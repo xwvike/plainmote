@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+runtime
+runtime/secrets
+design
+data
+tmp
+*.log

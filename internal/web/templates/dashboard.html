@@ -1,0 +1,64 @@
+{{define "dashboard.html"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+  {{template "htmlhead"}}
+  <title>资源 - PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page">
+    <div class="ph">
+      <h1>资源</h1>
+      <span class="sp"><a class="btn" href="/resources/new?kind=remote">引用地址</a><a class="btn pri" href="/resources/new?kind=upload">上传文件</a></span>
+    </div>
+    {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    <div class="panel">
+      <div class="pt">
+        <form class="tb" method="get" action="/">
+          <input type="search" name="q" value="{{.Pager.Query}}" placeholder="搜索名称或文件名">
+          <input type="hidden" name="size" value="{{.Pager.Size}}">
+          <button type="submit">搜索</button>
+          {{if .Pager.Query}}<a class="btn" href="/">清除</a>{{end}}
+        </form>
+        <span class="sp hint">{{.Pager.Total}} 项</span>
+      </div>
+      {{if .Resources}}
+      <table class="fx">
+        <colgroup><col style="width:150px"><col><col style="width:104px"><col style="width:132px"></colgroup>
+        <thead><tr><th>名称</th><th>文件名</th><th>状态</th><th class="r">最近更新</th></tr></thead>
+        <tbody>
+          {{range .Resources}}
+          <tr>
+            <td class="trunc"><a href="/resources/{{.ID}}">{{.Name}}</a></td>
+            <td><span class="fl"><span class="mono trunc" title="{{.Filename}}">{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">远程</span>{{end}}</span></td>
+            <td>
+              {{if .LiveShares}}<span class="st on"><i></i><span>{{.LiveShares}} 条分享</span></span>
+              {{else}}<span class="st off"><i></i><span>未分享</span></span>{{end}}
+            </td>
+            <td class="num">{{formatMinute .UpdatedAt}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      <div class="pf">
+        <div class="pg">
+          <span class="hint">第 {{.Pager.From}}–{{.Pager.To}} 项，共 {{.Pager.Total}} 项</span>
+          <form class="psize" method="get" action="/">
+            <input type="hidden" name="q" value="{{.Pager.Query}}">
+            <label>每页 <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+            <button type="submit" class="sm">应用</button>
+          </form>
+          <span class="pages">
+            {{if .Pager.PrevURL}}<a class="pgn" href="{{.Pager.PrevURL}}">&lsaquo;</a>{{else}}<span class="pgn dis">&lsaquo;</span>{{end}}
+            {{range .Pager.Links}}{{if .Current}}<span class="pgn on">{{.Num}}</span>{{else}}<a class="pgn" href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
+            {{if .Pager.NextURL}}<a class="pgn" href="{{.Pager.NextURL}}">&rsaquo;</a>{{else}}<span class="pgn dis">&rsaquo;</span>{{end}}
+          </span>
+        </div>
+      </div>
+      {{else}}
+      <p class="empty">{{if .Pager.Query}}没有匹配「{{.Pager.Query}}」的资源。{{else}}还没有资源。{{end}}</p>
+      {{end}}
+    </div>
+  </main>
+</body>
+</html>{{end}}

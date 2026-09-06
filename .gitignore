@@ -1,0 +1,9 @@
+/plainmote
+/config.json
+/plainmote.json
+.env
+/data/
+/runtime/
+runtime/secrets/
+/tmp/
+*.log

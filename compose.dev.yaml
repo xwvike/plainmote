@@ -1,0 +1,80 @@
+name: plainmote-dev
+
+services:
+  plainmote:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: plainmote:dev
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8964:8964"
+    tmpfs:
+      - /tmp
+    environment:
+      DATABASE_URL: "postgres://plainmote:plainmote@postgres:5432/plainmote?sslmode=disable"
+      PLAINMOTE_PUBLIC_URL: "${PLAINMOTE_PUBLIC_URL:-http://localhost:8964}"
+      PLAINMOTE_BLOB_ENDPOINT: "http://minio:9000"
+      PLAINMOTE_BLOB_BUCKET: plainmote
+      PLAINMOTE_BLOB_REGION: us-east-1
+      PLAINMOTE_BLOB_ACCESS_KEY: plainmote
+      PLAINMOTE_BLOB_SECRET_KEY: plainmote-secret
+      PLAINMOTE_TOKEN_KEY: "${PLAINMOTE_TOKEN_KEY:-0123456789abcdef0123456789abcdef}"
+      PLAINMOTE_ALLOW_PRIVATE_UPSTREAM: "${PLAINMOTE_ALLOW_PRIVATE_UPSTREAM:-false}"
+      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:-dev-client}"
+      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:-dev-secret}"
+      GITHUB_ALLOWED_IDS: "${GITHUB_ALLOWED_IDS:-100}"
+    volumes:
+      - .:/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: plainmote
+      POSTGRES_USER: plainmote
+      POSTGRES_PASSWORD: plainmote
+    ports:
+      - "54329:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plainmote -d plainmote"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: plainmote
+      MINIO_ROOT_PASSWORD: plainmote-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "mc alias set local http://minio:9000 plainmote plainmote-secret && mc mb --ignore-existing local/plainmote"
+    depends_on:
+      minio:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  minio_data:

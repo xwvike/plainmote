@@ -1,0 +1,67 @@
+{{define "logs.html"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+  {{template "htmlhead"}}
+  <title>访问记录 - PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page">
+    <div class="ph">
+      <h1>访问记录</h1>
+      <span class="cnt sp">{{len .AccessLogs}} 条</span>
+    </div>
+    <form class="panel" method="get" action="/logs" style="display:flex;gap:10px;align-items:end;padding:10px 12px">
+      <label class="f" style="width:260px"><span>资源</span>
+        <select name="resource">
+          <option value="">全部资源</option>
+          {{range .Resources}}<option value="{{.ID}}"{{if eq .ID $.LogResource}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </label>
+      <label class="f" style="width:160px"><span>结果</span>
+        <select name="outcome">
+          <option value="">全部结果</option>
+          {{range .Outcomes}}<option value="{{.}}"{{if eq . $.LogOutcome}} selected{{end}}>{{.}}</option>{{end}}
+        </select>
+      </label>
+      <button type="submit">筛选</button>
+      {{if or .LogResource .LogOutcome}}<a class="btn" href="/logs">清除</a>{{end}}
+    </form>
+    <div class="panel lg">
+      <div class="lgh"><span>时间</span><span>结果</span><span>请求路径</span><span>来源 IP</span><span></span></div>
+      {{range .AccessLogs}}
+      <details>
+        <summary>
+          <span class="tm">{{formatTime .OccurredAt}}</span>
+          <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{.Outcome}}</span></span>
+          <span class="mono trunc" title="{{.Path}}">{{.Path}}</span>
+          <span class="mono">{{.RemoteIP}}</span>
+          <svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>
+        </summary>
+        <div class="exp">
+          <dl class="kv">
+            <dt>资源</dt><dd>{{if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>请求</dt><dd>{{.Method}} {{.Path}}</dd>
+            <dt>响应</dt><dd>{{.Status}}{{if .Detail}} · {{.Detail}}{{end}}</dd>
+            <dt>Query</dt><dd>{{if .Query}}{{.Query}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>Host</dt><dd>{{.Host}}</dd>
+            <dt>Proto / TLS</dt><dd>{{.Proto}} · {{if .TLS}}是{{else}}否{{end}}</dd>
+          </dl>
+          <dl class="kv">
+            <dt>User-Agent</dt><dd>{{if .UserAgent}}{{.UserAgent}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>X-Forwarded-For</dt><dd>{{if .XForwardedFor}}{{.XForwardedFor}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>CF-Connecting-IP</dt><dd>{{if .CFConnectingIP}}{{.CFConnectingIP}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>CF-Ray</dt><dd>{{if .CFRay}}{{.CFRay}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>Forwarded</dt><dd>{{if .Forwarded}}{{.Forwarded}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>使用的链接</dt><dd>{{if .LinkName}}{{.LinkName}}{{else}}<span class="mut">—</span>{{end}}</dd>
+          </dl>
+        </div>
+      </details>
+      {{else}}
+      <p class="empty">没有符合条件的访问记录。</p>
+      {{end}}
+    </div>
+    {{if .AccessLogs}}<p class="hint">展开任意一行可以看到资源、响应码、User-Agent 和全部代理头。</p>{{end}}
+  </main>
+</body>
+</html>{{end}}
