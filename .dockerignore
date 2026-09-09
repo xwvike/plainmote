@@ -6,4 +6,5 @@ runtime/secrets
 design
 data
 tmp
+**/node_modules
 *.log

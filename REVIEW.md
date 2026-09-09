@@ -117,6 +117,33 @@ resource.origin_url
 
 重点检查私网地址策略、每次重定向、DNS 解析后的最终拨号地址、禁用环境 HTTP 代理，以及响应 `Content-Type` 的安全降级和 `nosniff`。
 
+### 静态资源与编辑器
+
+```text
+GET /static/<name>
+  -> internal/web/static.go  staticTypes 白名单
+  -> ETag 重新验证
+  -> 启动时预压缩，按 Accept-Encoding 分发
+
+internal/web/static/editor.js
+  -> internal/web/static/vendor/codemirror.js
+  -> tools/codemirror/package.json + package-lock.json
+  -> tools/codemirror/build.sh 通过 npm ci 重建
+```
+
+需要确认的不变量：
+
+- `/static/` 只服务 `staticTypes` 里列出的文件；类型不靠扩展名推断，目录里多一个文件不等于对外可取。
+- 静态资源使用 ETag 和 `Cache-Control: public, no-cache`，浏览器可以复用内容，但每次使用前必须确认
+  当前部署仍是同一版本。
+- 编辑器是渐进增强。服务端渲染的永远是 `<textarea name="content">`，隐藏它的 `cm-source` 只由
+  `editor.js` 在编辑器起来之后添加，任何时候都不能写进模板或样式表。
+- 只有可在线编辑的资源页面才加载 `editor.js`；远程资源和非文本资源页面不能下载 CodeMirror bundle。
+- 表单提交前由 `editor.js` 把内容写回 textarea；CSRF、字段名和大小校验都不经过 JavaScript。
+- 编辑器语言识别只存在于浏览器层，Store 不依赖 CodeMirror 的语言名称。
+- `codemirror.js` 是提交进仓库的构建产物。依赖版本以 `package.json` 和 `package-lock.json` 为准，
+  重建必须使用 `npm ci`。
+
 ## PostgreSQL 检查点
 
 - 所有时间字段使用 `TIMESTAMPTZ`，Go 侧使用 `time.Time`。

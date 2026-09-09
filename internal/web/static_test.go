@@ -1,11 +1,80 @@
 package web
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestStaticCompressionNegotiation(t *testing.T) {
+	app := staticApp(t)
+	const bundle = "/static/vendor/codemirror.js"
+	raw := staticAssets["vendor/codemirror.js"].body
+
+	get := func(accept string) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, bundle, nil)
+		request.Header.Set("Accept-Encoding", accept)
+		recorder := httptest.NewRecorder()
+		app.Handler().ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	compressed := get("gzip, deflate, br")
+	if got := compressed.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("content encoding %q, want gzip", got)
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(compressed.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("response is not gzip: %v", err)
+	}
+	decoded, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("decompress: %v", err)
+	}
+	if !bytes.Equal(decoded, raw) {
+		t.Error("the compressed asset does not round-trip")
+	}
+
+	for _, accept := range []string{
+		"gzip;q=0, identity",
+		"gzip;q=0;foo=bar",
+		"gzip; foo=bar; Q = 0",
+		"gzip;q=invalid",
+	} {
+		if got := get(accept).Header().Get("Content-Encoding"); got != "" {
+			t.Errorf("Accept-Encoding %q returned %q, want identity", accept, got)
+		}
+	}
+	if got := get("br, *;q=0.5").Header().Get("Content-Encoding"); got != "gzip" {
+		t.Errorf("a positive wildcard returned %q, want gzip", got)
+	}
+}
+
+func TestStaticCacheRevalidation(t *testing.T) {
+	app := staticApp(t)
+	first := httptest.NewRecorder()
+	app.Handler().ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/static/editor.js", nil))
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("static response has no ETag")
+	}
+	if got := first.Header().Get("Cache-Control"); got != "public, no-cache" {
+		t.Fatalf("Cache-Control %q, want public, no-cache", got)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/static/editor.js", nil)
+	request.Header.Set("If-None-Match", etag)
+	revalidated := httptest.NewRecorder()
+	app.Handler().ServeHTTP(revalidated, request)
+	if revalidated.Code != http.StatusNotModified || revalidated.Body.Len() != 0 {
+		t.Fatalf("revalidation returned status %d and %d bytes", revalidated.Code, revalidated.Body.Len())
+	}
+}
 
 func staticApp(t *testing.T) *App {
 	t.Helper()
@@ -20,14 +89,14 @@ func staticApp(t *testing.T) *App {
 // is ignored by the browser and the logo would download instead of render.
 func TestStaticAssetsServed(t *testing.T) {
 	app := staticApp(t)
-	for name, contentType := range staticAssets {
+	for name, asset := range staticAssets {
 		recorder := httptest.NewRecorder()
 		app.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/static/"+name, nil))
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("%s: status %d, want 200", name, recorder.Code)
 		}
-		if got := recorder.Header().Get("Content-Type"); got != contentType {
-			t.Errorf("%s: content type %q, want %q", name, got, contentType)
+		if got := recorder.Header().Get("Content-Type"); got != asset.contentType {
+			t.Errorf("%s: content type %q, want %q", name, got, asset.contentType)
 		}
 		if recorder.Body.Len() == 0 {
 			t.Errorf("%s: empty body", name)

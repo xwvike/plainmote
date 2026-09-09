@@ -109,6 +109,24 @@ go vet ./...
 
 没有设置 `PLAINMOTE_TEST_DATABASE_URL` 时，需要 PostgreSQL 的测试会跳过。
 
+## 编辑器
+
+可在线编辑的资源内容使用 CodeMirror 6，支持 YAML、JSON、TOML、XML、shell 和 ini/conf 语法高亮。
+
+这是渐进增强，不是替换：页面发出的仍然是 `<textarea name="content">`，编辑器挂在它旁边，
+提交时把内容写回去。模块没加载、加载失败或被拦截时，页面就是一个表单里的 textarea，保存照常。
+
+CodeMirror bundle 提交在仓库里并作为静态资源随应用镜像发布，浏览器运行时不会从第三方 CDN
+加载编辑器代码。`package.json` 使用精确版本，`package-lock.json` 锁定完整依赖图和 integrity；
+`node_modules` 不进入仓库或应用镜像。重建脚本在临时目录执行 `npm ci`，结束后自动清理：
+
+```bash
+tools/codemirror/build.sh
+```
+
+它只写 `internal/web/static/vendor/codemirror.js`。日常 Go 构建直接使用已提交的 bundle，不需要
+安装 Node.js。
+
 ## 代码结构
 
 ```text
@@ -122,4 +140,5 @@ internal/upstream/   远程地址校验与读取
 internal/web/        路由、会话、页面和公开分发
 design/              设计留档与 logo 母版
 docs/                README 用图
+tools/codemirror/    编辑器 bundle 的重建脚本
 ```

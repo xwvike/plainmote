@@ -79,12 +79,12 @@
           {{else if .Resource.Editable}}
           <label class="f">
             <span class="lr"><span>内容</span><em>{{bytesText .Resource.ContentSize}} / 上限 {{bytesText .MaxContent}}</em></span>
-            <textarea name="content" rows="13" spellcheck="false">{{.ContentText}}</textarea>
+            <textarea name="content" rows="13" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}">{{.ContentText}}</textarea>
           </label>
           {{else if .IsNew}}
           <label class="f">
             <span class="lr"><span>或直接输入内容</span><em>上限 {{bytesText .MaxContent}}</em></span>
-            <textarea name="content" rows="13" spellcheck="false"></textarea>
+            <textarea name="content" rows="13" spellcheck="false" aria-label="资源内容" data-editor data-filename="" data-content-type=""></textarea>
           </label>
           {{else}}
           <div class="f">
@@ -96,7 +96,7 @@
             {{else if hasPrefix .Resource.ContentType "video/"}}
             <video controls src="/resources/{{.Resource.ID}}/raw" style="max-width:100%;max-height:320px"></video>
             {{else}}
-            <p class="ro">二进制内容，无法在这里编辑。要更换请上传新文件。</p>
+            <p class="ro">该文件类型不支持在线编辑。要更换请上传新文件。</p>
             {{end}}
           </div>
           {{end}}
@@ -214,6 +214,9 @@
   </dialog>
   {{end}}
 
+  {{if or .Resource.Editable (and .IsNew (ne .NewKind "remote"))}}
+  <script type="module" src="/static/editor.js"></script>
+  {{end}}
   <script>
     document.addEventListener('click', function (event) {
       var button = event.target.closest('[data-copy]');

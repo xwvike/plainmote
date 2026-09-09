@@ -6,4 +6,5 @@
 /runtime/
 runtime/secrets/
 /tmp/
+**/node_modules/
 *.log

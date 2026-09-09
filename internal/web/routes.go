@@ -1,30 +1,16 @@
 package web
 
 import (
-	"embed"
 	"html/template"
 	"io"
 	"net/http"
 	"net/netip"
-	"strings"
 	"time"
 
 	"plainmote/internal/auth"
 	"plainmote/internal/store"
 	"plainmote/internal/upstream"
 )
-
-//go:embed templates/*.html static/style.css static/logo.png
-var webAssets embed.FS
-
-// staticAssets is the whole set of files served under /static/. Serving from an
-// explicit list rather than the embedded tree keeps the content type off
-// extension guessing, and means a file added to the directory is not exposed
-// until it is named here.
-var staticAssets = map[string]string{
-	"style.css": "text/css; charset=utf-8",
-	"logo.png":  "image/png",
-}
 
 type App struct {
 	cfg       Config
@@ -71,7 +57,7 @@ type pageData struct {
 	NewKind    string
 
 	// ContentText is the body loaded for the editor. It is only filled in for
-	// a resource small and textual enough to show, so a large or binary one is
+	// a resource small and textual enough to show, so a large or non-text one is
 	// never pulled into memory just to render a page.
 	ContentText         string
 	LogResource         string
@@ -127,23 +113,6 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc("/", a.handleDashboardRoot)
 	return mux
-}
-
-func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimPrefix(r.URL.Path, "/static/")
-	contentType, ok := staticAssets[name]
-	if !ok {
-		writePlainError(w, http.StatusNotFound, "not found")
-		return
-	}
-	data, err := webAssets.ReadFile("static/" + name)
-	if err != nil {
-		writePlainError(w, http.StatusNotFound, "not found")
-		return
-	}
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = w.Write(data)
 }
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {

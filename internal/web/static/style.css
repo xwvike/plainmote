@@ -64,7 +64,13 @@ input[type="text"], input[type="url"], input[type="search"], textarea, select {
    of font-size plus padding, so a control and a button on one row line up. */
 input[type="text"], input[type="url"], input[type="search"], select { height: 26px; padding: 0 7px; }
 input.sm, select.sm { height: 22px; padding: 0 6px; font-size: 11.5px; }
-input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -2px; border-color: var(--accent); }
+input[type="text"]:focus, input[type="url"]:focus, input[type="search"]:focus,
+textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+input[type="file"]:focus { outline: none; }
+input[type="file"]:focus-visible::file-selector-button { border-color: var(--accent); }
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible {
+  outline: 1px solid var(--accent); outline-offset: 2px;
+}
 input[readonly] { background: oklch(0.974 0.002 255); color: var(--ink2); }
 textarea { padding: 6px 7px; font: 400 12px/1.65 var(--mono); resize: vertical; display: block; }
 input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
@@ -201,6 +207,14 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .signin-card .err { width: 100%; margin-bottom: 12px; text-align: left; }
 .signin-go { width: 100%; height: 30px; }
 .signin-note { margin-top: 11px; }
+
+/* The editor mounts beside its textarea, and .cm-source is put on that
+   textarea by editor.js once the editor is actually up. Hiding it from the
+   stylesheet instead would hide it in every browser that never ran the module,
+   which is exactly the case the textarea is kept for. */
+.cm-source { display: none; }
+.cm-host { min-width: 0; }
+.cm-host .cm-editor { border-radius: 0; }
 
 @media (max-width: 900px) {
   :root { --col: 100%; }
