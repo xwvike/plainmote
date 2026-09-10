@@ -60,6 +60,8 @@ type pageData struct {
 	// a resource small and textual enough to show, so a large or non-text one is
 	// never pulled into memory just to render a page.
 	ContentText         string
+	ContentEncoding     string
+	TextEncodings       []encodingOption
 	LogResource         string
 	LogOutcome          string
 	Outcomes            []string
@@ -92,6 +94,11 @@ type pageLink struct {
 	Num     int
 	URL     string
 	Current bool
+}
+
+type encodingOption struct {
+	Value string
+	Label string
 }
 
 // linkView pairs a link with the address a viewer copies.

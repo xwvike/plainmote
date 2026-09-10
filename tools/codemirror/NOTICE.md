@@ -1,8 +1,8 @@
-# Vendored: CodeMirror 6
+# Vendored editor dependencies
 
 `internal/web/static/vendor/codemirror.js` is built by `build.sh` and committed
-as an application asset. The browser never fetches CodeMirror from a third-party
-CDN.
+as an application asset. The browser never fetches the editor or encoding
+detector from a third-party CDN.
 
 Direct runtime dependencies and the build tool use exact versions in
 `package.json`. `package-lock.json` is the single version record for the full
@@ -30,3 +30,10 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## jschardet
+
+`jschardet` 3.1.4 is distributed under LGPL-2.1-or-later. Its complete license
+is included in `LICENSE.jschardet`. The exact source version and integrity are
+recorded in `package-lock.json`, and `build.sh` allows the bundled copy to be
+rebuilt or replaced.

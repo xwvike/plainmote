@@ -26,7 +26,7 @@ npm ci --silent --no-audit --no-fund
 	--outfile=bundle.js
 
 {
-	echo '// CodeMirror 6, bundled for PlainMote. MIT licensed; see NOTICE.md in'
+	echo '// Editor dependencies bundled for PlainMote; see NOTICE.md in'
 	echo '// tools/codemirror for licensing and package-lock.json for versions.'
 	echo '// Regenerate with tools/codemirror/build.sh - do not edit by hand.'
 	cat bundle.js

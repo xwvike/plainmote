@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -48,6 +49,79 @@ func TestDetectContentType(t *testing.T) {
 	} {
 		if got := DetectContentType(tc.path, []byte(tc.body)); got != tc.want {
 			t.Errorf("%s (%s): got %q, want %q", tc.name, tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestLegacyEncodedTextRoundTrips(t *testing.T) {
+	for _, tc := range []struct {
+		encoding string
+		content  string
+	}{
+		{"gb18030", "名称: 上海😀节点\n说明: 中文配置文件\n"},
+		{"gbk", "名称: 上海节点\n说明: 中文配置文件\n"},
+		{"big5", "名稱: 台北節點\n說明: 中文設定檔\n"},
+		{"shift_jis", "名前: 東京ノード\n説明: 日本語設定ファイル\n"},
+		{"windows-1252", "name: café\ndescription: déjà vu\n"},
+		{"utf-16le-bom", "name: UTF-16 配置\n"},
+		{"utf-32be-bom", "name: UTF-32 配置\n"},
+	} {
+		encoded, canonical, err := EncodeText(tc.content, tc.encoding)
+		if err != nil {
+			t.Fatalf("encode %s: %v", tc.encoding, err)
+		}
+		contentType, detected := DetectContent("config.yaml", encoded, canonical)
+		if contentType != typeYAML || detected != canonical {
+			t.Errorf("%s classified as %q / %q", tc.encoding, contentType, detected)
+		}
+		decoded, decodedAs, err := DecodeText(encoded, detected)
+		if err != nil || decodedAs != canonical || decoded != tc.content {
+			t.Errorf("%s decoded as %q: %v / %q", tc.encoding, decodedAs, err, decoded)
+		}
+		reencoded, _, err := EncodeText(decoded, decodedAs)
+		if err != nil || !bytes.Equal(reencoded, encoded) {
+			t.Errorf("%s did not round-trip: %v", tc.encoding, err)
+		}
+	}
+}
+
+func TestLegacyEncodingCanBeAutoDetected(t *testing.T) {
+	content := "名称: 上海节点\n说明: 这是一个用于自动识别字符编码的中文配置文件。\n"
+	encoded, _, err := EncodeText(content, "gb18030")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, encodingName, err := DecodeText(encoded, "")
+	if err != nil || decoded != content || encodingName != "gb18030" {
+		t.Fatalf("GB18030 auto-detection: encoding=%q err=%v content=%q", encodingName, err, decoded)
+	}
+}
+
+func TestUnicodeWithoutBOMCanBeAutoDetected(t *testing.T) {
+	content := "name: 中文 config file\n"
+	for _, encodingName := range []string{"utf-16le", "utf-16be", "utf-32le", "utf-32be"} {
+		encoded, _, err := EncodeText(content, encodingName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, detected, err := DecodeText(encoded, "")
+		if err != nil || decoded != content || detected != encodingName {
+			t.Errorf("%s auto-detection: detected=%q err=%v content=%q", encodingName, detected, err, decoded)
+		}
+	}
+}
+
+func TestMalformedLegacyTextIsNeverDecodedWithReplacementCharacters(t *testing.T) {
+	for _, tc := range []struct {
+		encoding string
+		content  []byte
+	}{
+		{"big5", []byte{0x81, 0x30}},
+		{"gb18030", []byte{0x81, 0x20}},
+	} {
+		decoded, err := decodeWithEncoding(tc.content, tc.encoding)
+		if err == nil {
+			t.Errorf("%s malformed bytes decoded as %q", tc.encoding, decoded)
 		}
 	}
 }

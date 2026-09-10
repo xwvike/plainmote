@@ -239,12 +239,12 @@ func TestFilenameValidation(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
 	for _, bad := range []string{"../etc/passwd", "a/b.yaml", "with space.yaml", "-leading.yaml", ".hidden", "a?b", "a#b", "a\b"} {
-		if _, err := db.CreateResource(ctx, user.ID, "bad", bad, []byte("x"), ""); err == nil {
+		if _, err := db.CreateResource(ctx, user.ID, "bad", bad, []byte("x"), "", ""); err == nil {
 			t.Errorf("filename %q should have been rejected", bad)
 		}
 	}
 	for _, good := range []string{"clash.yaml", "sing-box.json", "hosts.txt", "wg0.conf", "a.b.c", "A1_-+@.txt", ""} {
-		if _, err := db.CreateResource(ctx, user.ID, "ok", good, []byte("x"), ""); err != nil {
+		if _, err := db.CreateResource(ctx, user.ID, "ok", good, []byte("x"), "", ""); err != nil {
 			t.Errorf("filename %q should have been accepted: %v", good, err)
 		}
 	}
@@ -258,10 +258,10 @@ func TestFilenamesMayCollideAcrossOwners(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, alice.ID, "clash", "shared.yaml", []byte("a: 1\n"), ""); err != nil {
+	if _, err := db.CreateResource(ctx, alice.ID, "clash", "shared.yaml", []byte("a: 1\n"), "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, bob.ID, "clash", "shared.yaml", []byte("b: 2\n"), ""); err != nil {
+	if _, err := db.CreateResource(ctx, bob.ID, "clash", "shared.yaml", []byte("b: 2\n"), "", ""); err != nil {
 		t.Fatalf("a second owner must be able to reuse a filename: %v", err)
 	}
 }

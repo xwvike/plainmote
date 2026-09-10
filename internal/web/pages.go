@@ -10,6 +10,53 @@ import (
 	"time"
 )
 
+var editorEncodingOptions = []encodingOption{
+	{Value: "utf-8", Label: "UTF-8"},
+	{Value: "utf-8bom", Label: "UTF-8 with BOM"},
+	{Value: "utf-16le", Label: "UTF-16 LE"},
+	{Value: "utf-16le-bom", Label: "UTF-16 LE with BOM"},
+	{Value: "utf-16be", Label: "UTF-16 BE"},
+	{Value: "utf-16be-bom", Label: "UTF-16 BE with BOM"},
+	{Value: "utf-32le", Label: "UTF-32 LE"},
+	{Value: "utf-32le-bom", Label: "UTF-32 LE with BOM"},
+	{Value: "utf-32be", Label: "UTF-32 BE"},
+	{Value: "utf-32be-bom", Label: "UTF-32 BE with BOM"},
+	{Value: "gb18030", Label: "GB18030"},
+	{Value: "gbk", Label: "GBK / GB2312"},
+	{Value: "big5", Label: "Big5"},
+	{Value: "shift_jis", Label: "Shift JIS"},
+	{Value: "euc-jp", Label: "EUC-JP"},
+	{Value: "iso-2022-jp", Label: "ISO-2022-JP"},
+	{Value: "euc-kr", Label: "EUC-KR"},
+	{Value: "windows-874", Label: "Windows 874"},
+	{Value: "windows-1250", Label: "Windows 1250"},
+	{Value: "windows-1251", Label: "Windows 1251"},
+	{Value: "windows-1252", Label: "Windows 1252"},
+	{Value: "windows-1253", Label: "Windows 1253"},
+	{Value: "windows-1254", Label: "Windows 1254"},
+	{Value: "windows-1255", Label: "Windows 1255"},
+	{Value: "windows-1256", Label: "Windows 1256"},
+	{Value: "windows-1257", Label: "Windows 1257"},
+	{Value: "windows-1258", Label: "Windows 1258"},
+	{Value: "iso-8859-2", Label: "ISO-8859-2"},
+	{Value: "iso-8859-3", Label: "ISO-8859-3"},
+	{Value: "iso-8859-4", Label: "ISO-8859-4"},
+	{Value: "iso-8859-5", Label: "ISO-8859-5"},
+	{Value: "iso-8859-6", Label: "ISO-8859-6"},
+	{Value: "iso-8859-7", Label: "ISO-8859-7"},
+	{Value: "iso-8859-8", Label: "ISO-8859-8"},
+	{Value: "iso-8859-9", Label: "ISO-8859-9"},
+	{Value: "iso-8859-10", Label: "ISO-8859-10"},
+	{Value: "iso-8859-13", Label: "ISO-8859-13"},
+	{Value: "iso-8859-14", Label: "ISO-8859-14"},
+	{Value: "iso-8859-15", Label: "ISO-8859-15"},
+	{Value: "koi8-r", Label: "KOI8-R"},
+	{Value: "koi8-u", Label: "KOI8-U"},
+	{Value: "ibm866", Label: "IBM866"},
+	{Value: "macintosh", Label: "Mac Roman"},
+	{Value: "mac-cyrillic", Label: "Mac Cyrillic"},
+}
+
 func (a *App) templateSet() *template.Template {
 	return template.Must(template.New("pages").Funcs(template.FuncMap{
 		"formatTime": func(value time.Time) string {
@@ -138,11 +185,13 @@ func csrfValue(r *http.Request) string {
 // origin used to build share addresses, and the configured content limit.
 func (a *App) basePage(r *http.Request, user User) pageData {
 	return pageData{
-		User:       user,
-		CSRF:       csrfValue(r),
-		Active:     "resources",
-		BaseURL:    a.baseURL(r),
-		MaxContent: a.cfg.MaxContent,
+		User:            user,
+		CSRF:            csrfValue(r),
+		Active:          "resources",
+		BaseURL:         a.baseURL(r),
+		MaxContent:      a.cfg.MaxContent,
+		ContentEncoding: "utf-8",
+		TextEncodings:   editorEncodingOptions,
 	}
 }
 

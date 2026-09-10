@@ -78,6 +78,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	resource := result.Resource
 
 	contentType := resource.ContentType
+	filenameType := contentType
 	var body io.ReadCloser
 	var size int64
 	if resource.Remote() {
@@ -91,8 +92,10 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		contentType, size = store.SafeContentType(upstreamType), int64(len(fetched))
+		filenameType = contentType
 		body = io.NopCloser(bytes.NewReader(fetched))
 	} else {
+		contentType = store.ContentTypeWithEncoding(contentType, resource.ContentEncoding)
 		body, size, err = a.db.OpenContent(r.Context(), resource)
 		if err != nil {
 			writePlainError(w, http.StatusInternalServerError, err.Error())
@@ -107,7 +110,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", contentType)
 	// The name is restricted to letters, digits and . _ - + @ on the way in,
 	// so it cannot break out of the quotes or the header.
-	w.Header().Set("Content-Disposition", `inline; filename="`+deliveryFilename(resource, contentType)+`"`)
+	w.Header().Set("Content-Disposition", `inline; filename="`+deliveryFilename(resource, filenameType)+`"`)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")

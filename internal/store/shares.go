@@ -288,11 +288,11 @@ FROM links WHERE token_hash = $1
 func resourceByIDTx(ctx context.Context, tx pgx.Tx, id string) (Resource, error) {
 	var resource Resource
 	err := tx.QueryRow(ctx, `
-SELECT id, owner_id, name, filename, content_key, content_size, content_type, origin_url
+SELECT id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url
 FROM resources WHERE id = $1
 `, id).Scan(
 		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
-		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.OriginURL,
+		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding, &resource.OriginURL,
 	)
 	return resource, err
 }

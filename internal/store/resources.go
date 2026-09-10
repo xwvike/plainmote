@@ -35,11 +35,12 @@ type resourceInput struct {
 	Name        string
 	Filename    string
 	ContentType string
+	Encoding    string
 	OriginURL   string
 	Content     []byte
 }
 
-func normalizeResourceInput(name, filename, originURL string, content []byte, allowPrivateUpstream bool) (resourceInput, error) {
+func normalizeResourceInput(name, filename string, content []byte, contentEncoding, originURL string, allowPrivateUpstream bool) (resourceInput, error) {
 	filename = strings.TrimSpace(filename)
 	if err := validateFilename(filename); err != nil {
 		return resourceInput{}, err
@@ -58,8 +59,9 @@ func normalizeResourceInput(name, filename, originURL string, content []byte, al
 		return resourceInput{}, errors.New("resource content must not be empty")
 	}
 	contentType := ""
+	detectedEncoding := ""
 	if originURL == "" {
-		contentType = DetectContentType(filename, content)
+		contentType, detectedEncoding = DetectContent(filename, content, contentEncoding)
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -68,18 +70,19 @@ func normalizeResourceInput(name, filename, originURL string, content []byte, al
 	if name == "" {
 		name = "未命名资源"
 	}
-	return resourceInput{Name: name, Filename: filename, ContentType: contentType, OriginURL: originURL, Content: content}, nil
+	return resourceInput{Name: name, Filename: filename, ContentType: contentType, Encoding: detectedEncoding, OriginURL: originURL, Content: content}, nil
 }
 
-func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename string, content []byte, originURL string) (Resource, error) {
-	input, err := normalizeResourceInput(name, filename, originURL, content, d.allowPrivateUpstream)
+func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename string, content []byte, contentEncoding, originURL string) (Resource, error) {
+	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
 	if err != nil {
 		return Resource{}, err
 	}
 	now := time.Now().UTC()
 	resource := Resource{
 		ID: uuid.NewString(), OwnerID: ownerID, Name: input.Name, Filename: input.Filename,
-		ContentType: input.ContentType, OriginURL: input.OriginURL, CreatedAt: now, UpdatedAt: now,
+		ContentType: input.ContentType, ContentEncoding: input.Encoding,
+		OriginURL: input.OriginURL, CreatedAt: now, UpdatedAt: now,
 	}
 	if len(input.Content) > 0 {
 		resource.ContentKey = contentKey(resource.ID)
@@ -89,10 +92,10 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 		}
 	}
 	_, err = d.db.Exec(ctx, `
-INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, origin_url, created_at, updated_at)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
 `, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
-		resource.ContentSize, resource.ContentType, resource.OriginURL, now)
+		resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.OriginURL, now)
 	if err != nil {
 		if resource.ContentKey != "" {
 			_ = d.blobs.Delete(ctx, resource.ContentKey)
@@ -108,12 +111,12 @@ func (d *Store) ResourceForOwner(ctx context.Context, ownerID, id string) (Resou
 	}
 	var resource Resource
 	err := d.db.QueryRow(ctx, `
-SELECT id, owner_id, name, filename, content_key, content_size, content_type, origin_url, created_at, updated_at
+SELECT id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at
 FROM resources
 WHERE id = $1 AND owner_id = $2
 `, id, ownerID).Scan(
 		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
-		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.OriginURL,
+		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding, &resource.OriginURL,
 		&resource.CreatedAt, &resource.UpdatedAt,
 	)
 	if err != nil {
@@ -140,7 +143,7 @@ WHERE owner_id = $1 AND ($2 = '' OR name ILIKE $3 ESCAPE '\' OR filename ILIKE $
 		offset = 0
 	}
 	rows, err := d.db.Query(ctx, `
-SELECT r.id, r.owner_id, r.name, r.filename, r.content_type, r.origin_url, r.updated_at,
+SELECT r.id, r.owner_id, r.name, r.filename, r.content_type, r.content_encoding, r.origin_url, r.updated_at,
        (SELECT COUNT(*) FROM links l WHERE l.resource_id = r.id AND l.revoked_at IS NULL
           AND (l.expires_at IS NULL OR l.expires_at > $1)
           AND (l.max_uses = 0 OR l.used_count < l.max_uses))
@@ -158,7 +161,7 @@ LIMIT $5 OFFSET $6
 		var resource Resource
 		if err := rows.Scan(
 			&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
-			&resource.ContentType, &resource.OriginURL, &resource.UpdatedAt, &resource.LiveShares,
+			&resource.ContentType, &resource.ContentEncoding, &resource.OriginURL, &resource.UpdatedAt, &resource.LiveShares,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -171,7 +174,7 @@ func escapeLikePattern(value string) string {
 	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(value)
 }
 
-func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename string, content []byte, originURL string) error {
+func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename string, content []byte, contentEncoding, originURL string) error {
 	current, err := d.ResourceForOwner(ctx, ownerID, id)
 	if err != nil {
 		return err
@@ -183,7 +186,7 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 			return err
 		}
 	}
-	input, err := normalizeResourceInput(name, filename, originURL, content, d.allowPrivateUpstream)
+	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
 	if err != nil {
 		return err
 	}
@@ -203,9 +206,9 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 
 	tag, err := d.db.Exec(ctx, `
 UPDATE resources
-SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, origin_url = $6, updated_at = $7
-WHERE id = $8 AND owner_id = $9
-`, input.Name, input.Filename, nextKey, nextSize, input.ContentType, input.OriginURL, time.Now().UTC(), id, ownerID)
+SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, content_encoding = $6, origin_url = $7, updated_at = $8
+WHERE id = $9 AND owner_id = $10
+`, input.Name, input.Filename, nextKey, nextSize, input.ContentType, input.Encoding, input.OriginURL, time.Now().UTC(), id, ownerID)
 	if err != nil || tag.RowsAffected() == 0 {
 		if wroteNewObject {
 			_ = d.blobs.Delete(ctx, nextKey)

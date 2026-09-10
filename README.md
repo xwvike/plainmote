@@ -112,16 +112,21 @@ go vet ./...
 ## 编辑器
 
 可在线编辑的资源内容使用 CodeMirror 6，支持 YAML、JSON、TOML、XML、shell 和 ini/conf 语法高亮。
+选择文件后，内容会立即载入编辑器。编辑器会自动识别 UTF-8、带 BOM 或无 BOM 的 UTF-16/UTF-32、
+GB18030/GBK、Big5、日文和韩文编码，以及常用 Windows、ISO、KOI8 和 Mac 编码；识别不准时可以从
+编码列表重新打开。未修改的上传和已有资源保留原始字节，修改后则按当前选定的编码写回，BOM 也会保留。
+后续维护和 review 可按 [`docs/encoding-editor-learning.md`](docs/encoding-editor-learning.md) 中的学习与检查清单进行。
 
 这是渐进增强，不是替换：页面发出的仍然是 `<textarea name="content">`，编辑器挂在它旁边，
 提交时把内容写回去。模块没加载、加载失败或被拦截时，页面就是一个表单里的 textarea，保存照常。
 
-CodeMirror bundle 提交在仓库里并作为静态资源随应用镜像发布，浏览器运行时不会从第三方 CDN
-加载编辑器代码。`package.json` 使用精确版本，`package-lock.json` 锁定完整依赖图和 integrity；
+编辑器依赖 bundle 提交在仓库里并作为静态资源随应用镜像发布，浏览器运行时不会从第三方 CDN
+加载编辑器或编码检测代码。`package.json` 使用精确版本，`package-lock.json` 锁定完整依赖图和 integrity；
 `node_modules` 不进入仓库或应用镜像。重建脚本在临时目录执行 `npm ci`，结束后自动清理：
 
 ```bash
 tools/codemirror/build.sh
+npm --prefix tools/codemirror test
 ```
 
 它只写 `internal/web/static/vendor/codemirror.js`。日常 Go 构建直接使用已提交的 bundle，不需要

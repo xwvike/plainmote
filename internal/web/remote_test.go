@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ func TestRemoteResourceForwardsLive(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	resource, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", []byte("ignored"), upstream.URL+"/rules.yaml")
+	resource, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", []byte("ignored"), "", upstream.URL+"/rules.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,6 +92,34 @@ func TestRemoteResourceForwardsLive(t *testing.T) {
 	}
 }
 
+func TestRemotePreviewUsesUpstreamCharset(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=windows-1252")
+		_, _ = w.Write([]byte{'c', 'a', 'f', 0xe9, '\n'})
+	}))
+	defer upstream.Close()
+
+	resource, err := db.CreateResource(ctx, user.ID, "Legacy remote", "remote.txt", nil, "", upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := newTestApp(db, user.GitHubID)
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+resource.ID, nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "café") {
+		t.Fatalf("remote legacy preview: %d %q", response.Code, response.Body.String())
+	}
+}
+
 func TestRemoteExecutableContentCannotRunOnTheAdminOrigin(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
@@ -100,7 +129,7 @@ func TestRemoteExecutableContentCannotRunOnTheAdminOrigin(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	resource, err := db.CreateResource(ctx, user.ID, "remote html", "page.html", nil, upstream.URL)
+	resource, err := db.CreateResource(ctx, user.ID, "remote html", "page.html", nil, "", upstream.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +161,7 @@ func TestSwitchingBetweenLocalAndRemote(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, resource.Name, resource.Filename, []byte("still here\n"), upstream.URL); err != nil {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, resource.Name, resource.Filename, []byte("still here\n"), "", upstream.URL); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := db.ResourceForOwner(ctx, user.ID, resource.ID)
@@ -144,10 +173,10 @@ func TestSwitchingBetweenLocalAndRemote(t *testing.T) {
 	}
 
 	// Clearing the link requires content again, and restores a local resource.
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, stored.Name, stored.Filename, nil, ""); err == nil {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, stored.Name, stored.Filename, nil, "", ""); err == nil {
 		t.Fatal("expected an error when clearing the link without content")
 	}
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, stored.Name, stored.Filename, []byte("back to local\n"), ""); err != nil {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, stored.Name, stored.Filename, []byte("back to local\n"), "", ""); err != nil {
 		t.Fatal(err)
 	}
 	stored, err = db.ResourceForOwner(ctx, user.ID, resource.ID)

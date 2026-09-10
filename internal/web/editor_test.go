@@ -1,13 +1,16 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"plainmote/internal/store"
 	"plainmote/internal/upstream"
 )
 
@@ -70,15 +73,145 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	}
 	if uploadPage := createPage("/resources/new"); !strings.Contains(uploadPage, `/static/editor.js`) {
 		t.Error("the upload form must load the editor")
+	} else {
+		if !strings.Contains(uploadPage, `data-upload data-max-bytes="4194304"`) {
+			t.Error("the file input must expose the upload hook and configured size limit")
+		}
+		if !strings.Contains(uploadPage, `data-upload-status role="status" aria-live="polite"`) {
+			t.Error("the upload form must include an accessible preview status")
+		}
 	}
 	if remotePage := createPage("/resources/new?kind=remote"); strings.Contains(remotePage, `/static/editor.js`) {
 		t.Error("the remote resource form must not load the editor")
 	}
-	opaque, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not text"), "")
+	opaque, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not text"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if opaquePage := createPage("/resources/" + opaque.ID); strings.Contains(opaquePage, `/static/editor.js`) {
 		t.Error("a non-text resource page must not load the editor")
+	}
+	legacyText := "名称: 上海节点\n说明: 中文配置文件\n"
+	legacyBytes, legacyEncoding, err := store.EncodeText(legacyText, "gb18030")
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := db.CreateResource(ctx, user.ID, "Legacy text", "legacy.yaml", legacyBytes, legacyEncoding, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.ContentEncoding != "gb18030" || !legacy.Editable() {
+		t.Fatalf("legacy text must retain its source encoding: %+v", legacy)
+	}
+	legacyPage := createPage("/resources/" + legacy.ID)
+	if !strings.Contains(legacyPage, legacyText) || !strings.Contains(legacyPage, `data-encoding="gb18030"`) {
+		t.Error("legacy text must be decoded into the editor with its source encoding")
+	}
+}
+
+func TestEveryEditorEncodingIsSupportedByTheStore(t *testing.T) {
+	for _, option := range editorEncodingOptions {
+		encoded, canonical, err := store.EncodeText("plain ASCII\n", option.Value)
+		if err != nil {
+			t.Errorf("%s cannot be encoded: %v", option.Value, err)
+			continue
+		}
+		decoded, detected, err := store.DecodeText(encoded, canonical)
+		if err != nil || detected != option.Value || decoded != "plain ASCII\n" {
+			t.Errorf("%s round-trip: detected=%q decoded=%q err=%v", option.Value, detected, decoded, err)
+		}
+	}
+}
+
+func TestLegacyTextKeepsBytesUntilEdited(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	originalText := "名称: 上海节点\n说明: 中文配置文件\n"
+	original, encodingName, err := store.EncodeText(originalText, "gb18030")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource, err := db.CreateResource(ctx, user.ID, "Legacy", "legacy.yaml", original, encodingName, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalKey := resource.ContentKey
+
+	app := newTestApp(db, user.GitHubID)
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	post := func(values url.Values) *httptest.ResponseRecorder {
+		t.Helper()
+		values.Set("csrf", csrf)
+		request := httptest.NewRequest(http.MethodPost, "https://cfg.test/resources/"+resource.ID, strings.NewReader(values.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+		request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+		response := httptest.NewRecorder()
+		app.Handler().ServeHTTP(response, request)
+		return response
+	}
+
+	// This is what enhanced browsers submit when only metadata changed: no
+	// content field, so the object must remain byte-for-byte untouched.
+	metadataOnly := post(url.Values{
+		"name":             {"Renamed"},
+		"filename":         {"legacy.yaml"},
+		"content_encoding": {encodingName},
+	})
+	if metadataOnly.Code != http.StatusSeeOther {
+		t.Fatalf("metadata update: %d %s", metadataOnly.Code, metadataOnly.Body.String())
+	}
+	stored, err := db.ResourceForOwner(ctx, user.ID, resource.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unchanged, err := db.ReadContent(ctx, stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.ContentKey != originalKey || !bytes.Equal(unchanged, original) {
+		t.Fatalf("metadata update rewrote source bytes: key %q -> %q, bytes %x -> %x", originalKey, stored.ContentKey, original, unchanged)
+	}
+
+	editedText := originalText + "状态: 可用\n"
+	editedResponse := post(url.Values{
+		"name":             {"Renamed"},
+		"filename":         {"legacy.yaml"},
+		"content":          {editedText},
+		"content_encoding": {encodingName},
+	})
+	if editedResponse.Code != http.StatusSeeOther {
+		t.Fatalf("content update: %d %s", editedResponse.Code, editedResponse.Body.String())
+	}
+	stored, err = db.ResourceForOwner(ctx, user.ID, resource.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _, err := store.EncodeText(editedText, encodingName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.ReadContent(ctx, stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.ContentEncoding != encodingName || !bytes.Equal(got, want) {
+		t.Fatalf("edited legacy text was not saved as %s: resource=%+v bytes=%x want=%x", encodingName, stored, got, want)
+	}
+
+	share, err := db.CreateShare(ctx, user.ID, resource.ID, "encoding", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivered := httptest.NewRecorder()
+	app.Handler().ServeHTTP(delivered, httptest.NewRequest(http.MethodGet, "https://cfg.test/d/"+url.PathEscape(share.Token)+"/legacy.yaml", nil))
+	if delivered.Code != http.StatusOK || !bytes.Equal(delivered.Body.Bytes(), want) {
+		t.Fatalf("legacy share changed bytes: %d %x", delivered.Code, delivered.Body.Bytes())
+	}
+	if gotType := delivered.Header().Get("Content-Type"); gotType != "application/yaml; charset=gb18030" {
+		t.Fatalf("legacy share content type = %q", gotType)
 	}
 }

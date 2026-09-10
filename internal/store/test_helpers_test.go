@@ -30,7 +30,7 @@ func testDatabase(t *testing.T) (*Store, User, Resource) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource, err := db.CreateResource(ctx, user.ID, "Example", "example.conf", []byte("answer=42\n"), "")
+	resource, err := db.CreateResource(ctx, user.ID, "Example", "example.conf", []byte("answer=42\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

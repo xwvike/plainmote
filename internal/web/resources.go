@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -82,7 +83,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	form, err := readResourceForm(r, a.cfg.MaxContent)
 	if err == nil {
 		var resource Resource
-		resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.OriginURL)
+		resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.ContentEncoding, form.OriginURL)
 		if err == nil {
 			http.Redirect(w, r, "/resources/"+resource.ID, http.StatusSeeOther)
 			return
@@ -91,8 +92,13 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	data := a.basePageWithError(r, user, err.Error())
 	data.IsNew = true
 	data.NewKind = newResourceKind(r.FormValue("kind"))
-	data.Resource = Resource{Name: form.Name, Filename: form.Filename, ContentSize: int64(len(form.Content)), OriginURL: form.OriginURL}
-	data.ContentText = string(form.Content)
+	data.Resource = Resource{Name: form.Name, Filename: form.Filename, ContentSize: int64(len(form.Content)), ContentEncoding: form.ContentEncoding, OriginURL: form.OriginURL}
+	data.ContentEncoding = form.ContentEncoding
+	if !form.Uploaded {
+		if text, _, decodeErr := store.DecodeText(form.Content, form.ContentEncoding); decodeErr == nil {
+			data.ContentText = text
+		}
+	}
 	a.renderTemplate(w, http.StatusBadRequest, "resource.html", data)
 }
 
@@ -103,6 +109,11 @@ type resourceForm struct {
 	Filename  string
 	OriginURL string
 	Content   []byte
+	// ContentEncoding is the source file encoding selected or detected in the
+	// editor. Uploaded bytes already use it; textarea content is converted to
+	// it before reaching the store.
+	ContentEncoding string
+	Uploaded        bool
 
 	// ContentGiven separates "the editor sent an empty box" from "this form
 	// had no content field at all". A binary resource is edited through a
@@ -128,11 +139,12 @@ func readResourceForm(r *http.Request, maxBytes int64) (resourceForm, error) {
 		}()
 	}
 	form = resourceForm{
-		Name:         r.FormValue("name"),
-		Filename:     strings.TrimSpace(r.FormValue("filename")),
-		OriginURL:    strings.TrimSpace(r.FormValue("origin_url")),
-		Content:      []byte(r.FormValue("content")),
-		ContentGiven: r.Form["content"] != nil,
+		Name:            r.FormValue("name"),
+		Filename:        strings.TrimSpace(r.FormValue("filename")),
+		OriginURL:       strings.TrimSpace(r.FormValue("origin_url")),
+		Content:         []byte(r.FormValue("content")),
+		ContentEncoding: strings.TrimSpace(r.FormValue("content_encoding")),
+		ContentGiven:    r.Form["content"] != nil,
 	}
 	// Only a multipart submission can carry a file; anything else simply has
 	// none, which is not an error.
@@ -142,7 +154,16 @@ func readResourceForm(r *http.Request, maxBytes int64) (resourceForm, error) {
 		} else if uploaded != nil {
 			form.Content = uploaded
 			form.ContentGiven = true
+			form.Uploaded = true
 		}
+	}
+	if form.OriginURL == "" && form.ContentGiven && !form.Uploaded {
+		encoded, encodingName, err := store.EncodeText(string(form.Content), form.ContentEncoding)
+		if err != nil {
+			return form, err
+		}
+		form.Content = encoded
+		form.ContentEncoding = encodingName
 	}
 	if form.OriginURL == "" && int64(len(form.Content)) > maxBytes {
 		return form, errors.New("content is too large")
@@ -200,7 +221,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			// A nil body tells the store to retain the current object.
 			content = nil
 		}
-		if err := a.db.UpdateResource(r.Context(), user.ID, resourceID, form.Name, form.Filename, content, form.OriginURL); err != nil {
+		if err := a.db.UpdateResource(r.Context(), user.ID, resourceID, form.Name, form.Filename, content, form.ContentEncoding, form.OriginURL); err != nil {
 			a.renderResourcePage(w, r, user, resource, err.Error())
 			return
 		}
@@ -222,16 +243,32 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		return
 	}
 	data := a.basePage(r, user)
-	data.Resource = resource
 	data.Error = pageError
-	if resource.Editable() {
+	// Reconsider only old opaque local rows with an explicitly textual name.
+	// A known image whose filename happens to end in .txt, and remote resources
+	// with no stored body, must keep their existing handling.
+	recoverOpaqueText := !resource.Remote() && resource.ContentType == "application/octet-stream" && store.TextFilename(resource.Filename)
+	if resource.Editable() || recoverOpaqueText {
 		text, err := a.db.ReadContent(r.Context(), resource)
 		if err != nil {
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
 		}
-		data.ContentText = string(text)
+		decoded, encodingName, decodeErr := store.DecodeText(text, resource.ContentEncoding)
+		if decodeErr == nil {
+			contentType, detectedEncoding := store.DetectContent(resource.Filename, text, encodingName)
+			if store.TextLike(contentType) {
+				resource.ContentType = contentType
+				resource.ContentEncoding = detectedEncoding
+				data.ContentText = decoded
+			}
+		} else {
+			resource.ContentType = "application/octet-stream"
+			resource.ContentEncoding = ""
+		}
 	}
+	data.Resource = resource
+	data.ContentEncoding = resource.ContentEncoding
 
 	// The type a request would be served with decides what an unnamed
 	// resource is called in its own address, so it has to be known before the
@@ -248,8 +285,11 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 			servedType = store.SafeContentType(contentType)
 			data.UpstreamType = servedType
 			if store.TextLike(servedType) {
-				data.UpstreamText = string(body)
-				data.UpstreamTextPreview = true
+				_, parameters, _ := mime.ParseMediaType(servedType)
+				if decoded, _, decodeErr := store.DecodeText(body, parameters["charset"]); decodeErr == nil {
+					data.UpstreamText = decoded
+					data.UpstreamTextPreview = true
+				}
 			}
 		}
 	}
@@ -302,7 +342,7 @@ func (a *App) handleRawPreview(w http.ResponseWriter, r *http.Request, user User
 		writePlainError(w, http.StatusNotFound, "remote resources have no stored bytes")
 		return
 	}
-	w.Header().Set("Content-Type", resource.ContentType)
+	w.Header().Set("Content-Type", store.ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding))
 	w.Header().Set("Content-Disposition", `inline; filename="`+deliveryFilename(resource, resource.ContentType)+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")

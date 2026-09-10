@@ -140,9 +140,13 @@ internal/web/static/editor.js
   `editor.js` 在编辑器起来之后添加，任何时候都不能写进模板或样式表。
 - 只有可在线编辑的资源页面才加载 `editor.js`；远程资源和非文本资源页面不能下载 CodeMirror bundle。
 - 表单提交前由 `editor.js` 把内容写回 textarea；CSRF、字段名和大小校验都不经过 JavaScript。
+- 选择文本文件后，编辑器必须立即自动识别编码并显示内容；识别不准时可手动选择编码重新打开。未修改时
+  上传和已有资源必须保留原始字节，一旦在编辑器中修改，文件输入会被清空，服务端按当前编码重新写入。
+- 浏览器和服务端支持的编码集合必须一致；资源要单独持久化源编码，不能靠 HTTP Content-Type 或文件后缀
+  猜测后直接覆盖。无法可靠解码或含二进制控制字符的内容不能进入文本编辑器。
 - 编辑器语言识别只存在于浏览器层，Store 不依赖 CodeMirror 的语言名称。
-- `codemirror.js` 是提交进仓库的构建产物。依赖版本以 `package.json` 和 `package-lock.json` 为准，
-  重建必须使用 `npm ci`。
+- `codemirror.js` 是提交进仓库的编辑器和编码检测构建产物。依赖版本以 `package.json` 和 `package-lock.json` 为准，
+  重建必须使用 `npm ci`；`npm --prefix tools/codemirror test` 覆盖浏览器侧的代表性自动识别和解码路径。
 
 ## PostgreSQL 检查点
 

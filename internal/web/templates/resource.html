@@ -57,8 +57,9 @@
           </label>
           {{else}}
           <label class="f">
-            <span class="lr"><span>{{if .IsNew}}选择文件{{else}}替换文件{{end}}</span><em>{{if not .Resource.Editable}}这类内容只能整份替换{{end}}</em></span>
-            <input type="file" name="upload">
+            <span class="lr"><span>{{if .IsNew}}选择文件{{else}}替换文件{{end}}</span><em>{{if and (not .IsNew) (not .Resource.Editable)}}这类内容只能整份替换{{end}}</em></span>
+            <input type="file" name="upload" data-upload data-max-bytes="{{.MaxContent}}">
+            <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
           </label>
           {{end}}
 
@@ -77,15 +78,21 @@
           {{end}}
           <p class="hint">上游不可达时公开地址返回 502，并记进访问记录。这里不缓存任何内容。</p>
           {{else if .Resource.Editable}}
-          <label class="f">
-            <span class="lr"><span>内容</span><em>{{bytesText .Resource.ContentSize}} / 上限 {{bytesText .MaxContent}}</em></span>
-            <textarea name="content" rows="13" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}">{{.ContentText}}</textarea>
-          </label>
+          <div class="f">
+            <span class="lr">
+              <span>内容</span><em>{{bytesText .Resource.ContentSize}} / 上限 {{bytesText .MaxContent}}</em>
+              <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+            </span>
+            <textarea name="content" rows="13" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
+          </div>
           {{else if .IsNew}}
-          <label class="f">
-            <span class="lr"><span>或直接输入内容</span><em>上限 {{bytesText .MaxContent}}</em></span>
-            <textarea name="content" rows="13" spellcheck="false" aria-label="资源内容" data-editor data-filename="" data-content-type=""></textarea>
-          </label>
+          <div class="f">
+            <span class="lr">
+              <span>或直接输入内容</span><em>上限 {{bytesText .MaxContent}}</em>
+              <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+            </span>
+            <textarea name="content" rows="13" spellcheck="false" aria-label="资源内容" data-editor data-filename="" data-content-type="" data-encoding="{{.ContentEncoding}}"></textarea>
+          </div>
           {{else}}
           <div class="f">
             <span class="lr"><span>内容</span><em>{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}</em></span>

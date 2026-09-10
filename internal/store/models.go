@@ -18,10 +18,14 @@ type Resource struct {
 	ContentKey  string
 	ContentSize int64
 	ContentType string
-	OriginURL   string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	LiveShares  int
+	// ContentEncoding is empty for opaque resources and the canonical source
+	// encoding for text. The editor uses it for lossless decode/edit/encode
+	// round-trips; it is separate from the HTTP media type on purpose.
+	ContentEncoding string
+	OriginURL       string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	LiveShares      int
 }
 
 func (r Resource) Remote() bool { return r.OriginURL != "" }

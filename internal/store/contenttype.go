@@ -2,10 +2,10 @@ package store
 
 import (
 	"encoding/json"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
-	"unicode/utf8"
 )
 
 // Content types this service is willing to serve. Nothing here is executed by
@@ -49,8 +49,8 @@ func SafeContentType(contentType string) string {
 
 // byExtension maps the delivery filename's suffix to a type. The filename is the
 // strongest signal available and the owner types it deliberately, so it wins
-// over sniffing the bytes - including the plain-text suffixes, so naming a
-// file .txt keeps it text even when the body happens to parse as JSON.
+// over sniffing the bytes. Text suffixes are decoded with the resource's
+// recorded encoding or the detector before they are admitted to the editor.
 var byExtension = map[string]string{
 	".json": typeJSON,
 	".yaml": typeYAML,
@@ -103,25 +103,85 @@ var byExtension = map[string]string{
 	".service":    typeText,
 }
 
-// DetectContentType works out how a resource should be served: first from the
-// delivery filename's extension, then from the shape of the content. Anything it
-// cannot place confidently is plain text, which is safe for every consumer.
+// DetectContentType works out how a resource should be served. Callers that
+// already know the source encoding use DetectContent so that the same decision
+// also records how the editor must decode and re-encode the bytes.
 func DetectContentType(publicPath string, content []byte) string {
+	contentType, _ := DetectContent(publicPath, content, "")
+	return contentType
+}
+
+// DetectContent returns both the safe media type and the detected text
+// encoding. Binary resources have an empty encoding.
+func DetectContent(publicPath string, content []byte, encodingHint string) (string, string) {
 	if extension := strings.ToLower(path.Ext(publicPath)); extension != "" {
 		if known, ok := byExtension[extension]; ok {
-			return known
+			if !TextLike(known) {
+				return known, ""
+			}
+			// A text-looking suffix cannot hide a recognised binary signature.
+			if magic := sniffMagic(content); magic != "" {
+				return magic, ""
+			}
+			if _, encodingName, err := detectAndDecodeText(content, encodingHint); err == nil {
+				return known, encodingName
+			}
+			return typeBinary, ""
 		}
 	}
 	// No usable extension: let the standard library read the file's own magic
 	// bytes, which is what it is good at. It only gets a say when it
 	// recognises something specific.
 	if magic := sniffMagic(content); magic != "" {
-		return magic
+		return magic, ""
 	}
-	if !utf8.Valid(content) {
-		return typeBinary
+	decoded, encodingName, err := detectAndDecodeText(content, encodingHint)
+	if err != nil {
+		return typeBinary, ""
 	}
-	return sniffContentType(content)
+	return sniffContentType([]byte(decoded)), encodingName
+}
+
+// TextFilename reports whether a filename explicitly denotes a format that
+// can be opened in the text editor. It lets old rows marked as opaque be
+// reconsidered now that legacy encodings are supported.
+func TextFilename(publicPath string) bool {
+	known, ok := byExtension[strings.ToLower(path.Ext(publicPath))]
+	return ok && TextLike(known)
+}
+
+// ContentTypeWithEncoding adds the standard charset label used by HTTP while
+// keeping BOM preservation details in the separate resource metadata.
+func ContentTypeWithEncoding(contentType, encodingName string) string {
+	canonical, ok := normalizeTextEncoding(encodingName)
+	if !ok || !TextLike(contentType) {
+		return contentType
+	}
+	// Preserve the long-standing UTF-8 response types. text/plain and text/csv
+	// already carry their charset, while adding a parameter to application/json
+	// and the structured text types needlessly changes their public contract.
+	if canonical == "utf-8" || canonical == "utf-8bom" {
+		return contentType
+	}
+	charset := canonical
+	switch canonical {
+	case "utf-8bom":
+		charset = "utf-8"
+	case "utf-16le-bom":
+		charset = "utf-16le"
+	case "utf-16be-bom":
+		charset = "utf-16be"
+	case "utf-32le-bom":
+		charset = "utf-32le"
+	case "utf-32be-bom":
+		charset = "utf-32be"
+	}
+	base, parameters, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return contentType
+	}
+	parameters["charset"] = charset
+	return mime.FormatMediaType(base, parameters)
 }
 
 // sniffMagic asks net/http what the bytes look like, and returns "" unless the

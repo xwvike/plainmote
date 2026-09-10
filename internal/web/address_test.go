@@ -17,7 +17,7 @@ func TestTokenIsTheWholeAddress(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
 	app := newTestApp(db, user.GitHubID)
-	resource, err := db.CreateResource(ctx, user.ID, "clash", "clash.yaml", []byte("port: 7890\n"), "")
+	resource, err := db.CreateResource(ctx, user.ID, "clash", "clash.yaml", []byte("port: 7890\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestTokenIsNotWrittenToTheAuditLog(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
 	app := newTestApp(db, user.GitHubID)
-	resource, err := db.CreateResource(ctx, user.ID, "clash", "clash.yaml", []byte("a: 1\n"), "")
+	resource, err := db.CreateResource(ctx, user.ID, "clash", "clash.yaml", []byte("a: 1\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestSameFilenameForTwoOwners(t *testing.T) {
 	}
 	serve := func(ownerID, body string) string {
 		t.Helper()
-		resource, err := db.CreateResource(ctx, ownerID, "clash", "clash.yaml", []byte(body), "")
+		resource, err := db.CreateResource(ctx, ownerID, "clash", "clash.yaml", []byte(body), "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -142,7 +142,7 @@ func TestUnnamedResourceStillGetsAFilename(t *testing.T) {
 		{"json 内容", `{"a":1}`, "file.json", "application/json"},
 		{"纯文本内容", "port: 7890\n", "file.txt", "text/plain; charset=utf-8"},
 	} {
-		resource, err := db.CreateResource(ctx, user.ID, "r", "", []byte(tc.body), "")
+		resource, err := db.CreateResource(ctx, user.ID, "r", "", []byte(tc.body), "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -178,7 +178,7 @@ func TestUnnamedResourceStillGetsAFilename(t *testing.T) {
 	}
 
 	// A named resource keeps its own name in both places.
-	named, err := db.CreateResource(ctx, user.ID, "r", "clash.yaml", []byte("port: 7890\n"), "")
+	named, err := db.CreateResource(ctx, user.ID, "r", "clash.yaml", []byte("port: 7890\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

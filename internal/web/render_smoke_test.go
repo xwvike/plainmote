@@ -27,11 +27,11 @@ func TestAllPagesRender(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 25; i++ {
-		if _, err := db.CreateResource(ctx, user.ID, fmt.Sprintf("填充资源 %d", i), fmt.Sprintf("fill-%d.yaml", i), []byte("a: 1\n"), ""); err != nil {
+		if _, err := db.CreateResource(ctx, user.ID, fmt.Sprintf("填充资源 %d", i), fmt.Sprintf("fill-%d.yaml", i), []byte("a: 1\n"), "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
-	remote, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", nil, upstream.URL+"/rules.yaml")
+	remote, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", nil, "", upstream.URL+"/rules.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

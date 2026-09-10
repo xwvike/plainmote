@@ -29,3 +29,18 @@ export { xml } from "@codemirror/lang-xml";
 export { toml } from "@codemirror/legacy-modes/mode/toml";
 export { properties } from "@codemirror/legacy-modes/mode/properties";
 export { shell } from "@codemirror/legacy-modes/mode/shell";
+
+// Encoding detection runs on the original Uint8Array before any browser text
+// decoder can replace bytes. The UI filters these ranked candidates through
+// the encodings it can also save losslessly on the Go side.
+import jschardet from "jschardet";
+export const analyseEncoding = (bytes) => {
+  let input = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    input += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return jschardet.detectAll(input).map((candidate) => ({
+    confidence: candidate.confidence * 100,
+    name: candidate.encoding,
+  }));
+};

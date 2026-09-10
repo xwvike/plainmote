@@ -18,7 +18,7 @@ import (
 func TestDeploymentTopologies(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	resource, err := db.CreateResource(ctx, user.ID, "clash", "clash.yaml", []byte("port: 7890\n"), "")
+	resource, err := db.CreateResource(ctx, user.ID, "clash", "clash.yaml", []byte("port: 7890\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestPrivatePeerIsNotAutomaticallyTrusted(t *testing.T) {
 func TestForwardedHeadersAreIgnoredWithoutAProxy(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	resource, err := db.CreateResource(ctx, user.ID, "clash", "direct.yaml", []byte("a: 1\n"), "")
+	resource, err := db.CreateResource(ctx, user.ID, "clash", "direct.yaml", []byte("a: 1\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestForwardedHeadersAreIgnoredWithoutAProxy(t *testing.T) {
 func TestSubPathMountIsNotSupported(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	resource, err := db.CreateResource(ctx, user.ID, "clash", "sub.yaml", []byte("a: 1\n"), "")
+	resource, err := db.CreateResource(ctx, user.ID, "clash", "sub.yaml", []byte("a: 1\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
