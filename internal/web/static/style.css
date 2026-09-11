@@ -179,7 +179,7 @@ details.pan[open] .chev { transform: rotate(90deg); }
 /* The UA stylesheet gives <dialog> inset-inline: 0 and margin: auto. Setting
    only left would leave right: 0 in place and centre the box in the right
    half of the viewport, so keep both insets and let the margins centre it. */
-.dlg { position: fixed; inset-inline: 0; top: 64px; margin: 0 auto; width: min(452px, calc(100% - 24px)); max-height: calc(100vh - 96px); overflow: auto; padding: 0; background: var(--panel); border: 1px solid var(--line2); border-radius: 0; color: var(--ink); box-shadow: 0 12px 32px oklch(0.24 0.012 255 / 0.18); }
+.dlg { position: fixed; inset-inline: 0; top: 64px; margin: 0 auto; width: min(640px, calc(100% - 24px)); max-height: calc(100vh - 96px); overflow: auto; padding: 0; background: var(--panel); border: 1px solid var(--line2); border-radius: 0; color: var(--ink); box-shadow: 0 12px 32px oklch(0.24 0.012 255 / 0.18); }
 .dlg > header { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--head); }
 .dlg > header b { font-size: 12.5px; font-weight: 600; }
 .dlg > header .x { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1px solid var(--line2); background: var(--panel); color: var(--ink2); font: 400 12px var(--sans); text-decoration: none; }
