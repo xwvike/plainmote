@@ -144,6 +144,8 @@ internal/web/static/editor.js
   `editor.js` 在编辑器起来之后添加，任何时候都不能写进模板或样式表。
 - 远程资源的只读预览走 `data-preview` 和 `preview()`，不是 `data-editor` 和 `enhance()`。它挂的 textarea
   没有 `name`、带 `disabled`，不进表单；`preview()` 里不能出现任何写回表单或产生待提交字节的逻辑。
+- 预览开 `EditorView.lineWrapping`，编辑器不开。这是有意的不对称：预览回答「这个地址是什么」，
+  对齐浏览器的软换行；编辑器沿用代码编辑器惯例。不要为了一致把两边统一。
 - 资源页是双栏：宽栏是内容，窄栏 `.side` 是名称、文件名和元信息。保存横跨两栏放在 `.savebar`，
   因为它提交的是整个 form。`.panel-ed > .pb` 的去内边距由 `:has(> .cm-host)` 把关，
   没跑起编辑器的浏览器必须仍然拿到有内边距的 textarea。

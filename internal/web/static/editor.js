@@ -604,6 +604,11 @@ function preview(textarea) {
         drawSelection(),
         EditorState.readOnly.of(true),
         EditorView.editable.of(false),
+        // A preview answers "what is at this address", so it matches what a
+        // browser shows rather than what an editor shows: a long line wraps
+        // instead of scrolling off the side. The editor keeps the editor
+        // convention and does not wrap.
+        EditorView.lineWrapping,
         highlightSelectionMatches(),
         search({ top: true }),
         syntaxHighlighting(highlight),
