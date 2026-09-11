@@ -126,7 +126,14 @@ func (u *Client) Fetch(ctx context.Context, rawURL string) ([]byte, string, erro
 	if err != nil {
 		return nil, "", err
 	}
-	req.Header.Set("Accept", "text/plain, application/json, text/yaml, text/*;q=0.8, */*;q=0.1")
+	// Ask for the resource, not for a preferred shape of it. An Accept header
+	// that ranks text formats is content negotiation, and a server that honours
+	// it answers with something other than what the address returns by default
+	// - GitHub's API, for one, drops from indented JSON to a single compact
+	// line. This service forwards what an address serves; stating a preference
+	// here would put a different document in front of every consumer of the
+	// share link.
+	req.Header.Set("Accept", "*/*")
 	resp, err := u.client.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("fetch upstream: %w", err)
