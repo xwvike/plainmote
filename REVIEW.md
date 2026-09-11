@@ -136,14 +136,27 @@ internal/web/static/editor.js
 - `/static/` 只服务 `staticTypes` 里列出的文件；类型不靠扩展名推断，目录里多一个文件不等于对外可取。
 - 静态资源使用 ETag 和 `Cache-Control: public, no-cache`，浏览器可以复用内容，但每次使用前必须确认
   当前部署仍是同一版本。
-- 编辑器是渐进增强。服务端渲染的永远是 `<textarea name="content">`，隐藏它的 `cm-source` 只由
+- 编辑器是渐进增强。可编辑资源服务端渲染的永远是 `<textarea name="content">`，隐藏它的 `cm-source` 只由
   `editor.js` 在编辑器起来之后添加，任何时候都不能写进模板或样式表。
-- 只有可在线编辑的资源页面才加载 `editor.js`；远程资源和非文本资源页面不能下载 CodeMirror bundle。
+- 远程资源的只读预览走 `data-preview` 和 `preview()`，不是 `data-editor` 和 `enhance()`。它挂的 textarea
+  没有 `name`、带 `disabled`，不进表单；`preview()` 里不能出现任何写回表单或产生待提交字节的逻辑。
+- 资源页是双栏：宽栏是内容，窄栏 `.side` 是名称、文件名和元信息。保存横跨两栏放在 `.savebar`，
+  因为它提交的是整个 form。`.panel-ed > .pb` 的去内边距由 `:has(> .cm-host)` 把关，
+  没跑起编辑器的浏览器必须仍然拿到有内边距的 textarea。
+- 加载 `editor.js` 的只有两种页面：可在线编辑的资源，以及上游返回文本、`UpstreamTextPreview` 为真的
+  远程资源。非文本资源和取不到上游内容的远程资源都不能下载 CodeMirror bundle。
 - 表单提交前由 `editor.js` 把内容写回 textarea；CSRF、字段名和大小校验都不经过 JavaScript。
 - 选择文本文件后，编辑器必须立即自动识别编码并显示内容；识别不准时可手动选择编码重新打开。未修改时
   上传和已有资源必须保留原始字节，一旦在编辑器中修改，文件输入会被清空，服务端按当前编码重新写入。
 - 浏览器和服务端支持的编码集合必须一致；资源要单独持久化源编码，不能靠 HTTP Content-Type 或文件后缀
   猜测后直接覆盖。无法可靠解码或含二进制控制字符的内容不能进入文本编辑器。
+- 行尾是文件属性，不是正文的一部分。`store.DetectEOL` 与 `editor.js` 的 `detectEOL` 必须给出相同结果，
+  两边都是「CRLF 数量多于其余换行数量才算 CRLF」，且只产出 `lf` 或 `crlf`。改一边必须改另一边。
+- 行尾不入库：每次渲染从字节重新检测。因此没有可迁移的列，也不存在与内容不符的陈旧值。
+- 写入前由服务端 `store.ApplyEOL` 按表单的 `content_eol` 统一行尾。这一步不能省：浏览器提交 textarea 时
+  一律把换行规范成 CRLF，无论有没有 JavaScript，省掉它会把 LF 文件写成 CRLF。
+- 编辑器侧必须用 `view.state.sliceDoc()` 取内容，不能用 `view.state.doc.toString()`。后者硬编码 LF，
+  会把整个文件的行尾改掉，包括用户没有碰过的行。行尾通过 `EditorState.lineSeparator` 放在 compartment 里。
 - 编辑器语言识别只存在于浏览器层，Store 不依赖 CodeMirror 的语言名称。
 - `codemirror.js` 是提交进仓库的编辑器和编码检测构建产物。依赖版本以 `package.json` 和 `package-lock.json` 为准，
   重建必须使用 `npm ci`；`npm --prefix tools/codemirror test` 覆盖浏览器侧的代表性自动识别和解码路径。

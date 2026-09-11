@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"plainmote/internal/store"
 )
 
 var editorEncodingOptions = []encodingOption{
@@ -191,6 +193,7 @@ func (a *App) basePage(r *http.Request, user User) pageData {
 		BaseURL:         a.baseURL(r),
 		MaxContent:      a.cfg.MaxContent,
 		ContentEncoding: "utf-8",
+		ContentEOL:      store.EOLLF,
 		TextEncodings:   editorEncodingOptions,
 	}
 }

@@ -61,6 +61,7 @@ type pageData struct {
 	// never pulled into memory just to render a page.
 	ContentText         string
 	ContentEncoding     string
+	ContentEOL          string
 	TextEncodings       []encodingOption
 	LogResource         string
 	LogOutcome          string

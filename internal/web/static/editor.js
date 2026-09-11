@@ -51,6 +51,26 @@ function tokenFor(filename, contentType) {
   return CONTENT_TYPES[base] || "";
 }
 
+// Line endings are file metadata, not text. CodeMirror always stores an LF
+// document and joins with state.lineBreak on the way out, so the ending is
+// carried in a facet and reapplied by sliceDoc() - never by doc.toString(),
+// which hardcodes LF and would rewrite every line in a CRLF file.
+const EOL_SEQUENCES = { crlf: "\r\n", lf: "\n" };
+
+function normalizeEOLName(value) {
+  return String(value || "").trim().toLowerCase() === "crlf" ? "crlf" : "lf";
+}
+
+// Majority wins, and only CRLF or LF is ever chosen: a lone CR counts as a
+// break but is not an ending a file gets written back with. Same rule the
+// Go side uses, so both ends agree on what a file is.
+function detectEOL(text) {
+  const crlf = (text.match(/\r\n/g) || []).length;
+  const lf = (text.match(/\n/g) || []).length - crlf;
+  const cr = (text.match(/\r/g) || []).length - crlf;
+  return crlf > lf + cr ? "crlf" : "lf";
+}
+
 function sizeText(size) {
   if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(2)} MiB`;
   if (size >= 1024) return `${(size / 1024).toFixed(2)} KiB`;
@@ -239,9 +259,15 @@ const highlight = HighlightStyle.define([
 // Give short and empty documents a useful editing area without inserting fake
 // newlines into their saved content. The scroller, content surface, and gutter
 // all fill that area; long documents scroll inside it.
+//
+// Height comes from .cm-host in the stylesheet rather than from here, so the
+// page decides how much room the editor gets - a resource page hands it a
+// whole column, a narrow viewport hands it less. The panel border closes the
+// box, so the editor draws none of its own; focus is an inset ring instead,
+// which shows the same thing without taking a pixel of layout.
 const theme = EditorView.theme({
-  "&": { border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--ink)", height: "200px", maxHeight: "60vh", overflow: "hidden" },
-  "&.cm-focused": { outline: "none", borderColor: "var(--accent)" },
+  "&": { border: "0", background: "var(--panel)", color: "var(--ink)", height: "100%", overflow: "hidden" },
+  "&.cm-focused": { outline: "none", boxShadow: "inset 0 0 0 1px var(--accent)" },
   ".cm-scroller": { fontFamily: "var(--mono)", fontSize: "12px", lineHeight: "1.65", minHeight: 0, overflow: "auto" },
   ".cm-content": { minHeight: "100%", padding: "6px 0" },
   ".cm-line": { padding: "0 7px" },
@@ -264,6 +290,8 @@ function enhance(textarea) {
   const upload = form ? form.querySelector("input[data-upload]") : null;
   const uploadStatus = form ? form.querySelector("[data-upload-status]") : null;
   const encodingSelect = form ? form.querySelector("[data-encoding-select]") : null;
+  const eolSelect = form ? form.querySelector("[data-eol-select]") : null;
+  const lineEnding = new Compartment();
   const host = document.createElement("div");
   host.className = "cm-host";
   textarea.parentNode.insertBefore(host, textarea.nextSibling);
@@ -296,6 +324,19 @@ function enhance(textarea) {
     setEncoding(initialEncoding);
   }
 
+  // The server detects the ending from the stored bytes and sends it here,
+  // because by the time the body reaches this script it cannot be recovered:
+  // the HTML parser turns every CRLF in the document into a bare LF.
+  let currentEOL = normalizeEOLName(textarea.dataset.eol || (eolSelect ? eolSelect.value : "lf"));
+  const setEOL = (name) => {
+    currentEOL = normalizeEOLName(name);
+    if (eolSelect) eolSelect.value = currentEOL;
+    textarea.dataset.eol = currentEOL;
+    if (view) {
+      view.dispatch({ effects: lineEnding.reconfigure(EditorState.lineSeparator.of(EOL_SEQUENCES[currentEOL])) });
+    }
+  };
+
   try {
     view = new EditorView({
       parent: host,
@@ -310,6 +351,7 @@ function enhance(textarea) {
           dropCursor(),
           indentOnInput(),
           indentUnit.of("  "),
+          lineEnding.of(EditorState.lineSeparator.of(EOL_SEQUENCES[currentEOL])),
           bracketMatching(),
           closeBrackets(),
           rectangularSelection(),
@@ -357,8 +399,11 @@ function enhance(textarea) {
   textarea.classList.add("cm-source");
 
   if (form) {
+    // sliceDoc() joins with state.lineBreak, which the lineEnding compartment
+    // owns. doc.toString() would hardcode LF and silently convert the whole
+    // file - including every line the editor never touched.
     const sync = () => {
-      textarea.value = view.state.doc.toString();
+      textarea.value = view.state.sliceDoc();
     };
     form.addEventListener("submit", sync);
     form.addEventListener("formdata", (event) => {
@@ -412,11 +457,19 @@ function enhance(textarea) {
 
     const openBytes = (bytes, encoding) => {
       const content = decodeBytes(bytes, encoding);
+      setEOL(detectEOL(content));
       replaceDocument(content);
       sourceBytes = bytes;
       setEncoding(encoding);
       return content;
     };
+
+    if (eolSelect) {
+      eolSelect.addEventListener("change", () => {
+        setEOL(eolSelect.value);
+        editorDirty = true;
+      });
+    }
 
     if (encodingSelect) {
       encodingSelect.addEventListener("change", async () => {
@@ -531,6 +584,44 @@ function enhance(textarea) {
   }
 }
 
+// A remote resource has no editable body - the bytes live upstream and are
+// fetched fresh for the page - but it reads like one, so it gets the same
+// surface with editing taken out: line numbers, highlighting and search stay,
+// the document cannot be changed, and nothing is wired to the form. Kept apart
+// from enhance() because every path in there is about producing bytes to post.
+function preview(textarea) {
+  const host = document.createElement("div");
+  host.className = "cm-host";
+  textarea.parentNode.insertBefore(host, textarea.nextSibling);
+
+  new EditorView({
+    parent: host,
+    state: EditorState.create({
+      doc: textarea.value,
+      extensions: [
+        lineNumbers(),
+        highlightSpecialChars(),
+        drawSelection(),
+        EditorState.readOnly.of(true),
+        EditorView.editable.of(false),
+        highlightSelectionMatches(),
+        search({ top: true }),
+        syntaxHighlighting(highlight),
+        theme,
+        languageFor(tokenFor(textarea.dataset.filename, textarea.dataset.contentType)),
+        keymap.of(searchKeymap),
+        EditorView.contentAttributes.of({
+          "aria-label": textarea.getAttribute("aria-label") || "资源内容",
+          "aria-readonly": "true",
+          spellcheck: "false",
+        }),
+      ],
+    }),
+  });
+
+  textarea.classList.add("cm-source");
+}
+
 for (const textarea of document.querySelectorAll("textarea[data-editor]")) {
   try {
     enhance(textarea);
@@ -538,5 +629,14 @@ for (const textarea of document.querySelectorAll("textarea[data-editor]")) {
     // One editor failing must not take the page with it: the textarea it was
     // meant to replace is still there and still posts.
     console.error("editor: falling back to the plain textarea", error);
+  }
+}
+
+for (const textarea of document.querySelectorAll("textarea[data-preview]")) {
+  try {
+    preview(textarea);
+  } catch (error) {
+    // Same rule: the disabled textarea behind it already shows the content.
+    console.error("editor: falling back to the plain preview", error);
   }
 }

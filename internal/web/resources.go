@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -61,6 +62,12 @@ const (
 	kindRemote = "remote"
 )
 
+// actionPreview asks the server to read the address and show what comes back,
+// and to do nothing else. Pulling an upstream to look at it is not the same
+// intent as keeping it, and on the new-resource screen there is nothing to
+// keep yet - the form has not been filled in.
+const actionPreview = "preview"
+
 func newResourceKind(value string) string {
 	if value == kindRemote {
 		return kindRemote
@@ -81,6 +88,15 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	form, err := readResourceForm(r, a.cfg.MaxContent)
+	if err == nil && r.FormValue("action") == actionPreview {
+		data := a.basePage(r, user)
+		data.IsNew = true
+		data.NewKind = newResourceKind(r.FormValue("kind"))
+		data.Resource = Resource{Name: form.Name, Filename: form.Filename, OriginURL: form.OriginURL}
+		a.previewUpstream(r.Context(), &data, form.OriginURL)
+		a.renderTemplate(w, http.StatusOK, "resource.html", data)
+		return
+	}
 	if err == nil {
 		var resource Resource
 		resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.ContentEncoding, form.OriginURL)
@@ -94,6 +110,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	data.NewKind = newResourceKind(r.FormValue("kind"))
 	data.Resource = Resource{Name: form.Name, Filename: form.Filename, ContentSize: int64(len(form.Content)), ContentEncoding: form.ContentEncoding, OriginURL: form.OriginURL}
 	data.ContentEncoding = form.ContentEncoding
+	data.ContentEOL = form.ContentEOL
 	if !form.Uploaded {
 		if text, _, decodeErr := store.DecodeText(form.Content, form.ContentEncoding); decodeErr == nil {
 			data.ContentText = text
@@ -113,7 +130,11 @@ type resourceForm struct {
 	// editor. Uploaded bytes already use it; textarea content is converted to
 	// it before reaching the store.
 	ContentEncoding string
-	Uploaded        bool
+	// ContentEOL is the line ending the body is written with. It is not stored:
+	// it is detected from the bytes whenever the page is rendered, so there is
+	// nothing to migrate and nothing that can go stale against the content.
+	ContentEOL string
+	Uploaded   bool
 
 	// ContentGiven separates "the editor sent an empty box" from "this form
 	// had no content field at all". A binary resource is edited through a
@@ -144,6 +165,7 @@ func readResourceForm(r *http.Request, maxBytes int64) (resourceForm, error) {
 		OriginURL:       strings.TrimSpace(r.FormValue("origin_url")),
 		Content:         []byte(r.FormValue("content")),
 		ContentEncoding: strings.TrimSpace(r.FormValue("content_encoding")),
+		ContentEOL:      store.NormalizeEOLName(r.FormValue("content_eol")),
 		ContentGiven:    r.Form["content"] != nil,
 	}
 	// Only a multipart submission can carry a file; anything else simply has
@@ -158,7 +180,11 @@ func readResourceForm(r *http.Request, maxBytes int64) (resourceForm, error) {
 		}
 	}
 	if form.OriginURL == "" && form.ContentGiven && !form.Uploaded {
-		encoded, encodingName, err := store.EncodeText(string(form.Content), form.ContentEncoding)
+		// Line endings first: the submitted value has been through a textarea,
+		// which the browser normalises to CRLF on the way out no matter what
+		// the file actually used.
+		body := store.ApplyEOL(string(form.Content), form.ContentEOL)
+		encoded, encodingName, err := store.EncodeText(body, form.ContentEncoding)
 		if err != nil {
 			return form, err
 		}
@@ -216,6 +242,15 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			a.renderResourcePage(w, r, user, resource, err.Error())
 			return
 		}
+		if r.FormValue("action") == actionPreview {
+			// Render against what is in the form rather than what is stored, so
+			// a pasted address can be read before deciding to keep it. The
+			// stored row is untouched either way.
+			pending := resource
+			pending.Name, pending.Filename, pending.OriginURL = form.Name, form.Filename, form.OriginURL
+			a.renderResourcePage(w, r, user, pending, "")
+			return
+		}
 		content := form.Content
 		if !form.ContentGiven {
 			// A nil body tells the store to retain the current object.
@@ -261,6 +296,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 				resource.ContentType = contentType
 				resource.ContentEncoding = detectedEncoding
 				data.ContentText = decoded
+				data.ContentEOL = store.DetectEOL(decoded)
 			}
 		} else {
 			resource.ContentType = "application/octet-stream"
@@ -276,21 +312,8 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	// which is the same fetch the preview needs.
 	servedType := resource.ContentType
 	if resource.Remote() {
-		// Read-only preview only: this is fetched fresh for the page, exactly
-		// as a public request would fetch it, and is never stored.
-		body, contentType, err := a.upstream.Fetch(r.Context(), resource.OriginURL)
-		if err != nil {
-			data.UpstreamError = err.Error()
-		} else {
-			servedType = store.SafeContentType(contentType)
-			data.UpstreamType = servedType
-			if store.TextLike(servedType) {
-				_, parameters, _ := mime.ParseMediaType(servedType)
-				if decoded, _, decodeErr := store.DecodeText(body, parameters["charset"]); decodeErr == nil {
-					data.UpstreamText = decoded
-					data.UpstreamTextPreview = true
-				}
-			}
+		if fetched := a.previewUpstream(r.Context(), &data, resource.OriginURL); fetched != "" {
+			servedType = fetched
 		}
 	}
 
@@ -317,6 +340,33 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 
 	a.renderTemplate(w, http.StatusOK, "resource.html", data)
+}
+
+// previewUpstream reads the address exactly as a public request would and fills
+// in whatever of it the page can show. Nothing is stored and nothing is cached:
+// this is a live read, and it is the only way the owner sees a remote body.
+// Returns the type the address would be served as, or "" if it could not be
+// read - callers keep their own fallback in that case.
+func (a *App) previewUpstream(ctx context.Context, data *pageData, originURL string) string {
+	if strings.TrimSpace(originURL) == "" {
+		data.UpstreamError = "先填写远程地址，再点拉取。"
+		return ""
+	}
+	body, contentType, err := a.upstream.Fetch(ctx, originURL)
+	if err != nil {
+		data.UpstreamError = err.Error()
+		return ""
+	}
+	servedType := store.SafeContentType(contentType)
+	data.UpstreamType = servedType
+	if store.TextLike(servedType) {
+		_, parameters, _ := mime.ParseMediaType(servedType)
+		if decoded, _, decodeErr := store.DecodeText(body, parameters["charset"]); decodeErr == nil {
+			data.UpstreamText = decoded
+			data.UpstreamTextPreview = true
+		}
+	}
+	return servedType
 }
 
 // handleRawPreview serves a resource's own bytes to its owner, so the editing

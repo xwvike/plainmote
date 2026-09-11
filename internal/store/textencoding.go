@@ -349,3 +349,50 @@ func EncodeText(content, encodingName string) ([]byte, string, error) {
 func DecodeText(content []byte, hint string) (string, string, error) {
 	return detectAndDecodeText(content, hint)
 }
+
+// Line endings are a property of the file, not of its text - the same rule
+// every editor follows. Detection happens on read, the value rides the form
+// like the encoding does, and the content is written back with it. A file
+// therefore keeps the endings it arrived with, and a file whose endings are
+// mixed is unified on the first save rather than kept mixed forever.
+const (
+	EOLLF   = "lf"
+	EOLCRLF = "crlf"
+)
+
+// NormalizeEOLName maps whatever arrived in a form to one of the two endings
+// that are actually written. Anything unrecognised is LF.
+func NormalizeEOLName(name string) string {
+	if strings.EqualFold(strings.TrimSpace(name), EOLCRLF) {
+		return EOLCRLF
+	}
+	return EOLLF
+}
+
+// DetectEOL picks the ending a text is written with, by majority. Only CRLF
+// and LF are produced: a lone CR is a line break for counting purposes but is
+// never chosen as the file's ending, which is what VS Code, Sublime and the
+// JetBrains editors all settle on. Text with no line break at all is LF.
+func DetectEOL(text string) string {
+	crlf := strings.Count(text, "\r\n")
+	// Every LF that is not the tail of a CRLF, plus every CR that is not its head.
+	lf := strings.Count(text, "\n") - crlf
+	cr := strings.Count(text, "\r") - crlf
+	if crlf > lf+cr {
+		return EOLCRLF
+	}
+	return EOLLF
+}
+
+// ApplyEOL rewrites every line break in text to the given ending. It is the
+// last step before encoding, so that a browser that normalised the textarea to
+// CRLF on submit - which every browser does, with or without JavaScript - does
+// not thereby convert an LF file.
+func ApplyEOL(text, eol string) string {
+	unified := strings.ReplaceAll(text, "\r\n", "\n")
+	unified = strings.ReplaceAll(unified, "\r", "\n")
+	if NormalizeEOLName(eol) == EOLCRLF {
+		return strings.ReplaceAll(unified, "\n", "\r\n")
+	}
+	return unified
+}

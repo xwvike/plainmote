@@ -28,13 +28,15 @@
       {{if or .LogResource .LogOutcome}}<a class="btn" href="/logs">清除</a>{{end}}
     </form>
     <div class="panel lg">
-      <div class="lgh"><span>时间</span><span>结果</span><span>请求路径</span><span>来源 IP</span><span></span></div>
+      <div class="lgh"><span>时间</span><span>结果</span><span>码</span><span>请求路径</span><span>资源</span><span>来源 IP</span><span></span></div>
       {{range .AccessLogs}}
       <details>
         <summary>
           <span class="tm">{{formatTime .OccurredAt}}</span>
           <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{.Outcome}}</span></span>
+          <span class="mono">{{.Status}}</span>
           <span class="mono trunc" title="{{.Path}}">{{.Path}}</span>
+          <span class="trunc" title="{{.ResourceName}}">{{if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</span>
           <span class="mono">{{.RemoteIP}}</span>
           <svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>
         </summary>
@@ -61,7 +63,7 @@
       <p class="empty">没有符合条件的访问记录。</p>
       {{end}}
     </div>
-    {{if .AccessLogs}}<p class="hint">展开任意一行可以看到资源、响应码、User-Agent 和全部代理头。</p>{{end}}
+    {{if .AccessLogs}}<p class="hint">展开任意一行可以看到响应详情、Query、User-Agent 和全部代理头。</p>{{end}}
   </main>
 </body>
 </html>{{end}}

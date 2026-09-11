@@ -16,7 +16,8 @@
   --bad: oklch(0.515 0.155 27);
   --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, system-ui, -apple-system, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --col: 620px;
+  --col: 1100px;
+  --edh: clamp(320px, calc(100vh - 300px), 760px);
 }
 
 * { box-sizing: border-box; }
@@ -56,6 +57,18 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
 .pb { padding: 12px; display: grid; gap: 12px; }
 .pf { padding: 10px 12px; border-top: 1px solid var(--line); background: var(--head); }
 
+/* The resource page runs two columns: the content surface takes the width it
+   now needs, and the resource's own identity and metadata sit beside it in a
+   fixed narrow column. minmax(0, 1fr) rather than 1fr, or a long unbroken line
+   in the editor widens the grid track instead of scrolling inside it. */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+.side { display: grid; gap: 14px; position: sticky; top: 16px; }
+/* Save commits the whole form - the name and filename live in the narrow
+   column, the body in the wide one - so the bar spans both rather than sitting
+   inside either, where it would read as saving only that column. */
+.savebar { display: flex; gap: 8px; align-items: center; padding: 10px 12px; background: var(--head); border: 1px solid var(--line); }
+.rform { display: grid; gap: 14px; align-content: start; }
+
 input[type="text"], input[type="url"], input[type="search"], textarea, select {
   width: 100%; border: 1px solid var(--line2); border-radius: 0;
   background: var(--panel); color: var(--ink); font: 400 12.5px/1.45 var(--sans);
@@ -75,13 +88,15 @@ input[readonly] { background: oklch(0.974 0.002 255); color: var(--ink2); }
 textarea { padding: 6px 7px; font: 400 12px/1.65 var(--mono); resize: vertical; display: block; }
 input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
 .f { display: grid; gap: 4px; min-width: 0; }
-.f > span { font-size: 11px; font-weight: 500; color: var(--ink2); }
+.f > span, .f > label { font-size: 11px; font-weight: 500; color: var(--ink2); }
 .lr { display: flex; align-items: baseline; gap: 8px; }
 .lr > span { font-size: 11px; font-weight: 500; color: var(--ink2); }
 .lr > em { margin-left: auto; font: 400 10.5px var(--mono); font-style: normal; color: var(--ink3); }
 .encoding-picker { display: inline-flex; align-items: center; gap: 5px; color: var(--ink3); font: 400 10.5px var(--mono); }
 .encoding-picker select { width: auto; min-width: 124px; height: 22px; padding: 0 5px; font-size: 10.5px; }
+.eol-picker select { min-width: 0; }
 .hint { font-size: 11px; line-height: 1.45; color: var(--ink3); }
+.fhint { font: 400 10.5px/1.5 var(--mono); color: var(--ink3); }
 .chk { display: flex; align-items: flex-start; gap: 8px; }
 .chk > div { display: grid; gap: 2px; }
 .chk b { font-size: 12px; font-weight: 500; }
@@ -185,7 +200,7 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .shl .ttl { font: 400 10.5px var(--mono); color: var(--ink3); margin-left: auto; }
 
 /* access log: native <details> rows, columns aligned by a shared grid template */
-.lg { --cols: 124px 82px minmax(0, 1fr) 98px 14px; }
+.lg { --cols: 124px 82px 44px minmax(0, 1fr) 152px 108px 14px; }
 .lgh { display: grid; grid-template-columns: var(--cols); gap: 10px; align-items: center; padding: 6px 12px; background: var(--head); border-bottom: 1px solid var(--line2); font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
 .lg details { border-bottom: 1px solid var(--line); }
 .lg details:last-child { border-bottom: 0; }
@@ -219,10 +234,30 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .cm-host { min-width: 0; }
 .cm-host .cm-editor { border-radius: 0; }
 
-@media (max-width: 900px) {
+/* Once the editor is up it becomes the panel body itself: the panel border
+   closes the box, so the editor draws none of its own and the padding goes.
+   Keyed off :has() so a browser that never ran the module - or ran it and
+   threw - keeps the padded textarea it is falling back to. */
+.panel-ed > .pb:has(> .cm-host) { padding: 0; gap: 0; }
+.panel-ed .cm-host { height: var(--edh); }
+/* The content column keeps the same height across every state it has - an
+   editor, a read-only preview, a not-yet-pulled address, a notice. Without
+   this the page collapses to a strip whenever there is nothing to show, and
+   jumps back out again once there is. */
+.panel-ed > .pb { min-height: var(--edh); align-content: start; }
+
+/* Below the fixed column the page goes fluid and the split stacks. The narrow
+   column is second in the DOM, so stacked it lands under the content - which is
+   the right order here: the body is what the page is for. */
+@media (max-width: 1180px) {
   :root { --col: 100%; }
   .topin { width: calc(100% - 20px); }
   .page { width: calc(100% - 20px); padding-top: 12px; }
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; }
+}
+
+@media (max-width: 900px) {
   .lg { --cols: 1fr; }
   .lgh { display: none; }
   .lg summary { gap: 3px; }

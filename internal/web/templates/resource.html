@@ -35,101 +35,124 @@
     </div>
     {{end}}
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    {{$remote := or .Resource.Remote (eq .NewKind "remote")}}
 
-    <form method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}">
+    <form class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       {{if .IsNew}}<input type="hidden" name="kind" value="{{.NewKind}}">{{end}}
-      <div class="panel">
-        <div class="pt"><span class="sec">资源</span>{{if not .IsNew}}<span class="sp hint">保存后立即对所有分享生效</span>{{end}}</div>
-        <div class="pb" style="gap:14px">
-          <label class="f"><span>名称</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="clash 订阅" required></label>
-          <label class="f">
-            <span class="lr">
-              <span>文件名</span>
-              <em>{{if .Resource.Remote}}类型取自上游{{else if .Resource.ContentType}}按后缀和内容识别为 {{.Resource.ContentType}}{{else}}保存时按后缀和内容识别类型{{end}}</em>
-            </span>
-            <input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="clash.yaml">
-          </label>
-          {{if or .Resource.Remote (eq .NewKind "remote")}}
-          <label class="f">
-            <span class="lr"><span>远程地址</span><em>每次访问实时回源转发，内容不落库</em></span>
-            <input type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" placeholder="https://example.com/clash.yaml" required>
-          </label>
-          {{else}}
-          <label class="f">
-            <span class="lr"><span>{{if .IsNew}}选择文件{{else}}替换文件{{end}}</span><em>{{if and (not .IsNew) (not .Resource.Editable)}}这类内容只能整份替换{{end}}</em></span>
-            <input type="file" name="upload" data-upload data-max-bytes="{{.MaxContent}}">
-            <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
-          </label>
-          {{end}}
+      <div class="split">
 
-          {{if or .Resource.Remote (eq .NewKind "remote")}}
-          {{if .UpstreamError}}<p class="err">{{.UpstreamError}}</p>{{end}}
-          {{if .UpstreamTextPreview}}
-          <label class="f">
-            <span class="lr"><span>内容</span><em>只读 · 打开本页时取自上游 · {{bytesText (len .UpstreamText)}}</em></span>
-            <textarea rows="13" spellcheck="false" disabled>{{.UpstreamText}}</textarea>
-          </label>
-          {{else if .UpstreamType}}
-          <div class="f">
-            <span class="lr"><span>内容</span><em>{{.UpstreamType}} · 只读</em></span>
-            <p class="ro">上游返回的是非文本内容，这里不做预览。公开地址会原样转发。</p>
-          </div>
-          {{end}}
-          <p class="hint">上游不可达时公开地址返回 502，并记进访问记录。这里不缓存任何内容。</p>
-          {{else if .Resource.Editable}}
-          <div class="f">
-            <span class="lr">
-              <span>内容</span><em>{{bytesText .Resource.ContentSize}} / 上限 {{bytesText .MaxContent}}</em>
+        <div class="panel panel-ed">
+          <div class="pt">
+            <span class="sec">内容</span>
+            {{if $remote}}<span class="tag">只读</span>{{end}}
+            <span class="sp">
+              {{if and (not $remote) (or .Resource.Editable .IsNew)}}
               <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+              <label class="encoding-picker eol-picker"><span>行尾</span><select name="content_eol" data-eol-select aria-label="行尾" title="保存时写入的换行符">
+                <option value="lf"{{if eq .ContentEOL "lf"}} selected{{end}}>LF</option>
+                <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>
+              </select></label>
+              {{end}}
+              <em style="font:400 10.5px var(--mono);font-style:normal;color:var(--ink3)">
+                {{if $remote}}{{if .UpstreamTextPreview}}取自上游 · {{bytesText (len .UpstreamText)}}{{else if .UpstreamType}}{{.UpstreamType}}{{else if .UpstreamError}}上游未取到{{else}}填入地址后点「拉取」{{end}}
+                {{else if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / 上限 {{bytesText .MaxContent}}
+                {{else if .IsNew}}上限 {{bytesText .MaxContent}}
+                {{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}}
+              </em>
             </span>
-            <textarea name="content" rows="13" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
           </div>
-          {{else if .IsNew}}
-          <div class="f">
-            <span class="lr">
-              <span>或直接输入内容</span><em>上限 {{bytesText .MaxContent}}</em>
-              <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
-            </span>
-            <textarea name="content" rows="13" spellcheck="false" aria-label="资源内容" data-editor data-filename="" data-content-type="" data-encoding="{{.ContentEncoding}}"></textarea>
-          </div>
-          {{else}}
-          <div class="f">
-            <span class="lr"><span>内容</span><em>{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}</em></span>
-            {{if hasPrefix .Resource.ContentType "image/"}}
-            <img src="/resources/{{.Resource.ID}}/raw" alt="{{.Resource.Name}}" style="max-width:100%;max-height:320px;border:1px solid var(--line);background:var(--head)">
-            {{else if hasPrefix .Resource.ContentType "audio/"}}
-            <audio controls src="/resources/{{.Resource.ID}}/raw" style="width:100%"></audio>
-            {{else if hasPrefix .Resource.ContentType "video/"}}
-            <video controls src="/resources/{{.Resource.ID}}/raw" style="max-width:100%;max-height:320px"></video>
+          <div class="pb">
+            {{if $remote}}
+              {{if .UpstreamError}}<p class="err">{{.UpstreamError}}</p>{{end}}
+              {{if .UpstreamTextPreview}}
+              <textarea rows="18" spellcheck="false" disabled aria-label="资源内容" data-preview data-filename="{{.Resource.Filename}}" data-content-type="{{.UpstreamType}}">{{.UpstreamText}}</textarea>
+              {{else if .UpstreamType}}
+              <p class="ro">上游返回的是非文本内容，这里不做预览。公开地址会原样转发。</p>
+              {{else if not .UpstreamError}}
+              <p class="ro">右侧填入远程地址后点「拉取」，这里会显示上游此刻返回的内容。拉取不保存任何东西。</p>
+              {{end}}
+            {{else if .Resource.Editable}}
+            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
+            {{else if .IsNew}}
+            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="" data-content-type="" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}"></textarea>
             {{else}}
-            <p class="ro">该文件类型不支持在线编辑。要更换请上传新文件。</p>
+              {{if hasPrefix .Resource.ContentType "image/"}}
+              <img src="/resources/{{.Resource.ID}}/raw" alt="{{.Resource.Name}}" style="max-width:100%;max-height:520px;border:1px solid var(--line);background:var(--head)">
+              {{else if hasPrefix .Resource.ContentType "audio/"}}
+              <audio controls src="/resources/{{.Resource.ID}}/raw" style="width:100%"></audio>
+              {{else if hasPrefix .Resource.ContentType "video/"}}
+              <video controls src="/resources/{{.Resource.ID}}/raw" style="max-width:100%;max-height:520px"></video>
+              {{else}}
+              <p class="ro">该文件类型不支持在线编辑。要更换请在右侧上传新文件。</p>
+              {{end}}
             {{end}}
           </div>
+          {{if $remote}}
+          <div class="pf"><p class="hint">引用地址不能在线编辑，但照样高亮和搜索。上游不可达时公开地址返回 502，并记进访问记录；这里不缓存任何内容。</p></div>
           {{end}}
         </div>
-        <div class="pf" style="display:flex;gap:8px;align-items:center">
-          <button type="submit" class="pri">{{if .IsNew}}创建资源{{else}}保存{{end}}</button>
-          <a class="btn" href="{{if .IsNew}}/{{else}}/resources/{{.Resource.ID}}{{end}}">{{if .IsNew}}取消{{else}}放弃修改{{end}}</a>
-          {{if .IsNew}}<span class="hint" style="margin-left:auto">创建后即可发起分享。</span>{{end}}
+
+        <div class="side">
+          <div class="panel">
+            <div class="pt"><span class="sec">资源</span></div>
+            <div class="pb" style="gap:14px">
+              <label class="f"><span>名称</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="clash 订阅" required></label>
+              <label class="f">
+                <span>文件名</span>
+                <input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="clash.yaml">
+                <span class="fhint">{{if $remote}}只决定下载名，类型取自上游{{else if .IsNew}}留空则按内容判定，自动命名{{else if .Resource.ContentType}}按后缀和内容识别为 {{.Resource.ContentType}}{{else}}保存时按后缀和内容识别类型{{end}}</span>
+              </label>
+              {{if $remote}}
+              <div class="f">
+                <label for="origin_url">远程地址</label>
+                <span class="fl">
+                  <input id="origin_url" type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" placeholder="https://example.com/clash.yaml" required>
+                  <button type="submit" name="action" value="preview" formnovalidate title="读取上游内容，不保存">拉取</button>
+                </span>
+                <span class="fhint">每次访问实时回源转发，内容不落库</span>
+              </div>
+              {{else}}
+              <label class="f">
+                <span>{{if .IsNew}}选择文件{{else}}替换文件{{end}}</span>
+                <input type="file" name="upload" data-upload data-max-bytes="{{.MaxContent}}">
+                <span class="fhint">{{if and (not .IsNew) (not .Resource.Editable)}}这类内容只能整份替换{{else}}选中后自动识别编码并载入左侧编辑器{{end}}</span>
+                <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
+              </label>
+              {{end}}
+            </div>
+          </div>
+
+          {{if .IsNew}}
+            {{if not $remote}}
+            <p class="ro">两条路都通向同一份正文：选文件会把它读进编辑器，也可以不选文件、直接在左侧敲。一旦在编辑器里改过，文件输入就被清空，保存时按当前编码写回。</p>
+            {{end}}
+          {{else}}
+          <div class="panel">
+            <div class="pt"><span class="sec">元信息</span></div>
+            <div class="pb">
+              <dl class="kv">
+                <dt>资源 ID</dt><dd>{{.Resource.ID}}</dd>
+                <dt>内容</dt><dd>{{if .Resource.Remote}}远程 · {{originHost .Resource.OriginURL}}{{else}}本地 · {{bytesText .Resource.ContentSize}}{{end}}</dd>
+                {{if and (not .Resource.Remote) .ContentEncoding}}<dt>源编码</dt><dd>{{.ContentEncoding}}</dd>{{end}}
+                {{if and .Resource.Remote .UpstreamType}}<dt>上游类型</dt><dd>{{.UpstreamType}}</dd>{{end}}
+                <dt>创建时间</dt><dd>{{formatTime .Resource.CreatedAt}}</dd>
+                <dt>最近更新</dt><dd>{{formatTime .Resource.UpdatedAt}}</dd>
+                <dt>分享</dt><dd>{{len .Shares}} 条进行中</dd>
+              </dl>
+            </div>
+          </div>
+          {{end}}
         </div>
+      </div>
+
+      <div class="savebar">
+        <button type="submit" class="pri">{{if .IsNew}}创建资源{{else}}保存{{end}}</button>
+        <a class="btn" href="{{if .IsNew}}/{{else}}/resources/{{.Resource.ID}}{{end}}">{{if .IsNew}}取消{{else}}放弃修改{{end}}</a>
+        <span class="hint" style="margin-left:auto">{{if .IsNew}}创建后即可发起分享。{{else}}保存后立即对所有分享生效{{end}}</span>
       </div>
     </form>
 
-    {{if not .IsNew}}
-    <details class="pan">
-      <summary>{{template "chev"}}<span class="sec">元信息</span></summary>
-      <div class="pb">
-        <dl class="kv">
-          <dt>资源 ID</dt><dd>{{.Resource.ID}}</dd>
-          <dt>内容</dt><dd>{{if .Resource.Remote}}远程 · {{.Resource.OriginURL}}{{else}}本地 · {{bytesText .Resource.ContentSize}}{{end}}</dd>
-          <dt>创建时间</dt><dd>{{formatTime .Resource.CreatedAt}}</dd>
-          <dt>最近更新</dt><dd>{{formatTime .Resource.UpdatedAt}}</dd>
-          <dt>分享</dt><dd>{{len .Shares}} 条进行中</dd>
-        </dl>
-      </div>
-    </details>
-    {{end}}
   </main>
 
   {{if .ShareOpen}}
@@ -221,7 +244,7 @@
   </dialog>
   {{end}}
 
-  {{if or .Resource.Editable (and .IsNew (ne .NewKind "remote"))}}
+  {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
   <script type="module" src="/static/editor.js"></script>
   {{end}}
   <script>

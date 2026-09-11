@@ -24,13 +24,17 @@
       </div>
       {{if .Resources}}
       <table class="fx">
-        <colgroup><col style="width:150px"><col><col style="width:104px"><col style="width:132px"></colgroup>
-        <thead><tr><th>名称</th><th>文件名</th><th>状态</th><th class="r">最近更新</th></tr></thead>
+        <colgroup><col style="width:240px"><col><col style="width:210px"><col style="width:130px"><col style="width:150px"></colgroup>
+        <thead><tr><th>名称</th><th>文件名</th><th>类型</th><th>状态</th><th class="r">最近更新</th></tr></thead>
         <tbody>
           {{range .Resources}}
           <tr>
             <td class="trunc"><a href="/resources/{{.ID}}">{{.Name}}</a></td>
             <td><span class="fl"><span class="mono trunc" title="{{.Filename}}">{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">远程</span>{{end}}</span></td>
+            <td>
+              {{if .Remote}}<span class="fl"><span class="tag">回源</span><span class="mono trunc" title="{{.OriginURL}}">{{originHost .OriginURL}}</span></span>
+              {{else}}<span class="mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
+            </td>
             <td>
               {{if .LiveShares}}<span class="st on"><i></i><span>{{.LiveShares}} 条分享</span></span>
               {{else}}<span class="st off"><i></i><span>未分享</span></span>{{end}}
