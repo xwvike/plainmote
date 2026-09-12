@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	defaultPageSize = 20
+	defaultPageSize = 10
 	// Keep search URLs and LIKE patterns bounded without cutting a UTF-8 rune.
 	maxQueryLength = 256
 	pageWindow     = 7
