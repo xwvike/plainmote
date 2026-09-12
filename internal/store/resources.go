@@ -185,6 +185,10 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 		if err != nil {
 			return err
 		}
+		// Encoding describes the stored bytes. A metadata-only request cannot
+		// change it without replacing those bytes, or the next read may decode
+		// the same object as an unrelated character set.
+		contentEncoding = current.ContentEncoding
 	}
 	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
 	if err != nil {

@@ -53,6 +53,7 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
 .panel { background: var(--panel); border: 1px solid var(--line); }
 .pt { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--line); background: var(--head); }
 .pt .sp { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.panel-ed > .pt .sp { min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
 .sec { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
 .pb { padding: 12px; display: grid; gap: 12px; }
 .pf { padding: 10px 12px; border-top: 1px solid var(--line); background: var(--head); }
@@ -95,6 +96,8 @@ input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var
 .encoding-picker { display: inline-flex; align-items: center; gap: 5px; color: var(--ink3); font: 400 10.5px var(--mono); }
 .encoding-picker select { width: auto; min-width: 124px; height: 22px; padding: 0 5px; font-size: 10.5px; }
 .eol-picker select { min-width: 0; }
+.encoding-reopen { font: 400 10.5px/1 var(--mono); }
+.encoding-reopen:disabled { cursor: default; opacity: 0.48; }
 .hint { font-size: 11px; line-height: 1.45; color: var(--ink3); }
 .fhint { font: 400 10.5px/1.5 var(--mono); color: var(--ink3); }
 .chk { display: flex; align-items: flex-start; gap: 8px; }

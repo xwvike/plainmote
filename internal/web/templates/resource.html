@@ -48,7 +48,8 @@
             {{if $remote}}<span class="tag">只读</span>{{end}}
             <span class="sp">
               {{if and (not $remote) (or .Resource.Editable .IsNew)}}
-              <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+              <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="保存编码" title="保存时写入的文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+              <button type="button" class="sm encoding-reopen" data-reopen-encoding title="按所选编码重新解码原始文件，会替换编辑器中的内容">重新解码</button>
               <label class="encoding-picker eol-picker"><span>行尾</span><select name="content_eol" data-eol-select aria-label="行尾" title="保存时写入的换行符">
                 <option value="lf"{{if eq .ContentEOL "lf"}} selected{{end}}>LF</option>
                 <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>

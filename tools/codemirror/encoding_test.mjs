@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 // prevents editor enhancement from running in this smoke test.
 globalThis.document = { documentElement: { style: {} }, querySelectorAll: () => [] };
 
-const { decodeBytes, detectFileEncoding, SUPPORTED_ENCODINGS } = await import("../../internal/web/static/editor.js");
+const { decodeBytes, detectFileEncoding, submissionSource, SUPPORTED_ENCODINGS } = await import("../../internal/web/static/editor.js");
 
 const fromHex = (value) => Uint8Array.from(value.match(/../g).map((pair) => Number.parseInt(pair, 16)));
 
@@ -41,3 +41,8 @@ assert.throws(() => decodeBytes(fromHex("8130"), "big5"));
 for (const encoding of SUPPORTED_ENCODINGS) {
   assert.doesNotThrow(() => decodeBytes(new Uint8Array(), encoding), `${encoding} browser decoder`);
 }
+
+assert.equal(submissionSource(true, false, false), "upload", "an untouched upload keeps its original bytes");
+assert.equal(submissionSource(false, true, false), "stored", "an untouched resource keeps its stored bytes");
+assert.equal(submissionSource(true, false, true), "editor", "a format change overrides the selected upload");
+assert.equal(submissionSource(false, true, true), "editor", "a format change overrides stored bytes");

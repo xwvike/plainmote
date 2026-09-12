@@ -50,6 +50,9 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	if !strings.Contains(page, `aria-label="资源内容"`) {
 		t.Error("the editor source must provide an accessible name")
 	}
+	if !strings.Contains(page, `data-encoding-select aria-label="保存编码"`) || !strings.Contains(page, `data-reopen-encoding`) {
+		t.Error("the editor must separate its save encoding from explicit source decoding")
+	}
 	if !strings.Contains(page, `<script type="module" src="/static/editor.js">`) {
 		t.Error("the editor module must be linked")
 	}
@@ -159,7 +162,7 @@ func TestLegacyTextKeepsBytesUntilEdited(t *testing.T) {
 	metadataOnly := post(url.Values{
 		"name":             {"Renamed"},
 		"filename":         {"legacy.yaml"},
-		"content_encoding": {encodingName},
+		"content_encoding": {"windows-1252"},
 	})
 	if metadataOnly.Code != http.StatusSeeOther {
 		t.Fatalf("metadata update: %d %s", metadataOnly.Code, metadataOnly.Body.String())
@@ -172,8 +175,8 @@ func TestLegacyTextKeepsBytesUntilEdited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.ContentKey != originalKey || !bytes.Equal(unchanged, original) {
-		t.Fatalf("metadata update rewrote source bytes: key %q -> %q, bytes %x -> %x", originalKey, stored.ContentKey, original, unchanged)
+	if stored.ContentKey != originalKey || stored.ContentEncoding != encodingName || !bytes.Equal(unchanged, original) {
+		t.Fatalf("metadata update changed source format: key %q -> %q, encoding %q -> %q, bytes %x -> %x", originalKey, stored.ContentKey, encodingName, stored.ContentEncoding, original, unchanged)
 	}
 
 	editedText := originalText + "状态: 可用\n"
@@ -213,5 +216,65 @@ func TestLegacyTextKeepsBytesUntilEdited(t *testing.T) {
 	}
 	if gotType := delivered.Header().Get("Content-Type"); gotType != "application/yaml; charset=gb18030" {
 		t.Fatalf("legacy share content type = %q", gotType)
+	}
+}
+
+func TestEditorSavesSelectedEncodingAndLineEnding(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	const text = "name: 示例\nstatus: enabled\n"
+	resource, err := db.CreateResource(ctx, user.ID, "Config", "config.yaml", []byte(text), "utf-8", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalKey := resource.ContentKey
+
+	app := newTestApp(db, user.GitHubID)
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := url.Values{
+		"csrf":             {csrf},
+		"name":             {resource.Name},
+		"filename":         {resource.Filename},
+		"content":          {text},
+		"content_encoding": {"utf-16le-bom"},
+		"content_eol":      {"crlf"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "https://cfg.test/resources/"+resource.ID, strings.NewReader(values.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("save: %d %s", response.Code, response.Body.String())
+	}
+
+	stored, err := db.ResourceForOwner(ctx, user.ID, resource.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := db.ReadContent(ctx, stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, encodingName, err := store.EncodeText(store.ApplyEOL(text, store.EOLCRLF), "utf-16le-bom")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.ContentKey == originalKey {
+		t.Fatal("changing encoding and line endings must replace the stored object")
+	}
+	if stored.ContentEncoding != encodingName || !bytes.Equal(got, want) {
+		t.Fatalf("saved format = encoding:%q bytes:%x, want encoding:%q bytes:%x", stored.ContentEncoding, got, encodingName, want)
+	}
+	decoded, _, err := store.DecodeText(got, stored.ContentEncoding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded != "name: 示例\r\nstatus: enabled\r\n" {
+		t.Fatalf("decoded content = %q", decoded)
 	}
 }

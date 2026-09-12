@@ -71,6 +71,12 @@ function detectEOL(text) {
   return crlf > lf + cr ? "crlf" : "lf";
 }
 
+function submissionSource(hasUpload, hasStoredBytes, contentChanged) {
+  if (hasUpload && !contentChanged) return "upload";
+  if (hasStoredBytes && !contentChanged) return "stored";
+  return "editor";
+}
+
 function sizeText(size) {
   if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(2)} MiB`;
   if (size >= 1024) return `${(size / 1024).toFixed(2)} KiB`;
@@ -241,7 +247,7 @@ function detectFileEncoding(bytes) {
 // Exported for the repository's browser-side encoding smoke test. The page
 // itself uses the same functions below, so the test does not maintain a second
 // implementation of the detection rules.
-export { decodeBytes, detectFileEncoding, SUPPORTED_ENCODINGS };
+export { decodeBytes, detectFileEncoding, submissionSource, SUPPORTED_ENCODINGS };
 
 // Colours come from the stylesheet's tokens, so the editor stays inside the
 // same palette as the rest of the page instead of shipping its own.
@@ -290,6 +296,7 @@ function enhance(textarea) {
   const upload = form ? form.querySelector("input[data-upload]") : null;
   const uploadStatus = form ? form.querySelector("[data-upload-status]") : null;
   const encodingSelect = form ? form.querySelector("[data-encoding-select]") : null;
+  const reopenEncoding = form ? form.querySelector("[data-reopen-encoding]") : null;
   const eolSelect = form ? form.querySelector("[data-eol-select]") : null;
   const lineEnding = new Compartment();
   const host = document.createElement("div");
@@ -301,11 +308,32 @@ function enhance(textarea) {
   let operationVersion = 0;
   let documentBeforeUpload = null;
   let dirtyBeforeUpload = false;
+  let editedBeforeUpload = false;
   let editorDirty = false;
+  let documentEdited = false;
   let sourceBytes = null;
 
   const setUploadStatus = (message) => {
     if (uploadStatus) uploadStatus.textContent = message;
+  };
+
+  const updateReopenAvailability = () => {
+    if (reopenEncoding) reopenEncoding.disabled = !sourceBytes && (!textarea.dataset.rawUrl || documentEdited);
+  };
+
+  // Selecting a file normally leaves its bytes untouched. Once the user
+  // changes content, encoding, or line endings, however, the editor is the
+  // source of truth and the form must submit its text instead of the file.
+  const markContentForSave = (message, keepSourceBytes = false) => {
+    editorDirty = true;
+    operationVersion += 1;
+    if (!keepSourceBytes) sourceBytes = null;
+    if (upload && upload.files.length > 0) {
+      upload.value = "";
+      documentBeforeUpload = null;
+    }
+    updateReopenAvailability();
+    setUploadStatus(message);
   };
 
   const setEncoding = (encoding, valid = true) => {
@@ -368,18 +396,8 @@ function enhance(textarea) {
           }),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged || applyingSource) return;
-
-            editorDirty = true;
-            sourceBytes = null;
-            operationVersion += 1;
-            if (!upload || upload.files.length === 0) return;
-
-            // Once the uploaded preview is edited, the editor becomes the
-            // source of truth. Clearing the file input keeps the server's
-            // existing "uploaded file wins" rule from discarding those edits.
-            upload.value = "";
-            documentBeforeUpload = null;
-            setUploadStatus(`已采用编辑器中的修改，保存时将按 ${encodingSelect ? encodingSelect.value : "utf-8"} 编码写入。`);
+            documentEdited = true;
+            markContentForSave(`已采用编辑器中的修改，保存时将按 ${encodingSelect ? encodingSelect.value : "utf-8"} 编码写入。`);
           }),
           language.of(languageFor(tokenFor(textarea.dataset.filename, textarea.dataset.contentType))),
           keymap.of([
@@ -409,19 +427,28 @@ function enhance(textarea) {
     form.addEventListener("formdata", (event) => {
       sync();
       if (!textarea.name) return;
-      if (upload && upload.files.length > 0) {
+      const source = submissionSource(
+        Boolean(upload && upload.files.length > 0),
+        Boolean(textarea.dataset.rawUrl),
+        editorDirty,
+      );
+      if (source === "upload") {
         // The server deliberately gives an uploaded file precedence. Do not
         // send the editor preview as a second full copy of the same content.
         event.formData.delete(textarea.name);
         if (encodingSelect && encodingSelect.dataset.valid !== "true") {
           event.formData.delete(encodingSelect.name);
         }
-      } else if (textarea.dataset.rawUrl && !editorDirty) {
-        // Keep the stored bytes byte-for-byte identical when only metadata or
-        // the chosen decoding changes. The server interprets an absent content
-        // field on an existing resource as "retain the current object".
+      } else if (source === "stored") {
+        // Keep the stored bytes byte-for-byte identical when fields outside
+        // the editor change. The server interprets an absent content field on
+        // an existing resource as "retain the current object".
         event.formData.delete(textarea.name);
       } else {
+        // Encoding and line-ending changes make the editor authoritative too.
+        // Deleting the file here is a second line of defence in case a browser
+        // retains it after upload.value was cleared.
+        if (upload && upload.name) event.formData.delete(upload.name);
         event.formData.set(textarea.name, textarea.value);
       }
     });
@@ -440,7 +467,7 @@ function enhance(textarea) {
       });
     }
 
-    const replaceDocument = (content, dirty = false) => {
+    const replaceDocument = (content, dirty = false, edited = false) => {
       applyingSource = true;
       try {
         view.dispatch({
@@ -450,6 +477,7 @@ function enhance(textarea) {
         });
         textarea.value = content;
         editorDirty = dirty;
+        documentEdited = edited;
       } finally {
         applyingSource = false;
       }
@@ -464,51 +492,59 @@ function enhance(textarea) {
       return content;
     };
 
+    const reopenWithEncoding = async (encoding) => {
+      const version = ++operationVersion;
+      let bytes = sourceBytes;
+
+      if (!bytes && textarea.dataset.rawUrl) {
+        setUploadStatus(`正在按 ${encoding} 重新解码…`);
+        try {
+          const response = await fetch(textarea.dataset.rawUrl, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          bytes = new Uint8Array(await response.arrayBuffer());
+        } catch (error) {
+          if (version !== operationVersion) return;
+          setEncoding(encoding, false);
+          setUploadStatus(`无法读取原始文件，请稍后重试。`);
+          console.error("editor: cannot read resource for decoding", error);
+          return;
+        }
+      }
+      if (version !== operationVersion || !bytes) return;
+
+      try {
+        openBytes(bytes, encoding);
+        markContentForSave(`已按 ${encoding} 重新解码；保存时也会写成 ${encoding}。`, true);
+      } catch (error) {
+        if (version !== operationVersion) return;
+        setEncoding(encoding, false);
+        setUploadStatus(`无法按 ${encoding} 解码，请选择其他编码。`);
+      }
+    };
+
     if (eolSelect) {
       eolSelect.addEventListener("change", () => {
         setEOL(eolSelect.value);
-        editorDirty = true;
+        const label = currentEOL === "crlf" ? "CRLF" : "LF";
+        markContentForSave(`保存时将写入 ${label} 行尾。`, true);
       });
     }
 
     if (encodingSelect) {
-      encodingSelect.addEventListener("change", async () => {
+      encodingSelect.addEventListener("change", () => {
         const encoding = normalizeEncoding(encodingSelect.value);
         if (!encoding) return;
-        const version = ++operationVersion;
-
-        if (sourceBytes) {
-          try {
-            openBytes(sourceBytes, encoding);
-            setUploadStatus(`已按 ${encoding} 重新打开，可以继续编辑。`);
-          } catch (error) {
-            encodingSelect.dataset.valid = "false";
-            setUploadStatus(`无法按 ${encoding} 解码，请选择其他编码。`);
-          }
-          return;
-        }
-
-        if (textarea.dataset.rawUrl && !editorDirty) {
-          setUploadStatus(`正在按 ${encoding} 重新打开…`);
-          try {
-            const response = await fetch(textarea.dataset.rawUrl, { cache: "no-store" });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const bytes = new Uint8Array(await response.arrayBuffer());
-            if (version !== operationVersion || editorDirty) return;
-            openBytes(bytes, encoding);
-            setUploadStatus(`已按 ${encoding} 重新打开，可以继续编辑。`);
-          } catch (error) {
-            if (version !== operationVersion) return;
-            encodingSelect.dataset.valid = "false";
-            setUploadStatus(`无法按 ${encoding} 重新打开，请选择其他编码。`);
-            console.error("editor: cannot reopen resource with encoding", error);
-          }
-          return;
-        }
-
         setEncoding(encoding);
-        setUploadStatus(`保存时将按 ${encoding} 编码写入。`);
+        markContentForSave(`保存时将按 ${encoding} 编码写入；若当前文字解码不对，请点“重新解码”。`, true);
       });
+    }
+
+    if (reopenEncoding) {
+      reopenEncoding.addEventListener("click", () => {
+        const encoding = normalizeEncoding(encodingSelect ? encodingSelect.value : "");
+        if (encoding) void reopenWithEncoding(encoding);
+      });
+      updateReopenAvailability();
     }
 
     if (upload) {
@@ -517,9 +553,10 @@ function enhance(textarea) {
         const file = upload.files[0];
 
         if (!file) {
-          if (documentBeforeUpload !== null) replaceDocument(documentBeforeUpload, dirtyBeforeUpload);
+          if (documentBeforeUpload !== null) replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           documentBeforeUpload = null;
           sourceBytes = null;
+          updateReopenAvailability();
           setUploadStatus("");
           return;
         }
@@ -527,10 +564,11 @@ function enhance(textarea) {
         if (documentBeforeUpload === null) {
           documentBeforeUpload = view.state.doc.toString();
           dirtyBeforeUpload = editorDirty;
+          editedBeforeUpload = documentEdited;
         } else {
           // A second selection replaces the first preview, not the content
           // that was in the editor before file selection began.
-          replaceDocument(documentBeforeUpload, dirtyBeforeUpload);
+          replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
         }
 
         if (filename && (filename.value.trim() === "" || filename.value === suggestedFilename)) {
@@ -542,6 +580,7 @@ function enhance(textarea) {
         const maxBytes = Number(upload.dataset.maxBytes || 0);
         if (maxBytes > 0 && file.size > maxBytes) {
           sourceBytes = null;
+          updateReopenAvailability();
           setUploadStatus(`文件大小为 ${sizeText(file.size)}，超过 ${sizeText(maxBytes)} 上限。`);
           return;
         }
@@ -553,6 +592,7 @@ function enhance(textarea) {
         } catch (error) {
           if (version !== operationVersion) return;
           sourceBytes = null;
+          updateReopenAvailability();
           setUploadStatus(`无法读取 ${file.name}，请重新选择文件。`);
           console.error("editor: cannot read uploaded file", error);
           return;
@@ -561,24 +601,25 @@ function enhance(textarea) {
 
         const source = new Uint8Array(bytes);
         sourceBytes = source;
+        updateReopenAvailability();
         const encoding = detectFileEncoding(source);
         if (!encoding) {
-          replaceDocument(documentBeforeUpload, dirtyBeforeUpload);
+          replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           if (encodingSelect) encodingSelect.dataset.valid = "false";
-          setUploadStatus(`${file.name} 未能自动识别为文本；可从编码列表手动选择，或按原始文件上传。`);
+          setUploadStatus(`${file.name} 未能自动识别为文本；请选择编码后点“重新解码”，或按原始文件上传。`);
           return;
         }
 
         try {
           openBytes(source, encoding);
         } catch (error) {
-          replaceDocument(documentBeforeUpload, dirtyBeforeUpload);
+          replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           if (encodingSelect) encodingSelect.dataset.valid = "false";
-          setUploadStatus(`${file.name} 无法按检测到的 ${encoding} 解码；可手动选择其他编码。`);
+          setUploadStatus(`${file.name} 无法按检测到的 ${encoding} 解码；请选择其他编码后点“重新解码”。`);
           return;
         }
 
-        setUploadStatus(`已自动按 ${encoding} 打开 ${file.name}（${sizeText(file.size)}），可以修改编码或内容。`);
+        setUploadStatus(`已自动按 ${encoding} 打开 ${file.name}（${sizeText(file.size)}）。编码列表决定保存格式，“重新解码”用于纠正识别结果。`);
       });
     }
   }
