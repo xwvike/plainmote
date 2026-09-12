@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS resources (
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL
 );
-ALTER TABLE resources ADD COLUMN IF NOT EXISTS content_encoding TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS resources_owner_idx ON resources(owner_id);
 
 CREATE TABLE IF NOT EXISTS links (
