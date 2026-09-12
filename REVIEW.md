@@ -76,7 +76,11 @@ GET /auth/github/callback
   -> internal/web/session.go
 ```
 
-重点检查 OAuth state、GitHub ID 白名单、Cookie 安全属性、Session 哈希和 CSRF。
+OAuth 只验证 GitHub 身份，`PLAINMOTE_REGISTRATION_MODE` 决定一个此前未出现的身份能否创建本地账号。
+`open` 接受所有新用户，`allowlist` 检查数字 GitHub ID，`closed` 只允许已有用户登录。注册名单不是
+持续访问控制：已有用户不能因为离开名单而被踢出；账号封禁应由未来独立的用户状态承担。
+
+重点检查 OAuth state、已有用户与新用户的分支、注册策略默认拒绝、Cookie 安全属性、Session 哈希和 CSRF。
 
 ### 资源写入
 

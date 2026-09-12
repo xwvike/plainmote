@@ -10,7 +10,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	data := pageData{LoginURL: "/auth/github"}
+	data := pageData{LoginURL: "/auth/github", RegistrationMode: a.cfg.RegistrationMode}
 	if next := safeNext(r.URL.Query().Get("next")); next != "" {
 		data.LoginURL += "?next=" + url.QueryEscape(next)
 	}

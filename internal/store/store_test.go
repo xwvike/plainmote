@@ -3,9 +3,24 @@ package store
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
+
+func TestGetUserByGitHubIDReturnsTheCompleteUser(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	got, err := db.GetUser(context.Background(), user.GitHubID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != user {
+		t.Fatalf("GetUser() = %+v, want %+v", got, user)
+	}
+	if _, err := db.GetUser(context.Background(), "999999"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing user error = %v, want ErrNotFound", err)
+	}
+}
 
 // A new resource is reachable by nobody until something is shared.
 func TestNewResourceHasNoLinks(t *testing.T) {

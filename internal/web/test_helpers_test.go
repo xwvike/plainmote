@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"plainmote/internal/auth"
 	"plainmote/internal/blob"
 	"plainmote/internal/store"
 	"plainmote/internal/upstream"
@@ -81,6 +82,7 @@ func newTestApp(db *store.Store, allowed ...string) *App {
 	}
 	app := &App{db: db, upstream: upstream.New(true, 4<<20), cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test", AllowedIDs: ids,
+		RegistrationMode: auth.RegistrationAllowlist,
 	}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()

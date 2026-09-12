@@ -40,10 +40,6 @@ func (a *App) currentUser(r *http.Request) (User, string, bool) {
 	if err != nil {
 		return User{}, "", false
 	}
-	if !a.cfg.AllowedIDs[user.GitHubID] {
-		_ = a.db.DeleteSession(r.Context(), sessionID)
-		return User{}, "", false
-	}
 	return user, sessionID, true
 }
 

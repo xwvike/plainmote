@@ -1,11 +1,15 @@
 package web
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"plainmote/internal/auth"
+	"plainmote/internal/store"
 )
 
 func (a *App) handleGitHubLogin(w http.ResponseWriter, r *http.Request) {
@@ -51,8 +55,17 @@ func (a *App) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, http.StatusBadGateway, err)
 		return
 	}
-	if !a.cfg.AllowedIDs[profile.ID] {
-		a.renderError(w, http.StatusForbidden, errors.New("this GitHub account is not allowed"))
+	admitted, err := a.githubIdentityAdmitted(r.Context(), profile.ID)
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !admitted {
+		message := "registration is closed"
+		if a.cfg.RegistrationMode == auth.RegistrationAllowlist {
+			message = "this GitHub account is not allowed to register"
+		}
+		a.renderError(w, http.StatusForbidden, errors.New(message))
 		return
 	}
 	user, err := a.db.UpsertUser(r.Context(), profile.ID, profile.Login, profile.Name, profile.AvatarURL)
@@ -74,6 +87,21 @@ func (a *App) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Redirect(w, r, next, http.StatusSeeOther)
+}
+
+// githubIdentityAdmitted separates GitHub authentication from local account
+// admission. Existing users always pass; only an identity that has no local
+// user yet is subject to the current registration policy.
+func (a *App) githubIdentityAdmitted(ctx context.Context, githubID string) (bool, error) {
+	_, err := a.db.GetUser(ctx, githubID)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, store.ErrNotFound):
+		return a.cfg.RegistrationMode.AllowsNewUser(githubID, a.cfg.AllowedIDs), nil
+	default:
+		return false, err
+	}
 }
 
 func (a *App) clearOAuthStateCookie(w http.ResponseWriter) {

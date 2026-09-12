@@ -45,11 +45,12 @@ func Run() error {
 	defer db.Close()
 
 	handler := web.New(web.Config{
-		PublicURL:      cfg.PublicURL,
-		SessionTTL:     cfg.SessionTTL,
-		MaxContent:     cfg.MaxContent,
-		AllowedIDs:     cfg.AllowedIDs,
-		TrustedProxies: cfg.TrustedProxies,
+		PublicURL:        cfg.PublicURL,
+		SessionTTL:       cfg.SessionTTL,
+		MaxContent:       cfg.MaxContent,
+		AllowedIDs:       cfg.AllowedIDs,
+		TrustedProxies:   cfg.TrustedProxies,
+		RegistrationMode: cfg.RegistrationMode,
 	}, db, upstream.New(cfg.AllowPrivateUpstream, cfg.MaxContent), auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
 
 	fmt.Fprintf(os.Stderr, "listening on %s\n", cfg.Listen)

@@ -27,11 +27,12 @@ type Link = store.Link
 type AccessLog = store.AccessLog
 
 type Config struct {
-	PublicURL      string
-	SessionTTL     time.Duration
-	MaxContent     int64
-	AllowedIDs     map[string]bool
-	TrustedProxies []netip.Prefix
+	PublicURL        string
+	SessionTTL       time.Duration
+	MaxContent       int64
+	AllowedIDs       map[string]bool
+	TrustedProxies   []netip.Prefix
+	RegistrationMode auth.RegistrationMode
 }
 
 func New(cfg Config, db *store.Store, source *upstream.Client, github *auth.GitHub) *App {
@@ -44,17 +45,18 @@ func New(cfg Config, db *store.Store, source *upstream.Client, github *auth.GitH
 func (a *App) Handler() http.Handler { return a.handler }
 
 type pageData struct {
-	User       User
-	CSRF       string
-	Active     string
-	BaseURL    string
-	MaxContent int64
-	Error      string
-	LoginURL   string
-	Resources  []Resource
-	Pager      pager
-	IsNew      bool
-	NewKind    string
+	User             User
+	CSRF             string
+	Active           string
+	BaseURL          string
+	MaxContent       int64
+	Error            string
+	LoginURL         string
+	RegistrationMode auth.RegistrationMode
+	Resources        []Resource
+	Pager            pager
+	IsNew            bool
+	NewKind          string
 
 	// ContentText is the body loaded for the editor. It is only filled in for
 	// a resource small and textual enough to show, so a large or non-text one is

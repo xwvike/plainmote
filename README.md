@@ -50,7 +50,6 @@ Token 使用 256 位安全随机数生成。PostgreSQL 保存 SHA-256 查找索�
 | `PLAINMOTE_TOKEN_KEY` | 32 字节、64 位十六进制或 Base64 Token 加密密钥 |
 | `GITHUB_CLIENT_ID` | GitHub OAuth Client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth Client Secret |
-| `GITHUB_ALLOWED_IDS` | 允许登录的 GitHub 数字用户 ID，逗号分隔 |
 
 可选参数：
 
@@ -62,8 +61,15 @@ Token 使用 256 位安全随机数生成。PostgreSQL 保存 SHA-256 查找索�
 | `PLAINMOTE_TRUSTED_PROXIES` | 空 | 可信代理 IP/CIDR，逗号分隔 |
 | `PLAINMOTE_SESSION_TTL` | `720h` | 登录会话有效期 |
 | `PLAINMOTE_MAX_CONTENT_MIB` | `4` | 单份内容大小上限 |
+| `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | 新用户注册策略：`open`、`allowlist` 或 `closed` |
+| `GITHUB_ALLOWED_IDS` | 空 | `allowlist` 模式下允许注册的 GitHub 数字用户 ID，逗号分隔 |
 
-配置在进程启动时完成类型转换和完整校验，缺少必填值会立即退出。
+OAuth 只负责确认 GitHub 身份。注册策略只应用于数据库中尚不存在的新用户：`open` 允许注册，
+`allowlist` 要求 GitHub ID 位于 `GITHUB_ALLOWED_IDS`，`closed` 不接受新用户。已经注册的用户仍可登录；
+后续若需要封禁，应使用独立的账号状态，而不是从注册名单中删除 ID。
+
+配置在进程启动时完成类型转换和完整校验。缺少必填值、注册模式非法、白名单包含非数字 ID，或者
+`allowlist` 模式没有任何 ID，都会立即退出。
 
 ## 本地开发
 

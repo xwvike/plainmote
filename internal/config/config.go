@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"plainmote/internal/auth"
 )
 
 type Config struct {
@@ -29,6 +31,7 @@ type Config struct {
 	GitHubID             string
 	GitHubSecret         string
 	AllowedIDs           map[string]bool
+	RegistrationMode     auth.RegistrationMode
 	TokenKey             []byte
 }
 
@@ -46,7 +49,6 @@ func Load() (Config, error) {
 		PublicURL:     strings.TrimRight(strings.TrimSpace(os.Getenv("PLAINMOTE_PUBLIC_URL")), "/"),
 		GitHubID:      strings.TrimSpace(os.Getenv("GITHUB_CLIENT_ID")),
 		GitHubSecret:  strings.TrimSpace(os.Getenv("GITHUB_CLIENT_SECRET")),
-		AllowedIDs:    parseAllowedIDs(os.Getenv("GITHUB_ALLOWED_IDS")),
 	}
 
 	for _, required := range []struct{ name, value string }{
@@ -59,11 +61,24 @@ func Load() (Config, error) {
 		{"PLAINMOTE_TOKEN_KEY", strings.TrimSpace(os.Getenv("PLAINMOTE_TOKEN_KEY"))},
 		{"GITHUB_CLIENT_ID", cfg.GitHubID},
 		{"GITHUB_CLIENT_SECRET", cfg.GitHubSecret},
-		{"GITHUB_ALLOWED_IDS", strings.TrimSpace(os.Getenv("GITHUB_ALLOWED_IDS"))},
 	} {
 		if required.value == "" {
 			return Config{}, fmt.Errorf("%s is required", required.name)
 		}
+	}
+
+	registrationMode, err := auth.ParseRegistrationMode(env("PLAINMOTE_REGISTRATION_MODE", string(auth.RegistrationAllowlist)))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.RegistrationMode = registrationMode
+	allowedIDs, err := parseAllowedIDs(os.Getenv("GITHUB_ALLOWED_IDS"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.AllowedIDs = allowedIDs
+	if cfg.RegistrationMode == auth.RegistrationAllowlist && len(cfg.AllowedIDs) == 0 {
+		return Config{}, errors.New("GITHUB_ALLOWED_IDS is required when PLAINMOTE_REGISTRATION_MODE is allowlist")
 	}
 
 	parsedPublicURL, err := url.Parse(cfg.PublicURL)
@@ -166,14 +181,20 @@ func parseTrustedProxies(value string) ([]netip.Prefix, error) {
 	return prefixes, nil
 }
 
-func parseAllowedIDs(value string) map[string]bool {
+func parseAllowedIDs(value string) (map[string]bool, error) {
 	allowed := map[string]bool{}
 	for item := range strings.SplitSeq(value, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			allowed[item] = true
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
 		}
+		id, err := strconv.ParseUint(item, 10, 64)
+		if err != nil || id == 0 {
+			return nil, fmt.Errorf("GITHUB_ALLOWED_IDS contains invalid GitHub user ID %q", item)
+		}
+		allowed[strconv.FormatUint(id, 10)] = true
 	}
-	return allowed
+	return allowed, nil
 }
 
 func parseSecretKey(raw string) ([]byte, error) {

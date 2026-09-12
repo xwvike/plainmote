@@ -88,3 +88,17 @@ func (d *Store) DeleteSession(ctx context.Context, sessionID string) error {
 	_, err := d.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, sessionID)
 	return err
 }
+
+func (d *Store) GetUser(ctx context.Context, githubID string) (User, error) {
+	var user User
+	err := d.db.QueryRow(ctx, `SELECT id, github_id, login, name, avatar_url FROM users WHERE github_id = $1`, githubID).Scan(
+		&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("read user: %w", err)
+	}
+	return user, nil
+}
