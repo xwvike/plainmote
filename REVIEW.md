@@ -63,6 +63,12 @@ postgres://plainmote:password@postgres.example.com:5432/plainmote?sslmode=requir
 - 当前 schema 使用 `CREATE ... IF NOT EXISTS` 且没有迁移历史，因此应用数据库角色需要首次建表权限。多副本同时冷启动和生产环境是否允许应用持有 DDL 权限，需要在部署时明确决定。
 - 所有副本必须共享相同的 `PLAINMOTE_TOKEN_KEY`，否则已有分享 Token 无法解密。
 - `/healthz` 只表示 HTTP 进程存活，不检查 PostgreSQL 或 S3/R2；编排平台若需要依赖就绪语义，应单独配置启动或就绪策略。
+- 进程内有且只有一个后台循环：`app.prune`。它绑在 `signal.NotifyContext` 上，关停时随之退出，失败只记日志
+  不终止进程——表大一点不影响分发资源。加第二个后台循环前，先确认它是否真的不能在请求时求解。
+- 清理必须先拿到 advisory lock `pruneLockKey`，且锁与删除要在同一个连接上：`pg_try_advisory_lock` 是会话级的，
+  从连接池里另取一条连接执行删除等于没加锁。
+- 删除按 `pruneBatch` 分批。不要改成一条不带 `LIMIT` 的 `DELETE`：积压数月的库首次清理会变成一个长事务。
+- `PLAINMOTE_LOG_RETENTION=0` 只关闭访问记录的清理，会话照清。会话过期是关于会话本身的事实，不是存储策略。
 
 ## 关键链路
 
@@ -180,6 +186,8 @@ internal/web/static/editor.js
 - Store 直接使用 `pgxpool`，Web 层只依赖领域错误。
 - schema 在应用启动时直接执行，数据库角色权限必须与这一行为匹配。
 - 每个测试使用独立 schema，支持包级并行执行。
+- `sessions` 只靠 `SessionUser` 删除「被出示且已过期」的那一行，换了设备或清掉 cookie 的会话不会再被查询到。
+  兜底在 `Store.Prune`，不要因为看起来重复就把它去掉。
 - 当前没有历史迁移；schema 不兼容时重建快速迭代环境。
 
 ## 通用函数检查表

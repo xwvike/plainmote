@@ -27,6 +27,7 @@ type Config struct {
 	AllowPrivateUpstream bool
 	TrustedProxies       []netip.Prefix
 	SessionTTL           time.Duration
+	LogRetention         time.Duration
 	MaxContent           int64
 	GitHubID             string
 	GitHubSecret         string
@@ -100,6 +101,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	cfg.LogRetention, err = parseRetention("PLAINMOTE_LOG_RETENTION", 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
 	maxContentMiB, err := parsePositiveInt("PLAINMOTE_MAX_CONTENT_MIB", 4)
 	if err != nil {
 		return Config{}, err
@@ -139,6 +144,25 @@ func parseDuration(name string, fallback time.Duration) (time.Duration, error) {
 	parsed, err := time.ParseDuration(value)
 	if err != nil || parsed <= 0 {
 		return 0, fmt.Errorf("%s must be a positive duration", name)
+	}
+	return parsed, nil
+}
+
+// parseRetention is parseDuration with one more accepted value: an explicit
+// zero, meaning keep the records for good. That is a deployment someone may
+// genuinely want - a full audit trail - so it has to be expressible, and it
+// cannot be spelled as an empty variable, which means "use the default".
+func parseRetention(name string, fallback time.Duration) (time.Duration, error) {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback, nil
+	}
+	if value == "0" {
+		return 0, nil
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("%s must be a positive duration, or 0 to keep records for good", name)
 	}
 	return parsed, nil
 }

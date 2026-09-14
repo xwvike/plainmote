@@ -61,6 +61,7 @@ Token 使用 256 位安全随机数生成。PostgreSQL 保存 SHA-256 查找索�
 | `PLAINMOTE_TRUSTED_PROXIES` | 空 | 可信代理 IP/CIDR，逗号分隔 |
 | `PLAINMOTE_SESSION_TTL` | `720h` | 登录会话有效期 |
 | `PLAINMOTE_MAX_CONTENT_MIB` | `4` | 单份内容大小上限 |
+| `PLAINMOTE_LOG_RETENTION` | `720h` | 访问记录保留时长，`0` 表示永久保留 |
 | `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | 新用户注册策略：`open`、`allowlist` 或 `closed` |
 | `GITHUB_ALLOWED_IDS` | 空 | `allowlist` 模式下允许注册的 GitHub 数字用户 ID，逗号分隔 |
 
@@ -70,6 +71,11 @@ OAuth 只负责确认 GitHub 身份。注册策略只应用于数据库中尚不
 
 配置在进程启动时完成类型转换和完整校验。缺少必填值、注册模式非法、白名单包含非数字 ID，或者
 `allowlist` 模式没有任何 ID，都会立即退出。
+
+进程内每小时清理一次过期数据，启动时先跑一遍：删除超过保留期的访问记录，以及已过期的会话。
+删除分批进行，避免积压多时的库在首次清理时产生一个长事务。多副本共享同一个数据库时，由 PostgreSQL
+advisory lock 保证同一时刻只有一个副本在清理，抢不到的直接跳过。这不需要宿主机 crontab、额外容器
+或数据库扩展——部署仍然只是 compose 加环境变量。
 
 ## 本地开发
 
