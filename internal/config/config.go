@@ -148,10 +148,8 @@ func parseDuration(name string, fallback time.Duration) (time.Duration, error) {
 	return parsed, nil
 }
 
-// parseRetention is parseDuration with one more accepted value: an explicit
-// zero, meaning keep the records for good. That is a deployment someone may
-// genuinely want - a full audit trail - so it has to be expressible, and it
-// cannot be spelled as an empty variable, which means "use the default".
+// parseRetention is parseDuration plus an explicit zero, meaning keep records
+// for good. An empty variable already means "use the default".
 func parseRetention(name string, fallback time.Duration) (time.Duration, error) {
 	value := strings.TrimSpace(os.Getenv(name))
 	if value == "" {

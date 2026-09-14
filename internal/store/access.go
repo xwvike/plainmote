@@ -84,43 +84,22 @@ LIMIT $4
 	return logs, rows.Err()
 }
 
-// Retention is the one piece of housekeeping that cannot be done lazily. A
-// share's expiry is derived when the link is used, so nothing has to run on a
-// timer; rows that have aged out are different, because there is no question
-// to answer at read time - they simply have to go.
 const (
-	// pruneLockKey namespaces the advisory lock the pruner holds. Replicas
-	// share one database, so without it every replica would run the same
-	// deletes against the same rows at the same time. It is only a courtesy:
-	// the work is idempotent, and losing the race costs nothing.
+	// Session-scoped, so the lock and the deletes have to share one connection.
 	pruneLockKey = 8964
-
-	// pruneBatch bounds one DELETE. A first run against a database that has
-	// been accumulating for months would otherwise take a single long
-	// transaction, holding locks and bloating WAL for its whole duration.
-	pruneBatch = 5000
+	pruneBatch   = 5000
 )
 
-// PruneResult reports what one pass removed, so a caller can log a pass that
-// did something and stay quiet about the many that did not.
 type PruneResult struct {
 	AccessLogs int64
 	Sessions   int64
 }
 
-// Prune removes access logs older than retention, and sessions that have
-// expired. A retention of zero keeps access logs for good; sessions are
-// pruned regardless, because their expiry is a fact about the session rather
-// than a policy about storage.
-//
-// Sessions need this: SessionUser only deletes the row for the token actually
-// presented, so a session whose token is never presented again - a cleared
-// cookie, a discarded device - would otherwise sit in the table for good.
+// Prune removes access logs older than retention and sessions that have
+// expired. Retention zero keeps the logs; sessions go either way, since
+// SessionUser only deletes the row for the token actually presented.
 func (d *Store) Prune(ctx context.Context, retention time.Duration, now time.Time) (PruneResult, error) {
 	var result PruneResult
-
-	// The lock is session-scoped, so every statement below has to run on this
-	// one connection rather than on whichever the pool hands out next.
 	conn, err := d.db.Acquire(ctx)
 	if err != nil {
 		return result, fmt.Errorf("prune: acquire connection: %w", err)
@@ -132,14 +111,9 @@ func (d *Store) Prune(ctx context.Context, retention time.Duration, now time.Tim
 		return result, fmt.Errorf("prune: take lock: %w", err)
 	}
 	if !locked {
-		// Another replica is already doing it. Nothing to report and nothing
-		// to retry: the next tick will find the work done.
 		return result, nil
 	}
 	defer func() {
-		// Release on its own deadline. A cancelled ctx is exactly when this
-		// matters, and an unreleased lock would block every later pass until
-		// the connection is recycled.
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		_, _ = conn.Exec(unlockCtx, `SELECT pg_advisory_unlock($1)`, int64(pruneLockKey))
@@ -165,10 +139,7 @@ WHERE id IN (SELECT id FROM sessions WHERE expires_at < $1 ORDER BY expires_at L
 	return result, nil
 }
 
-// deleteInBatches runs statement until it stops finding rows, so a large
-// backlog is cleared by many short transactions rather than one long one.
-// Cancellation is honoured between batches: a shutdown mid-prune leaves the
-// remaining rows for the next start, which is harmless.
+// deleteInBatches keeps a months-old backlog from becoming one long transaction.
 func deleteInBatches(ctx context.Context, conn *pgxpool.Conn, statement string, cutoff time.Time) (int64, error) {
 	var total int64
 	for {

@@ -44,10 +44,6 @@ func Run() error {
 	}
 	defer db.Close()
 
-	// Housekeeping runs on the same context as the server, so shutdown stops
-	// it too. It is in-process on purpose: the deployment is one compose file
-	// and one set of environment variables, and a host crontab or a second
-	// container would put a piece of it somewhere neither of those describes.
 	go prune(ctx, db, cfg.LogRetention)
 
 	handler := web.New(web.Config{
@@ -63,19 +59,15 @@ func Run() error {
 	return serve(ctx, cfg.Listen, handler)
 }
 
-// pruneInterval is how often records are checked for having aged out. The
-// window is measured in days, so the exact cadence does not matter; an hour is
-// often enough that a backlog never builds, and rare enough to be invisible.
 const pruneInterval = time.Hour
 
+// prune runs on the server's context, so shutdown stops it. A failed pass is
+// logged and not retried.
 func prune(ctx context.Context, db *store.Store, retention time.Duration) {
 	pass := func() {
 		started := time.Now()
 		result, err := db.Prune(ctx, retention, time.Now().UTC())
 		if err != nil {
-			// Housekeeping failing is not a reason to take the service down:
-			// it serves resources perfectly well with a table that is larger
-			// than it should be.
 			if ctx.Err() == nil {
 				fmt.Fprintf(os.Stderr, "prune: %v\n", err)
 			}
@@ -87,10 +79,7 @@ func prune(ctx context.Context, db *store.Store, retention time.Duration) {
 		}
 	}
 
-	// Once at startup, so a deployment that has been down - or has just had
-	// retention turned on - does not wait an hour to catch up.
 	pass()
-
 	ticker := time.NewTicker(pruneInterval)
 	defer ticker.Stop()
 	for {
