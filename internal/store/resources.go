@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"plainmote/internal/upstream"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 var filenameRule = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$`)
@@ -84,33 +85,61 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 		ContentType: input.ContentType, ContentEncoding: input.Encoding,
 		OriginURL: input.OriginURL, CreatedAt: now, UpdatedAt: now,
 	}
-	if len(input.Content) > 0 {
-		resource.ContentKey = contentKey(resource.ID)
-		resource.ContentSize = int64(len(input.Content))
-		if err := d.blobs.Put(ctx, resource.ContentKey, bytes.NewReader(input.Content), resource.ContentSize); err != nil {
-			return Resource{}, fmt.Errorf("store resource body: %w", err)
+
+	err = d.withTx(ctx, func(tx pgx.Tx) error {
+		var lockedUserID string
+		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&lockedUserID); err != nil {
+			return translateNotFound(err)
 		}
-	}
-	_, err = d.db.Exec(ctx, `
-INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
-`, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
-		resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.OriginURL, now)
+		userQuota, err := d.quotaForUser(ctx, tx, ownerID, now)
+		if err != nil {
+			return err
+		}
+		if userQuota.Usage.Resources+1 > userQuota.Limit.Resources {
+			return fmt.Errorf("quota exceeded")
+		}
+		if len(input.Content) > 0 {
+			resource.ContentKey = contentKey(resource.ID)
+			resource.ContentSize = int64(len(input.Content))
+			if userQuota.Usage.StorageBytes+resource.ContentSize > userQuota.Limit.StorageBytes {
+				return fmt.Errorf("quota exceeded")
+			}
+			if err := d.blobs.Put(ctx, resource.ContentKey, bytes.NewReader(input.Content), resource.ContentSize); err != nil {
+				return fmt.Errorf("store resource body: %w", err)
+			}
+		}
+
+		_, err = tx.Exec(ctx, `
+	INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at)
+	VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+	`, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
+			resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.OriginURL, now)
+		if err != nil {
+			return fmt.Errorf("create resource: %w", err)
+		}
+		return nil
+	})
+
 	if err != nil {
 		if resource.ContentKey != "" {
 			_ = d.blobs.Delete(ctx, resource.ContentKey)
 		}
-		return Resource{}, fmt.Errorf("create resource: %w", err)
+		return Resource{}, err
 	}
+
 	return resource, nil
 }
 
 func (d *Store) ResourceForOwner(ctx context.Context, ownerID, id string) (Resource, error) {
+	return d.resourceForOwner(ctx, d.db, ownerID, id)
+}
+
+func (d *Store) resourceForOwner(ctx context.Context, q storeQuerier, ownerID, id string) (Resource, error) {
 	if !validUUIDs(ownerID, id) {
 		return Resource{}, ErrNotFound
 	}
 	var resource Resource
-	err := d.db.QueryRow(ctx, `
+	err := q.QueryRow(ctx, `
 SELECT id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at
 FROM resources
 WHERE id = $1 AND owner_id = $2
@@ -175,56 +204,85 @@ func escapeLikePattern(value string) string {
 }
 
 func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename string, content []byte, contentEncoding, originURL string) error {
-	current, err := d.ResourceForOwner(ctx, ownerID, id)
-	if err != nil {
-		return err
-	}
-	replaceContent := content != nil
-	if !replaceContent && !current.Remote() && strings.TrimSpace(originURL) == "" {
-		content, err = d.ReadContent(ctx, current)
+
+	var (
+		previousKey    string
+		nextKey        string
+		nextSize       int64
+		wroteNewObject bool
+	)
+	err := d.withTx(ctx, func(tx pgx.Tx) error {
+		var lockedUserID string
+		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&lockedUserID); err != nil {
+			return translateNotFound(err)
+		}
+		userQuota, err := d.quotaForUser(ctx, tx, ownerID, time.Now().UTC())
+		if err != nil {
+			return fmt.Errorf("get quota for user: %w", err)
+		}
+
+		current, err := d.resourceForOwner(ctx, tx, ownerID, id)
+
 		if err != nil {
 			return err
 		}
-		// Encoding describes the stored bytes. A metadata-only request cannot
-		// change it without replacing those bytes, or the next read may decode
-		// the same object as an unrelated character set.
-		contentEncoding = current.ContentEncoding
-	}
-	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
-	if err != nil {
-		return err
-	}
-	previousKey := current.ContentKey
-	nextKey, nextSize := previousKey, current.ContentSize
-	wroteNewObject := false
-	if replaceContent && len(input.Content) > 0 {
-		nextKey = contentKey(id)
-		nextSize = int64(len(input.Content))
-		if err := d.blobs.Put(ctx, nextKey, bytes.NewReader(input.Content), nextSize); err != nil {
-			return fmt.Errorf("store resource body: %w", err)
-		}
-		wroteNewObject = true
-	} else if input.OriginURL != "" {
-		nextKey, nextSize = "", 0
-	}
+		replaceContent := content != nil
+		if !replaceContent && !current.Remote() && strings.TrimSpace(originURL) == "" {
+			content, err = d.ReadContent(ctx, current)
+			if err != nil {
+				return err
+			}
 
-	tag, err := d.db.Exec(ctx, `
-UPDATE resources
-SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, content_encoding = $6, origin_url = $7, updated_at = $8
-WHERE id = $9 AND owner_id = $10
-`, input.Name, input.Filename, nextKey, nextSize, input.ContentType, input.Encoding, input.OriginURL, time.Now().UTC(), id, ownerID)
-	if err != nil || tag.RowsAffected() == 0 {
+			contentEncoding = current.ContentEncoding
+		}
+		input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
+		if err != nil {
+			return err
+		}
+
+		previousKey = current.ContentKey
+		nextKey, nextSize = previousKey, current.ContentSize
+		wroteNewObject = false
+		if replaceContent && len(input.Content) > 0 {
+			nextKey = contentKey(id)
+			nextSize = int64(len(input.Content))
+			if nextSize > current.ContentSize &&
+				userQuota.Usage.StorageBytes-current.ContentSize+nextSize > userQuota.Limit.StorageBytes {
+				return fmt.Errorf("quota exceeded")
+			}
+			if err := d.blobs.Put(ctx, nextKey, bytes.NewReader(input.Content), nextSize); err != nil {
+				return fmt.Errorf("store resource body: %w", err)
+			}
+			wroteNewObject = true
+		} else if input.OriginURL != "" {
+			nextKey, nextSize = "", 0
+		}
+
+		tag, err := tx.Exec(ctx, `
+	UPDATE resources
+	SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, content_encoding = $6, origin_url = $7, updated_at = $8
+	WHERE id = $9 AND owner_id = $10
+	`, input.Name, input.Filename, nextKey, nextSize, input.ContentType, input.Encoding, input.OriginURL, time.Now().UTC(), id, ownerID)
+		if err != nil || tag.RowsAffected() == 0 {
+			if err != nil {
+				return fmt.Errorf("update resource: %w", err)
+			}
+			return ErrNotFound
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		if wroteNewObject {
 			_ = d.blobs.Delete(ctx, nextKey)
 		}
-		if err != nil {
-			return fmt.Errorf("update resource: %w", err)
-		}
-		return ErrNotFound
+		return err
 	}
 	if previousKey != "" && previousKey != nextKey {
 		_ = d.blobs.Delete(ctx, previousKey)
 	}
+
 	return nil
 }
 

@@ -90,3 +90,37 @@ type ConsumeResult struct {
 	LinkName string
 	Reason   string
 }
+
+type QuotaLimit struct {
+	Resources    int64
+	StorageBytes int64
+}
+
+type QuotaUsage struct {
+	Resources    int64
+	StorageBytes int64
+}
+
+type Plan struct {
+	ID         string
+	Name       string
+	Limit      QuotaLimit
+	IsDefault  bool
+	ValidFrom  *time.Time
+	ValidUntil *time.Time
+	CreatedAt  *time.Time
+	UpdatedAt  *time.Time
+}
+
+type ActivePlans struct {
+	Plan      Plan
+	GrantedAt time.Time
+	ExpiresAt *time.Time
+}
+
+type UserQuota struct {
+	User        User
+	Limit       QuotaLimit
+	Usage       QuotaUsage
+	ActivePlans []ActivePlans
+}

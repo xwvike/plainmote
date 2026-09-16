@@ -8,6 +8,32 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS plans (
+  id UUID PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  max_resources INTEGER NOT NULL CHECK (max_resources >= 0),
+  max_storage BIGINT NOT NULL CHECK (max_storage >= 0),
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  valid_from TIMESTAMPTZ,
+  valid_until TIMESTAMPTZ,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS plans_default_idx ON plans ((1)) WHERE is_default;
+
+INSERT INTO plans (id, name, max_resources, max_storage, is_default, created_at)
+VALUES (gen_random_uuid(), 'default', 20, 10485760, TRUE, now())
+ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS user_plans (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan_id UUID NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  granted_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ,
+  PRIMARY KEY (user_id, plan_id)
+);
+CREATE INDEX IF NOT EXISTS user_plans_plan_idx ON user_plans(plan_id);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id UUID PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

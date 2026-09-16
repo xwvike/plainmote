@@ -17,18 +17,31 @@ func (d *Store) UpsertUser(ctx context.Context, githubID, login, name, avatar st
 	}
 	now := time.Now().UTC()
 	var user User
-	err := d.db.QueryRow(ctx, `
+	err := d.withTx(ctx, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `
 INSERT INTO users(id, github_id, login, name, avatar_url, created_at, updated_at)
 VALUES($1, $2, $3, $4, $5, $6, $6)
-ON CONFLICT(github_id) DO UPDATE SET
-  login = EXCLUDED.login,
-  name = EXCLUDED.name,
-  avatar_url = EXCLUDED.avatar_url,
-  updated_at = EXCLUDED.updated_at
+ON CONFLICT(github_id) DO NOTHING
 RETURNING id, github_id, login, name, avatar_url
-`, uuid.NewString(), githubID, login, name, avatar, now).Scan(
-		&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
-	)
+		`, uuid.NewString(), githubID, login, name, avatar, now).Scan(
+			&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
+		)
+		if err == nil {
+			return grantDefaultPlan(ctx, tx, user.ID, now)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("create user: %w", err)
+		}
+
+		return tx.QueryRow(ctx, `
+UPDATE users
+SET login = $2, name = $3, avatar_url = $4, updated_at = $5
+WHERE github_id = $1
+RETURNING id, github_id, login, name, avatar_url
+		`, githubID, login, name, avatar, now).Scan(
+			&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
+		)
+	})
 	if err != nil {
 		return User{}, fmt.Errorf("save user: %w", err)
 	}
