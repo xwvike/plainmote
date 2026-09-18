@@ -198,9 +198,9 @@ internal/web/static/editor.js
 - 每个测试使用独立 schema，支持包级并行执行。
 - `sessions` 只靠 `SessionUser` 删除「被出示且已过期」的那一行，换了设备或清掉 cookie 的会话不会再被查询到。
   兜底在 `Store.Prune`，不要因为看起来重复就把它去掉。
-- 当前没有历史迁移；schema 不兼容时重建快速迭代环境。`access_logs` 的
-  `owner_id` / `resource_name` / `resource_file` / `hits` / `first_at` 带了
-  `ADD COLUMN IF NOT EXISTS`，等到没有更早的部署时按 `resources.content_encoding` 的先例删掉。
+- 当前没有历史迁移；schema 不兼容时重建快速迭代环境。schema.sql 里不留兼容性 `ALTER`。
+- `access_logs.owner_id` 是 `NOT NULL`：进入这张表的每一行都必须有主人，否则它没有读者。
+  写入侧靠 `links.resource_id` 的 `NOT NULL` 和级联删除保证这一点，`recordRefusalTx` 因此用内连接。
 - 数据库测试在没有 `PLAINMOTE_TEST_DATABASE_URL` 时整包跳过，`go test ./...` 依然打印 ok。
   改动 store 后必须带着这个变量跑一遍，否则等于没测。
 

@@ -262,12 +262,15 @@ func (d *Store) recordRefusalTx(ctx context.Context, tx pgx.Tx, hash string, met
 	var expires, revoked pgtype.Timestamptz
 	var maxUses, usedCount int
 	// The resource comes along so the refusal is recorded against an owner and
-	// keeps the name it was reached under.
+	// keeps the name it was reached under. The join is inner because a link
+	// cannot outlive its resource - links cascade with it - and a row that
+	// somehow did would have nothing to serve, so reading it as an unissued
+	// token is the honest answer.
 	err := tx.QueryRow(ctx, `
 SELECT l.id, l.resource_id, l.name, l.expires_at, l.revoked_at, l.max_uses, l.used_count,
-       COALESCE(r.owner_id::text, ''), COALESCE(r.name, ''), COALESCE(r.filename, '')
+       r.owner_id, r.name, r.filename
 FROM links l
-LEFT JOIN resources r ON r.id = l.resource_id
+JOIN resources r ON r.id = l.resource_id
 WHERE l.token_hash = $1
 `, hash).Scan(&linkID, &resourceID, &name, &expires, &revoked, &maxUses, &usedCount,
 		&ownerID, &resourceName, &resourceFile)

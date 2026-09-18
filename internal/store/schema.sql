@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS access_logs (
   -- The log outlives what it describes. owner_id says who may read the row and
   -- resource_name/resource_file say what was reached, so deleting a resource
   -- does not take its history with it.
-  owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   resource_id UUID REFERENCES resources(id) ON DELETE SET NULL,
   resource_name TEXT NOT NULL DEFAULT '',
   resource_file TEXT NOT NULL DEFAULT '',
@@ -107,16 +107,9 @@ CREATE TABLE IF NOT EXISTS access_logs (
   -- dropping: hits counts the attempts and first_at holds when the run began,
   -- so occurred_at stays the most recent one.
   hits INTEGER NOT NULL DEFAULT 1 CHECK (hits > 0),
-  first_at TIMESTAMPTZ,
+  first_at TIMESTAMPTZ NOT NULL,
   occurred_at TIMESTAMPTZ NOT NULL
 );
--- Databases created before the log stood on its own. Drop these once no
--- deployment predates them, the way the resources.content_encoding alter went.
-ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES users(id) ON DELETE CASCADE;
-ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS resource_name TEXT NOT NULL DEFAULT '';
-ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS resource_file TEXT NOT NULL DEFAULT '';
-ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS hits INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS first_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS access_logs_fold_idx ON access_logs(link_id, outcome, remote_ip, occurred_at DESC) WHERE link_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS access_logs_owner_idx ON access_logs(owner_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_resource_idx ON access_logs(resource_id, occurred_at DESC);

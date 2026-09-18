@@ -173,11 +173,10 @@ func (d *Store) ListAccess(ctx context.Context, ownerID, resourceID, outcome str
 	if !validUUIDs(ownerID) || resourceID != "" && !validUUIDs(resourceID) {
 		return nil, ErrNotFound
 	}
-	// The join is outer and the owner test falls back through it, so rows
-	// written before access_logs carried an owner still reach their owner, and
-	// rows whose resource has since been deleted are not lost with it. The
-	// displayed name prefers the live resource, which may have been renamed
-	// since, and falls back to what was recorded at the time.
+	// The owner is on the row, so a deleted resource takes nothing with it.
+	// The join is only there for the displayed name, which prefers the live
+	// resource - it may have been renamed since - and otherwise shows what the
+	// row recorded at the time.
 	rows, err := d.db.Query(ctx, `
 SELECT
   a.id, COALESCE(a.resource_id::text, ''),
@@ -185,10 +184,10 @@ SELECT
   COALESCE(a.link_id::text, ''), a.link_name, a.outcome, a.remote_ip, a.remote_addr,
   a.host, a.query, a.proto, a.user_agent, a.referer, a.forwarded, a.x_forwarded_for,
   a.cf_connecting_ip, a.cf_ray, a.content_length, a.tls, a.method, a.path, a.status,
-  a.detail, a.hits, COALESCE(a.first_at, a.occurred_at), a.occurred_at
+  a.detail, a.hits, a.first_at, a.occurred_at
 FROM access_logs a
 LEFT JOIN resources r ON r.id = a.resource_id
-WHERE COALESCE(a.owner_id, r.owner_id) = $1
+WHERE a.owner_id = $1
   AND ($2 = '' OR a.resource_id = NULLIF($2, '')::uuid)
   AND ($3 = '' OR a.outcome = $3)
 ORDER BY a.occurred_at DESC
