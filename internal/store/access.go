@@ -31,6 +31,23 @@ const (
 // AccessOutcomes are the stored outcomes, in the order the filter offers them.
 var AccessOutcomes = []string{OutcomeSuccess, OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError}
 
+// accessFoldWindow is how long one caller's repeat of the same refusal folds
+// into the row already there instead of adding another.
+const accessFoldWindow = time.Minute
+
+// foldable reports whether an outcome may be folded. Only refusals are: a dead
+// link can be hit forever by anyone who has the address, and the thousandth
+// attempt from one caller in a minute says nothing the first did not. A
+// delivery is not folded - the owner published a live link and every hit on it
+// is something they asked to see.
+func foldable(outcome string) bool {
+	switch outcome {
+	case OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError:
+		return true
+	}
+	return false
+}
+
 const (
 	accessTokenMaxBytes   = 32
 	accessIPMaxBytes      = 64
@@ -97,6 +114,28 @@ type AccessEvent struct {
 
 func insertAccessTx(ctx context.Context, tx pgx.Tx, event AccessEvent, meta RequestMeta, now time.Time) error {
 	meta = limitRequestMeta(meta)
+	// Folding keeps the count, which is what the earlier sampling attempt got
+	// wrong: it decided whether to write at all, so the attempts it skipped
+	// left no trace. The row is only reused for the same link, the same
+	// outcome and the same caller, so a second party probing the same dead
+	// link still gets a row of their own.
+	if foldable(event.Outcome) && event.LinkID != "" {
+		tag, err := tx.Exec(ctx, `
+UPDATE access_logs SET hits = hits + 1, occurred_at = $1
+WHERE id = (
+  SELECT id FROM access_logs
+  WHERE link_id = $2 AND outcome = $3 AND remote_ip = $4 AND occurred_at >= $5
+  ORDER BY occurred_at DESC
+  LIMIT 1
+)
+`, now, event.LinkID, event.Outcome, meta.RemoteIP, now.Add(-accessFoldWindow))
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 1 {
+			return nil
+		}
+	}
 	event.ResourceName = limitAccessText(event.ResourceName, accessHeaderMaxBytes)
 	event.ResourceFile = limitAccessText(event.ResourceFile, accessHeaderMaxBytes)
 	event.LinkName = limitAccessText(event.LinkName, accessHeaderMaxBytes)
@@ -108,13 +147,13 @@ INSERT INTO access_logs(
   id, owner_id, resource_id, resource_name, resource_file, link_id, link_name, outcome,
   remote_ip, remote_addr, host, query, proto,
   user_agent, referer, forwarded, x_forwarded_for, cf_connecting_ip, cf_ray,
-  content_length, tls, method, path, status, detail, occurred_at
+  content_length, tls, method, path, status, detail, hits, first_at, occurred_at
 )
 VALUES(
   $1, $2, $3, $4, $5, $6, $7, $8,
   $9, $10, $11, $12, $13,
   $14, $15, $16, $17, $18, $19,
-  $20, $21, $22, $23, $24, $25, $26
+  $20, $21, $22, $23, $24, $25, 1, $26, $26
 )
 `, uuid.NewString(), optionalUUID(event.OwnerID), optionalUUID(event.ResourceID),
 		event.ResourceName, event.ResourceFile, optionalUUID(event.LinkID), event.LinkName, event.Outcome,
@@ -146,7 +185,7 @@ SELECT
   COALESCE(a.link_id::text, ''), a.link_name, a.outcome, a.remote_ip, a.remote_addr,
   a.host, a.query, a.proto, a.user_agent, a.referer, a.forwarded, a.x_forwarded_for,
   a.cf_connecting_ip, a.cf_ray, a.content_length, a.tls, a.method, a.path, a.status,
-  a.detail, a.occurred_at
+  a.detail, a.hits, COALESCE(a.first_at, a.occurred_at), a.occurred_at
 FROM access_logs a
 LEFT JOIN resources r ON r.id = a.resource_id
 WHERE COALESCE(a.owner_id, r.owner_id) = $1
@@ -168,7 +207,7 @@ LIMIT $4
 			&item.Host, &item.Query, &item.Proto, &item.UserAgent, &item.Referer,
 			&item.Forwarded, &item.XForwardedFor, &item.CFConnectingIP, &item.CFRay,
 			&item.ContentLength, &item.TLS, &item.Method, &item.Path, &item.Status,
-			&item.Detail, &item.OccurredAt,
+			&item.Detail, &item.Hits, &item.FirstAt, &item.OccurredAt,
 		); err != nil {
 			return nil, err
 		}

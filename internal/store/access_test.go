@@ -50,22 +50,90 @@ func TestRefusalsAreRecordedWhenTheyHaveAnOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	later := time.Now().UTC().Add(time.Hour)
-	// Every attributable refusal is kept, not sampled: the owner is the one who
-	// needs to see that their link is being hit after it expired.
-	for i := 1; i <= 3; i++ {
-		if _, err := db.ConsumeToken(ctx, share.Token, meta, later); err != nil {
+	// One caller hammering a dead link folds into one row, and the row counts
+	// every attempt: the earlier sampling attempt dropped them instead.
+	// A second apart, so the run stays inside one fold window and the row has
+	// to move its occurred_at forward as it absorbs each attempt.
+	for i := 0; i < 50; i++ {
+		if _, err := db.ConsumeToken(ctx, share.Token, meta, later.Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
 		}
-		if got := countAccessLogs(t, db, OutcomeExpired); got != i {
-			t.Fatalf("expected %d expired rows, found %d", i, got)
-		}
+	}
+	if got := countAccessLogs(t, db, OutcomeExpired); got != 1 {
+		t.Fatalf("one caller in one window is one row, found %d", got)
+	}
+
+	// A second caller is a different fact, so it gets its own row.
+	if _, err := db.ConsumeToken(ctx, share.Token, RequestMeta{Method: "GET", RemoteIP: "198.51.100.7"}, later); err != nil {
+		t.Fatal(err)
 	}
 
 	logs, err := db.ListAccess(ctx, user.ID, resource.ID, OutcomeExpired, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logs) != 3 {
-		t.Fatalf("the owner must be able to read every refusal, found %d", len(logs))
+	if len(logs) != 2 {
+		t.Fatalf("each caller must be recorded separately, found %d rows", len(logs))
+	}
+	total := 0
+	for _, item := range logs {
+		total += item.Hits
+	}
+	if total != 51 {
+		t.Fatalf("folding must not lose attempts, counted %d of 51", total)
+	}
+	for _, item := range logs {
+		if item.Hits > 1 && !item.FirstAt.Before(item.OccurredAt) {
+			t.Fatalf("a folded row must keep when the run started, got %s -> %s", item.FirstAt, item.OccurredAt)
+		}
+	}
+}
+
+// TestFoldingIsBoundedByItsWindow keeps the fold from becoming an unbounded
+// bucket: once the window passes, the next attempt starts a new row, so the
+// log still shows when something came back.
+func TestFoldingIsBoundedByItsWindow(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	meta := RequestMeta{Method: "GET", RemoteIP: "203.0.113.9"}
+
+	share, err := db.CreateShare(ctx, user.ID, resource.ID, "临时", time.Minute, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := time.Now().UTC().Add(time.Hour)
+	if _, err := db.ConsumeToken(ctx, share.Token, meta, first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ConsumeToken(ctx, share.Token, meta, first.Add(2*accessFoldWindow)); err != nil {
+		t.Fatal(err)
+	}
+	if got := countAccessLogs(t, db, OutcomeExpired); got != 2 {
+		t.Fatalf("a hit past the window starts a new row, found %d", got)
+	}
+}
+
+// TestDeliveriesAreNeverFolded keeps the fold off the outcome the owner
+// published the link to get.
+func TestDeliveriesAreNeverFolded(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	meta := RequestMeta{Method: "GET", RemoteIP: "203.0.113.9"}
+	event := AccessEvent{
+		OwnerID: user.ID, ResourceID: resource.ID, ResourceName: resource.Name,
+		LinkID: "", LinkName: "长期", Outcome: OutcomeSuccess, Status: 200, Detail: "link accepted",
+	}
+	share, err := db.CreateShare(ctx, user.ID, resource.ID, "长期", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event.LinkID = share.ID
+	for i := 0; i < 3; i++ {
+		if err := db.RecordAccess(ctx, event, meta); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := countAccessLogs(t, db, OutcomeSuccess); got != 3 {
+		t.Fatalf("every delivery must be its own row, found %d", got)
 	}
 }

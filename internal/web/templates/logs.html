@@ -33,7 +33,7 @@
       <details>
         <summary>
           <span class="tm">{{formatTime .OccurredAt}}</span>
-          <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{.Outcome}}</span></span>
+          <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{.Outcome}}{{if gt .Hits 1}} ×{{.Hits}}{{end}}</span></span>
           <span class="mono">{{.Status}}</span>
           <span class="mono trunc" title="{{.Path}}">{{.Path}}</span>
           <span class="trunc" title="{{.ResourceName}}">{{if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</span>
@@ -45,6 +45,7 @@
             <dt>资源</dt><dd>{{if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</dd>
             <dt>请求</dt><dd>{{.Method}} {{.Path}}</dd>
             <dt>响应</dt><dd>{{.Status}}{{if .Detail}} · {{.Detail}}{{end}}</dd>
+            {{if gt .Hits 1}}<dt>重复</dt><dd>同一来源 {{.Hits}} 次，{{formatTime .FirstAt}} 起</dd>{{end}}
             <dt>Query</dt><dd>{{if .Query}}{{.Query}}{{else}}<span class="mut">—</span>{{end}}</dd>
             <dt>Host</dt><dd>{{.Host}}</dd>
             <dt>Proto / TLS</dt><dd>{{.Proto}} · {{if .TLS}}是{{else}}否{{end}}</dd>

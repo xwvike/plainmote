@@ -103,6 +103,11 @@ CREATE TABLE IF NOT EXISTS access_logs (
   path TEXT NOT NULL,
   status SMALLINT NOT NULL,
   detail TEXT NOT NULL DEFAULT '',
+  -- A refusal repeated by the same caller folds into one row rather than
+  -- dropping: hits counts the attempts and first_at holds when the run began,
+  -- so occurred_at stays the most recent one.
+  hits INTEGER NOT NULL DEFAULT 1 CHECK (hits > 0),
+  first_at TIMESTAMPTZ,
   occurred_at TIMESTAMPTZ NOT NULL
 );
 -- Databases created before the log stood on its own. Drop these once no
@@ -110,6 +115,9 @@ CREATE TABLE IF NOT EXISTS access_logs (
 ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES users(id) ON DELETE CASCADE;
 ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS resource_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS resource_file TEXT NOT NULL DEFAULT '';
+ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS hits INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS first_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS access_logs_fold_idx ON access_logs(link_id, outcome, remote_ip, occurred_at DESC) WHERE link_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS access_logs_owner_idx ON access_logs(owner_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_resource_idx ON access_logs(resource_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_time_idx ON access_logs(occurred_at DESC);

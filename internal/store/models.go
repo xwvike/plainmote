@@ -66,6 +66,8 @@ type AccessLog struct {
 	Path           string
 	Status         int
 	Detail         string
+	Hits           int
+	FirstAt        time.Time
 	OccurredAt     time.Time
 }
 
