@@ -39,6 +39,16 @@ main
 - 分享属于资源，资源属于 GitHub 用户。
 - 分享 Token 以 AES-GCM 密文保存，同时保存 SHA-256 哈希用于查找。
 - Web 容器本地没有需要保留的数据。
+- 交付不依赖记录：`RecordAccess` 失败只写 stderr，资源照发。Token 在此之前已经消耗，
+  此时拒绝交付既送不出资源，也补不回那行记录。
+- 进入 `access_logs` 的事件必须可归属。无人签发的 Token 和格式不对的地址不写库——
+  没有 owner 就没有读者，而匿名者可以无限制造。它们由 `web.probeLog` 计数，每分钟最多一行 stderr。
+- 折叠不等于丢弃。同一 link、同一 outcome、同一来源 IP 在一分钟内重复的拒绝合并进同一行，
+  `hits` 记次数、`first_at` 记起点。换一个来源就是另一行；`success` 永不折叠。
+- `access_logs` 独立于它描述的资源：行自带 `owner_id` 和资源名快照，删除资源不带走历史。
+- 配额只管写入，不碰交付。套餐过期不会让已发出的分享失效。
+- 配额检查在事务里、用户行锁之下；对象存储的读写在事务之外。
+- 每个配额天花板都有对应的释放路径：`DeleteResource` 是 `max_resources` 的唯一出口。
 
 ## 部署和启动边界
 
@@ -188,7 +198,11 @@ internal/web/static/editor.js
 - 每个测试使用独立 schema，支持包级并行执行。
 - `sessions` 只靠 `SessionUser` 删除「被出示且已过期」的那一行，换了设备或清掉 cookie 的会话不会再被查询到。
   兜底在 `Store.Prune`，不要因为看起来重复就把它去掉。
-- 当前没有历史迁移；schema 不兼容时重建快速迭代环境。
+- 当前没有历史迁移；schema 不兼容时重建快速迭代环境。`access_logs` 的
+  `owner_id` / `resource_name` / `resource_file` / `hits` / `first_at` 带了
+  `ADD COLUMN IF NOT EXISTS`，等到没有更早的部署时按 `resources.content_encoding` 的先例删掉。
+- 数据库测试在没有 `PLAINMOTE_TEST_DATABASE_URL` 时整包跳过，`go test ./...` 依然打印 ok。
+  改动 store 后必须带着这个变量跑一遍，否则等于没测。
 
 ## 通用函数检查表
 
