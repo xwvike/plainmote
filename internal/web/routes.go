@@ -19,6 +19,7 @@ type App struct {
 	github    *auth.GitHub
 	templates *template.Template
 	handler   http.Handler
+	probes    probeLog
 }
 
 type User = store.User

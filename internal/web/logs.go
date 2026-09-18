@@ -3,11 +3,13 @@ package web
 import (
 	"net/http"
 	"strings"
+
+	"plainmote/internal/store"
 )
 
 // accessOutcomes are the values the public handler records; the filter offers
 // exactly these so a typo cannot silently return nothing.
-var accessOutcomes = []string{"success", "expired", "exhausted", "revoked", "upstream_error"}
+var accessOutcomes = store.AccessOutcomes
 
 func (a *App) handleLogs(w http.ResponseWriter, r *http.Request) {
 	user, _, ok := a.requireUser(w, r)

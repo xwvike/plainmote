@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -83,12 +84,14 @@ func (a *App) templateSet() *template.Template {
 			return parsed.Host
 		},
 		"outcomeClass": func(outcome string) string {
+			// "invalid" and "missing_token" are no longer written - an
+			// unowned refusal has no reader - but rows from before still are.
 			switch outcome {
-			case "success":
+			case store.OutcomeSuccess:
 				return "on"
-			case "expired", "exhausted":
+			case store.OutcomeExpired, store.OutcomeExhausted:
 				return "wa"
-			case "invalid", "missing_token", "upstream_error", "revoked":
+			case store.OutcomeRevoked, store.OutcomeUpstreamError, "invalid", "missing_token":
 				return "no"
 			default:
 				return "off"
@@ -167,6 +170,14 @@ func (a *App) renderError(w http.ResponseWriter, status int, err error) {
 	if err != nil {
 		_, _ = io.WriteString(w, err.Error()+"\n")
 	}
+}
+
+// serverError keeps the cause in the process log. Anonymous callers reach this
+// path, and a pgx or S3 error text says more about the deployment than anyone
+// asking for a file needs to know.
+func (a *App) serverError(w http.ResponseWriter, what string, err error) {
+	fmt.Fprintf(os.Stderr, "%s: %v\n", what, err)
+	writePlainError(w, http.StatusInternalServerError, "internal error")
 }
 
 func writePlainError(w http.ResponseWriter, status int, message string) {

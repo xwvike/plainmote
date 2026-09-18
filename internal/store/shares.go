@@ -251,7 +251,7 @@ RETURNING id, resource_id, name
 		result.LinkID = linkID
 		result.LinkName = displayLinkName(linkName)
 		result.Allowed = true
-		result.Reason = "success"
+		result.Reason = OutcomeSuccess
 		return nil
 	})
 	return result, err
@@ -266,7 +266,7 @@ SELECT id, resource_id, name, expires_at, revoked_at, max_uses, used_count
 FROM links WHERE token_hash = $1
 `, hash).Scan(&linkID, &resourceID, &name, &expires, &revoked, &maxUses, &usedCount)
 	if errors.Is(err, pgx.ErrNoRows) {
-		result.Reason = "invalid"
+		result.Reason = ReasonInvalid
 		return nil
 	}
 	if err != nil {
@@ -274,12 +274,12 @@ FROM links WHERE token_hash = $1
 	}
 	result.LinkID = linkID
 	result.LinkName = displayLinkName(name)
-	reason, detail := "exhausted", "link is used up"
+	reason, detail := OutcomeExhausted, "link is used up"
 	switch {
 	case revoked.Valid:
-		reason, detail = "revoked", "link was revoked"
+		reason, detail = OutcomeRevoked, "link was revoked"
 	case expires.Valid && !now.Before(expires.Time):
-		reason, detail = "expired", "link expired"
+		reason, detail = OutcomeExpired, "link expired"
 	}
 	result.Reason = reason
 	return insertAccessTx(ctx, tx, resourceID, linkID, result.LinkName, reason, meta, httpStatusUnauthorized, detail, now)

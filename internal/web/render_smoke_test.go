@@ -26,7 +26,9 @@ func TestAllPagesRender(t *testing.T) {
 	if _, err := db.CreateShare(ctx, user.ID, resource.ID, "长期", 0, 0); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 25; i++ {
+	// Enough to fill a second page at size 10, and no more: this test renders
+	// pages, so it has no business spending the account's resource quota.
+	for i := 0; i < 12; i++ {
 		if _, err := db.CreateResource(ctx, user.ID, fmt.Sprintf("填充资源 %d", i), fmt.Sprintf("fill-%d.yaml", i), []byte("a: 1\n"), "", ""); err != nil {
 			t.Fatal(err)
 		}

@@ -2,11 +2,13 @@ package web
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -61,16 +63,23 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	}
 	token, ok := splitDeliveryPath(r.URL.Path)
 	if !ok {
+		a.recordProbe(probeMalformed)
 		writePlainError(w, http.StatusNotFound, "not found")
 		return
 	}
 	meta := a.requestMetadata(r)
 	result, err := a.db.ConsumeToken(r.Context(), token, meta, time.Now().UTC())
 	if err != nil {
-		writePlainError(w, http.StatusInternalServerError, err.Error())
+		a.serverError(w, "consume token", err)
 		return
 	}
 	if !result.Allowed {
+		// A token nobody issued belongs to no resource, so the refusal has no
+		// owner to read it. It is counted rather than stored; every refusal
+		// that does belong to a link was already written by ConsumeToken.
+		if result.Reason == store.ReasonInvalid {
+			a.recordProbe(probeUnknown)
+		}
 		writePlainError(w, http.StatusUnauthorized, "link is not valid")
 		return
 	}
@@ -86,7 +95,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		// token has already been spent, so the miss is logged separately.
 		fetched, upstreamType, err := a.upstream.Fetch(r.Context(), resource.OriginURL)
 		if err != nil {
-			_ = a.db.RecordAccess(r.Context(), resource.ID, result.LinkID, result.LinkName, "upstream_error", meta, http.StatusBadGateway, err.Error())
+			a.recordAccess(r, resource.ID, result, "upstream_error", meta, http.StatusBadGateway, err.Error())
 			writePlainError(w, http.StatusBadGateway, "upstream unavailable")
 			return
 		}
@@ -97,15 +106,15 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		contentType = store.ContentTypeWithEncoding(contentType, resource.ContentEncoding)
 		body, size, err = a.db.OpenContent(r.Context(), resource)
 		if err != nil {
-			writePlainError(w, http.StatusInternalServerError, err.Error())
+			a.serverError(w, "open content", err)
 			return
 		}
 	}
 	defer body.Close()
-	if err := a.db.RecordAccess(r.Context(), resource.ID, result.LinkID, result.LinkName, "success", meta, http.StatusOK, "link accepted"); err != nil {
-		writePlainError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	// The use was already spent when the token was consumed, so refusing to
+	// deliver here would cost the caller the resource without buying back the
+	// record it failed to write. Delivery goes ahead; the miss goes to stderr.
+	a.recordAccess(r, resource.ID, result, "success", meta, http.StatusOK, "link accepted")
 	w.Header().Set("Content-Type", contentType)
 	// The name is restricted to letters, digits and . _ - + @ on the way in,
 	// so it cannot break out of the quotes or the header.
@@ -120,6 +129,15 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	// Streamed rather than buffered, so a large object costs a copy buffer
 	// instead of its whole size in memory.
 	_, _ = io.Copy(w, body)
+}
+
+// recordAccess writes one delivery event. The record matters, but it is not
+// what the caller asked for: a failure here is reported to stderr and the
+// response carries on, because the work it describes has already happened.
+func (a *App) recordAccess(r *http.Request, resourceID string, result store.ConsumeResult, outcome string, meta store.RequestMeta, status int, detail string) {
+	if err := a.db.RecordAccess(r.Context(), resourceID, result.LinkID, result.LinkName, outcome, meta, status, detail); err != nil {
+		fmt.Fprintf(os.Stderr, "record %s access for resource %s: %v\n", outcome, resourceID, err)
+	}
 }
 
 // redactDeliveryPath keeps the token out of the audit log. It used to ride in

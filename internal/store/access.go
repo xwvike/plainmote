@@ -14,6 +14,23 @@ import (
 
 const httpStatusUnauthorized = 401
 
+// Access outcomes. Every value the public handler can record lives here so the
+// log filter and the store cannot drift apart.
+const (
+	OutcomeSuccess       = "success"
+	OutcomeExpired       = "expired"
+	OutcomeExhausted     = "exhausted"
+	OutcomeRevoked       = "revoked"
+	OutcomeUpstreamError = "upstream_error"
+
+	// ReasonInvalid is reported to the caller but never stored: a token nobody
+	// issued has no resource to hang the row off, and so no owner to read it.
+	ReasonInvalid = "invalid"
+)
+
+// AccessOutcomes are the stored outcomes, in the order the filter offers them.
+var AccessOutcomes = []string{OutcomeSuccess, OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError}
+
 const (
 	accessTokenMaxBytes   = 32
 	accessIPMaxBytes      = 64
