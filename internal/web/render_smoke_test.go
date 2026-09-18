@@ -86,12 +86,12 @@ func TestAllPagesRender(t *testing.T) {
 		{"dashboard page 2", "/?size=10&page=2", `class="pgn on">2<`},
 		{"dashboard search", "/?q=" + resource.Name, resource.Filename},
 		{"dashboard no match", "/?q=%25_nothing", "没有匹配"},
-		{"logs", "/logs", "invalid"},
+		{"logs", "/logs", "success"},
 		{"new resource, upload", "/resources/new?kind=upload", "选择文件"},
 		{"new resource, remote", "/resources/new?kind=remote", "远程地址"},
 		{"resource", "/resources/" + resource.ID, "查看分享"},
 		{"resource remote", "/resources/" + remote.ID, "远程地址"},
-		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=invalid", "invalid"},
+		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "expired"},
 	} {
 		response := get(tc.path)
 		body := response.Body.String()

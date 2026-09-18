@@ -267,7 +267,7 @@ FROM links WHERE token_hash = $1
 `, hash).Scan(&linkID, &resourceID, &name, &expires, &revoked, &maxUses, &usedCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		result.Reason = "invalid"
-		return insertAccessTx(ctx, tx, "", "", "", "invalid", meta, httpStatusUnauthorized, "link not found", now)
+		return nil
 	}
 	if err != nil {
 		return err
@@ -282,7 +282,7 @@ FROM links WHERE token_hash = $1
 		reason, detail = "expired", "link expired"
 	}
 	result.Reason = reason
-	return insertAccessTx(ctx, tx, resourceID, linkID, result.LinkName, reason, meta, httpStatusUnauthorized, detail, now)
+	return insertSampledAccessTx(ctx, tx, resourceID, linkID, result.LinkName, reason, meta, httpStatusUnauthorized, detail, now)
 }
 
 func resourceByIDTx(ctx context.Context, tx pgx.Tx, id string) (Resource, error) {

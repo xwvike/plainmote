@@ -62,6 +62,17 @@ func generateToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(data), nil
 }
 
+// ValidShareToken reports whether value has the exact canonical form emitted
+// by generateToken: 32 bytes encoded as unpadded URL-safe base64.
+func ValidShareToken(value string) bool {
+	if len(value) != base64.RawURLEncoding.EncodedLen(tokenLength) {
+		return false
+	}
+	var decoded [tokenLength]byte
+	n, err := base64.RawURLEncoding.Strict().Decode(decoded[:], []byte(value))
+	return err == nil && n == tokenLength
+}
+
 func randomSecret(length int) (string, error) {
 	data := make([]byte, length)
 	if _, err := rand.Read(data); err != nil {

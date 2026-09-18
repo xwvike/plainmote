@@ -45,9 +45,10 @@ func TestTokenIsTheWholeAddress(t *testing.T) {
 		}
 	}
 
-	// A wrong token is refused no matter how right the tail looks.
-	if got := get("/d/nonsense/clash.yaml"); got.Code != http.StatusUnauthorized {
-		t.Errorf("a bad token should be refused, got %d", got.Code)
+	// A malformed token is rejected at the HTTP boundary without reaching the
+	// database, no matter how right the tail looks.
+	if got := get("/d/nonsense/clash.yaml"); got.Code != http.StatusNotFound {
+		t.Errorf("a malformed token should not resolve, got %d", got.Code)
 	}
 	// The old path-shaped address is gone.
 	if got := get("/configs/clash.yaml?token=" + token); got.Code != http.StatusNotFound {

@@ -7,7 +7,7 @@ import (
 
 // accessOutcomes are the values the public handler records; the filter offers
 // exactly these so a typo cannot silently return nothing.
-var accessOutcomes = []string{"success", "invalid", "expired", "exhausted", "revoked", "missing_token", "upstream_error"}
+var accessOutcomes = []string{"success", "expired", "exhausted", "revoked", "upstream_error"}
 
 func (a *App) handleLogs(w http.ResponseWriter, r *http.Request) {
 	user, _, ok := a.requireUser(w, r)

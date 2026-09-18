@@ -47,7 +47,7 @@ func splitDeliveryPath(urlPath string) (token string, ok bool) {
 	if cut := strings.IndexByte(rest, '/'); cut >= 0 {
 		rest = rest[:cut]
 	}
-	if rest == "" {
+	if !store.ValidShareToken(rest) {
 		return "", false
 	}
 	return rest, true
@@ -59,13 +59,12 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	meta := a.requestMetadata(r)
 	token, ok := splitDeliveryPath(r.URL.Path)
 	if !ok {
-		_ = a.db.RecordAccess(r.Context(), "", "", "", "missing_token", meta, http.StatusNotFound, "no token in the address")
 		writePlainError(w, http.StatusNotFound, "not found")
 		return
 	}
+	meta := a.requestMetadata(r)
 	result, err := a.db.ConsumeToken(r.Context(), token, meta, time.Now().UTC())
 	if err != nil {
 		writePlainError(w, http.StatusInternalServerError, err.Error())
