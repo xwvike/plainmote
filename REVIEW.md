@@ -184,6 +184,9 @@ internal/web/static/editor.js
   一律把换行规范成 CRLF，无论有没有 JavaScript，省掉它会把 LF 文件写成 CRLF。
 - 编辑器侧必须用 `view.state.sliceDoc()` 取内容，不能用 `view.state.doc.toString()`。后者硬编码 LF，
   会把整个文件的行尾改掉，包括用户没有碰过的行。行尾通过 `EditorState.lineSeparator` 放在 compartment 里。
+- 编辑器的焦点提示是 `.panel-ed` 的边框换成 `--accent`，和页面上每个 input、select 的做法一致。
+  不要改回在编辑器内部画环：`.cm-gutters` 是 `position: sticky` 且带 `z-index`，
+  inset 阴影和 inset outline 都会被它盖住，行号列那一段会整段缺失。
 - 编辑器语言识别只存在于浏览器层，Store 不依赖 CodeMirror 的语言名称。
 - `codemirror.js` 是提交进仓库的编辑器和编码检测构建产物。依赖版本以 `package.json` 和 `package-lock.json` 为准，
   重建必须使用 `npm ci`；`npm --prefix tools/codemirror test` 覆盖浏览器侧的代表性自动识别和解码路径。

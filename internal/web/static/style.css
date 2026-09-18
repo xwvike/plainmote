@@ -242,6 +242,11 @@ details.pan[open] .chev { transform: rotate(90deg); }
    Keyed off :has() so a browser that never ran the module - or ran it and
    threw - keeps the padded textarea it is falling back to. */
 .panel-ed > .pb:has(> .cm-host) { padding: 0; gap: 0; }
+/* Focus recolours the panel border, the same as every input and select on
+   these pages. It cannot be drawn inside the editor: .cm-gutters is sticky
+   with a z-index, so it paints over any ring the editor draws for itself and
+   the line-number column comes out unringed. */
+.panel-ed:has(.cm-focused) { border-color: var(--accent); }
 .panel-ed .cm-host { height: var(--edh); }
 /* The content column keeps the same height across every state it has - an
    editor, a read-only preview, a not-yet-pulled address, a notice. Without

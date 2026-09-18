@@ -269,11 +269,17 @@ const highlight = HighlightStyle.define([
 // Height comes from .cm-host in the stylesheet rather than from here, so the
 // page decides how much room the editor gets - a resource page hands it a
 // whole column, a narrow viewport hands it less. The panel border closes the
-// box, so the editor draws none of its own; focus is an inset ring instead,
-// which shows the same thing without taking a pixel of layout.
+// box, so the editor draws none of its own - and it draws no focus ring of its
+// own either. Focus recolours that panel border, from the stylesheet, which is
+// what every other control on these pages does.
+//
+// Drawing the ring in here does not work: .cm-gutters is sticky with a z-index
+// of 200, so it paints over an inset shadow and over an inset outline alike,
+// and the ring came out missing for the whole width of the line numbers. The
+// panel border sits outside the editor and is in no such contest.
 const theme = EditorView.theme({
   "&": { border: "0", background: "var(--panel)", color: "var(--ink)", height: "100%", overflow: "hidden" },
-  "&.cm-focused": { outline: "none", boxShadow: "inset 0 0 0 1px var(--accent)" },
+  "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--mono)", fontSize: "12px", lineHeight: "1.65", minHeight: 0, overflow: "auto" },
   ".cm-content": { minHeight: "100%", padding: "6px 0" },
   ".cm-line": { padding: "0 7px" },
