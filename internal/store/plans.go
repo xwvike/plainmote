@@ -31,6 +31,22 @@ func (d *Store) quotaForUser(ctx context.Context, q storeQuerier, userID string,
 		return UserQuota{}, translateNotFound(err)
 	}
 
+	plans, limit, err := activePlansForUser(ctx, q, userID, at)
+	if err != nil {
+		return UserQuota{}, err
+	}
+
+	usage, err := usageForUser(ctx, q, userID, "")
+	if err != nil {
+		return UserQuota{}, err
+	}
+	return UserQuota{User: user, Limit: limit, Usage: usage, ActivePlans: plans}, nil
+}
+
+// activePlansForUser reads the grants in force at `at` and the ceiling they add
+// up to. The write paths take the limit without the rest of UserQuota, so the
+// account is not read again just to enforce it.
+func activePlansForUser(ctx context.Context, q storeQuerier, userID string, at time.Time) ([]ActivePlans, QuotaLimit, error) {
 	rows, err := q.Query(ctx,
 		`SELECT p.id, p.name, p.max_resources, p.max_storage, p.is_default, p.valid_from, p.valid_until, p.created_at, p.updated_at, up.granted_at, up.expires_at
 		FROM user_plans up
@@ -42,12 +58,12 @@ func (d *Store) quotaForUser(ctx context.Context, q storeQuerier, userID string,
 		ORDER BY p.is_default DESC, up.granted_at, p.id`,
 		userID, at)
 	if err != nil {
-		return UserQuota{}, err
+		return nil, QuotaLimit{}, err
 	}
 	defer rows.Close()
 
-	var userQuota UserQuota
-
+	var plans []ActivePlans
+	var limit QuotaLimit
 	for rows.Next() {
 		var activePlans ActivePlans
 		err := rows.Scan(
@@ -63,38 +79,56 @@ func (d *Store) quotaForUser(ctx context.Context, q storeQuerier, userID string,
 			&activePlans.GrantedAt,
 			&activePlans.ExpiresAt)
 		if err != nil {
-			return UserQuota{}, err
+			return nil, QuotaLimit{}, err
 		}
-		userQuota.Limit.Resources += activePlans.Plan.Limit.Resources
-		userQuota.Limit.StorageBytes += activePlans.Plan.Limit.StorageBytes
-		userQuota.ActivePlans = append(userQuota.ActivePlans, activePlans)
+		limit.Resources += activePlans.Plan.Limit.Resources
+		limit.StorageBytes += activePlans.Plan.Limit.StorageBytes
+		plans = append(plans, activePlans)
 	}
-
-	if err := rows.Err(); err != nil {
-		return UserQuota{}, err
-	}
-
-	userQuota.User = user
-	userQuota.Usage, err = d.usageForUser(ctx, q, userID)
-	if err != nil {
-		return UserQuota{}, err
-	}
-	return userQuota, nil
+	return plans, limit, rows.Err()
 }
+
 func (d *Store) UsageForUser(ctx context.Context, userID string) (QuotaUsage, error) {
-	return d.usageForUser(ctx, d.db, userID)
+	return usageForUser(ctx, d.db, userID, "")
 }
 
-func (d *Store) usageForUser(ctx context.Context, q storeQuerier, userID string) (QuotaUsage, error) {
+// usageForUser totals what the account holds. excludeID leaves one resource
+// out, so an update is measured against its replacement rather than counted at
+// both its old and its new size.
+func usageForUser(ctx context.Context, q storeQuerier, userID, excludeID string) (QuotaUsage, error) {
 	if !validUUIDs(userID) {
 		return QuotaUsage{}, ErrNotFound
 	}
 	var usage QuotaUsage
-	err := q.QueryRow(ctx, `SELECT COUNT(*), COALESCE(SUM(content_size),0) FROM resources WHERE owner_id = $1`, userID).Scan(&usage.Resources, &usage.StorageBytes)
+	err := q.QueryRow(ctx, `
+SELECT COUNT(*), COALESCE(SUM(content_size), 0)
+FROM resources
+WHERE owner_id = $1 AND ($2 = '' OR id <> NULLIF($2, '')::uuid)
+`, userID, excludeID).Scan(&usage.Resources, &usage.StorageBytes)
 	if err != nil {
 		return QuotaUsage{}, err
 	}
 	return usage, nil
+}
+
+// quotaGate locks the account for the length of the transaction and reports the
+// ceiling and the usage the caller has to fit under. The lock is what makes the
+// check binding: without it two uploads can both read a usage that leaves room
+// and both commit.
+func quotaGate(ctx context.Context, tx pgx.Tx, ownerID, excludeID string, at time.Time) (QuotaLimit, QuotaUsage, error) {
+	var locked string
+	if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&locked); err != nil {
+		return QuotaLimit{}, QuotaUsage{}, translateNotFound(err)
+	}
+	_, limit, err := activePlansForUser(ctx, tx, ownerID, at)
+	if err != nil {
+		return QuotaLimit{}, QuotaUsage{}, err
+	}
+	usage, err := usageForUser(ctx, tx, ownerID, excludeID)
+	if err != nil {
+		return QuotaLimit{}, QuotaUsage{}, err
+	}
+	return limit, usage, nil
 }
 
 func grantDefaultPlan(ctx context.Context, tx pgx.Tx, userID string, grantedAt time.Time) error {

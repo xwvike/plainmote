@@ -81,6 +81,12 @@ func newMemoryBlobs() *memoryBlobs {
 	return &memoryBlobs{objects: make(map[string][]byte)}
 }
 
+func (m *memoryBlobs) count() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.objects)
+}
+
 func (m *memoryBlobs) Put(_ context.Context, key string, reader io.Reader, size int64) error {
 	data, err := io.ReadAll(reader)
 	if err != nil {

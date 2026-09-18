@@ -1,6 +1,10 @@
 package store
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
 type User struct {
 	ID        string
@@ -123,4 +127,50 @@ type UserQuota struct {
 	Limit       QuotaLimit
 	Usage       QuotaUsage
 	ActivePlans []ActivePlans
+}
+
+// ErrQuotaExceeded marks the account reaching its own ceiling rather than the
+// service failing. The caller has to be able to tell the two apart: one is a
+// page telling the user what to free, the other is a 500.
+var ErrQuotaExceeded = errors.New("store: quota exceeded")
+
+// QuotaError carries the numbers behind the refusal. "over quota" on its own
+// leaves the user guessing which limit they hit and by how much, on a service
+// whose whole job is holding their resources.
+type QuotaError struct {
+	Storage bool
+	Limit   int64
+	Usage   int64
+	Wanted  int64
+}
+
+func (e *QuotaError) Is(target error) bool { return target == ErrQuotaExceeded }
+
+func (e *QuotaError) Error() string {
+	if e.Storage {
+		return fmt.Sprintf("存储空间不足：已用 %s，上限 %s，这份内容还需要 %s。请先删除或缩减已有资源。",
+			BytesText(e.Usage), BytesText(e.Limit), BytesText(e.Wanted))
+	}
+	return fmt.Sprintf("资源数量已达上限：已有 %d 个，上限 %d 个。请先删除不再需要的资源。", e.Usage, e.Limit)
+}
+
+func storageQuotaError(limit, usage, wanted int64) error {
+	return &QuotaError{Storage: true, Limit: limit, Usage: usage, Wanted: wanted}
+}
+
+func resourceQuotaError(limit, usage int64) error {
+	return &QuotaError{Limit: limit, Usage: usage}
+}
+
+// BytesText renders a size the way the resource pages do, so a limit reads the
+// same in an error as it does next to the file it is about.
+func BytesText(size int64) string {
+	switch {
+	case size >= 1<<20:
+		return fmt.Sprintf("%.2f MiB", float64(size)/(1<<20))
+	case size >= 1<<10:
+		return fmt.Sprintf("%.2f KiB", float64(size)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", size)
+	}
 }

@@ -86,47 +86,47 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 		OriginURL: input.OriginURL, CreatedAt: now, UpdatedAt: now,
 	}
 
-	err = d.withTx(ctx, func(tx pgx.Tx) error {
-		var lockedUserID string
-		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&lockedUserID); err != nil {
-			return translateNotFound(err)
+	// The body is written before the transaction opens. Object storage has no
+	// transaction to join, and pulling its round trip inside one would hold the
+	// account lock and a pooled connection for the length of an S3 call. The
+	// failure this ordering leaves behind is an object no row points at, which
+	// the cleanup below removes; the other order leaves a row pointing at an
+	// object that does not exist.
+	if len(input.Content) > 0 {
+		resource.ContentKey = contentKey(resource.ID)
+		resource.ContentSize = int64(len(input.Content))
+		if err := d.blobs.Put(ctx, resource.ContentKey, bytes.NewReader(input.Content), resource.ContentSize); err != nil {
+			return Resource{}, fmt.Errorf("store resource body: %w", err)
 		}
-		userQuota, err := d.quotaForUser(ctx, tx, ownerID, now)
+	}
+
+	err = d.withTx(ctx, func(tx pgx.Tx) error {
+		limit, usage, err := quotaGate(ctx, tx, ownerID, "", now)
 		if err != nil {
 			return err
 		}
-		if userQuota.Usage.Resources+1 > userQuota.Limit.Resources {
-			return fmt.Errorf("quota exceeded")
+		if usage.Resources+1 > limit.Resources {
+			return resourceQuotaError(limit.Resources, usage.Resources)
 		}
-		if len(input.Content) > 0 {
-			resource.ContentKey = contentKey(resource.ID)
-			resource.ContentSize = int64(len(input.Content))
-			if userQuota.Usage.StorageBytes+resource.ContentSize > userQuota.Limit.StorageBytes {
-				return fmt.Errorf("quota exceeded")
-			}
-			if err := d.blobs.Put(ctx, resource.ContentKey, bytes.NewReader(input.Content), resource.ContentSize); err != nil {
-				return fmt.Errorf("store resource body: %w", err)
-			}
+		if usage.StorageBytes+resource.ContentSize > limit.StorageBytes {
+			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
-
 		_, err = tx.Exec(ctx, `
-	INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at)
-	VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
-	`, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
+INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+`, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
 			resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.OriginURL, now)
 		if err != nil {
 			return fmt.Errorf("create resource: %w", err)
 		}
 		return nil
 	})
-
 	if err != nil {
 		if resource.ContentKey != "" {
 			_ = d.blobs.Delete(ctx, resource.ContentKey)
 		}
 		return Resource{}, err
 	}
-
 	return resource, nil
 }
 
@@ -204,75 +204,66 @@ func escapeLikePattern(value string) string {
 }
 
 func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename string, content []byte, contentEncoding, originURL string) error {
-
-	var (
-		previousKey    string
-		nextKey        string
-		nextSize       int64
-		wroteNewObject bool
-	)
-	err := d.withTx(ctx, func(tx pgx.Tx) error {
-		var lockedUserID string
-		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&lockedUserID); err != nil {
-			return translateNotFound(err)
-		}
-		userQuota, err := d.quotaForUser(ctx, tx, ownerID, time.Now().UTC())
-		if err != nil {
-			return fmt.Errorf("get quota for user: %w", err)
-		}
-
-		current, err := d.resourceForOwner(ctx, tx, ownerID, id)
-
+	current, err := d.ResourceForOwner(ctx, ownerID, id)
+	if err != nil {
+		return err
+	}
+	replaceContent := content != nil
+	if !replaceContent && !current.Remote() && strings.TrimSpace(originURL) == "" {
+		content, err = d.ReadContent(ctx, current)
 		if err != nil {
 			return err
 		}
-		replaceContent := content != nil
-		if !replaceContent && !current.Remote() && strings.TrimSpace(originURL) == "" {
-			content, err = d.ReadContent(ctx, current)
-			if err != nil {
-				return err
-			}
+		// Encoding describes the stored bytes. A metadata-only request cannot
+		// change it without replacing those bytes, or the next read may decode
+		// the same object as an unrelated character set.
+		contentEncoding = current.ContentEncoding
+	}
+	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
+	if err != nil {
+		return err
+	}
 
-			contentEncoding = current.ContentEncoding
+	// Same ordering as CreateResource: the object is written before the
+	// transaction, so no S3 round trip happens under the account lock.
+	previousKey := current.ContentKey
+	nextKey, nextSize := previousKey, current.ContentSize
+	wroteNewObject := false
+	if replaceContent && len(input.Content) > 0 {
+		nextKey = contentKey(id)
+		nextSize = int64(len(input.Content))
+		if err := d.blobs.Put(ctx, nextKey, bytes.NewReader(input.Content), nextSize); err != nil {
+			return fmt.Errorf("store resource body: %w", err)
 		}
-		input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
+		wroteNewObject = true
+	} else if input.OriginURL != "" {
+		nextKey, nextSize = "", 0
+	}
+
+	now := time.Now().UTC()
+	err = d.withTx(ctx, func(tx pgx.Tx) error {
+		// The resource is left out of the usage total, so the replacement is
+		// measured in place of what it replaces rather than on top of it.
+		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
 		if err != nil {
 			return err
 		}
-
-		previousKey = current.ContentKey
-		nextKey, nextSize = previousKey, current.ContentSize
-		wroteNewObject = false
-		if replaceContent && len(input.Content) > 0 {
-			nextKey = contentKey(id)
-			nextSize = int64(len(input.Content))
-			if nextSize > current.ContentSize &&
-				userQuota.Usage.StorageBytes-current.ContentSize+nextSize > userQuota.Limit.StorageBytes {
-				return fmt.Errorf("quota exceeded")
-			}
-			if err := d.blobs.Put(ctx, nextKey, bytes.NewReader(input.Content), nextSize); err != nil {
-				return fmt.Errorf("store resource body: %w", err)
-			}
-			wroteNewObject = true
-		} else if input.OriginURL != "" {
-			nextKey, nextSize = "", 0
+		if usage.StorageBytes+nextSize > limit.StorageBytes {
+			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, nextSize)
 		}
-
 		tag, err := tx.Exec(ctx, `
-	UPDATE resources
-	SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, content_encoding = $6, origin_url = $7, updated_at = $8
-	WHERE id = $9 AND owner_id = $10
-	`, input.Name, input.Filename, nextKey, nextSize, input.ContentType, input.Encoding, input.OriginURL, time.Now().UTC(), id, ownerID)
-		if err != nil || tag.RowsAffected() == 0 {
-			if err != nil {
-				return fmt.Errorf("update resource: %w", err)
-			}
+UPDATE resources
+SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, content_encoding = $6, origin_url = $7, updated_at = $8
+WHERE id = $9 AND owner_id = $10
+`, input.Name, input.Filename, nextKey, nextSize, input.ContentType, input.Encoding, input.OriginURL, now, id, ownerID)
+		if err != nil {
+			return fmt.Errorf("update resource: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-
 		return nil
 	})
-
 	if err != nil {
 		if wroteNewObject {
 			_ = d.blobs.Delete(ctx, nextKey)
@@ -282,7 +273,6 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 	if previousKey != "" && previousKey != nextKey {
 		_ = d.blobs.Delete(ctx, previousKey)
 	}
-
 	return nil
 }
 
