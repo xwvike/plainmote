@@ -101,4 +101,3 @@ CREATE TABLE IF NOT EXISTS access_logs (
 );
 CREATE INDEX IF NOT EXISTS access_logs_resource_idx ON access_logs(resource_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_time_idx ON access_logs(occurred_at DESC);
-CREATE INDEX IF NOT EXISTS access_logs_sample_idx ON access_logs(link_id, outcome, occurred_at DESC) WHERE link_id IS NOT NULL;

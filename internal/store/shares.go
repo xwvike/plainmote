@@ -282,7 +282,7 @@ FROM links WHERE token_hash = $1
 		reason, detail = "expired", "link expired"
 	}
 	result.Reason = reason
-	return insertSampledAccessTx(ctx, tx, resourceID, linkID, result.LinkName, reason, meta, httpStatusUnauthorized, detail, now)
+	return insertAccessTx(ctx, tx, resourceID, linkID, result.LinkName, reason, meta, httpStatusUnauthorized, detail, now)
 }
 
 func resourceByIDTx(ctx context.Context, tx pgx.Tx, id string) (Resource, error) {

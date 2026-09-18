@@ -21,7 +21,6 @@ const (
 	accessHeaderMaxBytes  = 512
 	accessTextMaxBytes    = 1024
 	accessTargetMaxBytes  = 2048
-	accessSampleWindow    = time.Minute
 )
 
 func limitAccessText(value string, maxBytes int) string {
@@ -87,43 +86,9 @@ VALUES(
 	return err
 }
 
-// insertSampledAccessTx keeps repeated failures for one known link from
-// becoming one database row per request. The non-blocking transaction lock
-// makes the check safe across processes without making attackers wait in a
-// lock queue; another request already sampling this link simply skips its log.
-func insertSampledAccessTx(ctx context.Context, tx pgx.Tx, resourceID, linkID, linkName, outcome string, meta RequestMeta, status int, detail string, now time.Time) error {
-	if linkID == "" {
-		return nil
-	}
-	var locked bool
-	if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))`, linkID+":"+outcome).Scan(&locked); err != nil {
-		return err
-	}
-	if !locked {
-		return nil
-	}
-	var recent bool
-	if err := tx.QueryRow(ctx, `
-SELECT EXISTS(
-  SELECT 1 FROM access_logs
-  WHERE link_id = $1 AND outcome = $2 AND occurred_at >= $3
-)
-	`, linkID, outcome, now.Add(-accessSampleWindow)).Scan(&recent); err != nil {
-		return err
-	}
-	if recent {
-		return nil
-	}
-	return insertAccessTx(ctx, tx, resourceID, linkID, linkName, outcome, meta, status, detail, now)
-}
-
 func (d *Store) RecordAccess(ctx context.Context, resourceID, linkID, linkName, outcome string, meta RequestMeta, status int, detail string) error {
 	return d.withTx(ctx, func(tx pgx.Tx) error {
-		now := time.Now().UTC()
-		if outcome == "upstream_error" {
-			return insertSampledAccessTx(ctx, tx, resourceID, linkID, linkName, outcome, meta, status, detail, now)
-		}
-		return insertAccessTx(ctx, tx, resourceID, linkID, linkName, outcome, meta, status, detail, now)
+		return insertAccessTx(ctx, tx, resourceID, linkID, linkName, outcome, meta, status, detail, time.Now().UTC())
 	})
 }
 
