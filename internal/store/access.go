@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -11,6 +13,48 @@ import (
 )
 
 const httpStatusUnauthorized = 401
+
+const (
+	accessTokenMaxBytes   = 32
+	accessIPMaxBytes      = 64
+	accessAddressMaxBytes = 128
+	accessHeaderMaxBytes  = 512
+	accessTextMaxBytes    = 1024
+	accessTargetMaxBytes  = 2048
+)
+
+func limitAccessText(value string, maxBytes int) string {
+	value = strings.ToValidUTF8(value, "\uFFFD")
+	value = strings.ReplaceAll(value, "\x00", "\uFFFD")
+	if len(value) <= maxBytes {
+		return value
+	}
+
+	const suffix = "…"
+	cut := maxBytes - len(suffix)
+	for cut > 0 && !utf8.RuneStart(value[cut]) {
+		cut--
+	}
+	return value[:cut] + suffix
+}
+
+func limitRequestMeta(meta RequestMeta) RequestMeta {
+	meta.RemoteIP = limitAccessText(meta.RemoteIP, accessIPMaxBytes)
+	meta.RemoteAddr = limitAccessText(meta.RemoteAddr, accessAddressMaxBytes)
+	meta.Host = limitAccessText(meta.Host, accessHeaderMaxBytes)
+	meta.Query = limitAccessText(meta.Query, accessTargetMaxBytes)
+	meta.Proto = limitAccessText(meta.Proto, accessTokenMaxBytes)
+	meta.UserAgent = limitAccessText(meta.UserAgent, accessTextMaxBytes)
+	meta.Referer = limitAccessText(meta.Referer, accessTextMaxBytes)
+	meta.Forwarded = limitAccessText(meta.Forwarded, accessHeaderMaxBytes)
+	meta.XForwardedFor = limitAccessText(meta.XForwardedFor, accessHeaderMaxBytes)
+	meta.CFConnectingIP = limitAccessText(meta.CFConnectingIP, accessIPMaxBytes)
+	meta.CFRay = limitAccessText(meta.CFRay, accessAddressMaxBytes)
+	meta.ContentLength = limitAccessText(meta.ContentLength, accessTokenMaxBytes)
+	meta.Method = limitAccessText(meta.Method, accessTokenMaxBytes)
+	meta.Path = limitAccessText(meta.Path, accessTargetMaxBytes)
+	return meta
+}
 
 func optionalUUID(value string) any {
 	if value == "" {
@@ -20,6 +64,11 @@ func optionalUUID(value string) any {
 }
 
 func insertAccessTx(ctx context.Context, tx pgx.Tx, resourceID, linkID, linkName, outcome string, meta RequestMeta, status int, detail string, now time.Time) error {
+	meta = limitRequestMeta(meta)
+	linkName = limitAccessText(linkName, accessHeaderMaxBytes)
+	outcome = limitAccessText(outcome, accessIPMaxBytes)
+	detail = limitAccessText(detail, accessTextMaxBytes)
+
 	_, err := tx.Exec(ctx, `
 INSERT INTO access_logs(
   id, resource_id, link_id, link_name, outcome, remote_ip, remote_addr, host, query, proto,
