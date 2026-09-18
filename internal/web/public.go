@@ -95,7 +95,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		// token has already been spent, so the miss is logged separately.
 		fetched, upstreamType, err := a.upstream.Fetch(r.Context(), resource.OriginURL)
 		if err != nil {
-			a.recordAccess(r, resource.ID, result, "upstream_error", meta, http.StatusBadGateway, err.Error())
+			a.recordAccess(r, result, store.OutcomeUpstreamError, meta, http.StatusBadGateway, err.Error())
 			writePlainError(w, http.StatusBadGateway, "upstream unavailable")
 			return
 		}
@@ -114,7 +114,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	// The use was already spent when the token was consumed, so refusing to
 	// deliver here would cost the caller the resource without buying back the
 	// record it failed to write. Delivery goes ahead; the miss goes to stderr.
-	a.recordAccess(r, resource.ID, result, "success", meta, http.StatusOK, "link accepted")
+	a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusOK, "link accepted")
 	w.Header().Set("Content-Type", contentType)
 	// The name is restricted to letters, digits and . _ - + @ on the way in,
 	// so it cannot break out of the quotes or the header.
@@ -134,9 +134,16 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 // recordAccess writes one delivery event. The record matters, but it is not
 // what the caller asked for: a failure here is reported to stderr and the
 // response carries on, because the work it describes has already happened.
-func (a *App) recordAccess(r *http.Request, resourceID string, result store.ConsumeResult, outcome string, meta store.RequestMeta, status int, detail string) {
-	if err := a.db.RecordAccess(r.Context(), resourceID, result.LinkID, result.LinkName, outcome, meta, status, detail); err != nil {
-		fmt.Fprintf(os.Stderr, "record %s access for resource %s: %v\n", outcome, resourceID, err)
+func (a *App) recordAccess(r *http.Request, result store.ConsumeResult, outcome string, meta store.RequestMeta, status int, detail string) {
+	resource := result.Resource
+	event := store.AccessEvent{
+		OwnerID: resource.OwnerID, ResourceID: resource.ID,
+		ResourceName: resource.Name, ResourceFile: resource.Filename,
+		LinkID: result.LinkID, LinkName: result.LinkName,
+		Outcome: outcome, Status: status, Detail: detail,
+	}
+	if err := a.db.RecordAccess(r.Context(), event, meta); err != nil {
+		fmt.Fprintf(os.Stderr, "record %s access for resource %s: %v\n", outcome, resource.ID, err)
 	}
 }
 

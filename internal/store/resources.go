@@ -276,6 +276,39 @@ WHERE id = $9 AND owner_id = $10
 	return nil
 }
 
+// DeleteResource removes a resource, the links that point at it and the object
+// holding its body. A quota that can only be spent is a trap: without this the
+// first account to fill its plan stays full for good.
+//
+// The access log is deliberately not touched. Its rows carry their own owner
+// and a copy of the name they were reached under, so the history of a resource
+// survives the resource and stays readable to whoever owned it.
+func (d *Store) DeleteResource(ctx context.Context, ownerID, id string) error {
+	if !validUUIDs(ownerID, id) {
+		return ErrNotFound
+	}
+	var contentKey string
+	err := d.withTx(ctx, func(tx pgx.Tx) error {
+		// Links go with it through ON DELETE CASCADE, so every address handed
+		// out for this resource stops resolving in the same statement.
+		err := tx.QueryRow(ctx, `
+DELETE FROM resources WHERE id = $1 AND owner_id = $2 RETURNING content_key
+`, id, ownerID).Scan(&contentKey)
+		return translateNotFound(err)
+	})
+	if err != nil {
+		return err
+	}
+	// The object goes last. An object left behind by a failure here costs
+	// storage; a row pointing at an object already gone costs a resource.
+	if contentKey != "" {
+		if err := d.blobs.Delete(ctx, contentKey); err != nil {
+			return fmt.Errorf("delete resource body: %w", err)
+		}
+	}
+	return nil
+}
+
 func contentKey(resourceID string) string {
 	return resourceID + "/" + uuid.NewString()
 }

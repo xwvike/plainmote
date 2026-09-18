@@ -68,6 +68,10 @@ const (
 // keep yet - the form has not been filled in.
 const actionPreview = "preview"
 
+// actionDelete removes the resource for good. It is reached from a confirm
+// dialog rather than the save bar, because nothing here undoes it.
+const actionDelete = "delete"
+
 func newResourceKind(value string) string {
 	if value == kindRemote {
 		return kindRemote
@@ -237,6 +241,14 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			writePlainError(w, http.StatusForbidden, "invalid csrf token")
 			return
 		}
+		if r.FormValue("action") == actionDelete {
+			if err := a.db.DeleteResource(r.Context(), user.ID, resourceID); err != nil {
+				a.renderResourcePage(w, r, user, resource, err.Error())
+				return
+			}
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
 		form, err := readResourceForm(r, a.cfg.MaxContent)
 		if err != nil {
 			a.renderResourcePage(w, r, user, resource, err.Error())
@@ -337,6 +349,8 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		}
 	} else if r.URL.Query().Get("shares") != "" {
 		data.ShareOpen = true
+	} else if r.URL.Query().Get("delete") != "" {
+		data.DeleteOpen = true
 	}
 
 	a.renderTemplate(w, http.StatusOK, "resource.html", data)

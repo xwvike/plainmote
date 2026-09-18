@@ -93,6 +93,7 @@ func TestAllPagesRender(t *testing.T) {
 		{"new resource, remote", "/resources/new?kind=remote", "远程地址"},
 		{"resource", "/resources/" + resource.ID, "查看分享"},
 		{"resource remote", "/resources/" + remote.ID, "远程地址"},
+		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "确认删除"},
 		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "expired"},
 	} {
 		response := get(tc.path)

@@ -72,6 +72,7 @@ type pageData struct {
 	Resource            Resource
 	Shares              []linkView
 	ShareOpen           bool
+	DeleteOpen          bool
 	FocusShare          linkView
 	AccessLogs          []AccessLog
 	UpstreamType        string

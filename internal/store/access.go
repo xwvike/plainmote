@@ -80,32 +80,53 @@ func optionalUUID(value string) any {
 	return value
 }
 
-func insertAccessTx(ctx context.Context, tx pgx.Tx, resourceID, linkID, linkName, outcome string, meta RequestMeta, status int, detail string, now time.Time) error {
+// AccessEvent is one delivery attempt as the log will keep it. The resource
+// fields are copied rather than referenced: the row has to stay readable after
+// what it describes is gone.
+type AccessEvent struct {
+	OwnerID      string
+	ResourceID   string
+	ResourceName string
+	ResourceFile string
+	LinkID       string
+	LinkName     string
+	Outcome      string
+	Status       int
+	Detail       string
+}
+
+func insertAccessTx(ctx context.Context, tx pgx.Tx, event AccessEvent, meta RequestMeta, now time.Time) error {
 	meta = limitRequestMeta(meta)
-	linkName = limitAccessText(linkName, accessHeaderMaxBytes)
-	outcome = limitAccessText(outcome, accessIPMaxBytes)
-	detail = limitAccessText(detail, accessTextMaxBytes)
+	event.ResourceName = limitAccessText(event.ResourceName, accessHeaderMaxBytes)
+	event.ResourceFile = limitAccessText(event.ResourceFile, accessHeaderMaxBytes)
+	event.LinkName = limitAccessText(event.LinkName, accessHeaderMaxBytes)
+	event.Outcome = limitAccessText(event.Outcome, accessIPMaxBytes)
+	event.Detail = limitAccessText(event.Detail, accessTextMaxBytes)
 
 	_, err := tx.Exec(ctx, `
 INSERT INTO access_logs(
-  id, resource_id, link_id, link_name, outcome, remote_ip, remote_addr, host, query, proto,
+  id, owner_id, resource_id, resource_name, resource_file, link_id, link_name, outcome,
+  remote_ip, remote_addr, host, query, proto,
   user_agent, referer, forwarded, x_forwarded_for, cf_connecting_ip, cf_ray,
   content_length, tls, method, path, status, detail, occurred_at
 )
 VALUES(
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-  $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+  $1, $2, $3, $4, $5, $6, $7, $8,
+  $9, $10, $11, $12, $13,
+  $14, $15, $16, $17, $18, $19,
+  $20, $21, $22, $23, $24, $25, $26
 )
-`, uuid.NewString(), optionalUUID(resourceID), optionalUUID(linkID), linkName, outcome,
+`, uuid.NewString(), optionalUUID(event.OwnerID), optionalUUID(event.ResourceID),
+		event.ResourceName, event.ResourceFile, optionalUUID(event.LinkID), event.LinkName, event.Outcome,
 		meta.RemoteIP, meta.RemoteAddr, meta.Host, meta.Query, meta.Proto,
-		meta.UserAgent, meta.Referer, meta.Forwarded, meta.XForwardedFor, meta.CFConnectingIP,
-		meta.CFRay, meta.ContentLength, meta.TLS, meta.Method, meta.Path, status, detail, now)
+		meta.UserAgent, meta.Referer, meta.Forwarded, meta.XForwardedFor, meta.CFConnectingIP, meta.CFRay,
+		meta.ContentLength, meta.TLS, meta.Method, meta.Path, event.Status, event.Detail, now)
 	return err
 }
 
-func (d *Store) RecordAccess(ctx context.Context, resourceID, linkID, linkName, outcome string, meta RequestMeta, status int, detail string) error {
+func (d *Store) RecordAccess(ctx context.Context, event AccessEvent, meta RequestMeta) error {
 	return d.withTx(ctx, func(tx pgx.Tx) error {
-		return insertAccessTx(ctx, tx, resourceID, linkID, linkName, outcome, meta, status, detail, time.Now().UTC())
+		return insertAccessTx(ctx, tx, event, meta, time.Now().UTC())
 	})
 }
 
@@ -113,16 +134,22 @@ func (d *Store) ListAccess(ctx context.Context, ownerID, resourceID, outcome str
 	if !validUUIDs(ownerID) || resourceID != "" && !validUUIDs(resourceID) {
 		return nil, ErrNotFound
 	}
+	// The join is outer and the owner test falls back through it, so rows
+	// written before access_logs carried an owner still reach their owner, and
+	// rows whose resource has since been deleted are not lost with it. The
+	// displayed name prefers the live resource, which may have been renamed
+	// since, and falls back to what was recorded at the time.
 	rows, err := d.db.Query(ctx, `
 SELECT
-  a.id, COALESCE(a.resource_id::text, ''), COALESCE(r.name, ''), COALESCE(r.filename, ''),
+  a.id, COALESCE(a.resource_id::text, ''),
+  COALESCE(NULLIF(r.name, ''), a.resource_name), COALESCE(NULLIF(r.filename, ''), a.resource_file),
   COALESCE(a.link_id::text, ''), a.link_name, a.outcome, a.remote_ip, a.remote_addr,
   a.host, a.query, a.proto, a.user_agent, a.referer, a.forwarded, a.x_forwarded_for,
   a.cf_connecting_ip, a.cf_ray, a.content_length, a.tls, a.method, a.path, a.status,
   a.detail, a.occurred_at
 FROM access_logs a
-JOIN resources r ON r.id = a.resource_id
-WHERE r.owner_id = $1
+LEFT JOIN resources r ON r.id = a.resource_id
+WHERE COALESCE(a.owner_id, r.owner_id) = $1
   AND ($2 = '' OR a.resource_id = NULLIF($2, '')::uuid)
   AND ($3 = '' OR a.outcome = $3)
 ORDER BY a.occurred_at DESC

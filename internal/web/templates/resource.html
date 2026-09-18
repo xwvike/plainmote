@@ -20,6 +20,7 @@
           <input type="hidden" name="action" value="create">
           <button type="submit" class="pri">分享</button>
         </form>
+        <a class="btn" href="/resources/{{.Resource.ID}}?delete=1">删除</a>
       </span>
     </div>
     <div class="metaline">
@@ -242,6 +243,28 @@
       <a class="btn pri" href="/resources/{{.Resource.ID}}" style="margin-left:auto">完成</a>
     </footer>
     {{end}}
+  </dialog>
+  {{end}}
+
+  {{if .DeleteOpen}}
+  <div class="scrim"></div>
+  <dialog class="dlg" open>
+    <header>
+      <b>删除「{{.Resource.Name}}」</b>
+      <a class="x" href="/resources/{{.Resource.ID}}" aria-label="关闭">&times;</a>
+    </header>
+    <div class="body">
+      <p class="ro">资源本身、它的正文和 {{len .Shares}} 条进行中的分享会一起删掉，对方手里的链接立刻失效。这一步没有撤销。</p>
+      <p class="hint">访问记录会留下，删除后仍然可以在日志里按这个名字查到。</p>
+    </div>
+    <footer>
+      <form method="post" action="/resources/{{.Resource.ID}}" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="delete">
+        <button type="submit" class="sm">确认删除</button>
+      </form>
+      <a class="btn pri" href="/resources/{{.Resource.ID}}" style="margin-left:auto">取消</a>
+    </footer>
   </dialog>
   {{end}}
 

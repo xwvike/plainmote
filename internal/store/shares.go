@@ -258,13 +258,19 @@ RETURNING id, resource_id, name
 }
 
 func (d *Store) recordRefusalTx(ctx context.Context, tx pgx.Tx, hash string, meta RequestMeta, now time.Time, result *ConsumeResult) error {
-	var linkID, resourceID, name string
+	var linkID, resourceID, name, ownerID, resourceName, resourceFile string
 	var expires, revoked pgtype.Timestamptz
 	var maxUses, usedCount int
+	// The resource comes along so the refusal is recorded against an owner and
+	// keeps the name it was reached under.
 	err := tx.QueryRow(ctx, `
-SELECT id, resource_id, name, expires_at, revoked_at, max_uses, used_count
-FROM links WHERE token_hash = $1
-`, hash).Scan(&linkID, &resourceID, &name, &expires, &revoked, &maxUses, &usedCount)
+SELECT l.id, l.resource_id, l.name, l.expires_at, l.revoked_at, l.max_uses, l.used_count,
+       COALESCE(r.owner_id::text, ''), COALESCE(r.name, ''), COALESCE(r.filename, '')
+FROM links l
+LEFT JOIN resources r ON r.id = l.resource_id
+WHERE l.token_hash = $1
+`, hash).Scan(&linkID, &resourceID, &name, &expires, &revoked, &maxUses, &usedCount,
+		&ownerID, &resourceName, &resourceFile)
 	if errors.Is(err, pgx.ErrNoRows) {
 		result.Reason = ReasonInvalid
 		return nil
@@ -282,7 +288,11 @@ FROM links WHERE token_hash = $1
 		reason, detail = OutcomeExpired, "link expired"
 	}
 	result.Reason = reason
-	return insertAccessTx(ctx, tx, resourceID, linkID, result.LinkName, reason, meta, httpStatusUnauthorized, detail, now)
+	return insertAccessTx(ctx, tx, AccessEvent{
+		OwnerID: ownerID, ResourceID: resourceID, ResourceName: resourceName, ResourceFile: resourceFile,
+		LinkID: linkID, LinkName: result.LinkName,
+		Outcome: reason, Status: httpStatusUnauthorized, Detail: detail,
+	}, meta, now)
 }
 
 func resourceByIDTx(ctx context.Context, tx pgx.Tx, id string) (Resource, error) {
