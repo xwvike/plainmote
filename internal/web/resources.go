@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -109,7 +110,8 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 			return
 		}
 	}
-	data := a.basePageWithError(r, user, err.Error())
+	text, status := a.writeErrorText("create resource", err)
+	data := a.basePageWithError(r, user, text)
 	data.IsNew = true
 	data.NewKind = newResourceKind(r.FormValue("kind"))
 	data.Resource = Resource{Name: form.Name, Filename: form.Filename, ContentSize: int64(len(form.Content)), ContentEncoding: form.ContentEncoding, OriginURL: form.OriginURL}
@@ -120,7 +122,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 			data.ContentText = text
 		}
 	}
-	a.renderTemplate(w, http.StatusBadRequest, "resource.html", data)
+	a.renderTemplate(w, status, "resource.html", data)
 }
 
 // resourceForm is one submission of the resource screen. An uploaded file wins
@@ -243,7 +245,8 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		}
 		if r.FormValue("action") == actionDelete {
 			if err := a.db.DeleteResource(r.Context(), user.ID, resourceID); err != nil {
-				a.renderResourcePage(w, r, user, resource, err.Error())
+				text, status := a.writeErrorText("delete resource", err)
+				a.renderResourcePage(w, r, user, resource, text, status)
 				return
 			}
 			http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -251,7 +254,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		}
 		form, err := readResourceForm(r, a.cfg.MaxContent)
 		if err != nil {
-			a.renderResourcePage(w, r, user, resource, err.Error())
+			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest)
 			return
 		}
 		if r.FormValue("action") == actionPreview {
@@ -260,7 +263,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			// stored row is untouched either way.
 			pending := resource
 			pending.Name, pending.Filename, pending.OriginURL = form.Name, form.Filename, form.OriginURL
-			a.renderResourcePage(w, r, user, pending, "")
+			a.renderResourcePage(w, r, user, pending, "", http.StatusOK)
 			return
 		}
 		content := form.Content
@@ -269,7 +272,8 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			content = nil
 		}
 		if err := a.db.UpdateResource(r.Context(), user.ID, resourceID, form.Name, form.Filename, content, form.ContentEncoding, form.OriginURL); err != nil {
-			a.renderResourcePage(w, r, user, resource, err.Error())
+			text, status := a.writeErrorText("update resource", err)
+			a.renderResourcePage(w, r, user, resource, text, status)
 			return
 		}
 		http.Redirect(w, r, "/resources/"+resourceID, http.StatusSeeOther)
@@ -279,10 +283,22 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	a.renderResourcePage(w, r, user, resource, r.URL.Query().Get("error"))
+	a.renderResourcePage(w, r, user, resource, r.URL.Query().Get("error"), http.StatusOK)
 }
 
-func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user User, resource Resource, pageError string) {
+// writeErrorText is what the owner of a resource is shown when a write is
+// refused. A quota refusal or a bad field is about their own request and says
+// so in full; anything else is the service failing, and its text names database
+// relations and object keys, so it goes to stderr with a status to match.
+func (a *App) writeErrorText(what string, err error) (string, int) {
+	if errors.Is(err, store.ErrInternal) {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", what, err)
+		return "服务暂时无法完成这次操作，请稍后再试。", http.StatusInternalServerError
+	}
+	return err.Error(), http.StatusBadRequest
+}
+
+func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user User, resource Resource, pageError string, status int) {
 	now := time.Now().UTC()
 	shares, err := a.db.ListShares(r.Context(), user.ID, resource.ID, now)
 	if err != nil {
@@ -353,7 +369,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		data.DeleteOpen = true
 	}
 
-	a.renderTemplate(w, http.StatusOK, "resource.html", data)
+	a.renderTemplate(w, status, "resource.html", data)
 }
 
 // previewUpstream reads the address exactly as a public request would and fills

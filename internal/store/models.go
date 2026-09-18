@@ -129,6 +129,11 @@ type UserQuota struct {
 	ActivePlans []ActivePlans
 }
 
+// ErrInternal marks the service failing rather than the request being wrong.
+// The text behind it names pgx relations and object keys, so a caller can use
+// this to keep it in the process log instead of on a page.
+var ErrInternal = errors.New("store: internal error")
+
 // ErrQuotaExceeded marks the account reaching its own ceiling rather than the
 // service failing. The caller has to be able to tell the two apart: one is a
 // page telling the user what to free, the other is a 500.

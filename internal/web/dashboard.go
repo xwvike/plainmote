@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -55,12 +56,21 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// What is left is part of the list, not a surprise at save time: the
+	// account should be able to see it coming.
+	quota, err := a.db.QuotaForUser(r.Context(), user.ID, time.Now().UTC())
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	a.renderTemplate(w, http.StatusOK, "dashboard.html", pageData{
 		User:      user,
 		CSRF:      csrfValue(r),
 		Active:    "resources",
 		BaseURL:   a.baseURL(r),
 		Resources: resources,
+		Quota:     quota,
 		Pager:     buildPager(search, page, size, total),
 	})
 }

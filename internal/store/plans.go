@@ -2,8 +2,8 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -131,20 +131,24 @@ func quotaGate(ctx context.Context, tx pgx.Tx, ownerID, excludeID string, at tim
 	return limit, usage, nil
 }
 
+// grantDefaultPlan gives a new account the plan marked default, if there is
+// one. A missing default is a deployment problem, not a reason to turn someone
+// away at the door: the account is created either way and lands on a zero
+// quota, where it can sign in and be told what is wrong, instead of failing
+// halfway through an OAuth callback with nothing to show for it.
 func grantDefaultPlan(ctx context.Context, tx pgx.Tx, userID string, grantedAt time.Time) error {
 	tag, err := tx.Exec(ctx, `
-		INSERT INTO user_plans (user_id, plan_id, granted_at)
-		SELECT $1, id, $2
-		FROM plans
-		WHERE is_default
-		ON CONFLICT (user_id, plan_id) DO NOTHING
-		`, userID, grantedAt)
-
+INSERT INTO user_plans (user_id, plan_id, granted_at)
+SELECT $1, id, $2
+FROM plans
+WHERE is_default
+ON CONFLICT (user_id, plan_id) DO NOTHING
+`, userID, grantedAt)
 	if err != nil {
 		return fmt.Errorf("grant default plan: %w", err)
 	}
-	if tag.RowsAffected() != 1 {
-		return errors.New("grant default plan: default plan not found")
+	if tag.RowsAffected() == 0 {
+		fmt.Fprintf(os.Stderr, "no default plan to grant user %s; the account starts with no quota\n", userID)
 	}
 	return nil
 }

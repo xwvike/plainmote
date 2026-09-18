@@ -55,6 +55,7 @@ type pageData struct {
 	LoginURL         string
 	RegistrationMode auth.RegistrationMode
 	Resources        []Resource
+	Quota            store.UserQuota
 	Pager            pager
 	IsNew            bool
 	NewKind          string

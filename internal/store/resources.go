@@ -96,7 +96,7 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 		resource.ContentKey = contentKey(resource.ID)
 		resource.ContentSize = int64(len(input.Content))
 		if err := d.blobs.Put(ctx, resource.ContentKey, bytes.NewReader(input.Content), resource.ContentSize); err != nil {
-			return Resource{}, fmt.Errorf("store resource body: %w", err)
+			return Resource{}, fmt.Errorf("store resource body: %w: %w", ErrInternal, err)
 		}
 	}
 
@@ -117,7 +117,7 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
 `, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
 			resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.OriginURL, now)
 		if err != nil {
-			return fmt.Errorf("create resource: %w", err)
+			return fmt.Errorf("create resource: %w: %w", ErrInternal, err)
 		}
 		return nil
 	})
@@ -163,7 +163,7 @@ SELECT COUNT(*)
 FROM resources
 WHERE owner_id = $1 AND ($2 = '' OR name ILIKE $3 ESCAPE '\' OR filename ILIKE $3 ESCAPE '\')
 `, ownerID, query, pattern).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count resources: %w", err)
+		return nil, 0, fmt.Errorf("count resources: %w: %w", ErrInternal, err)
 	}
 	if limit <= 0 {
 		limit = 20
@@ -233,7 +233,7 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 		nextKey = contentKey(id)
 		nextSize = int64(len(input.Content))
 		if err := d.blobs.Put(ctx, nextKey, bytes.NewReader(input.Content), nextSize); err != nil {
-			return fmt.Errorf("store resource body: %w", err)
+			return fmt.Errorf("store resource body: %w: %w", ErrInternal, err)
 		}
 		wroteNewObject = true
 	} else if input.OriginURL != "" {
@@ -257,7 +257,7 @@ SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type 
 WHERE id = $9 AND owner_id = $10
 `, input.Name, input.Filename, nextKey, nextSize, input.ContentType, input.Encoding, input.OriginURL, now, id, ownerID)
 		if err != nil {
-			return fmt.Errorf("update resource: %w", err)
+			return fmt.Errorf("update resource: %w: %w", ErrInternal, err)
 		}
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
@@ -303,7 +303,7 @@ DELETE FROM resources WHERE id = $1 AND owner_id = $2 RETURNING content_key
 	// storage; a row pointing at an object already gone costs a resource.
 	if contentKey != "" {
 		if err := d.blobs.Delete(ctx, contentKey); err != nil {
-			return fmt.Errorf("delete resource body: %w", err)
+			return fmt.Errorf("delete resource body: %w: %w", ErrInternal, err)
 		}
 	}
 	return nil
