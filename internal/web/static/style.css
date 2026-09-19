@@ -76,6 +76,15 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
    fixed narrow column. minmax(0, 1fr) rather than 1fr, or a long unbroken line
    in the editor widens the grid track instead of scrolling inside it. */
 .split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; }
+/* Creating something has no narrow column: there is no resource to carry
+   metadata about yet, and the fields that do exist are optional enough to
+   ride in the save bar. The column comes back once there is a resource. */
+.split.one { grid-template-columns: minmax(0, 1fr); }
+/* A labelled control on one line, for the save bar and the panel header. */
+.pick { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pick > span { font-size: 11px; font-weight: 500; color: var(--ink2); }
+.pickfile { width: auto; font-size: 11px; }
+.pickfile::file-selector-button { height: 22px; padding: 0 8px; font-size: 11px; }
 /* The narrow column sizes to its own fields and metadata, and the row takes its
    height from whichever side needs more, so it is the content column that
    absorbs the difference. Left to itself the sidebar hangs past the bottom of

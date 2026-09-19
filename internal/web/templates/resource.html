@@ -7,9 +7,9 @@
 <body>
   {{template "topbar" .}}
   <main class="page">
-    <div class="crumb"><a href="/resources/">资源</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}引用地址{{else}}上传文件{{end}}{{else}}{{.Resource.Name}}{{end}}</span></div>
+    <div class="crumb"><a href="/resources/">资源</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}引用地址{{else}}新建资源{{end}}{{else}}{{.Resource.Name}}{{end}}</span></div>
     {{if .IsNew}}
-    <div class="ph"><h1>{{if eq .NewKind "remote"}}引用地址{{else}}上传文件{{end}}</h1></div>
+    <div class="ph"><h1>{{if eq .NewKind "remote"}}引用地址{{else}}新建资源{{end}}</h1></div>
     {{else}}
     <div class="ph">
       <h1>{{.Resource.Name}}</h1>
@@ -41,13 +41,23 @@
     <form class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       {{if .IsNew}}<input type="hidden" name="kind" value="{{.NewKind}}">{{end}}
-      <div class="split">
+      <div class="split{{if .IsNew}} one{{end}}">
 
         <div class="panel panel-ed">
           <div class="pt">
-            <span class="sec">内容</span>
-            {{if $remote}}<span class="tag">只读</span>{{end}}
+            {{/* While creating a reference the panel is the address; once it
+                 exists the panel is what that address returns. */}}
+            <span class="sec">{{if and .IsNew $remote}}远程地址{{else}}内容{{end}}</span>
+            {{if and $remote (not .IsNew)}}<span class="tag">只读</span>{{end}}
             <span class="sp">
+              {{if and .IsNew (not $remote)}}
+              {{/* Filling the box from a file is one way in, beside typing -
+                   not a kind of resource. The status sits next to the control
+                   that produces it, because it is the only line in this flow
+                   that says out loud what just happened. */}}
+              <input type="file" name="upload" aria-label="从文件载入内容" data-upload data-max-bytes="{{.MaxContent}}" class="pickfile">
+              <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
+              {{end}}
               {{if and (not $remote) (or .Resource.Editable .IsNew)}}
               <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="保存编码" title="保存时写入的文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
               <button type="button" class="sm encoding-reopen" data-reopen-encoding title="按所选编码重新解码原始文件，会替换编辑器中的内容">重新解码</button>
@@ -57,7 +67,7 @@
               </select></label>
               {{end}}
               <em style="font:400 10.5px var(--mono);font-style:normal;color:var(--ink3)">
-                {{if $remote}}{{if .UpstreamTextPreview}}取自上游 · {{bytesText (len .UpstreamText)}}{{else if .UpstreamType}}{{.UpstreamType}}{{else if .UpstreamError}}上游未取到{{else}}填入地址后点「拉取」{{end}}
+                {{if $remote}}{{if .UpstreamTextPreview}}取自上游 · {{bytesText (len .UpstreamText)}}{{else if .UpstreamType}}{{.UpstreamType}}{{else if .UpstreamError}}上游未取到{{else if not .IsNew}}填入地址后点「拉取」{{end}}
                 {{else if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / 上限 {{bytesText .MaxContent}}
                 {{else if .IsNew}}上限 {{bytesText .MaxContent}}
                 {{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}}
@@ -66,13 +76,23 @@
           </div>
           <div class="pb">
             {{if $remote}}
+              {{if .IsNew}}
+              <div class="f">
+                <span class="fl">
+                  <input id="origin_url" type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" placeholder="https://example.com/clash.yaml" required autofocus>
+                  <button type="submit" name="action" value="preview" formnovalidate title="读取上游内容，不保存">拉取</button>
+                </span>
+                <span class="fhint">每次访问实时回源转发，内容不落库。文件名只决定下载名，类型取自上游。</span>
+              </div>
+              <input type="hidden" name="filename" value="{{.Resource.Filename}}">
+              {{end}}
               {{if .UpstreamError}}<p class="err">{{.UpstreamError}}</p>{{end}}
               {{if .UpstreamTextPreview}}
               <textarea rows="18" spellcheck="false" disabled aria-label="资源内容" data-preview data-filename="{{.Resource.Filename}}" data-content-type="{{.UpstreamType}}">{{.UpstreamText}}</textarea>
               {{else if .UpstreamType}}
               <p class="ro">上游返回的是非文本内容，这里不做预览。公开地址会原样转发。</p>
               {{else if not .UpstreamError}}
-              <p class="ro">右侧填入远程地址后点「拉取」，这里会显示上游此刻返回的内容。拉取不保存任何东西。</p>
+              <p class="ro">填入地址后点「拉取」，这里会显示上游此刻返回的内容。拉取不保存任何东西。</p>
               {{end}}
             {{else if .Resource.Editable}}
             <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
@@ -99,11 +119,12 @@
           {{end}}
         </div>
 
+        {{if not .IsNew}}
         <div class="side">
           <div class="panel">
             <div class="pt"><span class="sec">资源</span></div>
             <div class="pb" style="gap:14px">
-              <label class="f"><span>名称</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="clash 订阅" required></label>
+              <label class="f"><span>名称</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="留空则用文件名"></label>
               <label class="f">
                 <span>文件名</span>
                 <input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="clash.yaml">
@@ -129,11 +150,6 @@
             </div>
           </div>
 
-          {{if .IsNew}}
-            {{if not $remote}}
-            <p class="ro">两条路都通向同一份正文：选文件会把它读进编辑器，也可以不选文件、直接在左侧敲。一旦在编辑器里改过，文件输入就被清空，保存时按当前编码写回。</p>
-            {{end}}
-          {{else}}
           <div class="panel">
             <div class="pt"><span class="sec">元信息</span></div>
             <div class="pb">
@@ -148,15 +164,19 @@
               </dl>
             </div>
           </div>
-          {{end}}
         </div>
+        {{end}}
       </div>
 
       <div class="savebar">
         <button type="submit" class="pri">{{if .IsNew}}创建资源{{else}}保存{{end}}</button>
         {{if .IsNew}}
         <a class="btn" href="/resources/">取消</a>
-        <span class="hint live">创建后即可发起分享。</span>
+        <label class="pick"><span>名称</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="选填" style="width:140px"></label>
+        {{if not $remote}}
+        <label class="pick"><span>文件名</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="选填" style="width:150px"></label>
+        {{end}}
+        <span class="hint live">{{if $remote}}<a href="/resources/new">改回直接编辑</a>{{else}}<a href="/resources/new?kind=remote">改为引用远程地址</a>{{end}}</span>
         {{else}}
         <a class="btn" href="/resources/{{.Resource.ID}}" data-revert>放弃修改</a>
         {{/* What is live right now, stated whenever the page is open rather than

@@ -58,8 +58,13 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 // Resources come in two kinds, and which one you are making is settled by the
 // button you pressed rather than by a control inside the form: an upload keeps
 // a copy here, a remote link keeps only a reference.
+// A resource is either kept here or referenced elsewhere. Uploading is not a
+// third kind: a chosen file is read into the editor and saved from there, the
+// same as text that was typed, so it is a way of filling the box rather than a
+// thing to decide before opening it. "upload" is still accepted on the way in,
+// because links to the old form exist.
 const (
-	kindUpload = "upload"
+	kindLocal  = "local"
 	kindRemote = "remote"
 )
 
@@ -77,7 +82,7 @@ func newResourceKind(value string) string {
 	if value == kindRemote {
 		return kindRemote
 	}
-	return kindUpload
+	return kindLocal
 }
 
 func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user User, sessionID string) {

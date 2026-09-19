@@ -86,12 +86,12 @@ func TestAllPagesRender(t *testing.T) {
 
 	for _, tc := range []struct{ name, path, want string }{
 		{"home", "/", "粘贴内容"},
-		{"dashboard", "/resources/", "上传文件"},
+		{"dashboard", "/resources/", "新建资源"},
 		{"dashboard page 2", "/resources/?size=10&page=2", `class="pgn on">2<`},
 		{"dashboard search", "/resources/?q=" + resource.Name, resource.Filename},
 		{"dashboard no match", "/resources/?q=%25_nothing", "没有匹配"},
 		{"logs", "/logs", "success"},
-		{"new resource, upload", "/resources/new?kind=upload", "选择文件"},
+		{"new resource", "/resources/new", "从文件载入内容"},
 		{"new resource, remote", "/resources/new?kind=remote", "远程地址"},
 		{"resource", "/resources/" + resource.ID, "查看分享"},
 		{"resource remote", "/resources/" + remote.ID, "远程地址"},
