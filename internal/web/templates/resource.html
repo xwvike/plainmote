@@ -17,17 +17,6 @@
         <a class="btn" href="/resources/{{.Resource.ID}}?delete=1">删除</a>
       </span>
     </div>
-    <div class="metaline">
-      {{if .Resource.Filename}}<span>{{.Resource.Filename}}</span><span>·</span>{{end}}
-      {{if .Resource.Remote}}
-      <span>实时回源 {{originHost .Resource.OriginURL}}</span><span>·</span>
-      {{if .UpstreamType}}<span>{{.UpstreamType}}</span><span>·</span>{{end}}
-      {{else}}
-      <span>{{.Resource.ContentType}}</span><span>·</span>
-      <span>{{bytesText .Resource.ContentSize}}</span><span>·</span>
-      {{end}}
-      <span>更新于 {{formatTime .Resource.UpdatedAt}}</span>
-    </div>
     {{end}}
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
     {{$remote := or .Resource.Remote (eq .NewKind "remote")}}
@@ -180,7 +169,7 @@
       </div>
     </div>
 
-    <p class="meta">{{.Resource.ID}} · {{if .Resource.Remote}}远程 · {{originHost .Resource.OriginURL}}{{else}}本地 · {{bytesText .Resource.ContentSize}}{{if .ContentEncoding}} · {{.ContentEncoding}}{{end}}{{end}} · 创建 {{formatTime .Resource.CreatedAt}} · 更新 {{formatTime .Resource.UpdatedAt}}</p>
+    <p class="meta">{{.Resource.ID}} · {{if .Resource.Remote}}远程 · {{originHost .Resource.OriginURL}}{{else}}本地 · {{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}} · 创建 {{formatTime .Resource.CreatedAt}} · 更新 {{formatTime .Resource.UpdatedAt}}</p>
     {{end}}
 
   </main>
