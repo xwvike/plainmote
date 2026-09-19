@@ -328,11 +328,18 @@ details.pan[open] .chev { transform: rotate(90deg); }
    with a z-index, so it paints over any ring the editor draws for itself and
    the line-number column comes out unringed. */
 .panel-ed:has(.cm-focused) { border-color: var(--accent); }
-.panel-ed .cm-host { min-height: var(--edh); }
+/* A definite height, not a floor. CodeMirror scrolls inside a box it knows the
+   size of; given only a minimum it grows with the document instead, and a long
+   file turns the page itself into the scroller. The minimum was there so the
+   editor could stretch to meet a sidebar, and that sidebar is gone. */
+.panel-ed .cm-host { height: var(--edh); }
 /* The content column keeps the same height across every state it has - an
    editor, a read-only preview, a not-yet-pulled address, a notice. Without
    this the page collapses to a strip whenever there is nothing to show, and
    jumps back out again once there is. */
+/* Same height whatever the panel is showing - an editor, a read-only preview,
+   an address not yet pulled, a notice - so the page does not jump between
+   them. Only a minimum here: the states that are not the editor are short. */
 .panel-ed > .pb { min-height: var(--edh); align-content: start; }
 
 /* Below the fixed column the page goes fluid and the split stacks. The narrow
