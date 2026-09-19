@@ -39,6 +39,9 @@ main
 - 分享属于资源，资源属于 GitHub 用户。
 - 分享 Token 以 AES-GCM 密文保存，同时保存 SHA-256 哈希用于查找。
 - Web 容器本地没有需要保留的数据。
+- 服务整体不可索引。`robots.txt` 全量 Disallow，`X-Robots-Tag: noindex, nofollow, noarchive`
+  由中间件加在每个响应上。两者分工不同：robots.txt 只对主动来问的爬虫有效，响应头覆盖的是
+  别人把分享地址贴到公开位置的情况。`noarchive` 和 `noindex` 同等重要——缓存副本会比撤销的链接活得久。
 - 交付不依赖记录：`RecordAccess` 失败只写 stderr，资源照发。Token 在此之前已经消耗，
   此时拒绝交付既送不出资源，也补不回那行记录。
 - 进入 `access_logs` 的事件必须可归属。无人签发的 Token 和格式不对的地址不写库——

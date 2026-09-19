@@ -124,8 +124,39 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/resources/", a.handleResources)
 	mux.HandleFunc("/logs", a.handleLogs)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
+	mux.HandleFunc("/robots.txt", a.handleRobots)
 	mux.HandleFunc("/", a.handleDashboardRoot)
-	return mux
+	return noIndex(mux)
+}
+
+// robotsTxt keeps crawlers off the whole service. There is nothing here to
+// find: every page needs a session, and the one public path serves secrets.
+const robotsTxt = "User-agent: *\nDisallow: /\n"
+
+func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = io.WriteString(w, robotsTxt)
+}
+
+// noIndex is the half of this that does not depend on a crawler asking first.
+// robots.txt is a request; X-Robots-Tag travels with the response, so it also
+// covers an address someone else published - a share link pasted into a public
+// issue is a leak to be contained, not a page to be discovered. noarchive
+// matters as much as noindex here: a cached copy would outlive a revoked link.
+func noIndex(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {

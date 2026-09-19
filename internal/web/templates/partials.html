@@ -1,5 +1,8 @@
 {{define "htmlhead"}}<meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- X-Robots-Tag on the response says the same thing and is what covers the
+       delivery path; this survives a proxy that strips unknown headers. -->
+  <meta name="robots" content="noindex, nofollow, noarchive">
   <!-- Webfont is optional: delete the two lines below to run without any external request;
        the stacks in style.css fall back to Helvetica / system-ui and SFMono / Menlo. -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
