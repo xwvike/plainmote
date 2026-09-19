@@ -87,6 +87,13 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
    column, the body in the wide one - so the bar spans both rather than sitting
    inside either, where it would read as saving only that column. */
 .savebar { display: flex; gap: 8px; align-items: center; padding: 10px 12px; background: var(--head); border: 1px solid var(--line); }
+/* Hidden from the stylesheet so it never paints before the module can hide it -
+   every save is a fresh page, and the flash was visible. The no-script case is
+   restored by a <noscript> rule in the head, which is the one condition under
+   which the link has to be there from the start. Scoped past .btn rather than
+   relying on where it sits in this file. */
+.savebar [data-revert] { display: none; }
+.savebar [data-revert].show { display: inline-flex; }
 .rform { display: grid; gap: 14px; align-content: start; }
 /* The save bar ends with a statement of what is live, not a note about what
    saving would do. It is pushed to the far end so it reads as the bar's
@@ -268,7 +275,18 @@ details.pan[open] .chev { transform: rotate(90deg); }
    row it was given rather than only as tall as it asked for. --edh stays as
    the floor, below. */
 .panel-ed { display: grid; grid-template-rows: auto 1fr; }
+/* The textarea is what the page shows until the editor mounts - and every save
+   is a fresh page, so that happens constantly. Matching on the textarea rather
+   than on .cm-host means the body loses its padding before the mount instead of
+   at it, and the textarea is given the editor's box: no border of its own, the
+   full height of the panel body rather than the 18 rows it asks for, and a left
+   padding standing in for the line-number gutter. Without this the mount reflows
+   the page by 330px and shifts it 12px in both axes, which is the flicker. */
+.panel-ed > .pb:has(> [data-editor]),
+.panel-ed > .pb:has(> [data-preview]),
 .panel-ed > .pb:has(> .cm-host) { padding: 0; gap: 0; align-content: stretch; }
+.panel-ed > .pb > [data-editor],
+.panel-ed > .pb > [data-preview] { border: 0; resize: none; padding: 6px 7px 6px 28px; }
 /* Focus recolours the panel border, the same as every input and select on
    these pages. It cannot be drawn inside the editor: .cm-gutters is sticky
    with a z-index, so it paints over any ring the editor draws for itself and

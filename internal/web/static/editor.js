@@ -332,7 +332,7 @@ function enhance(textarea) {
   // "discard changes" button offered the moment a save lands reads as though
   // the save did not take.
   const markDirty = () => {
-    if (revert) revert.hidden = false;
+    if (revert) revert.classList.add("show");
   };
 
   const updateReopenAvailability = () => {
@@ -434,11 +434,6 @@ function enhance(textarea) {
   // Only now is the textarea taken out of view. Doing it here rather than in
   // the stylesheet means a thrown constructor leaves a working textarea behind.
   textarea.classList.add("cm-source");
-
-  // Same reason the revert link is hidden from here and not from the markup:
-  // a browser that never ran this module cannot tell whether the form has been
-  // touched, so it keeps the link it can still use.
-  if (revert) revert.hidden = true;
 
   if (form) {
     // The editor reports its own edits through markContentForSave; this covers
