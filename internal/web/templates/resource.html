@@ -76,7 +76,6 @@
                   <input id="origin_url" type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" placeholder="https://example.com/clash.yaml" required autofocus>
                   <button type="submit" name="action" value="preview" formnovalidate title="读取上游内容，不保存">拉取</button>
                 </span>
-                <span class="fhint">每次访问实时回源，不保存副本</span>
               </div>
               <input type="hidden" name="filename" value="{{.Resource.Filename}}">
               {{end}}
