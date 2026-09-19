@@ -224,11 +224,14 @@ const (
 type PruneResult struct {
 	AccessLogs int64
 	Sessions   int64
+	Pastes     int64
 }
 
-// Prune removes access logs older than retention and sessions that have
-// expired. Retention zero keeps the logs; sessions go either way, since
-// SessionUser only deletes the row for the token actually presented.
+// Prune removes access logs older than retention, sessions that have expired,
+// and anonymous pastes nothing can reach any more. Retention zero keeps the
+// logs; sessions go either way, since SessionUser only deletes the row for the
+// token actually presented, and pastes go either way too - a lifetime measured
+// in minutes is what the open endpoint rests on, not a retention setting.
 func (d *Store) Prune(ctx context.Context, retention time.Duration, now time.Time) (PruneResult, error) {
 	var result PruneResult
 	conn, err := d.db.Acquire(ctx)
@@ -266,6 +269,11 @@ WHERE id IN (SELECT id FROM sessions WHERE expires_at < $1 ORDER BY expires_at L
 `, now)
 	if err != nil {
 		return result, fmt.Errorf("prune sessions: %w", err)
+	}
+
+	result.Pastes, err = d.pruneAnonymous(ctx, conn, now)
+	if err != nil {
+		return result, fmt.Errorf("prune anonymous pastes: %w", err)
 	}
 	return result, nil
 }

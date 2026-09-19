@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS plans_default_idx ON plans ((1)) WHERE is_defa
 
 INSERT INTO plans (id, name, max_resources, max_storage, is_default, created_at)
 VALUES (gen_random_uuid(), 'default', 20, 10485760, TRUE, now())
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS user_plans (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -33,6 +33,26 @@ CREATE TABLE IF NOT EXISTS user_plans (
   PRIMARY KEY (user_id, plan_id)
 );
 CREATE INDEX IF NOT EXISTS user_plans_plan_idx ON user_plans(plan_id);
+
+-- The account every anonymous paste belongs to. A real row rather than a null
+-- owner, so owner_id stays NOT NULL everywhere and the quota, the access log
+-- and the delete path all keep working unchanged. Nobody can sign in as it:
+-- github_id here is not numeric, and every real account is created from a
+-- numeric GitHub id.
+INSERT INTO users (id, github_id, login, name, avatar_url, created_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001', 'anonymous', 'anonymous', '匿名', '', now(), now())
+ON CONFLICT (github_id) DO NOTHING;
+
+-- A fuse, not a quota. Anonymous writing is held down by a short link lifetime
+-- and by rate limiting; this only stops the process if both of those have
+-- already failed, and it is deliberately far above normal use.
+INSERT INTO plans (id, name, max_resources, max_storage, is_default, created_at)
+VALUES ('00000000-0000-0000-0000-000000000002', 'anonymous', 100000, 10737418240, FALSE, now())
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO user_plans (user_id, plan_id, granted_at)
+SELECT '00000000-0000-0000-0000-000000000001', id, now() FROM plans WHERE name = 'anonymous'
+ON CONFLICT (user_id, plan_id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS sessions (
   id UUID PRIMARY KEY,

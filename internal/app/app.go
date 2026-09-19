@@ -73,9 +73,9 @@ func prune(ctx context.Context, db *store.Store, retention time.Duration) {
 			}
 			return
 		}
-		if result.AccessLogs > 0 || result.Sessions > 0 {
-			fmt.Fprintf(os.Stderr, "prune: removed %d access logs and %d expired sessions in %s\n",
-				result.AccessLogs, result.Sessions, time.Since(started).Round(time.Millisecond))
+		if result.AccessLogs > 0 || result.Sessions > 0 || result.Pastes > 0 {
+			fmt.Fprintf(os.Stderr, "prune: removed %d access logs, %d expired sessions and %d anonymous pastes in %s\n",
+				result.AccessLogs, result.Sessions, result.Pastes, time.Since(started).Round(time.Millisecond))
 		}
 	}
 

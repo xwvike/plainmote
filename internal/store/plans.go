@@ -7,9 +7,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
+// storeQuerier is the part of the pool and of a transaction that is the same,
+// so a query can be written once and run either inside a transaction or on its
+// own. Both *pgxpool.Pool and pgx.Tx satisfy it.
 type storeQuerier interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 	QueryRow(context.Context, string, ...any) pgx.Row
 }

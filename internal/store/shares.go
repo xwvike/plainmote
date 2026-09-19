@@ -40,7 +40,7 @@ func (l Link) Live(now time.Time) bool {
 
 func (l Link) Never() bool { return l.ExpiresAt == nil }
 
-func (d *Store) insertLink(ctx context.Context, link *Link, now time.Time) error {
+func (d *Store) insertLink(ctx context.Context, q storeQuerier, link *Link, now time.Time) error {
 	token, err := generateToken()
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func (d *Store) insertLink(ctx context.Context, link *Link, now time.Time) error
 	link.ID = uuid.NewString()
 	link.Token = token
 	link.CreatedAt = now
-	_, err = d.db.Exec(ctx, `
+	_, err = q.Exec(ctx, `
 INSERT INTO links(
   id, resource_id, name, token_ciphertext, token_hash, max_uses, used_count,
   expires_at, revoked_at, last_used_at, created_at
@@ -137,7 +137,7 @@ func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name strin
 	}
 	now := time.Now().UTC()
 	link := Link{ResourceID: resourceID, Name: name, MaxUses: maxUses, ExpiresAt: shareExpiry(now, ttl)}
-	err := d.insertLink(ctx, &link, now)
+	err := d.insertLink(ctx, d.db, &link, now)
 	return link, err
 }
 
