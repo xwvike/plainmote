@@ -2,23 +2,23 @@
 <html lang="zh-CN">
 <head>
   {{template "htmlhead" .}}
-  <title>PlainMote - 粘贴内容，拿到一条会过期的链接</title>
-  <meta name="description" content="把一段文本粘进来，得到一条最长 30 分钟后就失效的链接。不用注册，内容一律按纯文本提供。登录后可以长期保存资源，并为它发出多条互相独立、可随时撤销的地址。">
+  <title>PlainMote - 临时分享文本</title>
+  <meta name="description" content="粘贴一段文本，生成最长有效 30 分钟的分享链接。无需登录，内容始终以纯文本显示。登录后可以长期保存和管理资源。">
 </head>
 <body>
   {{template "topbar" .}}
   <main class="page">
 
     <div class="lede">
-      <h1>粘贴内容，拿到一条会过期的链接</h1>
-      <p>不用注册。内容以纯文本提供，链接到期即失效。</p>
+      <h1>临时分享一段文本</h1>
+      <p>无需登录。分享链接最长有效 30 分钟，内容始终以纯文本显示。</p>
     </div>
 
     {{if .PasteURL}}
     {{/* The address is what the visitor came for, so the page becomes it. The
          content is not shown again: it has been handed over. */}}
     <div class="panel">
-      <div class="pt"><span class="sec">链接已生成</span></div>
+      <div class="pt"><span class="sec">分享链接已生成</span></div>
       <div class="pb">
         <div class="pfx">
           <input type="text" readonly value="{{.PasteURL}}" aria-label="分享链接" autofocus
@@ -27,14 +27,14 @@
         </div>
         <span class="st on">
           <i></i>
-          <span>{{formatTime .PasteExpires}} 失效（{{untilText .PasteExpires}}）· {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
+          <span>有效至 {{formatTime .PasteExpires}}（{{untilText .PasteExpires}}）· {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
         </span>
-        <p class="hint">到期后内容与地址一并失效，不保留副本</p>
+        <p class="hint">到期后链接将无法访问，内容随后由服务自动清理</p>
       </div>
     </div>
     <div class="savebar">
-      <a class="btn pri" href="/">再粘贴一份</a>
-      {{if not .SignedIn}}<span class="hint live">如需长期保留并随时修改，请<a href="/login">登录</a></span>{{end}}
+      <a class="btn pri" href="/">再分享一份</a>
+      {{if not .SignedIn}}<span class="hint live">如需长期保存和管理，请<a href="/login">登录</a></span>{{end}}
     </div>
 
     {{else}}
@@ -55,19 +55,19 @@
         </div>
       </div>
       <div class="savebar">
-        <button type="submit" class="pri">生成链接</button>
+        <button type="submit" class="pri">生成分享链接</button>
         <label class="ttl-picker"><span>有效期</span>
           <select name="ttl" aria-label="链接有效期">
             {{range .PasteChoices}}<option value="{{.Value}}"{{if eq .Value $.PasteTTL}} selected{{end}}>{{.Label}}</option>{{end}}
           </select>
         </label>
-        <label class="ttl-picker"><span>文件名</span>
+        <label class="ttl-picker"><span>文件名（可选）</span>
           <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="notes.txt"
-                 aria-label="下载时的文件名" style="width:150px">
+                 aria-label="文件名（可选）" style="width:150px">
         </label>
         <span class="st off live">
           <i></i>
-          <span>{{if .SignedIn}}此处内容为匿名且会过期，如需保留请使用<a href="/resources/">我的资源</a>{{else}}到期后立即失效，不保留副本{{end}}</span>
+          <span>{{if .SignedIn}}此处创建的是临时分享；需要长期保存，请使用<a href="/resources/">我的资源</a>{{else}}到期后链接将无法访问，内容随后自动清理{{end}}</span>
         </span>
       </div>
     </form>
@@ -75,20 +75,20 @@
 
     <div class="tell">
       <section>
-        <h2>临时传递，不是存储</h2>
-        <p>链接最长 30 分钟，到期后内容与地址一并失效，不保留副本，也没有备份。
-           适用于把一份配置、一段日志或一段报错交付给另一个人，交付完成后无需再管理。</p>
+        <h2>用于临时分享</h2>
+        <p>分享链接最长有效 30 分钟，到期后无法继续访问，内容随后由服务自动清理。
+           适合把配置、日志或错误信息临时发给别人。</p>
       </section>
       <section>
-        <h2>一律按纯文本提供</h2>
-        <p>无论文件名为何，取回的始终是 <code>text/plain</code>。
-           因此无法借此在本域名下托管页面，这是刻意的限制。</p>
+        <h2>始终以纯文本显示</h2>
+        <p>无论填写什么文件名，浏览器都会将内容作为 <code>text/plain</code> 显示，
+           不会把其中的 HTML 或脚本作为网页运行。</p>
       </section>
       <section>
-        <h2>登录后可长期保存</h2>
-        <p>资源长期保存，内容可随时修改；一份资源可发出多条互相独立、可单独撤销的地址，
-           每一次访问都有记录。首页的输入框是其中最简的一种用法。</p>
-        <p class="hint">{{if .SignedIn}}<a href="/resources/">打开我的资源 →</a>{{else}}<a href="/login">用 GitHub 登录 →</a>{{end}}</p>
+        <h2>登录后管理资源</h2>
+        <p>登录后可以长期保存和修改内容，并为同一资源创建多条相互独立、
+           可设置有效期和使用次数、可随时撤销的分享链接。</p>
+        <p class="hint">{{if .SignedIn}}<a href="/resources/">前往我的资源 →</a>{{else}}<a href="/login">使用 GitHub 登录 →</a>{{end}}</p>
       </section>
     </div>
 

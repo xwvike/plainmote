@@ -81,7 +81,7 @@ func TestAllPagesRender(t *testing.T) {
 	}
 
 	for _, tc := range []struct{ name, path, want string }{
-		{"home", "/", "粘贴内容"},
+		{"home", "/", "临时分享一段文本"},
 		{"dashboard", "/resources/", "新建资源"},
 		{"dashboard page 2", "/resources/?size=10&page=2", `class="pgn on">2<`},
 		{"dashboard search", "/resources/?q=" + resource.Name, resource.Filename},

@@ -130,9 +130,9 @@ func TestPasteRefusesADrivenCrossSitePost(t *testing.T) {
 	}
 }
 
-// TestSignedInVisitorIsToldThePasteIsStillAnonymous closes the misreading this
-// page invites: the box does the same thing whoever is looking at it.
-func TestSignedInVisitorIsToldThePasteIsStillAnonymous(t *testing.T) {
+// TestSignedInVisitorIsToldThePasteIsTemporary closes the misreading this page
+// invites: the box does the same temporary handoff whoever is looking at it.
+func TestSignedInVisitorIsToldThePasteIsTemporary(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
 	app := newTestApp(db, user.GitHubID)
@@ -147,8 +147,8 @@ func TestSignedInVisitorIsToldThePasteIsStillAnonymous(t *testing.T) {
 	app.handler.ServeHTTP(response, request)
 
 	page := response.Body.String()
-	if !strings.Contains(page, "此处内容为匿名") {
-		t.Fatal("a signed-in visitor must be told the box is still anonymous")
+	if !strings.Contains(page, "此处创建的是临时分享") {
+		t.Fatal("a signed-in visitor must be told the box still creates a temporary share")
 	}
 	if !strings.Contains(page, `href="/resources/"`) {
 		t.Fatal("a signed-in visitor must have a way to their own resources")
