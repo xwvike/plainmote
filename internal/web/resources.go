@@ -37,7 +37,7 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
-		writePlainError(w, http.StatusNotFound, "not found")
+		a.handleDashboard(w, r, user)
 		return
 	}
 	resourceID := parts[0]
@@ -269,7 +269,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 				a.renderResourcePage(w, r, user, resource, text, status, nil)
 				return
 			}
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+			http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
 			return
 		}
 		form, err := readResourceForm(r, a.cfg.MaxContent)

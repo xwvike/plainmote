@@ -14,11 +14,11 @@
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
     <div class="panel">
       <div class="pt">
-        <form class="tb" method="get" action="/">
+        <form class="tb" method="get" action="/resources/">
           <input type="search" name="q" value="{{.Pager.Query}}" placeholder="搜索名称或文件名">
           <input type="hidden" name="size" value="{{.Pager.Size}}">
           <button type="submit">搜索</button>
-          {{if .Pager.Query}}<a class="btn" href="/">清除</a>{{end}}
+          {{if .Pager.Query}}<a class="btn" href="/resources/">清除</a>{{end}}
         </form>
         <span class="sp hint">{{.Pager.Total}} 项 · 已用 {{.Quota.Usage.Resources}}/{{.Quota.Limit.Resources}} 个 · {{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</span>
       </div>
@@ -47,7 +47,7 @@
       <div class="pf">
         <div class="pg">
           <span class="hint">第 {{.Pager.From}}–{{.Pager.To}} 项，共 {{.Pager.Total}} 项</span>
-          <form class="psize" method="get" action="/">
+          <form class="psize" method="get" action="/resources/">
             <input type="hidden" name="q" value="{{.Pager.Query}}">
             <label>每页 <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
             <button type="submit" class="sm">应用</button>

@@ -1,8 +1,8 @@
 {{define "htmlhead"}}<meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- X-Robots-Tag on the response says the same thing and is what covers the
-       delivery path; this survives a proxy that strips unknown headers. -->
-  <meta name="robots" content="noindex, nofollow, noarchive">
+  {{if not .Indexable}}<!-- X-Robots-Tag on the response says the same thing and is what
+       covers the delivery path; this survives a proxy that strips unknown headers. -->
+  <meta name="robots" content="noindex, nofollow, noarchive">{{end}}
   <!-- Webfont is optional: delete the two lines below to run without any external request;
        the stacks in style.css fall back to Helvetica / system-ui and SFMono / Menlo. -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,12 +17,19 @@
 {{define "topbar"}}<div class="top"><div class="topin">
     <span class="brand"><a href="/">{{template "mark"}}<b>PlainMote</b></a></span>
     <nav class="nav">
-      <a href="/"{{if eq .Active "resources"}} class="on" aria-current="page"{{end}}>资源</a>
+      <a href="/"{{if eq .Active "home"}} class="on" aria-current="page"{{end}}>快速分享</a>
+      {{if .SignedIn}}
+      <a href="/resources/"{{if eq .Active "resources"}} class="on" aria-current="page"{{end}}>我的资源</a>
       <a href="/logs"{{if eq .Active "logs"}} class="on" aria-current="page"{{end}}>访问记录</a>
+      {{end}}
     </nav>
     <div class="rt">
+      {{if .SignedIn}}
       <span class="who">{{.User.Login}}</span>
       <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="sm">退出</button></form>
+      {{else}}
+      <a class="btn sm" href="/login">登录</a>
+      {{end}}
     </div>
   </div></div>{{end}}
 

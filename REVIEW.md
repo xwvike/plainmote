@@ -39,7 +39,14 @@ main
 - 分享属于资源，资源属于 GitHub 用户。
 - 分享 Token 以 AES-GCM 密文保存，同时保存 SHA-256 哈希用于查找。
 - Web 容器本地没有需要保留的数据。
-- 服务整体不可索引。`robots.txt` 全量 Disallow，`X-Robots-Tag: noindex, nofollow, noarchive`
+- `/` 是首页，对登录与否呈现同一个页面；账号的资源列表在 `/resources/`。首页按登录状态变身
+  会让爬虫和用户看到两个东西，这是有意避开的。
+- 首页不加载 `editor.js`，也不加载 CodeMirror bundle。那个框就是一个 `textarea`。
+- `POST /paste` 没有 CSRF token（没有会话可挂），改用 `Origin` 同源校验；缺少 `Origin` 的请求
+  （curl、老浏览器）放行，因为那不是被驱动的浏览器该有的样子。
+- 服务整体不可索引，**首页除外**。响应头的例外和 `htmlhead` 里 meta 的例外必须同时成立，
+  只改一边等于首页自己把自己摘出索引。
+- `robots.txt` 只放行 `/$`，其余 Disallow，`X-Robots-Tag: noindex, nofollow, noarchive`
   由中间件加在每个响应上。两者分工不同：robots.txt 只对主动来问的爬虫有效，响应头覆盖的是
   别人把分享地址贴到公开位置的情况。`noarchive` 和 `noindex` 同等重要——缓存副本会比撤销的链接活得久。
 - 交付不依赖记录：`RecordAccess` 失败只写 stderr，资源照发。Token 在此之前已经消耗，

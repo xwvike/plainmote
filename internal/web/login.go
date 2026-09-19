@@ -7,7 +7,7 @@ import (
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if _, _, ok := a.currentUser(r); ok {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
 		return
 	}
 	data := pageData{LoginURL: "/auth/github", RegistrationMode: a.cfg.RegistrationMode}

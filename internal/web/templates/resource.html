@@ -7,7 +7,7 @@
 <body>
   {{template "topbar" .}}
   <main class="page">
-    <div class="crumb"><a href="/">资源</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}引用地址{{else}}上传文件{{end}}{{else}}{{.Resource.Name}}{{end}}</span></div>
+    <div class="crumb"><a href="/resources/">资源</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}引用地址{{else}}上传文件{{end}}{{else}}{{.Resource.Name}}{{end}}</span></div>
     {{if .IsNew}}
     <div class="ph"><h1>{{if eq .NewKind "remote"}}引用地址{{else}}上传文件{{end}}</h1></div>
     {{else}}
@@ -155,7 +155,7 @@
       <div class="savebar">
         <button type="submit" class="pri">{{if .IsNew}}创建资源{{else}}保存{{end}}</button>
         {{if .IsNew}}
-        <a class="btn" href="/">取消</a>
+        <a class="btn" href="/resources/">取消</a>
         <span class="hint live">创建后即可发起分享。</span>
         {{else}}
         <a class="btn" href="/resources/{{.Resource.ID}}" data-revert>放弃修改</a>

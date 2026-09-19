@@ -45,13 +45,22 @@ func TestNothingHereIsIndexable(t *testing.T) {
 		t.Fatalf("robots.txt must keep crawlers out entirely, got %q", body)
 	}
 
+	// The home page is the one thing meant to be found, and robots.txt says so
+	// too. Everything else stays out.
+	if !strings.Contains(robots.Body.String(), "Allow: /$") {
+		t.Fatalf("robots.txt must let the home page through, got %q", robots.Body.String())
+	}
+	if tag := get("/", false).Header().Get("X-Robots-Tag"); tag != "" {
+		t.Fatalf("the home page must be indexable, got %q", tag)
+	}
+
 	for _, tc := range []struct {
 		path     string
 		signedIn bool
 	}{
 		{"/robots.txt", false},
 		{"/login", false},
-		{"/", true},
+		{"/resources/", true},
 		{"/logs", true},
 		{"/resources/" + resource.ID, true},
 		{"/static/style.css", false},

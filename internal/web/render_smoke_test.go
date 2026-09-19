@@ -84,10 +84,11 @@ func TestAllPagesRender(t *testing.T) {
 	}
 
 	for _, tc := range []struct{ name, path, want string }{
-		{"dashboard", "/", "上传文件"},
-		{"dashboard page 2", "/?size=10&page=2", `class="pgn on">2<`},
-		{"dashboard search", "/?q=" + resource.Name, resource.Filename},
-		{"dashboard no match", "/?q=%25_nothing", "没有匹配"},
+		{"home", "/", "粘贴内容"},
+		{"dashboard", "/resources/", "上传文件"},
+		{"dashboard page 2", "/resources/?size=10&page=2", `class="pgn on">2<`},
+		{"dashboard search", "/resources/?q=" + resource.Name, resource.Filename},
+		{"dashboard no match", "/resources/?q=%25_nothing", "没有匹配"},
 		{"logs", "/logs", "success"},
 		{"new resource, upload", "/resources/new?kind=upload", "选择文件"},
 		{"new resource, remote", "/resources/new?kind=remote", "远程地址"},
@@ -117,10 +118,10 @@ func TestAllPagesRender(t *testing.T) {
 
 	// The search filter must treat LIKE wildcards as literals, and an
 	// out-of-range page must fall back to the last page instead of 404-ing.
-	if body := get("/?q=" + resource.Name).Body.String(); strings.Contains(body, "/configs/fill-1") {
+	if body := get("/resources/?q=" + resource.Name).Body.String(); strings.Contains(body, "/configs/fill-1") {
 		t.Fatal("search returned resources that do not match the query")
 	}
-	if response := get("/?size=10&page=99"); response.Code != http.StatusSeeOther {
+	if response := get("/resources/?size=10&page=99"); response.Code != http.StatusSeeOther {
 		t.Fatalf("out-of-range page: expected redirect, got %d", response.Code)
 	}
 }

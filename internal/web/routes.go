@@ -59,6 +59,22 @@ type pageData struct {
 	Pager            pager
 	IsNew            bool
 	NewKind          string
+	SignedIn         bool
+	// Indexable is set by the one page that is meant to be found. The response
+	// header carries the same exception; both have to agree or the meta tag
+	// quietly undoes it.
+	Indexable bool
+
+	// The home page, both halves of it: the form as it was submitted when a
+	// paste was refused, and the address when one was made.
+	PasteContent  string
+	PasteFilename string
+	PasteTTL      string
+	PasteChoices  []ttlChoice
+	PasteURL      string
+	PasteExpires  time.Time
+	PasteSize     int64
+	MaxPaste      int64
 
 	// ContentText is the body loaded for the editor. It is only filled in for
 	// a resource small and textual enough to show, so a large or non-text one is
@@ -107,6 +123,13 @@ type encodingOption struct {
 	Label string
 }
 
+// ttlChoice is one entry in the home page's lifetime picker. The values are
+// minutes, which is the only unit an anonymous paste is ever measured in.
+type ttlChoice struct {
+	Value string
+	Label string
+}
+
 // linkView pairs a link with the address a viewer copies.
 type linkView struct {
 	Link Link
@@ -125,13 +148,14 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/logs", a.handleLogs)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc("/robots.txt", a.handleRobots)
-	mux.HandleFunc("/", a.handleDashboardRoot)
+	mux.HandleFunc(pastePath, a.handlePaste)
+	mux.HandleFunc("/", a.handleHome)
 	return noIndex(mux)
 }
 
 // robotsTxt keeps crawlers off the whole service. There is nothing here to
 // find: every page needs a session, and the one public path serves secrets.
-const robotsTxt = "User-agent: *\nDisallow: /\n"
+const robotsTxt = "User-agent: *\nAllow: /$\nDisallow: /\n"
 
 func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -154,7 +178,11 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 // matters as much as noindex here: a cached copy would outlive a revoked link.
 func noIndex(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
+		// The home page is the one thing here that is meant to be found. Every
+		// other path is either behind a session or is somebody's secret.
+		if r.URL.Path != "/" {
+			w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

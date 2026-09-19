@@ -1,0 +1,106 @@
+{{define "home.html"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+  {{template "htmlhead" .}}
+  <title>PlainMote - 粘贴内容，拿到一条会过期的链接</title>
+  <meta name="description" content="把一段文本粘进来，得到一条最长 30 分钟后就失效的链接。不用注册，内容一律按纯文本提供。登录后可以长期保存资源，并为它发出多条互相独立、可随时撤销的地址。">
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page">
+
+    <div class="lede">
+      <h1>粘贴内容，拿到一条会过期的链接</h1>
+      <p>不用注册。内容以纯文本提供，链接到期即失效。</p>
+    </div>
+
+    {{if .PasteURL}}
+    {{/* The address is what the visitor came for, so the page becomes it. The
+         content is not shown again: it has been handed over. */}}
+    <div class="panel">
+      <div class="pt"><span class="sec">链接已生成</span></div>
+      <div class="pb">
+        <div class="pfx">
+          <input type="text" readonly value="{{.PasteURL}}" aria-label="分享链接" autofocus
+                 onfocus="this.select()" style="font-family:var(--mono);font-size:12px">
+          <button type="button" class="btn" data-copy="{{.PasteURL}}">复制</button>
+        </div>
+        <span class="st on">
+          <i></i>
+          <span>{{formatTime .PasteExpires}} 失效（{{untilText .PasteExpires}}）· {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
+        </span>
+        <p class="hint">到期后内容和地址一起消失，不保留副本，也无法找回。把它发出去之前先确认收件人拿得到。</p>
+      </div>
+    </div>
+    <div class="savebar">
+      <a class="btn pri" href="/">再粘贴一份</a>
+      {{if not .SignedIn}}<span class="hint live">想长期保留并随时改内容？<a href="/login">登录</a>之后可以。</span>{{end}}
+    </div>
+
+    {{else}}
+    {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    <form method="post" action="/paste">
+      {{/* A plain .panel, not .panel-ed: that one carries the resource editor's
+           height, and this box is not that box. No data-editor either - the
+           home page loads no editor and no bundle, and a textarea is the whole
+           interaction. */}}
+      <div class="panel">
+        <div class="pt">
+          <span class="sec">内容</span>
+          <span class="sp hint">上限 {{bytesText .MaxPaste}}</span>
+        </div>
+        <div class="pb paste-body">
+          <textarea name="content" spellcheck="false" autofocus
+                    aria-label="要分享的内容" placeholder="把要分享的文本粘到这里">{{.PasteContent}}</textarea>
+        </div>
+      </div>
+      <div class="savebar">
+        <button type="submit" class="pri">生成链接</button>
+        <label class="ttl-picker"><span>有效期</span>
+          <select name="ttl" aria-label="链接有效期">
+            {{range .PasteChoices}}<option value="{{.Value}}"{{if eq .Value $.PasteTTL}} selected{{end}}>{{.Label}}</option>{{end}}
+          </select>
+        </label>
+        <label class="ttl-picker"><span>文件名</span>
+          <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="notes.txt"
+                 aria-label="下载时的文件名" style="width:150px">
+        </label>
+        <span class="st off live">
+          <i></i>
+          <span>{{if .SignedIn}}这里粘贴的内容是匿名的，也会过期；要保留请用<a href="/resources/">我的资源</a>{{else}}到期后立即失效，不保留副本{{end}}</span>
+        </span>
+      </div>
+    </form>
+    {{end}}
+
+    <div class="tell">
+      <section>
+        <h2>临时传递，不是存储</h2>
+        <p>链接最长 30 分钟。到期后内容和地址一起消失，不留副本，也没有备份可以翻出来。
+           它适合把一份配置、一段日志、一个报错交到另一个人手上，然后就该忘掉。</p>
+      </section>
+      <section>
+        <h2>一律按纯文本提供</h2>
+        <p>不管文件名叫什么，取回来的都是 <code>text/plain</code>。
+           所以这里不能用来在这个域名上挂一个页面——这是有意的，不是还没做。</p>
+      </section>
+      <section>
+        <h2>需要保留？登录之后可以</h2>
+        <p>资源长期保存、随时改内容、一份资源可以发出多条互相独立、能单独撤销的地址，
+           每一次访问都留下记录。首页这个框子是它最小的那一块。</p>
+        <p class="hint">{{if .SignedIn}}<a href="/resources/">打开我的资源 →</a>{{else}}<a href="/login">用 GitHub 登录 →</a>{{end}}</p>
+      </section>
+    </div>
+
+  </main>
+  <script>
+    document.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-copy]');
+      if (!button) return;
+      var value = button.getAttribute('data-copy');
+      if (navigator.clipboard) navigator.clipboard.writeText(value);
+      else window.prompt('复制链接', value);
+    });
+  </script>
+</body>
+</html>{{end}}

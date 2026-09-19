@@ -98,6 +98,16 @@ func (a *App) templateSet() *template.Template {
 			}
 		},
 		"remainText": remainText,
+		// untilText says how long is left in the words someone would use when
+		// passing the link on. The absolute time is next to it; this is the
+		// part that makes it mean something without doing arithmetic.
+		"untilText": func(at time.Time) string {
+			left := time.Until(at).Round(time.Minute)
+			if left < time.Minute {
+				return "不到 1 分钟后"
+			}
+			return fmt.Sprintf("约 %d 分钟后", int(left/time.Minute))
+		},
 	}).ParseFS(webAssets, "templates/*.html"))
 }
 
@@ -202,6 +212,7 @@ func (a *App) basePage(r *http.Request, user User) pageData {
 		CSRF:            csrfValue(r),
 		Active:          "resources",
 		BaseURL:         a.baseURL(r),
+		SignedIn:        true,
 		MaxContent:      a.cfg.MaxContent,
 		ContentEncoding: "utf-8",
 		ContentEOL:      store.EOLLF,

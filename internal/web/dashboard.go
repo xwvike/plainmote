@@ -9,6 +9,10 @@ import (
 	"unicode/utf8"
 )
 
+// dashboardPath is where an account's own resources live now that the root is
+// the page anyone can open.
+const dashboardPath = "/resources/"
+
 const (
 	defaultPageSize = 10
 	// Keep search URLs and LIKE patterns bounded without cutting a UTF-8 rune.
@@ -18,21 +22,10 @@ const (
 
 var pageSizes = []int{10, 20, 50}
 
-// handleDashboardRoot owns "/" outright: resources are delivered under /d/,
-// so nothing else can land here.
-func (a *App) handleDashboardRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		writePlainError(w, http.StatusNotFound, "not found")
-		return
-	}
-	a.handleDashboard(w, r)
-}
-
-func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	user, _, ok := a.requireUser(w, r)
-	if !ok {
-		return
-	}
+// handleDashboard lists the account's own resources. It sits under /resources/
+// rather than at the root, because the root is the one page in this service
+// that anyone is meant to be able to open.
+func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User) {
 	if r.Method != http.MethodGet {
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -69,6 +62,7 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		CSRF:      csrfValue(r),
 		Active:    "resources",
 		BaseURL:   a.baseURL(r),
+		SignedIn:  true,
 		Resources: resources,
 		Quota:     quota,
 		Pager:     buildPager(search, page, size, total),
@@ -120,9 +114,9 @@ func dashboardURL(search string, size, page int) string {
 		values.Set("page", strconv.Itoa(page))
 	}
 	if len(values) == 0 {
-		return "/"
+		return dashboardPath
 	}
-	return "/?" + values.Encode()
+	return dashboardPath + "?" + values.Encode()
 }
 
 func buildPager(search string, page, size, total int) pager {

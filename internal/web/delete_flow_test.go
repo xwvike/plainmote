@@ -64,7 +64,7 @@ func TestDeleteFlowThroughRouter(t *testing.T) {
 	}
 
 	deleted := do(http.MethodPost, "/resources/"+resource.ID, url.Values{"action": {"delete"}, "csrf": {csrf}})
-	if deleted.Code != http.StatusSeeOther || deleted.Header().Get("Location") != "/" {
+	if deleted.Code != http.StatusSeeOther || deleted.Header().Get("Location") != "/resources/" {
 		t.Fatalf("delete must land on the dashboard, got %d %q", deleted.Code, deleted.Header().Get("Location"))
 	}
 

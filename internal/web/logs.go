@@ -41,7 +41,7 @@ func (a *App) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.renderTemplate(w, http.StatusOK, "logs.html", pageData{
-		User: user, CSRF: csrfValue(r), Active: "logs", BaseURL: a.baseURL(r),
+		User: user, CSRF: csrfValue(r), Active: "logs", BaseURL: a.baseURL(r), SignedIn: true,
 		AccessLogs: logs, Resources: resources,
 		LogResource: resourceID, LogOutcome: outcome, Outcomes: accessOutcomes,
 	})

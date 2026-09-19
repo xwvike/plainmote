@@ -38,7 +38,10 @@ const (
 	// to serve it as anything else - html most of all - takes "host a page on
 	// someone else's domain" off the table entirely. The filename still decides
 	// what a download is called.
-	anonymousContentType = "text/plain"
+	//
+	// The charset is part of the type and not an afterthought: without it a
+	// browser guesses, and a paste in Chinese comes back as mojibake.
+	anonymousContentType = "text/plain; charset=utf-8"
 	anonymousEncoding    = "utf-8"
 )
 

@@ -96,7 +96,7 @@ func TestAnonymousPasteIsAlwaysServedAsText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resource.ContentType != "text/plain" {
+	if resource.ContentType != "text/plain; charset=utf-8" {
 		t.Fatalf("an anonymous paste must be text/plain, got %q", resource.ContentType)
 	}
 	if served := ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding); !strings.HasPrefix(served, "text/plain") {
@@ -105,6 +105,16 @@ func TestAnonymousPasteIsAlwaysServedAsText(t *testing.T) {
 	// The name still rides along, so a download is called what it was called.
 	if resource.Filename != "login.html" {
 		t.Fatalf("the filename must survive, got %q", resource.Filename)
+	}
+
+	// The charset has to be in there, or a paste in Chinese is handed over for
+	// the browser to guess at.
+	chinese, _, err := db.CreateAnonymousPaste(ctx, "", []byte("名称: 上海节点\n"), time.Minute, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ContentTypeWithEncoding(chinese.ContentType, chinese.ContentEncoding); !strings.Contains(got, "charset=utf-8") {
+		t.Fatalf("delivery must name the charset, got %q", got)
 	}
 }
 

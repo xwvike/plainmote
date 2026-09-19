@@ -95,6 +95,26 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
 .savebar [data-revert] { display: none; }
 .savebar [data-revert].show { display: inline-flex; }
 .rform { display: grid; gap: 14px; align-content: start; }
+
+/* The home page. One claim, one box, one button - and below the fold, what the
+   rest of the service is, which is the only text here a search engine has to
+   go on. */
+.lede { display: grid; gap: 6px; padding: 8px 0 2px; }
+.lede h1 { font-size: 21px; font-weight: 600; letter-spacing: -0.018em; }
+.lede p { font-size: 13px; color: var(--ink2); }
+/* Tall enough to paste into without thinking, short enough that the button
+   under it is on screen when the page opens. */
+.paste-body > textarea { height: clamp(200px, calc(100vh - 430px), 460px); resize: vertical; }
+.ttl-picker { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ttl-picker > span { font-size: 11px; font-weight: 500; color: var(--ink2); }
+.ttl-picker select { width: auto; }
+.tell { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.tell section { display: grid; gap: 6px; align-content: start; }
+.tell h2 { font-size: 13px; font-weight: 600; letter-spacing: -0.008em; }
+.tell p { font-size: 12px; line-height: 1.6; color: var(--ink2); }
+.tell code { font: 400 11.5px var(--mono); color: var(--ink); }
+/* The address is the whole point of the result panel, so it gets the width. */
+.pfx > input[readonly] { min-width: 0; flex: 1; border: 1px solid var(--line2); }
 /* The save bar ends with a statement of what is live, not a note about what
    saving would do. It is pushed to the far end so it reads as the bar's
    outcome rather than as a label on the buttons. */
@@ -304,6 +324,7 @@ details.pan[open] .chev { transform: rotate(90deg); }
    the right order here: the body is what the page is for. */
 @media (max-width: 1180px) {
   :root { --col: 100%; }
+  .tell { grid-template-columns: minmax(0, 1fr); }
   .topin { width: calc(100% - 20px); }
   .page { width: calc(100% - 20px); padding-top: 12px; }
   .split { grid-template-columns: minmax(0, 1fr); }

@@ -54,9 +54,9 @@ func TestTokenIsTheWholeAddress(t *testing.T) {
 	if got := get("/configs/clash.yaml?token=" + token); got.Code != http.StatusNotFound {
 		t.Errorf("the old address shape should not resolve, got %d", got.Code)
 	}
-	// Root belongs to the dashboard, so an anonymous hit is a redirect to login.
-	if got := get("/"); got.Code == http.StatusOK {
-		t.Errorf("root must not serve a resource, got %d", got.Code)
+	// Root is the home page now, and it must never be a way to a resource.
+	if got := get("/"); strings.Contains(got.Body.String(), "port: 7890") {
+		t.Error("root must not serve a resource")
 	}
 }
 
