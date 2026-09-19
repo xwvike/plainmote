@@ -284,11 +284,15 @@ const theme = EditorView.theme({
   ".cm-content": { minHeight: "100%", padding: "6px 0" },
   ".cm-line": { padding: "0 7px" },
   ".cm-gutters": { alignSelf: "stretch", background: "var(--head)", border: "none", borderRight: "1px solid var(--line)", color: "var(--ink3)", fontSize: "11px" },
-  ".cm-activeLine": { background: "var(--zebra)" },
+  // Translucent, so the selection layer beneath it still shows through. The
+  // gutter has no selection to hide and stays opaque.
+  ".cm-activeLine": { background: "var(--zebra-t)" },
   ".cm-activeLineGutter": { background: "var(--zebra)", color: "var(--ink2)" },
   ".cm-cursor": { borderLeftColor: "var(--ink)" },
-  ".cm-selectionBackground, .cm-content ::selection": { background: "var(--accent-s)" },
-  "&.cm-focused .cm-selectionBackground": { background: "var(--accent-s)" },
+  // Grey while the editor is not focused, accent while it is, the way every
+  // other text field on the platform behaves.
+  ".cm-selectionBackground, .cm-content ::selection": { background: "var(--sel-off)" },
+  "&.cm-focused .cm-selectionBackground, &.cm-focused .cm-content ::selection": { background: "var(--sel)" },
   ".cm-selectionMatch": { background: "color-mix(in oklab, var(--warn) 22%, white)" },
   ".cm-panels": { background: "var(--head)", color: "var(--ink)", borderBottom: "1px solid var(--line)" },
   ".cm-panels input, .cm-panels button": { font: "400 11.5px var(--sans)" },

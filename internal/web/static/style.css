@@ -10,6 +10,16 @@
   --line: oklch(0.905 0.004 255);
   --line2: oklch(0.845 0.005 255);
   --zebra: oklch(0.972 0.003 255);
+  /* The same tint as --zebra over a panel, but translucent. CodeMirror paints
+     its selection layer behind the lines, so an opaque active-line background
+     hides the selection exactly where the cursor is - which is most of the
+     time, since selecting inside one line makes that line the active one. */
+  --zebra-t: color-mix(in oklab, var(--ink) 5%, transparent);
+  /* The editor's selection. --accent-s is the 7% wash the notice blocks and the
+     open log row use; at that strength a selection is 22 away from white and 7
+     away from the active line under it, which is to say invisible. */
+  --sel: color-mix(in oklab, var(--accent) 22%, white);
+  --sel-off: color-mix(in oklab, var(--ink) 12%, white);
   --head: oklch(0.985 0.002 255);
   --ok: oklch(0.505 0.125 150);
   --warn: oklch(0.585 0.125 72);
