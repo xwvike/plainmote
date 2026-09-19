@@ -416,7 +416,7 @@ function enhance(textarea) {
           EditorView.updateListener.of((update) => {
             if (!update.docChanged || applyingSource) return;
             documentEdited = true;
-            markContentForSave(`已采用编辑器中的修改，保存时将按 ${encodingSelect ? encodingSelect.value : "utf-8"} 编码写入。`);
+            markContentForSave("");
           }),
           language.of(languageFor(tokenFor(textarea.dataset.filename, textarea.dataset.contentType))),
           keymap.of([
@@ -538,11 +538,11 @@ function enhance(textarea) {
 
       try {
         openBytes(bytes, encoding);
-        markContentForSave(`已按 ${encoding} 重新解码；保存时也会写成 ${encoding}。`, true);
+        markContentForSave("", true);
       } catch (error) {
         if (version !== operationVersion) return;
         setEncoding(encoding, false);
-        setUploadStatus(`无法按 ${encoding} 解码，请选择其他编码。`);
+        setUploadStatus(`不是 ${encoding}，请换一个编码。`);
       }
     };
 
@@ -550,7 +550,7 @@ function enhance(textarea) {
       eolSelect.addEventListener("change", () => {
         setEOL(eolSelect.value);
         const label = currentEOL === "crlf" ? "CRLF" : "LF";
-        markContentForSave(`保存时将写入 ${label} 行尾。`, true);
+        markContentForSave("", true);
       });
     }
 
@@ -559,7 +559,7 @@ function enhance(textarea) {
         const encoding = normalizeEncoding(encodingSelect.value);
         if (!encoding) return;
         setEncoding(encoding);
-        markContentForSave(`保存时将按 ${encoding} 编码写入；若当前文字解码不对，请点“重新解码”。`, true);
+        markContentForSave("", true);
       });
     }
 
@@ -630,7 +630,7 @@ function enhance(textarea) {
         if (!encoding) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           if (encodingSelect) encodingSelect.dataset.valid = "false";
-          setUploadStatus(`${file.name} 未能自动识别为文本；请选择编码后点“重新解码”，或按原始文件上传。`);
+          setUploadStatus(`无法识别 ${file.name} 的文本编码。可以选一个编码点「重新解码」，或按原样上传。`);
           return;
         }
 
@@ -639,11 +639,11 @@ function enhance(textarea) {
         } catch (error) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           if (encodingSelect) encodingSelect.dataset.valid = "false";
-          setUploadStatus(`${file.name} 无法按检测到的 ${encoding} 解码；请选择其他编码后点“重新解码”。`);
+          setUploadStatus(`${file.name} 不是 ${encoding}。请选一个编码后点「重新解码」。`);
           return;
         }
 
-        setUploadStatus(`已自动按 ${encoding} 打开 ${file.name}（${sizeText(file.size)}）。编码列表决定保存格式，“重新解码”用于纠正识别结果。`);
+        setUploadStatus(`已打开 ${file.name}（${encoding}）`);
       });
     }
   }

@@ -104,7 +104,7 @@
               {{else if hasPrefix .Resource.ContentType "video/"}}
               <video controls src="/resources/{{.Resource.ID}}/raw" style="max-width:100%;max-height:520px"></video>
               {{else}}
-              <p class="ro">该文件类型不支持在线编辑。要更换请在右侧上传新文件。</p>
+              <p class="ro">这类内容不能在线编辑，只能整份替换：用上面的「选择文件」换一个。</p>
               {{end}}
             {{end}}
           </div>
