@@ -45,7 +45,9 @@ const (
 	anonymousEncoding    = "utf-8"
 )
 
-var errAnonymousTTL = fmt.Errorf("有效期最短 %s，最长 %s", AnonymousDefaultTTL, AnonymousMaxTTL)
+// Minutes, not a Go duration: %s renders AnonymousMaxTTL as "30m0s".
+var errAnonymousTTL = fmt.Errorf("有效期最短 %d 分钟，最长 %d 分钟",
+	int(AnonymousDefaultTTL/time.Minute), int(AnonymousMaxTTL/time.Minute))
 
 // CreateAnonymousPaste writes the body and the one time-limited link that
 // reaches it in a single transaction. A paste with no link is unreachable

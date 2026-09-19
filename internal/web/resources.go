@@ -120,7 +120,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	if form.Uploaded && !recovered {
 		// The only body that cannot be handed back. Saying so beats a page
 		// that silently comes back without the file that was just read.
-		text += "（这份内容无法在页面里保留，请重新选择文件）"
+		text += "（该内容无法在页面中保留，请重新选择文件）"
 	}
 	data := a.basePageWithError(r, user, text)
 	data.IsNew = true
@@ -310,7 +310,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 				pending.ContentEncoding = form.ContentEncoding
 				if _, ok := editableText(pendingBody, form.Filename, form.ContentEncoding); !ok {
 					pendingBody = nil
-					text += "（这份内容无法在页面里保留，请重新选择文件）"
+					text += "（该内容无法在页面中保留，请重新选择文件）"
 				}
 			}
 			a.renderResourcePage(w, r, user, pending, text, status, pendingBody)
@@ -333,7 +333,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 func (a *App) writeErrorText(what string, err error) (string, int) {
 	if errors.Is(err, store.ErrInternal) {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", what, err)
-		return "服务暂时无法完成这次操作，请稍后再试。", http.StatusInternalServerError
+		return "服务暂时无法完成该操作，请稍后重试。", http.StatusInternalServerError
 	}
 	return err.Error(), http.StatusBadRequest
 }
@@ -425,7 +425,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 // read - callers keep their own fallback in that case.
 func (a *App) previewUpstream(ctx context.Context, data *pageData, originURL string) string {
 	if strings.TrimSpace(originURL) == "" {
-		data.UpstreamError = "先填写远程地址，再点拉取。"
+		data.UpstreamError = "请先填写远程地址。"
 		return ""
 	}
 	body, contentType, err := a.upstream.Fetch(ctx, originURL)

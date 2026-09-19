@@ -63,7 +63,7 @@ func validateFilename(name string) error {
 		case unicode.IsControl(r):
 			return errors.New("文件名不能包含控制字符")
 		case unicode.Is(unicode.Bidi_Control, r):
-			return errors.New("文件名不能包含文字方向控制符，它会让名字显示成别的样子")
+			return errors.New("文件名不能包含文字方向控制符")
 		}
 	}
 	return nil

@@ -155,7 +155,7 @@ func (e *QuotaError) Is(target error) bool { return target == ErrQuotaExceeded }
 
 func (e *QuotaError) Error() string {
 	if e.Storage {
-		return fmt.Sprintf("存储空间不足：已用 %s，上限 %s，这份内容还需要 %s。请先删除或缩减已有资源。",
+		return fmt.Sprintf("存储空间不足：已用 %s，上限 %s，本次需要 %s。请先删除或缩减已有资源。",
 			BytesText(e.Usage), BytesText(e.Limit), BytesText(e.Wanted))
 	}
 	return fmt.Sprintf("资源数量已达上限：已有 %d 个，上限 %d 个。请先删除不再需要的资源。", e.Usage, e.Limit)

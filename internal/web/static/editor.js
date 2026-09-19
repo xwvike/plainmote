@@ -542,7 +542,7 @@ function enhance(textarea) {
       } catch (error) {
         if (version !== operationVersion) return;
         setEncoding(encoding, false);
-        setUploadStatus(`不是 ${encoding}，请换一个编码。`);
+        setUploadStatus(`无法按 ${encoding} 解码，请更换编码。`);
       }
     };
 
@@ -630,7 +630,7 @@ function enhance(textarea) {
         if (!encoding) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           if (encodingSelect) encodingSelect.dataset.valid = "false";
-          setUploadStatus(`无法识别 ${file.name} 的文本编码。可以选一个编码点「重新解码」，或按原样上传。`);
+          setUploadStatus(`无法识别 ${file.name} 的文本编码。可指定编码后重新解码，或按原样上传。`);
           return;
         }
 
@@ -639,7 +639,7 @@ function enhance(textarea) {
         } catch (error) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           if (encodingSelect) encodingSelect.dataset.valid = "false";
-          setUploadStatus(`${file.name} 不是 ${encoding}。请选一个编码后点「重新解码」。`);
+          setUploadStatus(`${file.name} 无法按 ${encoding} 解码。请指定编码后重新解码。`);
           return;
         }
 

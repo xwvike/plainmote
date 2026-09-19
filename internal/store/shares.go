@@ -112,7 +112,7 @@ func validateShareTerms(ttl time.Duration, maxUses int) error {
 		return errors.New("存活时长不能为负")
 	}
 	if ttl > maxShareTTL {
-		return errors.New("存活时长最长一年，需要更久请选「永不过期」")
+		return errors.New("存活时长最长一年，如需更久请选择「永不过期」")
 	}
 	if maxUses < 0 {
 		return errors.New("使用次数不能为负")

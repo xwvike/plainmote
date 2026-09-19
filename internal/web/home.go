@@ -117,7 +117,7 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, store.ErrInternal) {
 			fmt.Fprintf(os.Stderr, "create paste: %v\n", err)
-			a.refusePasteWith(w, r, content, filename, ttlValue, "服务暂时无法完成这次操作，请稍后再试。", http.StatusInternalServerError)
+			a.refusePasteWith(w, r, content, filename, ttlValue, "服务暂时无法完成该操作，请稍后重试。", http.StatusInternalServerError)
 			return
 		}
 		a.refusePasteWith(w, r, content, filename, ttlValue, err.Error(), http.StatusBadRequest)

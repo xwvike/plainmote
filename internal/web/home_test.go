@@ -147,7 +147,7 @@ func TestSignedInVisitorIsToldThePasteIsStillAnonymous(t *testing.T) {
 	app.handler.ServeHTTP(response, request)
 
 	page := response.Body.String()
-	if !strings.Contains(page, "匿名的") {
+	if !strings.Contains(page, "此处内容为匿名") {
 		t.Fatal("a signed-in visitor must be told the box is still anonymous")
 	}
 	if !strings.Contains(page, `href="/resources/"`) {
