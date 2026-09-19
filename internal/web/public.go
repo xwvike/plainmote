@@ -116,9 +116,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	// record it failed to write. Delivery goes ahead; the miss goes to stderr.
 	a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusOK, "link accepted")
 	w.Header().Set("Content-Type", contentType)
-	// The name is restricted to letters, digits and . _ - + @ on the way in,
-	// so it cannot break out of the quotes or the header.
-	w.Header().Set("Content-Disposition", `inline; filename="`+deliveryFilename(resource, filenameType)+`"`)
+	w.Header().Set("Content-Disposition", contentDisposition(deliveryFilename(resource, filenameType)))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
@@ -145,6 +143,47 @@ func (a *App) recordAccess(r *http.Request, result store.ConsumeResult, outcome 
 	if err := a.db.RecordAccess(r.Context(), event, meta); err != nil {
 		fmt.Fprintf(os.Stderr, "record %s access for resource %s: %v\n", outcome, resource.ID, err)
 	}
+}
+
+// contentDisposition names the file on the way out. A header field is ASCII,
+// so a name that is not gets both forms RFC 6266 describes: the quoted one
+// with everything unrepresentable folded to an underscore, for a client that
+// reads only that, and the extended one beside it, which every current browser
+// and curl prefer. Control characters, quotes and path separators are refused
+// at the door, so the quoted form cannot end early or start a header of its own.
+func contentDisposition(filename string) string {
+	var ascii strings.Builder
+	for _, r := range filename {
+		if r < 0x20 || r > 0x7e || r == '"' || r == '\\' {
+			ascii.WriteByte('_')
+			continue
+		}
+		ascii.WriteRune(r)
+	}
+	fallback := ascii.String()
+	value := `inline; filename="` + fallback + `"`
+	if fallback != filename {
+		value += "; filename*=UTF-8''" + encodeExtendedValue(filename)
+	}
+	return value
+}
+
+// encodeExtendedValue percent-encodes everything outside RFC 5987's attr-char
+// set. url.PathEscape leaves several of those bytes alone, and a delimiter
+// surviving into a header parameter is exactly what this must not allow.
+func encodeExtendedValue(value string) string {
+	const safe = "!#$&+-.^_`|~"
+	var out strings.Builder
+	for _, b := range []byte(value) {
+		switch {
+		case b >= '0' && b <= '9', b >= 'A' && b <= 'Z', b >= 'a' && b <= 'z',
+			strings.IndexByte(safe, b) >= 0:
+			out.WriteByte(b)
+		default:
+			out.WriteString(fmt.Sprintf("%%%02X", b))
+		}
+	}
+	return out.String()
 }
 
 // redactDeliveryPath keeps the token out of the audit log. It used to ride in

@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"plainmote/internal/upstream"
 
@@ -17,17 +18,48 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var filenameRule = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$`)
+// filenameMaxRunes bounds the name for the database column, the URL tail and
+// the Content-Disposition header at once. Counted in runes, because a limit in
+// bytes would give a Chinese name a third of the room an English one gets.
+const filenameMaxRunes = 128
 
+// validateFilename keeps a name safe to put in a URL tail and in a
+// Content-Disposition header. Everything printable is allowed - these are the
+// user's own files, and a Chinese name is as ordinary here as an English one -
+// and only the characters that would end the quoted header field, start a
+// header of their own, or look like a path are refused. The delivery header
+// carries non-ASCII names in the RFC 6266 extended form, so the character set
+// no longer has to be narrowed to keep that header well formed.
 func validateFilename(name string) error {
 	if name == "" {
 		return nil
 	}
+	if !utf8.ValidString(name) {
+		return errors.New("文件名必须是有效的 UTF-8 文本")
+	}
+	if utf8.RuneCountInString(name) > filenameMaxRunes {
+		return fmt.Errorf("文件名最长 %d 个字符", filenameMaxRunes)
+	}
 	if strings.Contains(name, "..") {
 		return errors.New("文件名不能包含 ..")
 	}
-	if !filenameRule.MatchString(name) {
-		return errors.New("文件名只能用字母、数字和 . _ - + @，且以字母或数字开头")
+	if name != strings.TrimSpace(name) || strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
+		return errors.New("文件名不能以空格或点开头或结尾")
+	}
+	// Whoever saves this with curl -O ends up with the name as an argument to
+	// whatever they run next, where a leading dash reads as an option.
+	if strings.HasPrefix(name, "-") {
+		return errors.New("文件名不能以 - 开头")
+	}
+	for _, r := range name {
+		switch {
+		case unicode.IsControl(r):
+			return errors.New("文件名不能包含控制字符")
+		case r == '/' || r == '\\':
+			return errors.New("文件名不能包含路径分隔符")
+		case r == '"':
+			return errors.New("文件名不能包含引号")
+		}
 	}
 	return nil
 }

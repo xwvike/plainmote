@@ -5,6 +5,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -247,6 +248,11 @@ var fallbackNames = map[string]string{
 	typeText:   "file.txt",
 }
 
+// subtypeRule is the shape a media subtype must have before it is used as a
+// file extension. It arrives in an upstream header rather than from the owner,
+// so it is held to a far narrower set than a filename is.
+var subtypeRule = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
+
 // FallbackFilename names a resource whose owner left the filename empty, so
 // that saving it still produces something openable instead of a token.
 func FallbackFilename(contentType string) string {
@@ -258,7 +264,7 @@ func FallbackFilename(contentType string) string {
 	// usable, and fall back to plain text otherwise.
 	base, _, _ := strings.Cut(contentType, ";")
 	_, subtype, found := strings.Cut(strings.TrimSpace(base), "/")
-	if found && filenameRule.MatchString("f."+subtype) {
+	if found && subtypeRule.MatchString(subtype) {
 		return "file." + subtype
 	}
 	return "file.txt"

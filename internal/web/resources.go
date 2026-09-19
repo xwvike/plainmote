@@ -111,18 +111,38 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		}
 	}
 	text, status := a.writeErrorText("create resource", err)
+	body, recovered := editableText(form.Content, form.Filename, form.ContentEncoding)
+	if form.Uploaded && !recovered {
+		// The only body that cannot be handed back. Saying so beats a page
+		// that silently comes back without the file that was just read.
+		text += "（这份内容无法在页面里保留，请重新选择文件）"
+	}
 	data := a.basePageWithError(r, user, text)
 	data.IsNew = true
 	data.NewKind = newResourceKind(r.FormValue("kind"))
 	data.Resource = Resource{Name: form.Name, Filename: form.Filename, ContentSize: int64(len(form.Content)), ContentEncoding: form.ContentEncoding, OriginURL: form.OriginURL}
 	data.ContentEncoding = form.ContentEncoding
 	data.ContentEOL = form.ContentEOL
-	if !form.Uploaded {
-		if text, _, decodeErr := store.DecodeText(form.Content, form.ContentEncoding); decodeErr == nil {
-			data.ContentText = text
-		}
-	}
+	data.ContentText = body
 	a.renderTemplate(w, status, "resource.html", data)
+}
+
+// editableText is what a refused save can put back in the editor. A browser
+// cannot refill a file input, so a page that comes back without the body has
+// thrown the upload away; anything that decodes as text goes back, and the
+// caller is told when it could not.
+func editableText(content []byte, filename, encoding string) (string, bool) {
+	if len(content) == 0 {
+		return "", false
+	}
+	text, encodingName, err := store.DecodeText(content, encoding)
+	if err != nil {
+		return "", false
+	}
+	if contentType, _ := store.DetectContent(filename, content, encodingName); !store.TextLike(contentType) {
+		return "", false
+	}
+	return text, true
 }
 
 // resourceForm is one submission of the resource screen. An uploaded file wins
@@ -246,7 +266,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		if r.FormValue("action") == actionDelete {
 			if err := a.db.DeleteResource(r.Context(), user.ID, resourceID); err != nil {
 				text, status := a.writeErrorText("delete resource", err)
-				a.renderResourcePage(w, r, user, resource, text, status)
+				a.renderResourcePage(w, r, user, resource, text, status, nil)
 				return
 			}
 			http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -254,7 +274,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		}
 		form, err := readResourceForm(r, a.cfg.MaxContent)
 		if err != nil {
-			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest)
+			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest, nil)
 			return
 		}
 		if r.FormValue("action") == actionPreview {
@@ -263,7 +283,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			// stored row is untouched either way.
 			pending := resource
 			pending.Name, pending.Filename, pending.OriginURL = form.Name, form.Filename, form.OriginURL
-			a.renderResourcePage(w, r, user, pending, "", http.StatusOK)
+			a.renderResourcePage(w, r, user, pending, "", http.StatusOK, nil)
 			return
 		}
 		content := form.Content
@@ -273,7 +293,22 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		}
 		if err := a.db.UpdateResource(r.Context(), user.ID, resourceID, form.Name, form.Filename, content, form.ContentEncoding, form.OriginURL); err != nil {
 			text, status := a.writeErrorText("update resource", err)
-			a.renderResourcePage(w, r, user, resource, text, status)
+			// The refused page comes back carrying the submission, not the
+			// stored row: the fields as they were typed, and the body as it
+			// was sent. Bytes that cannot go in a textarea are the one thing
+			// that cannot come back, and the page says so instead of quietly
+			// showing the old version in their place.
+			pending := resource
+			pending.Name, pending.Filename, pending.OriginURL = form.Name, form.Filename, form.OriginURL
+			pendingBody := content
+			if pendingBody != nil {
+				pending.ContentEncoding = form.ContentEncoding
+				if _, ok := editableText(pendingBody, form.Filename, form.ContentEncoding); !ok {
+					pendingBody = nil
+					text += "（这份内容无法在页面里保留，请重新选择文件）"
+				}
+			}
+			a.renderResourcePage(w, r, user, pending, text, status, pendingBody)
 			return
 		}
 		http.Redirect(w, r, "/resources/"+resourceID, http.StatusSeeOther)
@@ -283,7 +318,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	a.renderResourcePage(w, r, user, resource, r.URL.Query().Get("error"), http.StatusOK)
+	a.renderResourcePage(w, r, user, resource, r.URL.Query().Get("error"), http.StatusOK, nil)
 }
 
 // writeErrorText is what the owner of a resource is shown when a write is
@@ -298,7 +333,11 @@ func (a *App) writeErrorText(what string, err error) (string, int) {
 	return err.Error(), http.StatusBadRequest
 }
 
-func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user User, resource Resource, pageError string, status int) {
+// pendingBody is the body the user just submitted, for a save that was
+// refused: their work only exists in that request, so re-reading the stored
+// object would quietly replace it with the version they were editing away
+// from. nil means there is nothing pending and the stored object is the truth.
+func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user User, resource Resource, pageError string, status int, pendingBody []byte) {
 	now := time.Now().UTC()
 	shares, err := a.db.ListShares(r.Context(), user.ID, resource.ID, now)
 	if err != nil {
@@ -312,10 +351,14 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	// with no stored body, must keep their existing handling.
 	recoverOpaqueText := !resource.Remote() && resource.ContentType == "application/octet-stream" && store.TextFilename(resource.Filename)
 	if resource.Editable() || recoverOpaqueText {
-		text, err := a.db.ReadContent(r.Context(), resource)
-		if err != nil {
-			a.renderError(w, http.StatusInternalServerError, err)
-			return
+		text := pendingBody
+		if text == nil {
+			var err error
+			text, err = a.db.ReadContent(r.Context(), resource)
+			if err != nil {
+				a.renderError(w, http.StatusInternalServerError, err)
+				return
+			}
 		}
 		decoded, encodingName, decodeErr := store.DecodeText(text, resource.ContentEncoding)
 		if decodeErr == nil {

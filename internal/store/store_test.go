@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -253,15 +254,31 @@ func TestTokenCipherDoesNotStorePlaintext(t *testing.T) {
 func TestFilenameValidation(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	for _, bad := range []string{"../etc/passwd", "a/b.yaml", "with space.yaml", "-leading.yaml", ".hidden", "a?b", "a#b", "a\b"} {
+	// What is refused is what would climb out of a path, end the quoted
+	// Content-Disposition field, or start a header of its own - plus a leading
+	// dash, which turns into an option for whatever the downloader runs next.
+	for _, bad := range []string{
+		"../etc/passwd", "a/b.yaml", "a\\b", "-leading.yaml", ".hidden", "trailing.",
+		"quo\"te.yaml", "line\nbreak.yaml", strings.Repeat("名", 129) + ".yaml",
+	} {
 		if _, err := db.CreateResource(ctx, user.ID, "bad", bad, []byte("x"), "", ""); err == nil {
 			t.Errorf("filename %q should have been rejected", bad)
 		}
 	}
-	for _, good := range []string{"clash.yaml", "sing-box.json", "hosts.txt", "wg0.conf", "a.b.c", "A1_-+@.txt", ""} {
+	// Everything else is the user's own file, named however they name it.
+	for _, good := range []string{
+		"clash.yaml", "sing-box.json", "hosts.txt", "wg0.conf", "a.b.c", "A1_-+@.txt", "",
+		"机场配置.yaml", "my config.yaml", "a?b", "a#b", "config(1).yaml", "Ünïcode.txt",
+	} {
 		if _, err := db.CreateResource(ctx, user.ID, "ok", good, []byte("x"), "", ""); err != nil {
 			t.Errorf("filename %q should have been accepted: %v", good, err)
 		}
+	}
+	// Surrounding whitespace is trimmed rather than refused - it is almost
+	// always a paste artefact, and there is nothing to warn anyone about.
+	trimmed, err := db.CreateResource(ctx, user.ID, "ok", "  spaced.yaml  ", []byte("x"), "", "")
+	if err != nil || trimmed.Filename != "spaced.yaml" {
+		t.Errorf("surrounding whitespace should be trimmed, got %q: %v", trimmed.Filename, err)
 	}
 }
 

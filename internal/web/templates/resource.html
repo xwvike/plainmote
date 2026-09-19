@@ -77,7 +77,11 @@
             {{else if .Resource.Editable}}
             <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
             {{else if .IsNew}}
-            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="" data-content-type="" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}"></textarea>
+            {{/* Carries ContentText, because this is also the page a refused
+                 creation comes back on and the body has to survive it. Empty on
+                 a fresh screen, and with no data-raw-url either way: nothing is
+                 stored yet to re-read. */}}
+            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}">{{.ContentText}}</textarea>
             {{else}}
               {{if hasPrefix .Resource.ContentType "image/"}}
               <img src="/resources/{{.Resource.ID}}/raw" alt="{{.Resource.Name}}" style="max-width:100%;max-height:520px;border:1px solid var(--line);background:var(--head)">
