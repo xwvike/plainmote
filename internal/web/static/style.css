@@ -65,8 +65,14 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
    now needs, and the resource's own identity and metadata sit beside it in a
    fixed narrow column. minmax(0, 1fr) rather than 1fr, or a long unbroken line
    in the editor widens the grid track instead of scrolling inside it. */
-.split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
-.side { display: grid; gap: 14px; position: sticky; top: 16px; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; }
+/* The narrow column sizes to its own fields and metadata, and the row takes its
+   height from whichever side needs more, so it is the content column that
+   absorbs the difference. Left to itself the sidebar hangs past the bottom of
+   the panel beside it, which reads as a misalignment rather than as a column.
+   align-self keeps it at the top: it is sticky, and a stretched sticky element
+   has nothing to slide against. */
+.side { display: grid; gap: 14px; position: sticky; top: 16px; align-self: start; }
 /* Save commits the whole form - the name and filename live in the narrow
    column, the body in the wide one - so the bar spans both rather than sitting
    inside either, where it would read as saving only that column. */
@@ -248,13 +254,17 @@ details.pan[open] .chev { transform: rotate(90deg); }
    closes the box, so the editor draws none of its own and the padding goes.
    Keyed off :has() so a browser that never ran the module - or ran it and
    threw - keeps the padded textarea it is falling back to. */
-.panel-ed > .pb:has(> .cm-host) { padding: 0; gap: 0; }
+/* Header row, then the body takes the rest, so the editor is as tall as the
+   row it was given rather than only as tall as it asked for. --edh stays as
+   the floor, below. */
+.panel-ed { display: grid; grid-template-rows: auto 1fr; }
+.panel-ed > .pb:has(> .cm-host) { padding: 0; gap: 0; align-content: stretch; }
 /* Focus recolours the panel border, the same as every input and select on
    these pages. It cannot be drawn inside the editor: .cm-gutters is sticky
    with a z-index, so it paints over any ring the editor draws for itself and
    the line-number column comes out unringed. */
 .panel-ed:has(.cm-focused) { border-color: var(--accent); }
-.panel-ed .cm-host { height: var(--edh); }
+.panel-ed .cm-host { min-height: var(--edh); }
 /* The content column keeps the same height across every state it has - an
    editor, a read-only preview, a not-yet-pulled address, a notice. Without
    this the page collapses to a strip whenever there is nothing to show, and
