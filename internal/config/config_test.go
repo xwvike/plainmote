@@ -23,7 +23,6 @@ func setRequiredEnvironment(t *testing.T) {
 
 func TestLoadReadsEnvironment(t *testing.T) {
 	setRequiredEnvironment(t)
-	t.Setenv("PLAINMOTE_ALLOW_PRIVATE_UPSTREAM", "true")
 	t.Setenv("PLAINMOTE_TRUSTED_PROXIES", "127.0.0.1, 172.18.0.0/16, 127.0.0.1/32")
 	t.Setenv("PLAINMOTE_SESSION_TTL", "24h")
 	t.Setenv("PLAINMOTE_MAX_CONTENT_MIB", "8")
@@ -35,7 +34,7 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	if cfg.DatabaseURL == "" || cfg.BlobBucket != "plainmote" || cfg.MaxContent != 8<<20 {
 		t.Fatalf("environment was not loaded: %+v", cfg)
 	}
-	if !cfg.AllowPrivateUpstream || cfg.SessionTTL.Hours() != 24 {
+	if cfg.SessionTTL.Hours() != 24 {
 		t.Fatalf("typed values were not parsed: %+v", cfg)
 	}
 	if len(cfg.TrustedProxies) != 2 {
@@ -102,10 +101,9 @@ func TestLoadFailsFastOnMissingRequiredValue(t *testing.T) {
 
 func TestLoadRejectsInvalidValues(t *testing.T) {
 	for name, value := range map[string]string{
-		"PLAINMOTE_ALLOW_PRIVATE_UPSTREAM": "perhaps",
-		"PLAINMOTE_TRUSTED_PROXIES":        "docker-network",
-		"PLAINMOTE_SESSION_TTL":            "forever",
-		"PLAINMOTE_MAX_CONTENT_MIB":        "zero",
+		"PLAINMOTE_TRUSTED_PROXIES": "docker-network",
+		"PLAINMOTE_SESSION_TTL":     "forever",
+		"PLAINMOTE_MAX_CONTENT_MIB": "zero",
 	} {
 		t.Run(name, func(t *testing.T) {
 			setRequiredEnvironment(t)

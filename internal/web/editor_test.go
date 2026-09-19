@@ -21,7 +21,7 @@ import (
 func TestResourcePageStaysPostable(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := &App{db: db, upstream: upstream.New(true, 4<<20), cfg: Config{
+	app := &App{db: db, upstream: upstream.New(4 << 20), cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test",
 		AllowedIDs: map[string]bool{user.GitHubID: true},
 	}}

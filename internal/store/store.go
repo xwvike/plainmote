@@ -16,13 +16,12 @@ import (
 var ErrNotFound = errors.New("store: not found")
 
 type Store struct {
-	db                   *pgxpool.Pool
-	blobs                blob.Store
-	cipher               *tokenCipher
-	allowPrivateUpstream bool
+	db     *pgxpool.Pool
+	blobs  blob.Store
+	cipher *tokenCipher
 }
 
-func Open(ctx context.Context, databaseURL string, key []byte, blobs blob.Store, allowPrivateUpstream bool) (*Store, error) {
+func Open(ctx context.Context, databaseURL string, key []byte, blobs blob.Store) (*Store, error) {
 	if strings.TrimSpace(databaseURL) == "" {
 		return nil, errors.New("database URL must not be empty")
 	}
@@ -45,7 +44,7 @@ func Open(ctx context.Context, databaseURL string, key []byte, blobs blob.Store,
 		pool.Close()
 		return nil, fmt.Errorf("connect PostgreSQL: %w", err)
 	}
-	store := &Store{db: pool, blobs: blobs, cipher: cipher, allowPrivateUpstream: allowPrivateUpstream}
+	store := &Store{db: pool, blobs: blobs, cipher: cipher}
 	if err := store.initializeSchema(ctx); err != nil {
 		pool.Close()
 		return nil, err

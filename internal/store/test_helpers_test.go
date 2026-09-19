@@ -21,7 +21,7 @@ import (
 func testDatabase(t *testing.T) (*Store, User, Resource) {
 	t.Helper()
 	ctx := context.Background()
-	db, err := Open(ctx, testDatabaseURL(t), bytes.Repeat([]byte{7}, 32), newMemoryBlobs(), false)
+	db, err := Open(ctx, testDatabaseURL(t), bytes.Repeat([]byte{7}, 32), newMemoryBlobs())
 	if err != nil {
 		t.Fatal(err)
 	}

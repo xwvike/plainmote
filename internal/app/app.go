@@ -38,7 +38,7 @@ func Run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	db, err := store.Open(ctx, cfg.DatabaseURL, cfg.TokenKey, blobs, cfg.AllowPrivateUpstream)
+	db, err := store.Open(ctx, cfg.DatabaseURL, cfg.TokenKey, blobs)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func Run() error {
 		TrustedProxies:   cfg.TrustedProxies,
 		RegistrationMode: cfg.RegistrationMode,
 		AnonymousEnabled: cfg.AnonymousEnabled,
-	}, db, upstream.New(cfg.AllowPrivateUpstream, cfg.MaxContent), auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
+	}, db, upstream.New(cfg.MaxContent), auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
 
 	fmt.Fprintf(os.Stderr, "listening on %s\n", cfg.Listen)
 	return serve(ctx, cfg.Listen, handler)

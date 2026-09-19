@@ -78,7 +78,7 @@ type resourceInput struct {
 	Content     []byte
 }
 
-func normalizeResourceInput(name, filename string, content []byte, contentEncoding, originURL string, allowPrivateUpstream bool) (resourceInput, error) {
+func normalizeResourceInput(name, filename string, content []byte, contentEncoding, originURL string) (resourceInput, error) {
 	filename = strings.TrimSpace(filename)
 	if err := validateFilename(filename); err != nil {
 		return resourceInput{}, err
@@ -89,7 +89,7 @@ func normalizeResourceInput(name, filename string, content []byte, contentEncodi
 		if err != nil {
 			return resourceInput{}, fmt.Errorf("parse remote link: %w", err)
 		}
-		if err := upstream.ValidateURL(parsed, allowPrivateUpstream); err != nil {
+		if err := upstream.ValidateURL(parsed); err != nil {
 			return resourceInput{}, err
 		}
 		content = nil
@@ -112,7 +112,7 @@ func normalizeResourceInput(name, filename string, content []byte, contentEncodi
 }
 
 func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename string, content []byte, contentEncoding, originURL string) (Resource, error) {
-	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
+	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL)
 	if err != nil {
 		return Resource{}, err
 	}
@@ -256,7 +256,7 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 		// the same object as an unrelated character set.
 		contentEncoding = current.ContentEncoding
 	}
-	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL, d.allowPrivateUpstream)
+	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL)
 	if err != nil {
 		return err
 	}

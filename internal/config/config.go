@@ -16,25 +16,24 @@ import (
 )
 
 type Config struct {
-	Listen               string
-	DatabaseURL          string
-	BlobEndpoint         string
-	BlobBucket           string
-	BlobRegion           string
-	BlobAccessKey        string
-	BlobSecretKey        string
-	PublicURL            string
-	AllowPrivateUpstream bool
-	AnonymousEnabled     bool
-	TrustedProxies       []netip.Prefix
-	SessionTTL           time.Duration
-	LogRetention         time.Duration
-	MaxContent           int64
-	GitHubID             string
-	GitHubSecret         string
-	AllowedIDs           map[string]bool
-	RegistrationMode     auth.RegistrationMode
-	TokenKey             []byte
+	Listen           string
+	DatabaseURL      string
+	BlobEndpoint     string
+	BlobBucket       string
+	BlobRegion       string
+	BlobAccessKey    string
+	BlobSecretKey    string
+	PublicURL        string
+	AnonymousEnabled bool
+	TrustedProxies   []netip.Prefix
+	SessionTTL       time.Duration
+	LogRetention     time.Duration
+	MaxContent       int64
+	GitHubID         string
+	GitHubSecret     string
+	AllowedIDs       map[string]bool
+	RegistrationMode auth.RegistrationMode
+	TokenKey         []byte
 }
 
 // Load reads deployment settings from the process environment. The service
@@ -95,10 +94,6 @@ func Load() (Config, error) {
 	// plenty of deployments of this are an internal tool where nobody outside
 	// should be able to put anything in at all.
 	cfg.AnonymousEnabled, err = parseBool("PLAINMOTE_ANONYMOUS", false)
-	if err != nil {
-		return Config{}, err
-	}
-	cfg.AllowPrivateUpstream, err = parseBool("PLAINMOTE_ALLOW_PRIVATE_UPSTREAM", false)
 	if err != nil {
 		return Config{}, err
 	}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -19,23 +20,20 @@ const defaultMaxBytes = 4 << 20
 const maxRedirects = 3
 
 type Client struct {
-	client       *http.Client
-	allowPrivate bool
-	maxBytes     int64
+	client   *http.Client
+	maxBytes int64
 }
 
-func New(allowPrivate bool, maxBytes int64) *Client {
+func New(maxBytes int64) *Client {
 	if maxBytes <= 0 {
 		maxBytes = defaultMaxBytes
 	}
-	u := &Client{allowPrivate: allowPrivate, maxBytes: maxBytes}
+	u := &Client{maxBytes: maxBytes}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	// A process-wide HTTP proxy would hide the actual upstream connection from
 	// the address check below. Upstream resources therefore connect directly.
 	transport.Proxy = nil
-	if !allowPrivate {
-		transport.DialContext = validatedDialContext
-	}
+	transport.DialContext = validatedDialContext
 	u.client = &http.Client{
 		Timeout:   15 * time.Second,
 		Transport: transport,
@@ -43,34 +41,54 @@ func New(allowPrivate bool, maxBytes int64) *Client {
 			if len(via) > maxRedirects {
 				return errors.New("too many redirects")
 			}
-			return ValidateURL(req.URL, u.allowPrivate)
+			return ValidateURL(req.URL)
 		},
 	}
 	return u
 }
 
-func ValidateURL(parsed *url.URL, allowPrivate bool) error {
+func ValidateURL(parsed *url.URL) error {
 	if parsed == nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil {
 		return errors.New("upstream URL must be HTTP(S) without user information")
 	}
-	if allowPrivate {
-		return nil
-	}
-	host := parsed.Hostname()
-	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") || strings.EqualFold(host, "metadata.google.internal") {
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || host == "metadata.google.internal" {
 		return errors.New("local upstream hosts are not allowed")
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if isPrivateIP(ip) {
-			return errors.New("private upstream addresses are not allowed")
+		if isNonPublicIP(ip) {
+			return errors.New("non-public upstream addresses are not allowed")
 		}
 		return nil
 	}
 	return nil
 }
 
-func isPrivateIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsInterfaceLocalMulticast()
+var additionalNonPublicPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+}
+
+// IsPrivate only covers RFC 1918 and IPv6 ULA space. Upstream access also
+// rejects addresses that are commonly routed inside deployments despite not
+// carrying that label, including shared address space used by overlay networks.
+func isNonPublicIP(ip net.IP) bool {
+	if !ip.IsGlobalUnicast() || ip.IsPrivate() {
+		return true
+	}
+	address, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return true
+	}
+	address = address.Unmap()
+	for _, prefix := range additionalNonPublicPrefixes {
+		if prefix.Contains(address) {
+			return true
+		}
+	}
+	return false
 }
 
 var upstreamDialer = net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
@@ -84,8 +102,8 @@ func validatedDialContext(ctx context.Context, network, address string) (net.Con
 		return nil, fmt.Errorf("parse upstream address: %w", err)
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if isPrivateIP(ip) {
-			return nil, errors.New("upstream resolved to a private address")
+		if isNonPublicIP(ip) {
+			return nil, errors.New("upstream resolved to a non-public address")
 		}
 		return upstreamDialer.DialContext(ctx, network, address)
 	}
@@ -98,8 +116,8 @@ func validatedDialContext(ctx context.Context, network, address string) (net.Con
 		return nil, errors.New("upstream host has no address")
 	}
 	for _, resolved := range addresses {
-		if isPrivateIP(resolved.IP) {
-			return nil, errors.New("upstream host resolves to a private address")
+		if isNonPublicIP(resolved.IP) {
+			return nil, errors.New("upstream host resolves to a non-public address")
 		}
 	}
 
@@ -119,7 +137,7 @@ func (u *Client) Fetch(ctx context.Context, rawURL string) ([]byte, string, erro
 	if err != nil {
 		return nil, "", fmt.Errorf("parse upstream URL: %w", err)
 	}
-	if err := ValidateURL(parsed, u.allowPrivate); err != nil {
+	if err := ValidateURL(parsed); err != nil {
 		return nil, "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)

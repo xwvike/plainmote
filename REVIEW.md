@@ -42,7 +42,7 @@ main
 - `/` 是首页，对登录与否呈现同一个页面；账号的资源列表在 `/resources/`。首页按登录状态变身
   会让爬虫和用户看到两个东西，这是有意避开的。
 - 首页不加载 `editor.js`，也不加载 CodeMirror bundle。那个框就是一个 `textarea`。
-- `PLAINMOTE_ANONYMOUS` 默认 `false`，和 `ALLOW_PRIVATE_UPSTREAM`、`REGISTRATION_MODE` 一样失败关闭。
+- `PLAINMOTE_ANONYMOUS` 默认 `false`，注册模式缺省为 `allowlist`，两项都失败关闭。
   关闭时 `/paste` 不注册进 mux——端点不存在，而不是存在但拒绝；`/` 也不渲染页面，
   未登录跳 `/login`，已登录跳 `/resources/`。首页的可索引例外和 `robots.txt` 的 `Allow: /$`
   都跟着这个开关走：`/` 只有在真是一个页面时才值得被找到。
@@ -169,7 +169,8 @@ resource.origin_url
   -> response size limit
 ```
 
-重点检查私网地址策略、每次重定向、DNS 解析后的最终拨号地址、禁用环境 HTTP 代理，以及响应 `Content-Type` 的安全降级和 `nosniff`。
+远程资源只允许公网 HTTP/HTTPS 地址，没有放行私网的配置或代码分支。重点检查原始地址、每次重定向、
+DNS 解析后的最终拨号地址、禁用环境 HTTP 代理，以及响应 `Content-Type` 的安全降级和 `nosniff`。
 
 请求头必须保持透明：`Accept` 是 `*/*`，不能写成对文本格式的偏好。那是内容协商，会让上游返回与该地址默认
 返回不同的东西——GitHub API 在收到排序过的 Accept 时会把缩进 JSON 压成单行。这条同时影响预览和公开地址，

@@ -2,13 +2,12 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	upstreamclient "plainmote/internal/upstream"
 )
 
 // TestRemoteResourceForwardsLive covers the whole point of a remote resource:
@@ -20,18 +19,15 @@ func TestRemoteResourceForwardsLive(t *testing.T) {
 	hits := 0
 	body := "rules:\n  - MATCH,DIRECT\n"
 	fail := false
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	source := upstreamFunc(func(_ context.Context, _ string) ([]byte, string, error) {
 		hits++
 		if fail {
-			http.Error(w, "boom", http.StatusInternalServerError)
-			return
+			return nil, "", errors.New("boom")
 		}
-		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
-		_, _ = w.Write([]byte(body))
-	}))
-	defer upstream.Close()
+		return []byte(body), "text/yaml; charset=utf-8", nil
+	})
 
-	resource, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", []byte("ignored"), "", upstream.URL+"/rules.yaml")
+	resource, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", []byte("ignored"), "", "https://upstream.example/rules.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +39,7 @@ func TestRemoteResourceForwardsLive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	app := &App{db: db, upstream: upstreamclient.New(true, 4<<20), cfg: Config{}}
+	app := &App{db: db, upstream: source, cfg: Config{}}
 
 	fetch := func() *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodGet, "https://cfg.test/d/"+longLived.Token+"/"+resource.Filename, nil)
@@ -95,17 +91,14 @@ func TestRemoteResourceForwardsLive(t *testing.T) {
 func TestRemotePreviewUsesUpstreamCharset(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=windows-1252")
-		_, _ = w.Write([]byte{'c', 'a', 'f', 0xe9, '\n'})
-	}))
-	defer upstream.Close()
-
-	resource, err := db.CreateResource(ctx, user.ID, "Legacy remote", "remote.txt", nil, "", upstream.URL)
+	resource, err := db.CreateResource(ctx, user.ID, "Legacy remote", "remote.txt", nil, "", "https://upstream.example/legacy.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	app := newTestApp(db, user.GitHubID)
+	app.upstream = upstreamFunc(func(_ context.Context, _ string) ([]byte, string, error) {
+		return []byte{'c', 'a', 'f', 0xe9, '\n'}, "text/plain; charset=windows-1252", nil
+	})
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -123,13 +116,7 @@ func TestRemotePreviewUsesUpstreamCharset(t *testing.T) {
 func TestRemoteExecutableContentCannotRunOnTheAdminOrigin(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte("<script>document.location='/logout'</script>"))
-	}))
-	defer upstream.Close()
-
-	resource, err := db.CreateResource(ctx, user.ID, "remote html", "page.html", nil, "", upstream.URL)
+	resource, err := db.CreateResource(ctx, user.ID, "remote html", "page.html", nil, "", "https://upstream.example/page.html")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +124,9 @@ func TestRemoteExecutableContentCannotRunOnTheAdminOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := &App{db: db, upstream: upstreamclient.New(true, 4<<20)}
+	app := &App{db: db, upstream: upstreamFunc(func(_ context.Context, _ string) ([]byte, string, error) {
+		return []byte("<script>document.location='/logout'</script>"), "text/html; charset=utf-8", nil
+	})}
 	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/d/"+share.Token+"/page.html", nil)
 	response := httptest.NewRecorder()
 	app.handlePublic(response, request)
@@ -156,12 +145,7 @@ func TestRemoteExecutableContentCannotRunOnTheAdminOrigin(t *testing.T) {
 func TestSwitchingBetweenLocalAndRemote(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("remote\n"))
-	}))
-	defer upstream.Close()
-
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, resource.Name, resource.Filename, []byte("still here\n"), "", upstream.URL); err != nil {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, resource.Name, resource.Filename, []byte("still here\n"), "", "https://upstream.example/resource"); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := db.ResourceForOwner(ctx, user.ID, resource.ID)

@@ -21,10 +21,16 @@ import (
 	"plainmote/internal/upstream"
 )
 
+type upstreamFunc func(context.Context, string) ([]byte, string, error)
+
+func (f upstreamFunc) Fetch(ctx context.Context, rawURL string) ([]byte, string, error) {
+	return f(ctx, rawURL)
+}
+
 func testDatabase(t *testing.T) (*store.Store, User, Resource) {
 	t.Helper()
 	ctx := context.Background()
-	db, err := store.Open(ctx, testDatabaseURL(t), bytes.Repeat([]byte{7}, 32), newMemoryBlobs(), true)
+	db, err := store.Open(ctx, testDatabaseURL(t), bytes.Repeat([]byte{7}, 32), newMemoryBlobs())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +86,7 @@ func newTestApp(db *store.Store, allowed ...string) *App {
 	for _, id := range allowed {
 		ids[id] = true
 	}
-	app := &App{db: db, upstream: upstream.New(true, 4<<20), cfg: Config{
+	app := &App{db: db, upstream: upstream.New(4 << 20), cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test", AllowedIDs: ids,
 		RegistrationMode: auth.RegistrationAllowlist, AnonymousEnabled: true,
 	}}

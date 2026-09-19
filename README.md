@@ -10,7 +10,7 @@ PlainMote 是一个使用 Go 编写的无状态资源分发服务。登录用户
 
 - PostgreSQL 保存用户、会话、资源元数据、分享规则和访问记录。
 - S3 兼容对象存储保存上传的资源正文，可直接使用 Cloudflare R2。
-- 远程资源只保存 HTTP/HTTPS URL；预览和公开访问都会实时请求上游。
+- 远程资源只保存公网 HTTP/HTTPS URL；预览和公开访问都会实时请求上游。回环、私网、链路本地地址及解析到这些地址的域名一律拒绝。
 - GitHub OAuth 负责登录，只有白名单中的 GitHub 数字用户 ID 可以进入。
 - Web 页面由 Go 模板和手写 CSS 构成，没有前端构建流程。
 - 服务不读取配置文件，全部部署参数来自环境变量。
@@ -104,7 +104,6 @@ Token 使用 256 位安全随机数生成。PostgreSQL 保存 SHA-256 查找索�
 | --- | --- | --- |
 | `PLAINMOTE_LISTEN` | `:8964` | HTTP 监听地址 |
 | `PLAINMOTE_BLOB_REGION` | `auto` | S3 区域 |
-| `PLAINMOTE_ALLOW_PRIVATE_UPSTREAM` | `false` | 是否允许引用私网地址 |
 | `PLAINMOTE_TRUSTED_PROXIES` | 空 | 可信代理 IP/CIDR，逗号分隔 |
 | `PLAINMOTE_SESSION_TTL` | `720h` | 登录会话有效期 |
 | `PLAINMOTE_MAX_CONTENT_MIB` | `4` | 单份内容大小上限 |

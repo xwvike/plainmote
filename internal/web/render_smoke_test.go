@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"plainmote/internal/store"
-	upstreamclient "plainmote/internal/upstream"
 )
 
 // TestAllPagesRender drives every signed-in page through the real router and
@@ -18,11 +17,6 @@ import (
 func TestAllPagesRender(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
-		_, _ = w.Write([]byte("rules:\n  - MATCH,PROXY\n"))
-	}))
-	t.Cleanup(upstream.Close)
 	if _, err := db.CreateShare(ctx, user.ID, resource.ID, "长期", 0, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +27,7 @@ func TestAllPagesRender(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	remote, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", nil, "", upstream.URL+"/rules.yaml")
+	remote, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", nil, "", "https://upstream.example/rules.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +44,10 @@ func TestAllPagesRender(t *testing.T) {
 	}
 
 	app := &App{
-		db:       db,
-		upstream: upstreamclient.New(true, 4<<20),
+		db: db,
+		upstream: upstreamFunc(func(_ context.Context, _ string) ([]byte, string, error) {
+			return []byte("rules:\n  - MATCH,PROXY\n"), "text/yaml; charset=utf-8", nil
+		}),
 		cfg: Config{
 			MaxContent:       4 << 20,
 			PublicURL:        "https://cfg.test",

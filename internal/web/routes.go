@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"html/template"
 	"io"
 	"net/http"
@@ -9,17 +10,20 @@ import (
 
 	"plainmote/internal/auth"
 	"plainmote/internal/store"
-	"plainmote/internal/upstream"
 )
 
 type App struct {
 	cfg       Config
 	db        *store.Store
-	upstream  *upstream.Client
+	upstream  upstreamFetcher
 	github    *auth.GitHub
 	templates *template.Template
 	handler   http.Handler
 	probes    probeLog
+}
+
+type upstreamFetcher interface {
+	Fetch(context.Context, string) ([]byte, string, error)
 }
 
 type User = store.User
@@ -37,7 +41,7 @@ type Config struct {
 	AnonymousEnabled bool
 }
 
-func New(cfg Config, db *store.Store, source *upstream.Client, github *auth.GitHub) *App {
+func New(cfg Config, db *store.Store, source upstreamFetcher, github *auth.GitHub) *App {
 	app := &App{cfg: cfg, db: db, upstream: source, github: github}
 	app.templates = app.templateSet()
 	app.handler = app.routes()
