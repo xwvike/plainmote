@@ -59,7 +59,7 @@ func TestRejectedUploadKeepsItsBody(t *testing.T) {
 	const body = "port: 7890\nmode: rule\n"
 	// A name the filename rule refuses, so the save fails after the file has
 	// already been read.
-	response := uploadResource(t, app, session, csrf, "配置", "配置 /../.yaml", body)
+	response := uploadResource(t, app, session, csrf, "配置", "配置/子目录.yaml", body)
 	if response.Code == http.StatusSeeOther {
 		t.Fatal("this filename must not be accepted")
 	}
@@ -73,8 +73,8 @@ func TestRejectedUploadKeepsItsBody(t *testing.T) {
 }
 
 // TestUploadedNameSurvivesTheRoundTrip pins the case that started this: the
-// browser hands over a file whose name is not ASCII, editor.js puts that name
-// in the field, and saving has to work.
+// browser hands over a file, editor.js puts its name in the field, and saving
+// has to work - in whatever script the name happens to be written in.
 func TestUploadedNameSurvivesTheRoundTrip(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
@@ -84,17 +84,26 @@ func TestUploadedNameSurvivesTheRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	response := uploadResource(t, app, session, csrf, "机场配置", "机场配置.yaml", "port: 7890\n")
-	if response.Code != http.StatusSeeOther {
-		t.Fatalf("a Chinese filename must be accepted, got %d: %s", response.Code, response.Body.String())
-	}
-
-	resources, _, err := db.ListResources(ctx, user.ID, "机场配置.yaml", 10, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(resources) != 1 || resources[0].Filename != "机场配置.yaml" {
-		t.Fatalf("the filename must be stored as given, got %+v", resources)
+	for _, filename := range []string{
+		"机场配置.yaml",
+		"設定ファイル.yaml",
+		"إعدادات.yaml",
+		"настройки.yaml",
+		"설정.yaml",
+		"my config (1).yaml",
+	} {
+		response := uploadResource(t, app, session, csrf, filename, filename, "port: 7890\n")
+		if response.Code != http.StatusSeeOther {
+			t.Errorf("%q must be accepted, got %d", filename, response.Code)
+			continue
+		}
+		resources, _, err := db.ListResources(ctx, user.ID, filename, 10, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(resources) != 1 || resources[0].Filename != filename {
+			t.Errorf("%q must be stored exactly as given, got %+v", filename, resources)
+		}
 	}
 }
 
@@ -114,7 +123,7 @@ func TestRefusedUpdateKeepsTheEditInProgress(t *testing.T) {
 	form := url.Values{
 		"csrf":             {csrf},
 		"name":             {resource.Name},
-		"filename":         {"bad\"name.yaml"},
+		"filename":         {"bad/name.yaml"},
 		"content":          {"answer=43\n"},
 		"content_encoding": {"utf-8"},
 		"content_eol":      {"lf"},

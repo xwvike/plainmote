@@ -149,16 +149,25 @@ func (a *App) recordAccess(r *http.Request, result store.ConsumeResult, outcome 
 // so a name that is not gets both forms RFC 6266 describes: the quoted one
 // with everything unrepresentable folded to an underscore, for a client that
 // reads only that, and the extended one beside it, which every current browser
-// and curl prefer. Control characters, quotes and path separators are refused
-// at the door, so the quoted form cannot end early or start a header of its own.
+// and curl prefer.
+//
+// The quoted form escapes rather than relies on the name having been narrowed:
+// a quote or a backslash is a perfectly ordinary character in a filename, and
+// keeping the header well formed is this function's job, not the validator's.
+// Control characters cannot reach here - validateFilename refuses them - but
+// they are folded too, so a header line can never be ended early from here.
 func contentDisposition(filename string) string {
 	var ascii strings.Builder
 	for _, r := range filename {
-		if r < 0x20 || r > 0x7e || r == '"' || r == '\\' {
+		switch {
+		case r == '"' || r == '\\':
+			ascii.WriteByte('\\')
+			ascii.WriteRune(r)
+		case r < 0x20 || r > 0x7e:
 			ascii.WriteByte('_')
-			continue
+		default:
+			ascii.WriteRune(r)
 		}
-		ascii.WriteRune(r)
 	}
 	fallback := ascii.String()
 	value := `inline; filename="` + fallback + `"`

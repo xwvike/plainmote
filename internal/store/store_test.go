@@ -254,21 +254,37 @@ func TestTokenCipherDoesNotStorePlaintext(t *testing.T) {
 func TestFilenameValidation(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	// What is refused is what would climb out of a path, end the quoted
-	// Content-Disposition field, or start a header of its own - plus a leading
-	// dash, which turns into an option for whatever the downloader runs next.
+	// This case is about names, not about how many a plan allows.
+	setPlanLimits(t, db, 500, 1<<20)
+	// Only what is actually hazardous: a path separator, a control character,
+	// a bidi control that makes a name render as something else, and the two
+	// directory entries.
 	for _, bad := range []string{
-		"../etc/passwd", "a/b.yaml", "a\\b", "-leading.yaml", ".hidden", "trailing.",
-		"quo\"te.yaml", "line\nbreak.yaml", strings.Repeat("名", 129) + ".yaml",
+		"a/b.yaml", "a\\b.yaml", "../etc/passwd", ".", "..",
+		"line\nbreak.yaml", "bell\a.yaml", "null\x00.yaml",
+		"photo\u202Egnp.exe", "mark\u200Fname.yaml", "isolate\u2066name.yaml",
+		strings.Repeat("名", 129) + ".yaml",
 	} {
 		if _, err := db.CreateResource(ctx, user.ID, "bad", bad, []byte("x"), "", ""); err == nil {
 			t.Errorf("filename %q should have been rejected", bad)
 		}
 	}
-	// Everything else is the user's own file, named however they name it.
+	// Everything else is the user's own file, named however they name it - in
+	// whatever script they write in.
 	for _, good := range []string{
 		"clash.yaml", "sing-box.json", "hosts.txt", "wg0.conf", "a.b.c", "A1_-+@.txt", "",
-		"机场配置.yaml", "my config.yaml", "a?b", "a#b", "config(1).yaml", "Ünïcode.txt",
+		"机场配置.yaml",             // Chinese
+		"設定ファイル.yaml",           // Japanese
+		"إعدادات.yaml",          // Arabic
+		"پیکربندی\u200Cها.yaml", // Persian, held together by a zero-width non-joiner
+		"настройки.yaml",        // Cyrillic
+		"설정.yaml",               // Korean
+		"Ünïcode.txt", "עברית.yaml", "ไทย.yaml",
+		"my config.yaml", "config(1).yaml", "a?b", "a#b", "100%.yaml",
+		"quo\"te.yaml",  // legal on Linux; the delivery header escapes it
+		"-leading.yaml", // legal; what a shell does with it is the shell's business
+		".env", "backup..2024.yaml", "trailing.",
+		"报告 📊.yaml",
 	} {
 		if _, err := db.CreateResource(ctx, user.ID, "ok", good, []byte("x"), "", ""); err != nil {
 			t.Errorf("filename %q should have been accepted: %v", good, err)

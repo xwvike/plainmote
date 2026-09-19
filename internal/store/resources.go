@@ -23,13 +23,26 @@ import (
 // bytes would give a Chinese name a third of the room an English one gets.
 const filenameMaxRunes = 128
 
-// validateFilename keeps a name safe to put in a URL tail and in a
-// Content-Disposition header. Everything printable is allowed - these are the
-// user's own files, and a Chinese name is as ordinary here as an English one -
-// and only the characters that would end the quoted header field, start a
-// header of their own, or look like a path are refused. The delivery header
-// carries non-ASCII names in the RFC 6266 extended form, so the character set
-// no longer has to be narrowed to keep that header well formed.
+// validateFilename refuses what is dangerous and nothing else. This is the
+// user's own file: Japanese, Arabic, Persian, emoji and spaces are all how
+// people name things, and none of them threaten anything here - the delivery
+// header carries non-ASCII in the RFC 6266 extended form and escapes the rest,
+// and the URL tail is percent-encoded.
+//
+// What is left out is genuinely hazardous rather than merely unusual:
+//
+//   - path separators, so a name can never steer where a downloader writes;
+//   - control characters, which would end a header line and begin one of the
+//     caller's own, and which a terminal may act on rather than print;
+//   - bidi controls, the one class of otherwise-printable character that makes
+//     a name render as something it is not - U+202E turns "photo\u202Egnp.exe"
+//     into "photoexe.png" in front of whoever received the link. Joiners are
+//     deliberately not in this set: U+200C is required to write Persian
+//     correctly, and U+200D holds emoji sequences together.
+//
+// "." and ".." are refused as whole names because they are directory entries,
+// not files. Inside a name those dots are ordinary, and without a separator
+// they cannot climb anywhere.
 func validateFilename(name string) error {
 	if name == "" {
 		return nil
@@ -40,25 +53,17 @@ func validateFilename(name string) error {
 	if utf8.RuneCountInString(name) > filenameMaxRunes {
 		return fmt.Errorf("文件名最长 %d 个字符", filenameMaxRunes)
 	}
-	if strings.Contains(name, "..") {
-		return errors.New("文件名不能包含 ..")
-	}
-	if name != strings.TrimSpace(name) || strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
-		return errors.New("文件名不能以空格或点开头或结尾")
-	}
-	// Whoever saves this with curl -O ends up with the name as an argument to
-	// whatever they run next, where a leading dash reads as an option.
-	if strings.HasPrefix(name, "-") {
-		return errors.New("文件名不能以 - 开头")
+	if name == "." || name == ".." {
+		return errors.New("文件名不能是 . 或 ..")
 	}
 	for _, r := range name {
 		switch {
-		case unicode.IsControl(r):
-			return errors.New("文件名不能包含控制字符")
 		case r == '/' || r == '\\':
 			return errors.New("文件名不能包含路径分隔符")
-		case r == '"':
-			return errors.New("文件名不能包含引号")
+		case unicode.IsControl(r):
+			return errors.New("文件名不能包含控制字符")
+		case unicode.Is(unicode.Bidi_Control, r):
+			return errors.New("文件名不能包含文字方向控制符，它会让名字显示成别的样子")
 		}
 	}
 	return nil
