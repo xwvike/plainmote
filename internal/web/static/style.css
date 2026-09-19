@@ -150,7 +150,7 @@ input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var
 .lr > span { font-size: 11px; font-weight: 500; color: var(--ink2); }
 .lr > em { margin-left: auto; font: 400 10.5px var(--mono); font-style: normal; color: var(--ink3); }
 .encoding-picker { display: inline-flex; align-items: center; gap: 5px; color: var(--ink3); font: 400 10.5px var(--mono); }
-.text-controls { display: inline-flex; align-items: center; gap: 8px; }
+.text-controls { display: inline-flex; max-width: 100%; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .encoding-picker select { width: auto; min-width: 124px; height: 22px; padding: 0 5px; font-size: 10.5px; }
 .eol-picker select { min-width: 0; }
 .encoding-reopen { font: 400 10.5px/1 var(--mono); }

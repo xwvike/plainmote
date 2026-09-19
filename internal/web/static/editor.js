@@ -516,7 +516,7 @@ function enhance(textarea) {
       let bytes = sourceBytes;
 
       if (!bytes && textarea.dataset.rawUrl) {
-        setUploadStatus(`正在按 ${encoding} 重新解码…`);
+        setUploadStatus(`正在通过 ${encoding} 重新打开…`);
         try {
           const response = await fetch(textarea.dataset.rawUrl, { cache: "no-store" });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -537,7 +537,7 @@ function enhance(textarea) {
       } catch (error) {
         if (version !== operationVersion) return;
         setEncoding(encoding, false);
-        setUploadStatus(`无法按 ${encoding} 解码，请更换编码。`);
+        setUploadStatus(`无法使用 ${encoding} 重新打开，请选择其他文件编码。`);
       }
     };
 
@@ -630,7 +630,7 @@ function enhance(textarea) {
           documentEdited = false;
           if (encodingSelect) encodingSelect.dataset.valid = "false";
           if (kind === "text") {
-            uploads.showText(file, `无法自动识别 ${file.name} 的编码，请选择编码后重新解码。`);
+            uploads.showText(file, `无法自动识别 ${file.name} 的文件编码，请选择文件编码，然后点「通过编码重新打开」。`);
           } else {
             uploads.showFile(file);
           }
@@ -645,7 +645,7 @@ function enhance(textarea) {
           documentEdited = false;
           if (encodingSelect) encodingSelect.dataset.valid = "false";
           if (kind === "text") {
-            uploads.showText(file, `${file.name} 无法按 ${encoding} 解码，请选择编码后重新解码。`);
+            uploads.showText(file, `${file.name} 无法使用 ${encoding} 重新打开，请选择其他文件编码，然后点「通过编码重新打开」。`);
           } else {
             uploads.showFile(file);
           }

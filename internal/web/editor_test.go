@@ -50,8 +50,11 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	if !strings.Contains(page, `aria-label="资源内容"`) {
 		t.Error("the editor source must provide an accessible name")
 	}
-	if !strings.Contains(page, `data-encoding-select aria-label="保存编码"`) || !strings.Contains(page, `data-reopen-encoding`) {
-		t.Error("the editor must separate its save encoding from explicit source decoding")
+	if !strings.Contains(page, `data-encoding-select aria-label="文件编码"`) ||
+		!strings.Contains(page, `data-reopen-encoding`) ||
+		!strings.Contains(page, `>通过编码重新打开</button>`) ||
+		!strings.Contains(page, `<span>行尾序列</span>`) {
+		t.Error("the editor must expose its file encoding, reopen, and end-of-line controls")
 	}
 	if !strings.Contains(page, `<script type="module" src="/static/editor.js">`) {
 		t.Error("the editor module must be linked")
