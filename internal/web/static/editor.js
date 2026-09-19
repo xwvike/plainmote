@@ -304,6 +304,7 @@ function enhance(textarea) {
   const encodingSelect = form ? form.querySelector("[data-encoding-select]") : null;
   const reopenEncoding = form ? form.querySelector("[data-reopen-encoding]") : null;
   const eolSelect = form ? form.querySelector("[data-eol-select]") : null;
+  const revert = form ? form.querySelector("[data-revert]") : null;
   const lineEnding = new Compartment();
   const host = document.createElement("div");
   host.className = "cm-host";
@@ -323,6 +324,13 @@ function enhance(textarea) {
     if (uploadStatus) uploadStatus.textContent = message;
   };
 
+  // There is nothing to revert to until something has been changed, and a
+  // "discard changes" button offered the moment a save lands reads as though
+  // the save did not take.
+  const markDirty = () => {
+    if (revert) revert.hidden = false;
+  };
+
   const updateReopenAvailability = () => {
     if (reopenEncoding) reopenEncoding.disabled = !sourceBytes && (!textarea.dataset.rawUrl || documentEdited);
   };
@@ -332,6 +340,7 @@ function enhance(textarea) {
   // source of truth and the form must submit its text instead of the file.
   const markContentForSave = (message, keepSourceBytes = false) => {
     editorDirty = true;
+    markDirty();
     operationVersion += 1;
     if (!keepSourceBytes) sourceBytes = null;
     if (upload && upload.files.length > 0) {
@@ -422,7 +431,17 @@ function enhance(textarea) {
   // the stylesheet means a thrown constructor leaves a working textarea behind.
   textarea.classList.add("cm-source");
 
+  // Same reason the revert link is hidden from here and not from the markup:
+  // a browser that never ran this module cannot tell whether the form has been
+  // touched, so it keeps the link it can still use.
+  if (revert) revert.hidden = true;
+
   if (form) {
+    // The editor reports its own edits through markContentForSave; this covers
+    // everything else on the form - the name, the filename, the pickers and
+    // the file input.
+    form.addEventListener("input", markDirty);
+    form.addEventListener("change", markDirty);
     // sliceDoc() joins with state.lineBreak, which the lineEnding compartment
     // owns. doc.toString() would hardcode LF and silently convert the whole
     // file - including every line the editor never touched.

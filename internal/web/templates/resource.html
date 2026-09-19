@@ -150,8 +150,19 @@
 
       <div class="savebar">
         <button type="submit" class="pri">{{if .IsNew}}创建资源{{else}}保存{{end}}</button>
-        <a class="btn" href="{{if .IsNew}}/{{else}}/resources/{{.Resource.ID}}{{end}}">{{if .IsNew}}取消{{else}}放弃修改{{end}}</a>
-        <span class="hint" style="margin-left:auto">{{if .IsNew}}创建后即可发起分享。{{else}}保存后立即对所有分享生效{{end}}</span>
+        {{if .IsNew}}
+        <a class="btn" href="/">取消</a>
+        <span class="hint live">创建后即可发起分享。</span>
+        {{else}}
+        <a class="btn" href="/resources/{{.Resource.ID}}" data-revert>放弃修改</a>
+        {{/* What is live right now, stated whenever the page is open rather than
+             announced once after a save. Saving changes this line, which is the
+             confirmation - no dialog, and nothing that disappears. */}}
+        <span class="st live {{if .Shares}}on{{else}}off{{end}}">
+          <i></i>
+          <span>{{if .Shares}}{{len .Shares}} 条分享正在提供{{if .Resource.Remote}} {{originHost .Resource.OriginURL}} 的实时内容{{else}} {{formatTime .Resource.UpdatedAt}} 的版本{{end}}{{else}}还没有分享，外面取不到它{{end}}</span>
+        </span>
+        {{end}}
       </div>
     </form>
 

@@ -21,6 +21,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Author display rules outrank the UA sheet, so any class that sets display -
+   .btn does - would keep an element with [hidden] on screen. */
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 400 13px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
 h1, h2, h3, p, dl, dd { margin: 0; }
 a { color: var(--accent); text-decoration: none; }
@@ -69,6 +72,10 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
    inside either, where it would read as saving only that column. */
 .savebar { display: flex; gap: 8px; align-items: center; padding: 10px 12px; background: var(--head); border: 1px solid var(--line); }
 .rform { display: grid; gap: 14px; align-content: start; }
+/* The save bar ends with a statement of what is live, not a note about what
+   saving would do. It is pushed to the far end so it reads as the bar's
+   outcome rather than as a label on the buttons. */
+.live { margin-left: auto; }
 
 input[type="text"], input[type="url"], input[type="search"], textarea, select {
   width: 100%; border: 1px solid var(--line2); border-radius: 0;

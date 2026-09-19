@@ -94,6 +94,10 @@ func TestAllPagesRender(t *testing.T) {
 		{"resource", "/resources/" + resource.ID, "查看分享"},
 		{"resource remote", "/resources/" + remote.ID, "远程地址"},
 		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "确认删除"},
+		// The save bar states what is live rather than what saving would do,
+		// so a save confirms itself by changing that line.
+		{"resource states what is live", "/resources/" + resource.ID, "条分享正在提供"},
+		{"unshared resource says so", "/resources/" + remote.ID, "还没有分享"},
 		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "expired"},
 	} {
 		response := get(tc.path)
