@@ -53,9 +53,10 @@ func TestAllPagesRender(t *testing.T) {
 		db:       db,
 		upstream: upstreamclient.New(true, 4<<20),
 		cfg: Config{
-			MaxContent: 4 << 20,
-			PublicURL:  "https://cfg.test",
-			AllowedIDs: map[string]bool{user.GitHubID: true},
+			MaxContent:       4 << 20,
+			PublicURL:        "https://cfg.test",
+			AnonymousEnabled: true,
+			AllowedIDs:       map[string]bool{user.GitHubID: true},
 		},
 	}
 	app.templates = app.templateSet()

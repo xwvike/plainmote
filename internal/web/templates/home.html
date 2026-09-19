@@ -2,8 +2,13 @@
 <html lang="zh-CN">
 <head>
   {{template "htmlhead" .}}
+  {{if .Anonymous}}
   <title>PlainMote - 粘贴内容，拿到一条会过期的链接</title>
   <meta name="description" content="把一段文本粘进来，得到一条最长 30 分钟后就失效的链接。不用注册，内容一律按纯文本提供。登录后可以长期保存资源，并为它发出多条互相独立、可随时撤销的地址。">
+  {{else}}
+  <title>PlainMote - 为你的资源发出可撤销的链接</title>
+  <meta name="description" content="上传或引用一份内容，为它生成互相独立的分享地址：各自维护有效期和使用次数，可以单独撤销，每一次访问都留下记录。">
+  {{end}}
 </head>
 <body>
   {{template "topbar" .}}

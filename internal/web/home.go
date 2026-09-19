@@ -52,7 +52,6 @@ func (a *App) homePage(r *http.Request) pageData {
 	data := pageData{
 		Active:       "home",
 		Indexable:    true,
-		Anonymous:    a.cfg.AnonymousEnabled,
 		BaseURL:      a.baseURL(r),
 		PasteTTL:     pasteTTLChoices[0].Value,
 		PasteChoices: pasteTTLChoices,

@@ -191,6 +191,14 @@ func TestAnonymousCanBeTurnedOff(t *testing.T) {
 	if !strings.Contains(page, "没有开放匿名分享") || !strings.Contains(page, "可撤销的链接") {
 		t.Fatal("the page must still say what this service is and how to get in")
 	}
+	// The parts of the page that describe the box have to go with it, or the
+	// tab and the navigation advertise something this deployment does not do.
+	if strings.Contains(page, "<title>PlainMote - 粘贴内容") {
+		t.Fatal("the title must not promise a box that is not there")
+	}
+	if strings.Contains(page, ">快速分享<") {
+		t.Fatal("the navigation must not name a feature that is off")
+	}
 
 	if posted := postPaste(t, app, url.Values{"content": {"x"}}, nil); posted.Code != http.StatusNotFound {
 		t.Fatalf("the endpoint must not exist, got %d", posted.Code)

@@ -164,6 +164,11 @@ func bytesText(value any) string {
 }
 
 func (a *App) renderTemplate(w http.ResponseWriter, status int, name string, data pageData) {
+	// A deployment-wide fact, set at the one place every page goes through
+	// rather than at each of the handlers that build a pageData. The top bar
+	// names the home page after it, and getting that from only some of them
+	// would leave the navigation disagreeing with itself.
+	data.Anonymous = a.cfg.AnonymousEnabled
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if status != http.StatusOK {
