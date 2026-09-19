@@ -35,7 +35,6 @@
     <form class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       {{if .IsNew}}<input type="hidden" name="kind" value="{{.NewKind}}">{{end}}
-      <div class="split one">
 
         <div class="panel panel-ed">
           <div class="pt">
@@ -109,7 +108,6 @@
           </div>
         </div>
 
-      </div>
 
       <div class="savebar">
         <button type="submit" class="pri">{{if .IsNew}}创建资源{{else}}保存{{end}}</button>

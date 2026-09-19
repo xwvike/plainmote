@@ -75,30 +75,11 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
 .pb { padding: 12px; display: grid; gap: 12px; }
 .pf { padding: 10px 12px; border-top: 1px solid var(--line); background: var(--head); }
 
-/* The resource page runs two columns: the content surface takes the width it
-   now needs, and the resource's own identity and metadata sit beside it in a
-   fixed narrow column. minmax(0, 1fr) rather than 1fr, or a long unbroken line
-   in the editor widens the grid track instead of scrolling inside it. */
-.split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; }
-/* Creating something has no narrow column: there is no resource to carry
-   metadata about yet, and the fields that do exist are optional enough to
-   ride in the save bar. The column comes back once there is a resource. */
-.split.one { grid-template-columns: minmax(0, 1fr); }
 /* A labelled control on one line, for the save bar and the panel header. */
 .pick { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .pick > span { font-size: 11px; font-weight: 500; color: var(--ink2); }
 .pickfile { width: auto; font-size: 11px; }
 .pickfile::file-selector-button { height: 22px; padding: 0 8px; font-size: 11px; }
-/* The narrow column sizes to its own fields and metadata, and the row takes its
-   height from whichever side needs more, so it is the content column that
-   absorbs the difference. Left to itself the sidebar hangs past the bottom of
-   the panel beside it, which reads as a misalignment rather than as a column.
-   align-self keeps it at the top: it is sticky, and a stretched sticky element
-   has nothing to slide against. */
-.side { display: grid; gap: 14px; position: sticky; top: 16px; align-self: start; }
-/* Save commits the whole form - the name and filename live in the narrow
-   column, the body in the wide one - so the bar spans both rather than sitting
-   inside either, where it would read as saving only that column. */
 .savebar { display: flex; gap: 8px; align-items: center; padding: 10px 12px; background: var(--head); border: 1px solid var(--line); }
 /* Hidden from the stylesheet so it never paints before the module can hide it -
    every save is a fresh page, and the flash was visible. The no-script case is
@@ -107,7 +88,9 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
    relying on where it sits in this file. */
 .savebar [data-revert] { display: none; }
 .savebar [data-revert].show { display: inline-flex; }
-.rform { display: grid; gap: 14px; align-content: start; }
+/* minmax(0, 1fr) rather than the implicit auto track: a long unbroken line in
+   the editor would otherwise widen the column instead of scrolling inside it. */
+.rform { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; }
 
 /* The home page. One claim, one box, one button - and below the fold, what the
    rest of the service is, which is the only text here a search engine has to
@@ -336,22 +319,17 @@ details.pan[open] .chev { transform: rotate(90deg); }
 /* The content column keeps the same height across every state it has - an
    editor, a read-only preview, a not-yet-pulled address, a notice. Without
    this the page collapses to a strip whenever there is nothing to show, and
-   jumps back out again once there is. */
-/* Same height whatever the panel is showing - an editor, a read-only preview,
-   an address not yet pulled, a notice - so the page does not jump between
-   them. Only a minimum here: the states that are not the editor are short. */
+   jumps back out again once there is. A minimum, not a height: the editor
+   above sets its own, and the other states are short. */
 .panel-ed > .pb { min-height: var(--edh); align-content: start; }
 
-/* Below the fixed column the page goes fluid and the split stacks. The narrow
-   column is second in the DOM, so stacked it lands under the content - which is
-   the right order here: the body is what the page is for. */
+/* Below the fixed column width the page goes fluid: the shell stops being a
+   centred column and takes the viewport, less a margin. */
 @media (max-width: 1180px) {
   :root { --col: 100%; }
   .tell { grid-template-columns: minmax(0, 1fr); }
   .topin { width: calc(100% - 20px); }
   .page { width: calc(100% - 20px); padding-top: 12px; }
-  .split { grid-template-columns: minmax(0, 1fr); }
-  .side { position: static; }
 }
 
 @media (max-width: 900px) {
