@@ -82,7 +82,7 @@ func newTestApp(db *store.Store, allowed ...string) *App {
 	}
 	app := &App{db: db, upstream: upstream.New(true, 4<<20), cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test", AllowedIDs: ids,
-		RegistrationMode: auth.RegistrationAllowlist,
+		RegistrationMode: auth.RegistrationAllowlist, AnonymousEnabled: true,
 	}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()

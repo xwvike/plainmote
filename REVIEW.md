@@ -42,6 +42,8 @@ main
 - `/` 是首页，对登录与否呈现同一个页面；账号的资源列表在 `/resources/`。首页按登录状态变身
   会让爬虫和用户看到两个东西，这是有意避开的。
 - 首页不加载 `editor.js`，也不加载 CodeMirror bundle。那个框就是一个 `textarea`。
+- `PLAINMOTE_ANONYMOUS` 默认 `false`，和 `ALLOW_PRIVATE_UPSTREAM`、`REGISTRATION_MODE` 一样失败关闭。
+  关闭时 `/paste` 不注册进 mux——端点不存在，而不是存在但拒绝。
 - `POST /paste` 没有 CSRF token（没有会话可挂），改用 `Origin` 同源校验；缺少 `Origin` 的请求
   （curl、老浏览器）放行，因为那不是被驱动的浏览器该有的样子。
 - 服务整体不可索引，**首页除外**。响应头的例外和 `htmlhead` 里 meta 的例外必须同时成立，

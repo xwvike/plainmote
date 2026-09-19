@@ -52,6 +52,7 @@ func (a *App) homePage(r *http.Request) pageData {
 	data := pageData{
 		Active:       "home",
 		Indexable:    true,
+		Anonymous:    a.cfg.AnonymousEnabled,
 		BaseURL:      a.baseURL(r),
 		PasteTTL:     pasteTTLChoices[0].Value,
 		PasteChoices: pasteTTLChoices,
@@ -68,6 +69,10 @@ func (a *App) renderHome(w http.ResponseWriter, r *http.Request, data pageData, 
 }
 
 func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
+	if !a.cfg.AnonymousEnabled {
+		writePlainError(w, http.StatusNotFound, "not found")
+		return
+	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")

@@ -34,6 +34,7 @@ type Config struct {
 	AllowedIDs       map[string]bool
 	TrustedProxies   []netip.Prefix
 	RegistrationMode auth.RegistrationMode
+	AnonymousEnabled bool
 }
 
 func New(cfg Config, db *store.Store, source *upstream.Client, github *auth.GitHub) *App {
@@ -64,6 +65,9 @@ type pageData struct {
 	// header carries the same exception; both have to agree or the meta tag
 	// quietly undoes it.
 	Indexable bool
+	// Anonymous is whether this deployment takes pastes from anyone at all.
+	// With it off the home page is what the service is, and nothing more.
+	Anonymous bool
 
 	// The home page, both halves of it: the form as it was submitted when a
 	// paste was refused, and the address when one was made.
@@ -148,7 +152,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/logs", a.handleLogs)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc("/robots.txt", a.handleRobots)
-	mux.HandleFunc(pastePath, a.handlePaste)
+	// Not registered at all when it is off, so the endpoint does not exist
+	// rather than existing and refusing.
+	if a.cfg.AnonymousEnabled {
+		mux.HandleFunc(pastePath, a.handlePaste)
+	}
 	mux.HandleFunc("/", a.handleHome)
 	return noIndex(mux)
 }

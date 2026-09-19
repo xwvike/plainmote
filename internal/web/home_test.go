@@ -168,3 +168,31 @@ func findDeliveryAddress(t *testing.T, page string) string {
 	}
 	return rest
 }
+
+// TestAnonymousCanBeTurnedOff is what makes this deployable by someone who
+// does not want an open write endpoint at all. The switch has to remove the
+// endpoint rather than leave it there refusing, and the page has to still be a
+// page.
+func TestAnonymousCanBeTurnedOff(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	app := &App{db: db, cfg: Config{PublicURL: "https://cfg.test", AllowedIDs: map[string]bool{user.GitHubID: true}}}
+	app.templates = app.templateSet()
+	app.handler = app.routes()
+
+	home := httptest.NewRecorder()
+	app.handler.ServeHTTP(home, httptest.NewRequest(http.MethodGet, "https://cfg.test/", nil))
+	if home.Code != http.StatusOK {
+		t.Fatalf("the home page must still open, got %d", home.Code)
+	}
+	page := home.Body.String()
+	if strings.Contains(page, `action="/paste"`) {
+		t.Fatal("no box when the deployment does not take pastes")
+	}
+	if !strings.Contains(page, "没有开放匿名分享") || !strings.Contains(page, "可撤销的链接") {
+		t.Fatal("the page must still say what this service is and how to get in")
+	}
+
+	if posted := postPaste(t, app, url.Values{"content": {"x"}}, nil); posted.Code != http.StatusNotFound {
+		t.Fatalf("the endpoint must not exist, got %d", posted.Code)
+	}
+}

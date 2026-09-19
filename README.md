@@ -40,6 +40,11 @@ Token 是唯一的路由依据；文件名只用于下载名称和类型提示�
 
 `/` 是任何人都能打开的页面：粘一段文本，选一个有效期，拿到一条链接。不需要账号。
 
+这项功能默认关闭，要开需要 `PLAINMOTE_ANONYMOUS=true`。和这里其他放宽限制的开关一样，
+它失败关闭：开放写入端点是一个决定，不是默认值——把本项目当内部工具部署的场景里，
+外面的人本来就不该能往里放东西。关闭时 `/paste` 根本不存在（不是存在但拒绝），
+首页变成介绍加一个登录入口。
+
 匿名内容有三条硬限制，都在 store 层，构造请求绕不过去：链接必须过期，默认 1 分钟、最长 30 分钟；
 正文最大 128 KiB；无论文件名叫什么，一律以 `text/plain; charset=utf-8` 交付。最后一条是滥用边界——
 它让这里没法被用来在这个域名上挂页面。链接到期后，正文和记录由 `Prune` 一起回收。
@@ -97,6 +102,7 @@ Token 使用 256 位安全随机数生成。PostgreSQL 保存 SHA-256 查找索�
 | `PLAINMOTE_MAX_CONTENT_MIB` | `4` | 单份内容大小上限 |
 | `PLAINMOTE_LOG_RETENTION` | `720h` | 访问记录保留时长，`0` 表示永久保留 |
 | `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | 新用户注册策略：`open`、`allowlist` 或 `closed` |
+| `PLAINMOTE_ANONYMOUS` | `false` | 是否开放首页的匿名分享 |
 | `GITHUB_ALLOWED_IDS` | 空 | `allowlist` 模式下允许注册的 GitHub 数字用户 ID，逗号分隔 |
 
 OAuth 只负责确认 GitHub 身份。注册策略只应用于数据库中尚不存在的新用户：`open` 允许注册，

@@ -10,8 +10,13 @@
   <main class="page">
 
     <div class="lede">
+      {{if .Anonymous}}
       <h1>粘贴内容，拿到一条会过期的链接</h1>
       <p>不用注册。内容以纯文本提供，链接到期即失效。</p>
+      {{else}}
+      <h1>为你的资源发出可撤销的链接</h1>
+      <p>上传或引用一份内容，为它生成互相独立的地址，随时撤销，每次访问都有记录。</p>
+      {{end}}
     </div>
 
     {{if .PasteURL}}
@@ -37,7 +42,7 @@
       {{if not .SignedIn}}<span class="hint live">想长期保留并随时改内容？<a href="/login">登录</a>之后可以。</span>{{end}}
     </div>
 
-    {{else}}
+    {{else if .Anonymous}}
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
     <form method="post" action="/paste">
       {{/* A plain .panel, not .panel-ed: that one carries the resource editor's
@@ -71,9 +76,17 @@
         </span>
       </div>
     </form>
+
+    {{else}}
+    <div class="savebar">
+      {{if .SignedIn}}<a class="btn pri" href="/resources/">打开我的资源</a>
+      {{else}}<a class="btn pri" href="/login">用 GitHub 登录</a>{{end}}
+      <span class="hint live">这个部署没有开放匿名分享。</span>
+    </div>
     {{end}}
 
     <div class="tell">
+      {{if .Anonymous}}
       <section>
         <h2>临时传递，不是存储</h2>
         <p>链接最长 30 分钟。到期后内容和地址一起消失，不留副本，也没有备份可以翻出来。
@@ -84,10 +97,22 @@
         <p>不管文件名叫什么，取回来的都是 <code>text/plain</code>。
            所以这里不能用来在这个域名上挂一个页面——这是有意的，不是还没做。</p>
       </section>
+      {{else}}
       <section>
-        <h2>需要保留？登录之后可以</h2>
+        <h2>一份内容，多条独立的地址</h2>
+        <p>每条分享各自维护有效期、使用次数和撤销状态，互不影响。
+           撤销一条，其余照常；改一次内容，所有还活着的地址同时生效。</p>
+      </section>
+      <section>
+        <h2>地址就是全部凭据</h2>
+        <p>链接里除了 Token 什么都没有，看不出指向什么、属于谁。
+           Token 以密文保存，每一次取用都留下记录。</p>
+      </section>
+      {{end}}
+      <section>
+        <h2>{{if .Anonymous}}需要保留？登录之后可以{{else}}登录之后开始{{end}}</h2>
         <p>资源长期保存、随时改内容、一份资源可以发出多条互相独立、能单独撤销的地址，
-           每一次访问都留下记录。首页这个框子是它最小的那一块。</p>
+           每一次访问都留下记录。{{if .Anonymous}}首页这个框子是它最小的那一块。{{end}}</p>
         <p class="hint">{{if .SignedIn}}<a href="/resources/">打开我的资源 →</a>{{else}}<a href="/login">用 GitHub 登录 →</a>{{end}}</p>
       </section>
     </div>

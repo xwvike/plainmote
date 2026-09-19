@@ -53,6 +53,7 @@ func Run() error {
 		AllowedIDs:       cfg.AllowedIDs,
 		TrustedProxies:   cfg.TrustedProxies,
 		RegistrationMode: cfg.RegistrationMode,
+		AnonymousEnabled: cfg.AnonymousEnabled,
 	}, db, upstream.New(cfg.AllowPrivateUpstream, cfg.MaxContent), auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
 
 	fmt.Fprintf(os.Stderr, "listening on %s\n", cfg.Listen)

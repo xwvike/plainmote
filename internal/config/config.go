@@ -25,6 +25,7 @@ type Config struct {
 	BlobSecretKey        string
 	PublicURL            string
 	AllowPrivateUpstream bool
+	AnonymousEnabled     bool
 	TrustedProxies       []netip.Prefix
 	SessionTTL           time.Duration
 	LogRetention         time.Duration
@@ -89,6 +90,14 @@ func Load() (Config, error) {
 		return Config{}, errors.New("PLAINMOTE_PUBLIC_URL must be an absolute HTTP(S) origin without a path")
 	}
 
+	// Off unless asked for, like every other switch here that widens what the
+	// service accepts. An open write endpoint is a decision, not a default:
+	// plenty of deployments of this are an internal tool where nobody outside
+	// should be able to put anything in at all.
+	cfg.AnonymousEnabled, err = parseBool("PLAINMOTE_ANONYMOUS", false)
+	if err != nil {
+		return Config{}, err
+	}
 	cfg.AllowPrivateUpstream, err = parseBool("PLAINMOTE_ALLOW_PRIVATE_UPSTREAM", false)
 	if err != nil {
 		return Config{}, err
