@@ -43,15 +43,15 @@
                  exists the panel is what that address returns. */}}
             <span class="sec">{{if and .IsNew $remote}}远程地址{{else}}内容{{end}}</span>
             {{if and $remote (not .IsNew)}}<span class="tag">只读</span>{{end}}
+            {{if not $remote}}
+            {{/* Next to the title, because this is how the content gets in -
+                 the pickers on the right are about how it is stored. The status
+                 follows the control that produces it: it is the only line in
+                 this flow that says out loud what just happened. */}}
+            <input type="file" name="upload" aria-label="{{if .IsNew}}从文件载入内容{{else}}替换文件{{end}}" data-upload data-max-bytes="{{.MaxContent}}" class="pickfile">
+            <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
+            {{end}}
             <span class="sp">
-              {{if not $remote}}
-              {{/* Filling the box from a file is one way in, beside typing -
-                   not a kind of resource. The status sits next to the control
-                   that produces it, because it is the only line in this flow
-                   that says out loud what just happened. */}}
-              <input type="file" name="upload" aria-label="{{if .IsNew}}从文件载入内容{{else}}替换文件{{end}}" data-upload data-max-bytes="{{.MaxContent}}" class="pickfile">
-              <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
-              {{end}}
               {{if and (not $remote) (or .Resource.Editable .IsNew)}}
               <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="保存编码" title="保存时写入的文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
               <button type="button" class="sm encoding-reopen" data-reopen-encoding title="按所选编码重新解码原始文件，会替换编辑器中的内容">重新解码</button>

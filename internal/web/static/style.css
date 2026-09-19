@@ -66,6 +66,10 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
 .panel { background: var(--panel); border: 1px solid var(--line); }
 .pt { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--line); background: var(--head); }
 .pt .sp { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+/* The upload status can run long. Let the header wrap rather than squeeze the
+   pickers, so nothing it says has to be cut. */
+.panel-ed > .pt { flex-wrap: wrap; }
+.panel-ed > .pt .upload-status { min-width: 0; }
 .panel-ed > .pt .sp { min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
 .sec { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
 .pb { padding: 12px; display: grid; gap: 12px; }
