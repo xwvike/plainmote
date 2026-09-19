@@ -76,7 +76,7 @@
                   <input id="origin_url" type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" placeholder="https://example.com/clash.yaml" required autofocus>
                   <button type="submit" name="action" value="preview" formnovalidate title="读取上游内容，不保存">拉取</button>
                 </span>
-                <span class="fhint">每次访问实时回源转发，内容不落库。文件名只决定下载名，类型取自上游。</span>
+                <span class="fhint">每次访问实时回源，不保存副本。</span>
               </div>
               <input type="hidden" name="filename" value="{{.Resource.Filename}}">
               {{end}}
@@ -84,9 +84,9 @@
               {{if .UpstreamTextPreview}}
               <textarea rows="18" spellcheck="false" disabled aria-label="资源内容" data-preview data-filename="{{.Resource.Filename}}" data-content-type="{{.UpstreamType}}">{{.UpstreamText}}</textarea>
               {{else if .UpstreamType}}
-              <p class="ro">上游返回的是非文本内容，这里不做预览。公开地址会原样转发。</p>
+              <p class="ro">非文本内容，不做预览。</p>
               {{else if not .UpstreamError}}
-              <p class="ro">填入地址后点「拉取」，这里会显示上游此刻返回的内容。拉取不保存任何东西。</p>
+              <p class="ro">点「拉取」看上游现在返回什么。</p>
               {{end}}
             {{else if .Resource.Editable}}
             <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
@@ -104,13 +104,10 @@
               {{else if hasPrefix .Resource.ContentType "video/"}}
               <video controls src="/resources/{{.Resource.ID}}/raw" style="max-width:100%;max-height:520px"></video>
               {{else}}
-              <p class="ro">这类内容不能在线编辑，只能整份替换：用上面的「选择文件」换一个。</p>
+              <p class="ro">不能在线编辑，用上面的「选择文件」整份替换。</p>
               {{end}}
             {{end}}
           </div>
-          {{if $remote}}
-          <div class="pf"><p class="hint">引用地址不能在线编辑，但照样高亮和搜索。上游不可达时公开地址返回 502，并记进访问记录；这里不缓存任何内容。</p></div>
-          {{end}}
         </div>
 
       </div>
@@ -181,7 +178,7 @@
           {{end}}
         </ul>
         {{else}}
-        <p class="ro">还没有分享，外面取不到它。按「新建分享」立刻得到一条可以发出去的地址。</p>
+        <p class="ro">还没有分享，外面取不到它。</p>
         {{end}}
       </div>
     </div>
@@ -247,8 +244,8 @@
       <a class="x" href="/resources/{{.Resource.ID}}" aria-label="关闭">&times;</a>
     </header>
     <div class="body">
-      <p class="ro">资源本身、它的正文和 {{len .Shares}} 条进行中的分享会一起删掉，对方手里的链接立刻失效。这一步没有撤销。</p>
-      <p class="hint">访问记录会留下，删除后仍然可以在日志里按这个名字查到。</p>
+      <p class="ro">连同正文和 {{len .Shares}} 条分享一起删掉，对方手里的链接立刻失效。不可撤销。</p>
+      <p class="hint">访问记录会留下。</p>
     </div>
     <footer>
       <form method="post" action="/resources/{{.Resource.ID}}" class="inline">
