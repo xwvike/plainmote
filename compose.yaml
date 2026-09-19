@@ -7,11 +7,7 @@ services:
     image: plainmote:local
     restart: unless-stopped
     init: true
-    # Loopback by default. This service is meant to sit behind a tunnel, and a
-    # published port on every interface is a way straight past it - whoever
-    # finds the host reaches the app without the rate limiting and the filtering
-    # that the edge is carrying. Override the bind address only to put something
-    # else in front of it.
+    # Loopback by default; set PLAINMOTE_BIND to 0.0.0.0 to publish wider.
     ports:
       - "${PLAINMOTE_BIND:-127.0.0.1}:${PLAINMOTE_PORT:-8964}:8964"
     read_only: true
