@@ -145,12 +145,19 @@ POST /resources/{id}/share
   -> internal/store/shares.go
 
 GET /d/{token}/{filename}
-  -> ConsumeToken transaction
-  -> S3 Open or upstream Fetch
+  -> ResumeDelivery grant or ConsumeToken transaction
+  -> S3 Open/OpenRange or upstream Fetch
   -> access_logs
 ```
 
 分享次数通过 PostgreSQL 条件 `UPDATE ... RETURNING` 原子扣除。需要明确接受或调整“正文读取前扣除次数”的产品语义。
+单段 `Range: bytes=...` 对所有资源类型使用同一套处理；本地对象必须调用 S3 `OpenRange`，不能先读取完整对象再
+截取。多段 Range 返回 416，不在 Go 内存中拼装 multipart 响应。首次请求扣除一次分享次数并得到一小时有效的
+加密续传 Cookie；后续请求验证 Cookie、Token、分享 ID、到期和撤销状态，继续逐条记录访问，但不重复扣次数。
+这是所有文件共用的交付会话语义，不能按媒体类型绕过计数。
+交付响应的 CSP 保持 `sandbox` 和 `default-src 'none'`，但必须有 `allow-same-origin` 和 `media-src 'self'`。
+Chrome 直接打开音频或视频时会生成一个带 `crossorigin=anonymous` 的同源 `<source>`；不保留同源身份或不允许
+媒体源，都会出现播放器外壳却无法载入正文。这里仍未加入 `allow-scripts`，不会放开脚本执行。
 
 ### 远程资源
 
@@ -193,11 +200,19 @@ internal/web/static/editor.js
   没有 `name`、带 `disabled`，不进表单；`preview()` 里不能出现任何写回表单或产生待提交字节的逻辑。
 - 预览开 `EditorView.lineWrapping`，编辑器不开。这是有意的不对称：预览回答「这个地址是什么」，
   对齐浏览器的软换行；编辑器沿用代码编辑器惯例。不要为了一致把两边统一。
-- 资源页是双栏：宽栏是内容，窄栏 `.side` 是名称、文件名和元信息。保存横跨两栏放在 `.savebar`，
-  因为它提交的是整个 form。`.panel-ed > .pb` 的去内边距由 `:has(> .cm-host)` 把关，
-  没跑起编辑器的浏览器必须仍然拿到有内边距的 textarea。
+- 资源页是单栏。内容面板下面的 `.savebar` 提交整个 form；名称、文件名等字段也放在这里。
+  `.panel-ed > .pb` 的去内边距由当前可见的编辑器或媒体预览把关，没跑起编辑器的浏览器必须仍然拿到
+  有内边距的 textarea。
 - 加载 `editor.js` 的只有两种页面：可在线编辑的资源，以及上游返回文本、`UpstreamTextPreview` 为真的
   远程资源。非文本资源和取不到上游内容的远程资源都不能下载 CodeMirror bundle。
+- 本地资源页加载轻量的 `upload.js`。它负责文件名建议、大小提示、文件分类和媒体预览；图片、音频和视频
+  使用 Object URL，不能为了预览读取完整文件。`editor.js` 只订阅文本和未知类型的文件，识别为二进制后
+  必须交还给普通文件预览。媒体与普通文件状态下必须隐藏编码和行尾控件。音视频使用 `preload="metadata"`；
+  视频元数据就绪后只 seek 到 `0.001s` 触发首帧解码，不能改成自动播放或整段预载。
+- 已有资源用 `.resource-detail` 单独缩短内容区；没有分享和仅有一条分享时分别用 `:has()` 校正高度，让整个页面
+  留在首屏且不出现纵向滚动条，多条分享则保留更高的编辑区域并允许页面滚动。新建页没有分享区，继续使用
+  较大的默认高度。`resource.js` 拦截“新建分享”，POST 成功后只替换 `data-share-status` 和 `data-share-panel`。
+  失败恢复只能发 GET 刷新页面，不能自动重试 POST，否则响应丢失时可能重复创建分享。
 - 表单提交前由 `editor.js` 把内容写回 textarea；CSRF、字段名和大小校验都不经过 JavaScript。
 - 选择文本文件后，编辑器必须立即自动识别编码并显示内容。编码下拉框表示保存格式；识别不准时，用户选择
   编码后必须再点「重新解码」，才能按该编码解释原始字节。未修改时上传和已有资源必须保留原始字节；修改

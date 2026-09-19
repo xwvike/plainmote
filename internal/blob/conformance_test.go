@@ -37,6 +37,25 @@ func RunStoreContract(t *testing.T, store Store) {
 		}
 	})
 
+	t.Run("range reads only requested bytes", func(t *testing.T) {
+		key := "contract/range"
+		if err := store.Put(ctx, key, strings.NewReader("0123456789"), 10); err != nil {
+			t.Fatal(err)
+		}
+		reader, size, err := store.OpenRange(ctx, key, 2, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer reader.Close()
+		got, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if size != 4 || string(got) != "2345" {
+			t.Fatalf("range returned size %d and %q, want 4 and %q", size, got, "2345")
+		}
+	})
+
 	t.Run("empty object is allowed", func(t *testing.T) {
 		key := "contract/empty"
 		if err := store.Put(ctx, key, strings.NewReader(""), 0); err != nil {

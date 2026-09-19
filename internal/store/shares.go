@@ -257,6 +257,45 @@ RETURNING id, resource_id, name
 	return result, err
 }
 
+// ResumeDelivery validates a short-lived grant issued after a counted use.
+// The use limit is intentionally not checked again: one browser navigation can
+// require several HTTP and Range requests. Expiry and revocation are checked
+// on every request so the owner can still stop an in-progress grant.
+func (d *Store) ResumeDelivery(ctx context.Context, token, grant string, now time.Time) (ConsumeResult, bool, error) {
+	linkID, ok := d.openDeliveryGrant(token, grant, now)
+	if !ok {
+		return ConsumeResult{}, false, nil
+	}
+	var result ConsumeResult
+	var linkName string
+	err := d.db.QueryRow(ctx, `
+SELECT l.name,
+       r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size,
+       r.content_type, r.content_encoding, r.origin_url
+FROM links l
+JOIN resources r ON r.id = l.resource_id
+WHERE l.id = $1 AND l.token_hash = $2
+  AND l.revoked_at IS NULL
+  AND (l.expires_at IS NULL OR l.expires_at > $3)
+`, linkID, hashToken(token), now).Scan(
+		&linkName,
+		&result.Resource.ID, &result.Resource.OwnerID, &result.Resource.Name,
+		&result.Resource.Filename, &result.Resource.ContentKey, &result.Resource.ContentSize,
+		&result.Resource.ContentType, &result.Resource.ContentEncoding, &result.Resource.OriginURL,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ConsumeResult{}, false, nil
+	}
+	if err != nil {
+		return ConsumeResult{}, false, err
+	}
+	result.Allowed = true
+	result.LinkID = linkID
+	result.LinkName = displayLinkName(linkName)
+	result.Reason = OutcomeSuccess
+	return result, true, nil
+}
+
 func (d *Store) recordRefusalTx(ctx context.Context, tx pgx.Tx, hash string, meta RequestMeta, now time.Time, result *ConsumeResult) error {
 	var linkID, resourceID, name, ownerID, resourceName, resourceFile string
 	var expires, revoked pgtype.Timestamptz

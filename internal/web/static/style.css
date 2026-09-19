@@ -56,6 +56,17 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
 .who { font: 400 11.5px var(--mono); color: var(--ink2); }
 
 .page { width: var(--col); margin: 0 auto; padding: 16px 0 32px; display: grid; gap: 14px; align-content: start; }
+/* Leave enough of an existing resource's first viewport for the save bar and
+   at least one share row. New resources have no share panel yet and retain the
+   roomier editor height above. */
+.resource-detail { --edh: clamp(270px, calc(100vh - 390px), 630px); }
+.resource-detail:has([data-share-panel] .shl > li:only-child) { --edh: clamp(270px, calc(100vh - 396px), 630px); }
+.resource-detail:not(:has([data-share-panel] .shl > li)) { --edh: clamp(270px, calc(100vh - 406px), 630px); }
+@supports (height: 100dvh) {
+  .resource-detail { --edh: clamp(270px, calc(100dvh - 390px), 630px); }
+  .resource-detail:has([data-share-panel] .shl > li:only-child) { --edh: clamp(270px, calc(100dvh - 396px), 630px); }
+  .resource-detail:not(:has([data-share-panel] .shl > li)) { --edh: clamp(270px, calc(100dvh - 406px), 630px); }
+}
 .ph { display: flex; align-items: center; gap: 10px; }
 .ph h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.014em; }
 .ph .sp { margin-left: auto; display: flex; gap: 8px; align-items: center; }
@@ -139,6 +150,7 @@ input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var
 .lr > span { font-size: 11px; font-weight: 500; color: var(--ink2); }
 .lr > em { margin-left: auto; font: 400 10.5px var(--mono); font-style: normal; color: var(--ink3); }
 .encoding-picker { display: inline-flex; align-items: center; gap: 5px; color: var(--ink3); font: 400 10.5px var(--mono); }
+.text-controls { display: inline-flex; align-items: center; gap: 8px; }
 .encoding-picker select { width: auto; min-width: 124px; height: 22px; padding: 0 5px; font-size: 10.5px; }
 .eol-picker select { min-width: 0; }
 .encoding-reopen { font: 400 10.5px/1 var(--mono); }
@@ -233,7 +245,7 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .dlg > header .x { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1px solid var(--line2); background: var(--panel); color: var(--ink2); font: 400 12px var(--sans); text-decoration: none; }
 .dlg > header .x:hover { background: oklch(0.935 0.004 255); color: var(--ink); text-decoration: none; }
 .dlg > .body { padding: 12px; display: grid; gap: 12px; }
-.dlg > footer { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--head); }
+.dlg > footer { display: flex; justify-content: flex-end; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--head); }
 .rr { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .rr label { display: flex; gap: 6px; align-items: center; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .rr input[type="radio"] { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); flex: none; }
@@ -302,7 +314,8 @@ details.pan[open] .chev { transform: rotate(90deg); }
    the page by 330px and shifts it 12px in both axes, which is the flicker. */
 .panel-ed > .pb:has(> [data-editor]),
 .panel-ed > .pb:has(> [data-preview]),
-.panel-ed > .pb:has(> .cm-host) { padding: 0; gap: 0; align-content: stretch; }
+.panel-ed > .pb:has(> .cm-host),
+.panel-ed > .pb:has(> .media-stage:not([hidden])) { padding: 0; gap: 0; align-content: stretch; }
 .panel-ed > .pb > [data-editor],
 .panel-ed > .pb > [data-preview] { border: 0; resize: none; padding: 6px 7px 6px 28px; }
 /* Focus recolours the panel border, the same as every input and select on
@@ -321,6 +334,14 @@ details.pan[open] .chev { transform: rotate(90deg); }
    jumps back out again once there is. A minimum, not a height: the editor
    above sets its own, and the other states are short. */
 .panel-ed > .pb { min-height: var(--edh); align-content: start; }
+.media-stage { min-height: var(--edh); padding: 16px; display: grid; place-items: center; overflow: hidden; }
+.resource-media { display: block; max-width: 100%; }
+.resource-image, .resource-video { max-height: calc(var(--edh) - 32px); object-fit: contain; }
+.resource-image { border: 1px solid var(--line); background: var(--head); }
+.resource-audio { width: min(680px, 100%); }
+.file-card { min-width: min(420px, 100%); max-width: 100%; display: grid; justify-items: center; gap: 7px; padding: 22px; border: 1px solid var(--line); background: var(--head); text-align: center; }
+.file-card strong { max-width: 100%; overflow-wrap: anywhere; font: 500 13px var(--sans); }
+.file-card span { max-width: 100%; overflow-wrap: anywhere; color: var(--ink3); font: 400 10.5px var(--mono); }
 
 /* Below the fixed column width the page goes fluid: the shell stops being a
    centred column and takes the viewport, less a margin. */

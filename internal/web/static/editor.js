@@ -14,6 +14,7 @@ import {
   lineNumbers, properties, rectangularSelection, search, searchKeymap, shell,
   StreamLanguage, syntaxHighlighting, tags, toml, xml, yaml,
 } from "./vendor/codemirror.js";
+import { uploadController } from "./upload.js";
 
 const LANGUAGES = {
   yaml: () => yaml(),
@@ -75,12 +76,6 @@ function submissionSource(hasUpload, hasStoredBytes, contentChanged) {
   if (hasUpload && !contentChanged) return "upload";
   if (hasStoredBytes && !contentChanged) return "stored";
   return "editor";
-}
-
-function sizeText(size) {
-  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(2)} MiB`;
-  if (size >= 1024) return `${(size / 1024).toFixed(2)} KiB`;
-  return `${size} B`;
 }
 
 const ENCODING_ALIASES = {
@@ -304,7 +299,7 @@ function enhance(textarea) {
   const form = textarea.form;
   const language = new Compartment();
   const upload = form ? form.querySelector("input[data-upload]") : null;
-  const uploadStatus = form ? form.querySelector("[data-upload-status]") : null;
+  const uploads = uploadController(upload);
   const encodingSelect = form ? form.querySelector("[data-encoding-select]") : null;
   const reopenEncoding = form ? form.querySelector("[data-reopen-encoding]") : null;
   const eolSelect = form ? form.querySelector("[data-eol-select]") : null;
@@ -313,6 +308,7 @@ function enhance(textarea) {
   const host = document.createElement("div");
   host.className = "cm-host";
   textarea.parentNode.insertBefore(host, textarea.nextSibling);
+  if (uploads) uploads.registerCurrent(host);
 
   let view;
   let applyingSource = false;
@@ -325,7 +321,7 @@ function enhance(textarea) {
   let sourceBytes = null;
 
   const setUploadStatus = (message) => {
-    if (uploadStatus) uploadStatus.textContent = message;
+    if (uploads) uploads.setStatus(message);
   };
 
   // There is nothing to revert to until something has been changed, and a
@@ -348,7 +344,8 @@ function enhance(textarea) {
     operationVersion += 1;
     if (!keepSourceBytes) sourceBytes = null;
     if (upload && upload.files.length > 0) {
-      upload.value = "";
+      if (uploads) uploads.useEditor(message);
+      else upload.value = "";
       documentBeforeUpload = null;
     }
     updateReopenAvailability();
@@ -477,7 +474,6 @@ function enhance(textarea) {
       }
     });
     const filename = form.elements.filename;
-    let suggestedFilename = "";
     const configureLanguage = () => {
       view.dispatch({ effects: language.reconfigure(languageFor(tokenFor(filename ? filename.value : "", textarea.dataset.contentType))) });
     };
@@ -486,7 +482,6 @@ function enhance(textarea) {
     // the content just as often as before it.
     if (filename) {
       filename.addEventListener("input", () => {
-        if (filename.value !== suggestedFilename) suggestedFilename = "";
         configureLanguage();
       });
     }
@@ -571,10 +566,9 @@ function enhance(textarea) {
       updateReopenAvailability();
     }
 
-    if (upload) {
-      upload.addEventListener("change", async () => {
-        const version = ++operationVersion;
-        const file = upload.files[0];
+    if (uploads) {
+      uploads.subscribe(async ({ file, kind, version, oversize }) => {
+        operationVersion = Math.max(operationVersion + 1, version);
 
         if (!file) {
           if (documentBeforeUpload !== null) replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
@@ -595,33 +589,36 @@ function enhance(textarea) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
         }
 
-        if (filename && (filename.value.trim() === "" || filename.value === suggestedFilename)) {
-          filename.value = file.name;
-          suggestedFilename = file.name;
-          configureLanguage();
-        }
-
-        const maxBytes = Number(upload.dataset.maxBytes || 0);
-        if (maxBytes > 0 && file.size > maxBytes) {
+        if (oversize) {
           sourceBytes = null;
+          editorDirty = false;
+          documentEdited = false;
           updateReopenAvailability();
-          setUploadStatus(`文件大小为 ${sizeText(file.size)}，超过 ${sizeText(maxBytes)} 上限。`);
           return;
         }
 
-        setUploadStatus(`正在读取 ${file.name}…`);
+        if (kind !== "text" && kind !== "unknown") {
+          sourceBytes = null;
+          editorDirty = false;
+          documentEdited = false;
+          updateReopenAvailability();
+          return;
+        }
+
         let bytes;
         try {
           bytes = await file.arrayBuffer();
         } catch (error) {
-          if (version !== operationVersion) return;
+          if (!uploads.current(version, file)) return;
           sourceBytes = null;
+          editorDirty = false;
+          documentEdited = false;
           updateReopenAvailability();
-          setUploadStatus(`无法读取 ${file.name}，请重新选择文件。`);
+          uploads.showFile(file, `无法读取 ${file.name}，请重新选择文件。`);
           console.error("editor: cannot read uploaded file", error);
           return;
         }
-        if (version !== operationVersion || upload.files[0] !== file) return;
+        if (!uploads.current(version, file)) return;
 
         const source = new Uint8Array(bytes);
         sourceBytes = source;
@@ -629,8 +626,14 @@ function enhance(textarea) {
         const encoding = detectFileEncoding(source);
         if (!encoding) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
+          editorDirty = false;
+          documentEdited = false;
           if (encodingSelect) encodingSelect.dataset.valid = "false";
-          setUploadStatus(`无法识别 ${file.name} 的文本编码。可指定编码后重新解码，或按原样上传。`);
+          if (kind === "text") {
+            uploads.showText(file, `无法自动识别 ${file.name} 的编码，请选择编码后重新解码。`);
+          } else {
+            uploads.showFile(file);
+          }
           return;
         }
 
@@ -638,12 +641,18 @@ function enhance(textarea) {
           openBytes(source, encoding);
         } catch (error) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
+          editorDirty = false;
+          documentEdited = false;
           if (encodingSelect) encodingSelect.dataset.valid = "false";
-          setUploadStatus(`${file.name} 无法按 ${encoding} 解码。请指定编码后重新解码。`);
+          if (kind === "text") {
+            uploads.showText(file, `${file.name} 无法按 ${encoding} 解码，请选择编码后重新解码。`);
+          } else {
+            uploads.showFile(file);
+          }
           return;
         }
 
-        setUploadStatus(`已打开 ${file.name}（${encoding}）`);
+        uploads.showText(file);
       });
     }
   }

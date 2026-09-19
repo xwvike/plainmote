@@ -6,7 +6,7 @@
 </head>
 <body>
   {{template "topbar" .}}
-  <main class="page">
+  <main class="page{{if not .IsNew}} resource-detail{{end}}">
     <div class="crumb"><a href="/resources/">资源</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}引用地址{{else}}新建资源{{end}}{{else}}{{.Resource.Name}}{{end}}</span></div>
     {{if .IsNew}}
     <div class="ph"><h1>{{if eq .NewKind "remote"}}引用地址{{else}}新建资源{{end}}</h1></div>
@@ -41,14 +41,16 @@
             {{end}}
             <span class="sp">
               {{if and (not $remote) (or .Resource.Editable .IsNew)}}
+              <span class="text-controls" data-text-controls>
               <label class="encoding-picker"><span>编码</span><select name="content_encoding" data-encoding-select aria-label="保存编码" title="保存时写入的文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
               <button type="button" class="sm encoding-reopen" data-reopen-encoding title="按所选编码重新解码原始文件，会替换编辑器中的内容">重新解码</button>
               <label class="encoding-picker eol-picker"><span>行尾</span><select name="content_eol" data-eol-select aria-label="行尾" title="保存时写入的换行符">
                 <option value="lf"{{if eq .ContentEOL "lf"}} selected{{end}}>LF</option>
                 <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>
               </select></label>
+              </span>
               {{end}}
-              <em style="font:400 10.5px var(--mono);font-style:normal;color:var(--ink3)">
+              <em data-content-meta style="font:400 10.5px var(--mono);font-style:normal;color:var(--ink3)">
                 {{if $remote}}{{if .UpstreamTextPreview}}取自上游 · {{bytesText (len .UpstreamText)}}{{else if .UpstreamType}}{{.UpstreamType}}{{else if .UpstreamError}}上游未取到{{else if not .IsNew}}填入地址后点「拉取」{{end}}
                 {{else if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / 上限 {{bytesText .MaxContent}}
                 {{else if .IsNew}}上限 {{bytesText .MaxContent}}
@@ -56,7 +58,8 @@
               </em>
             </span>
           </div>
-          <div class="pb">
+          <div class="pb" data-content-body>
+            {{if not $remote}}<div class="media-stage upload-preview" data-upload-preview hidden></div>{{end}}
             {{if $remote}}
               {{if .IsNew}}
               <div class="f">
@@ -76,22 +79,28 @@
               <p class="ro">点击拉取，预览上游内容</p>
               {{end}}
             {{else if .Resource.Editable}}
-            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
+            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
             {{else if .IsNew}}
             {{/* Carries ContentText, because this is also the page a refused
                  creation comes back on and the body has to survive it. Empty on
                  a fresh screen, and with no data-raw-url either way: nothing is
                  stored yet to re-read. */}}
-            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}">{{.ContentText}}</textarea>
+            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}">{{.ContentText}}</textarea>
             {{else}}
               {{if hasPrefix .Resource.ContentType "image/"}}
-              <img src="/resources/{{.Resource.ID}}/raw" alt="{{.Resource.Name}}" style="max-width:100%;max-height:520px;border:1px solid var(--line);background:var(--head)">
+              <div class="media-stage" data-current-content><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{.Resource.Name}}"></div>
               {{else if hasPrefix .Resource.ContentType "audio/"}}
-              <audio controls src="/resources/{{.Resource.ID}}/raw" style="width:100%"></audio>
+              <div class="media-stage" data-current-content><audio class="resource-media resource-audio" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{.Resource.Name}}"></audio></div>
               {{else if hasPrefix .Resource.ContentType "video/"}}
-              <video controls src="/resources/{{.Resource.ID}}/raw" style="max-width:100%;max-height:520px"></video>
+              <div class="media-stage" data-current-content><video class="resource-media resource-video" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{.Resource.Name}}" data-prime-video></video></div>
               {{else}}
-              <p class="ro">不支持在线编辑，可整份替换文件</p>
+              <div class="media-stage" data-current-content>
+                <div class="file-card">
+                  <strong>{{.Resource.Filename}}</strong>
+                  <span>{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}</span>
+                  <a class="btn sm" href="/resources/{{.Resource.ID}}/raw" target="_blank" rel="noopener">打开文件</a>
+                </div>
+              </div>
               {{end}}
             {{end}}
           </div>
@@ -115,10 +124,7 @@
         {{/* What is live right now, stated whenever the page is open rather than
              announced once after a save. Saving changes this line, which is the
              confirmation - no dialog, and nothing that disappears. */}}
-        <span class="st live {{if .Shares}}on{{else}}off{{end}}">
-          <i></i>
-          <span>{{if .Shares}}{{len .Shares}} 条分享正在提供{{if .Resource.Remote}} {{originHost .Resource.OriginURL}} 的实时内容{{else}} {{formatTime .Resource.UpdatedAt}} 的版本{{end}}{{else}}尚无分享，当前无法通过链接访问{{end}}</span>
-        </span>
+        {{template "share-status" .}}
         {{end}}
       </div>
     </form>
@@ -127,49 +133,9 @@
     {{/* Below the content, not behind a button. The addresses are what this
          resource is for, so they are on the page whenever it is open; the
          dialog is left for changing one's terms, which is rare. */}}
-    <div class="panel">
-      <div class="pt">
-        <span class="sec">分享</span>
-        <span class="sp">
-          {{if .Shares}}
-          <form method="post" action="/resources/{{.Resource.ID}}/share" class="inline">
-            <input type="hidden" name="csrf" value="{{.CSRF}}">
-            <input type="hidden" name="action" value="revoke_all">
-            <button type="submit" class="sm">全部撤销</button>
-          </form>
-          {{end}}
-          <form method="post" action="/resources/{{.Resource.ID}}/share" class="inline">
-            <input type="hidden" name="csrf" value="{{.CSRF}}">
-            <input type="hidden" name="action" value="create">
-            <button type="submit" class="sm pri">新建分享</button>
-          </form>
-        </span>
-      </div>
-      <div class="pb">
-        {{if .Shares}}
-        <ul class="shl">
-          {{range .Shares}}
-          <li>
-            <input type="text" readonly value="{{.URL}}" aria-label="分享链接" onfocus="this.select()">
-            <button type="button" class="sm" data-copy="{{.URL}}">复制</button>
-            <span class="ttl">{{if .Link.Name}}{{.Link.Name}} · {{end}}{{remainText .Link.ExpiresAt}}{{if .Link.MaxUses}} · 限 {{.Link.MaxUses}} 次{{end}} · 已用 {{.Link.UsedCount}}</span>
-            <a class="btn sm" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}">设置</a>
-            <form method="post" action="/resources/{{$.Resource.ID}}/share" class="inline">
-              <input type="hidden" name="csrf" value="{{$.CSRF}}">
-              <input type="hidden" name="action" value="revoke">
-              <input type="hidden" name="share_id" value="{{.Link.ID}}">
-              <button type="submit" class="sm">撤销</button>
-            </form>
-          </li>
-          {{end}}
-        </ul>
-        {{else}}
-        <p class="ro">尚无分享，当前无法通过链接访问</p>
-        {{end}}
-      </div>
-    </div>
+    {{template "share-panel" .}}
 
-    <p class="meta">{{.Resource.ID}} · {{if .Resource.Remote}}远程 · {{originHost .Resource.OriginURL}}{{else}}本地 · {{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}} · 创建 {{formatTime .Resource.CreatedAt}} · 更新 {{formatTime .Resource.UpdatedAt}}</p>
+    <p class="meta">{{.Resource.ID}} · {{if .Resource.Remote}}引用 · {{originHost .Resource.OriginURL}}{{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}} · 创建 {{formatTime .Resource.CreatedAt}} · 更新 {{formatTime .Resource.UpdatedAt}}</p>
     {{end}}
 
   </main>
@@ -234,16 +200,18 @@
       <p class="hint">访问记录保留</p>
     </div>
     <footer>
+      <a class="btn" href="/resources/{{.Resource.ID}}">取消</a>
       <form method="post" action="/resources/{{.Resource.ID}}" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="delete">
-        <button type="submit" class="sm">确认删除</button>
+        <button type="submit" class="pri">确认删除</button>
       </form>
-      <a class="btn pri" href="/resources/{{.Resource.ID}}" style="margin-left:auto">取消</a>
     </footer>
   </dialog>
   {{end}}
 
+  {{if not $remote}}<script type="module" src="/static/upload.js"></script>{{end}}
+  {{if not .IsNew}}<script type="module" src="/static/resource.js"></script>{{end}}
   {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
   <script type="module" src="/static/editor.js"></script>
   {{end}}

@@ -186,6 +186,46 @@ func TestShareFlowThroughRouter(t *testing.T) {
 	}
 }
 
+func TestCreateShareReturnsARefreshableFragment(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	app := newTestApp(db, user.GitHubID)
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	form := url.Values{"action": {"create"}, "csrf": {csrf}}
+	request := httptest.NewRequest(http.MethodPost, "https://cfg.test/resources/"+resource.ID+"/share", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("X-PlainMote-Fragment", "shares")
+	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+	response := httptest.NewRecorder()
+	app.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("fragment create: %d %q", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	if strings.Contains(body, "<html") || !strings.Contains(body, "data-share-status") || !strings.Contains(body, "data-share-panel") {
+		t.Fatalf("response is not the share fragment: %q", body)
+	}
+	shares, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
+	if err != nil || len(shares) != 1 {
+		t.Fatalf("created shares: %d %v", len(shares), err)
+	}
+	if !strings.Contains(body, shares[0].Token) || !strings.Contains(body, "1 条分享正在提供") {
+		t.Fatal("fragment does not contain the new share and updated status")
+	}
+
+	pageRequest := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+resource.ID, nil)
+	pageRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	page := httptest.NewRecorder()
+	app.Handler().ServeHTTP(page, pageRequest)
+	if !strings.Contains(page.Body.String(), `data-share-create`) || !strings.Contains(page.Body.String(), `/static/resource.js`) {
+		t.Fatal("resource page does not enable the partial share refresh")
+	}
+}
+
 // TestParseShareDuration pins the formats the custom box accepts, including
 // days, which Go's own parser does not understand.
 func TestParseShareDuration(t *testing.T) {

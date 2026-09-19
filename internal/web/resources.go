@@ -393,13 +393,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		}
 	}
 
-	base := a.baseURL(r)
-	for _, share := range shares {
-		data.Shares = append(data.Shares, linkView{
-			Link: share,
-			URL:  base + shareAddress(share.Token, deliveryFilename(resource, servedType)),
-		})
-	}
+	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares)
 
 	// The list is on the page, so the only thing left to open is one share's
 	// terms. A stale id opens nothing rather than an empty dialog.
@@ -416,6 +410,49 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 
 	a.renderTemplate(w, status, "resource.html", data)
+}
+
+func buildShareViews(base string, resource Resource, servedType string, shares []Link) []linkView {
+	views := make([]linkView, 0, len(shares))
+	for _, share := range shares {
+		views = append(views, linkView{
+			Link: share,
+			URL:  base + shareAddress(share.Token, deliveryFilename(resource, servedType)),
+		})
+	}
+	return views
+}
+
+// renderShareFragment refreshes the part of a resource page changed by a
+// share action. It deliberately does not read the resource body, so creating a
+// link for a large object never reloads the editor or pulls that object again.
+func (a *App) renderShareFragment(w http.ResponseWriter, r *http.Request, user User, resourceID string) {
+	resource, err := a.db.ResourceForOwner(r.Context(), user.ID, resourceID)
+	if errors.Is(err, store.ErrNotFound) {
+		writePlainError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	shares, err := a.db.ListShares(r.Context(), user.ID, resource.ID, time.Now().UTC())
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	data := a.basePage(r, user)
+	data.Resource = resource
+	servedType := resource.ContentType
+	// The filename is decorative, but preserve the full-page address for the
+	// unusual remote resource whose owner left it blank.
+	if resource.Remote() && resource.Filename == "" {
+		if fetched := a.previewUpstream(r.Context(), &data, resource.OriginURL); fetched != "" {
+			servedType = fetched
+		}
+	}
+	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares)
+	a.renderTemplate(w, http.StatusOK, "share-fragment", data)
 }
 
 // previewUpstream reads the address exactly as a public request would and fills
@@ -471,18 +508,43 @@ func (a *App) handleRawPreview(w http.ResponseWriter, r *http.Request, user User
 	w.Header().Set("Content-Type", store.ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding))
 	w.Header().Set("Content-Disposition", `inline; filename="`+deliveryFilename(resource, resource.ContentType)+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+	w.Header().Set("Content-Security-Policy", deliveredContentSecurityPolicy)
 	w.Header().Set("Cache-Control", "no-store")
-	body, size, err := a.db.OpenContent(r.Context(), resource)
+	w.Header().Set("Accept-Ranges", "bytes")
+	size := resource.ContentSize
+	requestedRange, err := parseByteRange(r.Header.Get("Range"), size)
+	if err != nil {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", size))
+		writePlainError(w, http.StatusRequestedRangeNotSatisfiable, "requested range is not satisfiable")
+		return
+	}
+	var body io.ReadCloser
+	if requestedRange == nil {
+		body, size, err = a.db.OpenContent(r.Context(), resource)
+	} else {
+		var opened int64
+		body, opened, err = a.db.OpenContentRange(r.Context(), resource, requestedRange.start, requestedRange.end)
+		if err == nil && opened != requestedRange.length() {
+			_ = body.Close()
+			err = fmt.Errorf("blob range length %d, want %d", opened, requestedRange.length())
+		}
+	}
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
 	}
 	defer body.Close()
-	if size > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	status := http.StatusOK
+	responseSize := size
+	if requestedRange != nil {
+		status = http.StatusPartialContent
+		responseSize = requestedRange.length()
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", requestedRange.start, requestedRange.end, size))
 	}
-	w.WriteHeader(http.StatusOK)
+	if responseSize > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(responseSize, 10))
+	}
+	w.WriteHeader(status)
 	_, _ = io.Copy(w, body)
 }
 
@@ -519,6 +581,10 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 			return
 		}
 		_ = link
+		if r.Header.Get("X-PlainMote-Fragment") == "shares" {
+			a.renderShareFragment(w, r, user, resourceID)
+			return
+		}
 		back("", "")
 	case "update":
 		shareID := r.FormValue("share_id")

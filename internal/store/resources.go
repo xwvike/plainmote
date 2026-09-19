@@ -357,6 +357,13 @@ func (d *Store) OpenContent(ctx context.Context, resource Resource) (io.ReadClos
 	return d.blobs.Open(ctx, resource.ContentKey)
 }
 
+func (d *Store) OpenContentRange(ctx context.Context, resource Resource, start, end int64) (io.ReadCloser, int64, error) {
+	if resource.ContentKey == "" {
+		return io.NopCloser(strings.NewReader("")), 0, nil
+	}
+	return d.blobs.OpenRange(ctx, resource.ContentKey, start, end)
+}
+
 func (d *Store) ReadContent(ctx context.Context, resource Resource) ([]byte, error) {
 	reader, _, err := d.OpenContent(ctx, resource)
 	if err != nil {

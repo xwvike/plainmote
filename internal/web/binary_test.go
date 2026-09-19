@@ -101,6 +101,9 @@ func TestUploadedBinarySurvivesTheRoundTrip(t *testing.T) {
 	if !strings.Contains(page, `src="/resources/`+stored.ID+`/raw"`) {
 		t.Fatal("expected an inline preview of the image")
 	}
+	if !strings.Contains(page, `class="resource-media resource-image"`) || !strings.Contains(page, `/static/upload.js`) {
+		t.Fatal("the image page must use the media preview without loading the editor")
+	}
 
 	// Saving the form again, with no file chosen, must leave the bytes alone.
 	resave := url.Values{"csrf": {csrf}, "name": {"站标"}, "filename": {"logo.png"}}
@@ -151,5 +154,32 @@ func TestUploadedBinarySurvivesTheRoundTrip(t *testing.T) {
 	}
 	if got := delivered.Header().Get("Content-Type"); got != "image/png" {
 		t.Fatalf("served as %q", got)
+	}
+}
+
+func TestSavedVideoLoadsMetadataAndFirstFrame(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	video, err := db.CreateResource(ctx, user.ID, "Clip", "clip.mp4", []byte("video fixture"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if video.ContentType != "video/mp4" {
+		t.Fatalf("video stored as %q", video.ContentType)
+	}
+	session, _, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+video.ID, nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	response := httptest.NewRecorder()
+	newTestApp(db, user.GitHubID).Handler().ServeHTTP(response, request)
+	page := response.Body.String()
+	if response.Code != http.StatusOK {
+		t.Fatalf("video page: %d %q", response.Code, page)
+	}
+	if !strings.Contains(page, `preload="metadata"`) || !strings.Contains(page, `data-prime-video`) {
+		t.Fatal("saved video must load its duration and prime the first frame")
 	}
 }

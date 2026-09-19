@@ -18,6 +18,10 @@ type Store interface {
 	Put(ctx context.Context, key string, r io.Reader, size int64) error
 	// Open returns the object's bytes and its length. The caller closes it.
 	Open(ctx context.Context, key string) (io.ReadCloser, int64, error)
+	// OpenRange returns the inclusive byte interval without reading the rest of
+	// the object through the application. The caller validates the interval
+	// against the size stored with the resource and closes the returned body.
+	OpenRange(ctx context.Context, key string, start, end int64) (io.ReadCloser, int64, error)
 	// Delete removes an object. Removing something absent is not an error,
 	// so cleaning up twice is safe.
 	Delete(ctx context.Context, key string) error

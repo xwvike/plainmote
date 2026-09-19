@@ -14,13 +14,15 @@ import (
 // webAssets contains the templates and browser assets shipped with the Web
 // service. The explicit staticTypes list below remains the public boundary.
 //
-//go:embed templates/*.html static/style.css static/logo.png static/editor.js static/vendor/codemirror.js
+//go:embed templates/*.html static/style.css static/logo.png static/editor.js static/upload.js static/resource.js static/vendor/codemirror.js
 var webAssets embed.FS
 
 var staticTypes = map[string]string{
 	"style.css":            "text/css; charset=utf-8",
 	"logo.png":             "image/png",
 	"editor.js":            "text/javascript; charset=utf-8",
+	"upload.js":            "text/javascript; charset=utf-8",
+	"resource.js":          "text/javascript; charset=utf-8",
 	"vendor/codemirror.js": "text/javascript; charset=utf-8",
 }
 

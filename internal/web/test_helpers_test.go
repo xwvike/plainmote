@@ -123,6 +123,17 @@ func (m *memoryBlobs) Open(_ context.Context, key string) (io.ReadCloser, int64,
 	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), nil
 }
 
+func (m *memoryBlobs) OpenRange(_ context.Context, key string, start, end int64) (io.ReadCloser, int64, error) {
+	m.mu.RLock()
+	data, ok := m.objects[key]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, 0, blob.ErrNotFound
+	}
+	part := bytes.Clone(data[start : end+1])
+	return io.NopCloser(bytes.NewReader(part)), int64(len(part)), nil
+}
+
 func (m *memoryBlobs) Delete(_ context.Context, key string) error {
 	m.mu.Lock()
 	delete(m.objects, key)

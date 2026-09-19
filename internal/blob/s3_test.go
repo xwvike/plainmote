@@ -65,6 +65,12 @@ func TestS3RefusesEmptyKeys(t *testing.T) {
 	if _, _, err := store.Open(ctx, ""); err == nil {
 		t.Error("an empty key should be refused")
 	}
+	if _, _, err := store.OpenRange(ctx, "", 0, 0); err == nil {
+		t.Error("an empty range key should be refused")
+	}
+	if _, _, err := store.OpenRange(ctx, "x", 2, 1); err == nil {
+		t.Error("an invalid range should be refused")
+	}
 	if err := store.Delete(ctx, ""); err == nil {
 		t.Error("an empty key should be refused")
 	}

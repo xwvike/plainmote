@@ -21,6 +21,16 @@ import (
 // so nothing about a link says what it points at or who owns it.
 const deliveryPrefix = "/d/"
 
+const deliveryCookie = "plainmote_delivery"
+
+// Browsers turn a top-level audio or video response into a generated media
+// document whose <source> points back at the same URL. The source needs this
+// one permission to load. The sandbox must retain the response's origin too:
+// Chromium puts crossorigin=anonymous on its generated player, and an opaque
+// sandbox origin would turn that same URL into a cross-origin request. Scripts,
+// frames and every other subresource remain blocked.
+const deliveredContentSecurityPolicy = "sandbox allow-same-origin; default-src 'none'; media-src 'self'"
+
 // shareAddress builds the address a link is handed out as: the token routes,
 // and the filename rides along so whoever saves it gets a sensible name. The
 // tail is never empty, because plain `curl -O` names the file after the last
@@ -67,8 +77,16 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusNotFound, "not found")
 		return
 	}
+	now := time.Now().UTC()
 	meta := a.requestMetadata(r)
-	result, err := a.db.ConsumeToken(r.Context(), token, meta, time.Now().UTC())
+	var grant string
+	if cookie, cookieErr := r.Cookie(deliveryCookie); cookieErr == nil {
+		grant = cookie.Value
+	}
+	result, resumed, err := a.db.ResumeDelivery(r.Context(), token, grant, now)
+	if err == nil && !resumed {
+		result, err = a.db.ConsumeToken(r.Context(), token, meta, now)
+	}
 	if err != nil {
 		a.serverError(w, "consume token", err)
 		return
@@ -83,12 +101,27 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusUnauthorized, "link is not valid")
 		return
 	}
+	if !resumed {
+		grant, expires, err := a.db.IssueDeliveryGrant(token, result.LinkID, now)
+		if err != nil {
+			a.serverError(w, "issue delivery grant", err)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name: deliveryCookie, Value: grant, Path: deliveryPrefix + token,
+			Expires: expires, MaxAge: int(time.Until(expires).Seconds()),
+			HttpOnly: true,
+			Secure:   strings.HasPrefix(strings.ToLower(a.baseURL(r)), "https://"),
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
 	resource := result.Resource
 
 	contentType := resource.ContentType
 	filenameType := contentType
 	var body io.ReadCloser
 	var size int64
+	var servedRange *byteRange
 	if resource.Remote() {
 		// Nothing is cached: every request goes back to the upstream, and its
 		// content type is passed through unchanged. A failure is hard - the
@@ -101,10 +134,39 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		}
 		contentType, size = store.SafeContentType(upstreamType), int64(len(fetched))
 		filenameType = contentType
+		servedRange, err = parseByteRange(r.Header.Get("Range"), size)
+		if err != nil {
+			a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusRequestedRangeNotSatisfiable, "link accepted; invalid byte range")
+			w.Header().Set("Accept-Ranges", "bytes")
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", size))
+			writePlainError(w, http.StatusRequestedRangeNotSatisfiable, "requested range is not satisfiable")
+			return
+		}
+		if servedRange != nil {
+			fetched = fetched[servedRange.start : servedRange.end+1]
+		}
 		body = io.NopCloser(bytes.NewReader(fetched))
 	} else {
 		contentType = store.ContentTypeWithEncoding(contentType, resource.ContentEncoding)
-		body, size, err = a.db.OpenContent(r.Context(), resource)
+		size = resource.ContentSize
+		servedRange, err = parseByteRange(r.Header.Get("Range"), size)
+		if err != nil {
+			a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusRequestedRangeNotSatisfiable, "link accepted; invalid byte range")
+			w.Header().Set("Accept-Ranges", "bytes")
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", size))
+			writePlainError(w, http.StatusRequestedRangeNotSatisfiable, "requested range is not satisfiable")
+			return
+		}
+		if servedRange == nil {
+			body, size, err = a.db.OpenContent(r.Context(), resource)
+		} else {
+			var opened int64
+			body, opened, err = a.db.OpenContentRange(r.Context(), resource, servedRange.start, servedRange.end)
+			if err == nil && opened != servedRange.length() {
+				_ = body.Close()
+				err = fmt.Errorf("blob range length %d, want %d", opened, servedRange.length())
+			}
+		}
 		if err != nil {
 			a.serverError(w, "open content", err)
 			return
@@ -114,16 +176,26 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	// The use was already spent when the token was consumed, so refusing to
 	// deliver here would cost the caller the resource without buying back the
 	// record it failed to write. Delivery goes ahead; the miss goes to stderr.
-	a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusOK, "link accepted")
+	status := http.StatusOK
+	responseSize := size
+	if servedRange != nil {
+		status = http.StatusPartialContent
+		responseSize = servedRange.length()
+	}
+	a.recordAccess(r, result, store.OutcomeSuccess, meta, status, "link accepted")
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", contentDisposition(deliveryFilename(resource, filenameType)))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
-	if size > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Content-Security-Policy", deliveredContentSecurityPolicy)
+	w.Header().Set("Accept-Ranges", "bytes")
+	if servedRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", servedRange.start, servedRange.end, size))
 	}
-	w.WriteHeader(http.StatusOK)
+	if responseSize > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(responseSize, 10))
+	}
+	w.WriteHeader(status)
 	// Streamed rather than buffered, so a large object costs a copy buffer
 	// instead of its whole size in memory.
 	_, _ = io.Copy(w, body)

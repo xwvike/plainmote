@@ -101,6 +101,31 @@ func (s *S3) Open(ctx context.Context, key string) (io.ReadCloser, int64, error)
 	return out.Body, size, nil
 }
 
+func (s *S3) OpenRange(ctx context.Context, key string, start, end int64) (io.ReadCloser, int64, error) {
+	if strings.TrimSpace(key) == "" {
+		return nil, 0, errors.New("blob key must not be empty")
+	}
+	if start < 0 || end < start {
+		return nil, 0, errors.New("invalid blob byte range")
+	}
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", start, end)),
+	})
+	if err != nil {
+		if isNotFound(err) {
+			return nil, 0, ErrNotFound
+		}
+		return nil, 0, fmt.Errorf("open blob range: %w", err)
+	}
+	var size int64
+	if out.ContentLength != nil {
+		size = *out.ContentLength
+	}
+	return out.Body, size, nil
+}
+
 func (s *S3) Delete(ctx context.Context, key string) error {
 	if strings.TrimSpace(key) == "" {
 		return errors.New("blob key must not be empty")

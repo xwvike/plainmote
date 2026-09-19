@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 globalThis.document = { documentElement: { style: {} }, querySelectorAll: () => [] };
 
 const { decodeBytes, detectFileEncoding, submissionSource, SUPPORTED_ENCODINGS } = await import("../../internal/web/static/editor.js");
+const { classifyUpload, primeVideo } = await import("../../internal/web/static/upload.js");
+const { formActionURL } = await import("../../internal/web/static/resource.js");
 
 const fromHex = (value) => Uint8Array.from(value.match(/../g).map((pair) => Number.parseInt(pair, 16)));
 
@@ -46,3 +48,43 @@ assert.equal(submissionSource(true, false, false), "upload", "an untouched uploa
 assert.equal(submissionSource(false, true, false), "stored", "an untouched resource keeps its stored bytes");
 assert.equal(submissionSource(true, false, true), "editor", "a format change overrides the selected upload");
 assert.equal(submissionSource(false, true, true), "editor", "a format change overrides stored bytes");
+
+assert.equal(classifyUpload({ name: "photo.png", type: "image/png" }), "image");
+assert.equal(classifyUpload({ name: "song.mp3", type: "audio/mpeg" }), "audio");
+assert.equal(classifyUpload({ name: "clip.mp4", type: "video/mp4" }), "video");
+assert.equal(classifyUpload({ name: "config.yaml", type: "" }), "text");
+assert.equal(classifyUpload({ name: "document.pdf", type: "application/pdf" }), "file");
+assert.equal(classifyUpload({ name: "drawing.svg", type: "image/svg+xml" }), "file");
+assert.equal(classifyUpload({ name: "drawing.svg", type: "" }), "file");
+assert.equal(classifyUpload({ name: "unknown", type: "application/octet-stream" }), "unknown");
+
+let loadedMetadata;
+let loadCalls = 0;
+let currentTime = 0;
+const video = {
+  preload: "none",
+  duration: 6,
+  readyState: 0,
+  addEventListener(name, listener) {
+    if (name === "loadedmetadata") loadedMetadata = listener;
+  },
+  load() { loadCalls += 1; },
+  get currentTime() { return currentTime; },
+  set currentTime(value) { currentTime = value; },
+};
+primeVideo(video);
+assert.equal(video.preload, "metadata", "video preview requests metadata immediately");
+assert.equal(loadCalls, 1, "an idle video is told to begin loading metadata");
+assert.equal(currentTime, 0, "video does not seek before metadata is available");
+loadedMetadata();
+assert.equal(currentTime, 0.001, "metadata load seeks just enough to decode the first frame");
+
+const shadowedForm = {
+  action: { value: "create" },
+  getAttribute(name) { return name === "action" ? "/resources/example/share" : null; },
+};
+assert.equal(
+  formActionURL(shadowedForm, "https://cfg.test/resources/example").href,
+  "https://cfg.test/resources/example/share",
+  "a named action field must not replace the form submission URL",
+);
