@@ -42,6 +42,18 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	// With the box turned off there is nothing at the root for someone without
+	// an account to do, and for someone with one the list is what they came
+	// for. A page whose only content is a button to somewhere else is a step,
+	// not a destination, and routing past it costs one line here.
+	if !a.cfg.AnonymousEnabled {
+		if _, _, ok := a.currentUser(r); !ok {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
+		return
+	}
 	a.renderHome(w, r, a.homePage(r), http.StatusOK)
 }
 

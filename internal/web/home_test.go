@@ -170,37 +170,53 @@ func findDeliveryAddress(t *testing.T, page string) string {
 }
 
 // TestAnonymousCanBeTurnedOff is what makes this deployable by someone who
-// does not want an open write endpoint at all. The switch has to remove the
-// endpoint rather than leave it there refusing, and the page has to still be a
-// page.
+// does not want an open write endpoint. The switch removes the endpoint rather
+// than leaving it there refusing, and the root stops being a page at all: with
+// no box there is nothing at it for a visitor without an account to do, and
+// nothing for one with an account that their own list does not do better.
 func TestAnonymousCanBeTurnedOff(t *testing.T) {
 	db, user, _ := testDatabase(t)
+	ctx := context.Background()
 	app := &App{db: db, cfg: Config{PublicURL: "https://cfg.test", AllowedIDs: map[string]bool{user.GitHubID: true}}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()
 
-	home := httptest.NewRecorder()
-	app.handler.ServeHTTP(home, httptest.NewRequest(http.MethodGet, "https://cfg.test/", nil))
-	if home.Code != http.StatusOK {
-		t.Fatalf("the home page must still open, got %d", home.Code)
+	get := func(signedIn bool) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "https://cfg.test/", nil)
+		if signedIn {
+			session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+			request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+		}
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, request)
+		return response
 	}
-	page := home.Body.String()
-	if strings.Contains(page, `action="/paste"`) {
-		t.Fatal("no box when the deployment does not take pastes")
+
+	anon := get(false)
+	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/login" {
+		t.Fatalf("a visitor with no account belongs at the login, got %d %q", anon.Code, anon.Header().Get("Location"))
 	}
-	if !strings.Contains(page, "没有开放匿名分享") || !strings.Contains(page, "可撤销的链接") {
-		t.Fatal("the page must still say what this service is and how to get in")
-	}
-	// The parts of the page that describe the box have to go with it, or the
-	// tab and the navigation advertise something this deployment does not do.
-	if strings.Contains(page, "<title>PlainMote - 粘贴内容") {
-		t.Fatal("the title must not promise a box that is not there")
-	}
-	if strings.Contains(page, ">快速分享<") {
-		t.Fatal("the navigation must not name a feature that is off")
+	signedIn := get(true)
+	if signedIn.Code != http.StatusSeeOther || signedIn.Header().Get("Location") != dashboardPath {
+		t.Fatalf("an account belongs at its own list, got %d %q", signedIn.Code, signedIn.Header().Get("Location"))
 	}
 
 	if posted := postPaste(t, app, url.Values{"content": {"x"}}, nil); posted.Code != http.StatusNotFound {
 		t.Fatalf("the endpoint must not exist, got %d", posted.Code)
+	}
+
+	// Nothing is meant to be found here now, not even the root.
+	robots := httptest.NewRecorder()
+	app.handler.ServeHTTP(robots, httptest.NewRequest(http.MethodGet, "https://cfg.test/robots.txt", nil))
+	if strings.Contains(robots.Body.String(), "Allow:") {
+		t.Fatalf("robots.txt must let nothing through, got %q", robots.Body.String())
+	}
+	if tag := anon.Header().Get("X-Robots-Tag"); !strings.Contains(tag, "noindex") {
+		t.Fatalf("the root must not be indexable when it is a redirect, got %q", tag)
 	}
 }

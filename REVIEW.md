@@ -43,7 +43,9 @@ main
   会让爬虫和用户看到两个东西，这是有意避开的。
 - 首页不加载 `editor.js`，也不加载 CodeMirror bundle。那个框就是一个 `textarea`。
 - `PLAINMOTE_ANONYMOUS` 默认 `false`，和 `ALLOW_PRIVATE_UPSTREAM`、`REGISTRATION_MODE` 一样失败关闭。
-  关闭时 `/paste` 不注册进 mux——端点不存在，而不是存在但拒绝。
+  关闭时 `/paste` 不注册进 mux——端点不存在，而不是存在但拒绝；`/` 也不渲染页面，
+  未登录跳 `/login`，已登录跳 `/resources/`。首页的可索引例外和 `robots.txt` 的 `Allow: /$`
+  都跟着这个开关走：`/` 只有在真是一个页面时才值得被找到。
 - `POST /paste` 没有 CSRF token（没有会话可挂），改用 `Origin` 同源校验；缺少 `Origin` 的请求
   （curl、老浏览器）放行，因为那不是被驱动的浏览器该有的样子。
 - 服务整体不可索引，**首页除外**。响应头的例外和 `htmlhead` 里 meta 的例外必须同时成立，

@@ -17,7 +17,7 @@
 {{define "topbar"}}<div class="top"><div class="topin">
     <span class="brand"><a href="/">{{template "mark"}}<b>PlainMote</b></a></span>
     <nav class="nav">
-      <a href="/"{{if eq .Active "home"}} class="on" aria-current="page"{{end}}>{{if .Anonymous}}快速分享{{else}}首页{{end}}</a>
+      {{if .Anonymous}}<a href="/"{{if eq .Active "home"}} class="on" aria-current="page"{{end}}>快速分享</a>{{end}}
       {{if .SignedIn}}
       <a href="/resources/"{{if eq .Active "resources"}} class="on" aria-current="page"{{end}}>我的资源</a>
       <a href="/logs"{{if eq .Active "logs"}} class="on" aria-current="page"{{end}}>访问记录</a>

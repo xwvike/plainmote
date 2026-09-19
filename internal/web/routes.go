@@ -158,12 +158,17 @@ func (a *App) routes() http.Handler {
 		mux.HandleFunc(pastePath, a.handlePaste)
 	}
 	mux.HandleFunc("/", a.handleHome)
-	return noIndex(mux)
+	return a.noIndex(mux)
 }
 
 // robotsTxt keeps crawlers off the whole service. There is nothing here to
 // find: every page needs a session, and the one public path serves secrets.
-const robotsTxt = "User-agent: *\nAllow: /$\nDisallow: /\n"
+// The home page is let through only where it is a page - with the box off it
+// redirects into the half of the service that needs an account.
+const (
+	robotsTxt     = "User-agent: *\nDisallow: /\n"
+	robotsTxtHome = "User-agent: *\nAllow: /$\nDisallow: /\n"
+)
 
 func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -176,7 +181,11 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	_, _ = io.WriteString(w, robotsTxt)
+	body := robotsTxt
+	if a.cfg.AnonymousEnabled {
+		body = robotsTxtHome
+	}
+	_, _ = io.WriteString(w, body)
 }
 
 // noIndex is the half of this that does not depend on a crawler asking first.
@@ -184,11 +193,13 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 // covers an address someone else published - a share link pasted into a public
 // issue is a leak to be contained, not a page to be discovered. noarchive
 // matters as much as noindex here: a cached copy would outlive a revoked link.
-func noIndex(next http.Handler) http.Handler {
+func (a *App) noIndex(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The home page is the one thing here that is meant to be found. Every
-		// other path is either behind a session or is somebody's secret.
-		if r.URL.Path != "/" {
+		// The home page is the one thing here that is meant to be found, and
+		// only where it is a page: with the box off it redirects into the half
+		// of the service that needs an account, and has nothing to offer a
+		// crawler. Every other path is behind a session or is somebody's secret.
+		if r.URL.Path != "/" || !a.cfg.AnonymousEnabled {
 			w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
 		}
 		next.ServeHTTP(w, r)
