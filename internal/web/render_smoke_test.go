@@ -93,7 +93,7 @@ func TestAllPagesRender(t *testing.T) {
 		{"logs", "/logs", "success"},
 		{"new resource", "/resources/new", "从文件载入内容"},
 		{"new resource, remote", "/resources/new?kind=remote", "远程地址"},
-		{"resource", "/resources/" + resource.ID, "查看分享"},
+		{"resource", "/resources/" + resource.ID, "新建分享"},
 		{"resource remote", "/resources/" + remote.ID, "远程地址"},
 		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "确认删除"},
 		// The save bar states what is live rather than what saving would do,

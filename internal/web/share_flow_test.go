@@ -47,14 +47,15 @@ func TestShareFlowThroughRouter(t *testing.T) {
 		return response
 	}
 
-	// Pressing 分享 must land on the resource page with the dialog open.
+	// Pressing 新建分享 mints the link and lands back on the resource, where
+	// the list already holds something that can be sent.
 	created := do(http.MethodPost, "/resources/"+resource.ID+"/share", url.Values{"action": {"create"}})
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("share create: expected a redirect, got %d", created.Code)
 	}
 	location := created.Header().Get("Location")
-	if !strings.Contains(location, "share=") {
-		t.Fatalf("share create must reopen the dialog on the new link, got %q", location)
+	if location != "/resources/"+resource.ID {
+		t.Fatalf("share create must land on the resource itself, got %q", location)
 	}
 
 	page := do(http.MethodGet, location, nil)
@@ -62,10 +63,8 @@ func TestShareFlowThroughRouter(t *testing.T) {
 	if page.Code != http.StatusOK {
 		t.Fatalf("resource page: %d", page.Code)
 	}
-	for _, want := range []string{"分享「", "分享链接", "存活时长", "使用次数"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("dialog is missing %q", want)
-		}
+	if !strings.Contains(body, "/d/") || !strings.Contains(body, "复制") {
+		t.Fatal("the new address must be on the page, ready to copy")
 	}
 
 	shares, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
@@ -150,21 +149,21 @@ func TestShareFlowThroughRouter(t *testing.T) {
 		t.Fatalf("a revoked link must stop working, got %d", gone.Code)
 	}
 
-	// 查看分享 opens the dialog without minting anything.
+	// Opening the resource shows what is live and mints nothing.
 	before, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
-	listed := do(http.MethodGet, "/resources/"+resource.ID+"?shares=1", nil)
-	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), "分享「") {
-		t.Fatalf("查看分享 should open the dialog: %d", listed.Code)
+	listed := do(http.MethodGet, "/resources/"+resource.ID, nil)
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), "新建分享") {
+		t.Fatalf("the resource page should carry the share list: %d", listed.Code)
 	}
 	after2, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(after2) != len(before) {
-		t.Fatalf("merely viewing the list must not create a share: %d -> %d", len(before), len(after2))
+		t.Fatalf("merely opening the page must not create a share: %d -> %d", len(before), len(after2))
 	}
 
 	// A share can be made permanent.
@@ -274,7 +273,10 @@ func TestServedContentTypeIsDetected(t *testing.T) {
 
 // The two ways into the dialog are two different screens: 分享 is about the
 // link it just made, 查看分享 is about managing what exists.
-func TestShareDialogModesAreSeparate(t *testing.T) {
+// TestSharesAreOnThePageNotBehindIt pins what the dialog was costing: the
+// addresses are what a resource is for, so they are there whenever the page is,
+// and the only thing left worth opening is one share's terms.
+func TestSharesAreOnThePageNotBehindIt(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
 	app := newTestApp(db, user.GitHubID)
@@ -304,25 +306,29 @@ func TestShareDialogModesAreSeparate(t *testing.T) {
 		return response.Body.String()
 	}
 
-	// Focused on one link: that link, and nothing about the others.
-	created := page("?share=" + fresh.ID)
-	if !strings.Contains(created, fresh.Token) {
-		t.Fatal("the focused dialog must show its own link")
-	}
-	for _, unwanted := range []string{older.Token, "老链接", "进行中的分享", "全部撤销", "新建分享"} {
-		if strings.Contains(created, unwanted) {
-			t.Errorf("the create dialog should not mention %q", unwanted)
+	// No query, no click: every live address is already there, with the
+	// actions that act on them.
+	plain := page("")
+	for _, wanted := range []string{older.Token, fresh.Token, "老链接", "新建分享", "全部撤销", "撤销"} {
+		if !strings.Contains(plain, wanted) {
+			t.Errorf("the resource page must carry %q without being asked", wanted)
 		}
+	}
+	if strings.Contains(plain, "存活时长") {
+		t.Error("the per-share settings form must stay behind its own step")
 	}
 
-	// The list: everything live, with the bulk actions.
-	listed := page("?shares=1")
-	for _, wanted := range []string{older.Token, fresh.Token, "进行中的分享", "全部撤销", "新建分享"} {
-		if !strings.Contains(listed, wanted) {
-			t.Errorf("the list dialog should include %q", wanted)
-		}
+	// One share's terms are the one thing still worth a dialog.
+	focused := page("?share=" + fresh.ID)
+	if !strings.Contains(focused, "存活时长") || !strings.Contains(focused, "使用次数") {
+		t.Error("the focused dialog must carry the terms")
 	}
-	if strings.Contains(listed, "存活时长") {
-		t.Error("the list should not carry the per-link settings form")
+	if !strings.Contains(focused, fresh.Token) {
+		t.Error("the focused dialog must show the link it is about")
+	}
+
+	// A share that is gone opens nothing rather than an empty dialog.
+	if stale := page("?share=" + resource.ID); strings.Contains(stale, "存活时长") {
+		t.Error("an unknown share must not open the settings dialog")
 	}
 }

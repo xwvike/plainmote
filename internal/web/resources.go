@@ -401,18 +401,16 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		})
 	}
 
-	// Two ways into the dialog: "分享" mints a link and focuses it, while
-	// "查看分享" only lists what already exists and creates nothing.
+	// The list is on the page, so the only thing left to open is one share's
+	// terms. A stale id opens nothing rather than an empty dialog.
 	if focusID := strings.TrimSpace(r.URL.Query().Get("share")); focusID != "" {
-		data.ShareOpen = true
 		for _, view := range data.Shares {
 			if view.Link.ID == focusID {
 				data.FocusShare = view
+				data.ShareOpen = true
 				break
 			}
 		}
-	} else if r.URL.Query().Get("shares") != "" {
-		data.ShareOpen = true
 	} else if r.URL.Query().Get("delete") != "" {
 		data.DeleteOpen = true
 	}
@@ -493,19 +491,22 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 		writePlainError(w, http.StatusForbidden, "invalid request")
 		return
 	}
-	// Every share action lands back in the dialog: focused on one link when
-	// there is one to focus, otherwise on the list.
+	// Every share action lands back on the resource, where the list is. A
+	// refusal reopens the share it was about so the message has something to
+	// be next to; success just shows the list, which now holds the result.
 	back := func(shareID, message string) {
+		target := "/resources/" + resourceID
 		values := url.Values{}
-		if shareID != "" {
-			values.Set("share", shareID)
-		} else {
-			values.Set("shares", "1")
-		}
 		if message != "" {
 			values.Set("error", message)
+			if shareID != "" {
+				values.Set("share", shareID)
+			}
 		}
-		http.Redirect(w, r, "/resources/"+resourceID+"?"+values.Encode(), http.StatusSeeOther)
+		if len(values) > 0 {
+			target += "?" + values.Encode()
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
 	}
 
 	switch r.FormValue("action") {
@@ -517,7 +518,8 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 			back("", err.Error())
 			return
 		}
-		back(link.ID, "")
+		_ = link
+		back("", "")
 	case "update":
 		shareID := r.FormValue("share_id")
 		ttl, err := shareTTL(r)

@@ -255,11 +255,14 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .fg { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px 12px; align-items: center; }
 .fg > dt { font-size: 11px; font-weight: 500; color: var(--ink2); }
 .fg > dd { margin: 0; }
-.shl { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); }
-.shl > li { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--line); }
-.shl > li:last-child { border-bottom: 0; }
-.shl b { font-size: 12px; font-weight: 500; flex: none; }
-.shl .ttl { font: 400 10.5px var(--mono); color: var(--ink3); margin-left: auto; }
+/* One address per row: the link takes the width, its state and the two things
+   you can do to it sit at the end. */
+.shl { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.shl > li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.shl > li > input[readonly] { flex: 1 1 auto; min-width: 0; height: 22px; font: 400 11.5px var(--mono); }
+.shl .ttl { font: 400 11px var(--mono); color: var(--ink3); white-space: nowrap; }
+/* The record, kept but not given a panel of its own. */
+.meta { font: 400 10.5px var(--mono); color: var(--ink3); word-break: break-all; }
 
 /* access log: native <details> rows, columns aligned by a shared grid template */
 .lg { --cols: 124px 82px 44px minmax(0, 1fr) 152px 108px 14px; }
