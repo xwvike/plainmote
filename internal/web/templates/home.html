@@ -10,8 +10,8 @@
   <main class="page">
 
     <div class="lede">
-      <h1>临时分享一段文本</h1>
-      <p>无需登录。分享链接最长有效 30 分钟，内容始终以纯文本显示。</p>
+      <h1>在互联网隐秘安全的分享你输入的内容</h1>
+      <p>无需登录！输入任何内容，分享链接最长有效 30 分钟！</p>
     </div>
 
     {{if .PasteURL}}
@@ -51,7 +51,7 @@
         </div>
         <div class="pb paste-body">
           <textarea name="content" spellcheck="false" autofocus
-                    aria-label="要分享的内容" placeholder="粘贴要分享的文本">{{.PasteContent}}</textarea>
+                    aria-label="要分享的内容" placeholder="输入或粘贴要分享的内容">{{.PasteContent}}</textarea>
         </div>
       </div>
       <div class="savebar">
@@ -75,19 +75,17 @@
 
     <div class="tell">
       <section>
-        <h2>用于临时分享</h2>
-        <p>分享链接最长有效 30 分钟，到期后无法继续访问，内容随后由服务自动清理。
-           适合把配置、日志或错误信息临时发给别人。</p>
+        <h2>临时分享</h2>
+        <p>分享链接最长有效 30 分钟，到期后无法继续访问，PlainMote会自动清理。
+           放心将配置、日志或错误信息临时发给别人。</p>
       </section>
       <section>
-        <h2>始终以纯文本显示</h2>
-        <p>无论填写什么文件名，浏览器都会将内容作为 <code>text/plain</code> 显示，
-           不会把其中的 HTML 或脚本作为网页运行。</p>
+        <h2>始终保留原始内容</h2>
+        <p>无论填写什么，PlainMote都会原汁原味保留每一字节的字符。</p>
       </section>
       <section>
-        <h2>登录后管理资源</h2>
-        <p>登录后可以长期保存和修改内容，并为同一资源创建多条相互独立、
-           可设置有效期和使用次数、可随时撤销的分享链接。</p>
+        <h2>创建个人账户</h2>
+        <p>登录后可以长期保存和修改内容，并为分享提供有效期和使用次数设置！更提供媒体资源和文件的分享能力！</p>
         <p class="hint">{{if .SignedIn}}<a href="/resources/">前往我的资源 →</a>{{else}}<a href="/login">使用 GitHub 登录 →</a>{{end}}</p>
       </section>
     </div>
