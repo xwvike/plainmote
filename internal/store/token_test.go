@@ -156,39 +156,6 @@ func TestTokenCipherUsesAFreshNonceAndDetectsTampering(t *testing.T) {
 	}
 }
 
-func TestDeliveryGrantIsBoundToTokenAndExpires(t *testing.T) {
-	cipher, err := newTokenCipher(bytes.Repeat([]byte{5}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	db := &Store{cipher: cipher}
-	token, err := generateToken()
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	linkID := uuid.NewString()
-	grant, expires, err := db.IssueDeliveryGrant(token, linkID, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, ok := db.openDeliveryGrant(token, grant, now); !ok || got != linkID {
-		t.Fatalf("valid delivery grant: id=%q ok=%v", got, ok)
-	}
-	other, _ := generateToken()
-	if _, ok := db.openDeliveryGrant(other, grant, now); ok {
-		t.Fatal("delivery grant was accepted with another share token")
-	}
-	if _, ok := db.openDeliveryGrant(token, grant, expires); ok {
-		t.Fatal("expired delivery grant was accepted")
-	}
-	tampered := []byte(grant)
-	tampered[len(tampered)-1] ^= 1
-	if _, ok := db.openDeliveryGrant(token, string(tampered), now); ok {
-		t.Fatal("tampered delivery grant was accepted")
-	}
-}
-
 // Probability is not a safety mechanism, so the schema carries a hard one: the
 // token hash is UNIQUE. Even in the world where crypto/rand repeats itself,
 // the second link fails loudly at insert instead of quietly aliasing the

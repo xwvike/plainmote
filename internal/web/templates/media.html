@@ -1,0 +1,16 @@
+{{define "media.html"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>PlainMote</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/media.css">
+  <script src="/static/media.js" defer></script>
+</head>
+<body>
+  <main data-media-source="{{.MediaSource}}"><p role="status">正在加载…</p></main>
+  <noscript><p>播放需要启用 JavaScript，或<a href="{{.MediaSource}}" download>下载文件</a>。</p></noscript>
+</body>
+</html>{{end}}

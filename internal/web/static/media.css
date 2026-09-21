@@ -1,0 +1,6 @@
+html, body { margin: 0; min-height: 100%; background: #181818; color: #ddd; font: 14px system-ui, sans-serif; }
+main { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; }
+video { display: block; max-width: 100%; max-height: 100vh; max-height: 100dvh; }
+audio { width: min(480px, 90vw); }
+p { padding: 16px; text-align: center; }
+a { color: #b5ccff; }

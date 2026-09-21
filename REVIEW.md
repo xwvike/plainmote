@@ -145,19 +145,30 @@ POST /resources/{id}/share
   -> internal/store/shares.go
 
 GET /d/{token}/{filename}
-  -> ResumeDelivery grant or ConsumeToken transaction
-  -> S3 Open/OpenRange or upstream Fetch
-  -> access_logs
+  -> browser HTML request for stored audio/video: empty player shell
+  -> otherwise: ConsumeToken transaction -> S3 Open or upstream Fetch -> access_logs
+
+Browser player
+  -> GET same /d/ address with ?raw=1 (one full-body, counted request)
+  -> response.blob() -> URL.createObjectURL() -> native audio/video controls
 ```
 
-分享次数通过 PostgreSQL 条件 `UPDATE ... RETURNING` 原子扣除。需要明确接受或调整“正文读取前扣除次数”的产品语义。
-单段 `Range: bytes=...` 对所有资源类型使用同一套处理；本地对象必须调用 S3 `OpenRange`，不能先读取完整对象再
-截取。多段 Range 返回 416，不在 Go 内存中拼装 multipart 响应。首次请求扣除一次分享次数并得到一小时有效的
-加密续传 Cookie；后续请求验证 Cookie、Token、分享 ID、到期和撤销状态，继续逐条记录访问，但不重复扣次数。
-这是所有文件共用的交付会话语义，不能按媒体类型绕过计数。
-交付响应的 CSP 保持 `sandbox` 和 `default-src 'none'`，但必须有 `allow-same-origin` 和 `media-src 'self'`。
-Chrome 直接打开音频或视频时会生成一个带 `crossorigin=anonymous` 的同源 `<source>`；不保留同源身份或不允许
-媒体源，都会出现播放器外壳却无法载入正文。这里仍未加入 `allow-scripts`，不会放开脚本执行。
+分享次数通过 PostgreSQL 条件 `UPDATE ... RETURNING` 原子扣除，正文读取失败仍会消耗本次额度。
+所有公开正文请求都扣次，不能因为 Cookie、Range、User-Agent 或 Fetch Metadata 而免扣。
+公开接口忽略 Range 并完整返回 200，使用 `Accept-Ranges: none`；所有正文请求统一通过 `ConsumeToken` 校验并计次。
+资源编辑页的已登录原始内容接口仍可使用 S3 OpenRange，与公开分享计次无关。
+
+媒体只使用原来的分享地址。Accept 的 HTML 协商用于选择播放器外壳，不能授予读取权限；外壳不能包含资源正文，
+也不能提前扣次。JS 从同一地址的 `?raw=1` 完整读取一次，不自动重试，生成本地 Blob URL 给播放器。
+播放器不能将 /d/ 网络地址直接作为 src。播放、拖动、重播不再访问正文接口；刷新重新获取正文，额度耗尽应显示失败。
+
+播放器只载入本地静态脚本和样式，CSP 仅允许同源 fetch 与 blob: 媒体，禁止嵌入并设置 no-referrer/no-store。
+文件字节响应保持 sandbox/default-src 'none'，不能将用户内容当作脚本执行。查询参数和 Referer 中的 Token、grant 等敏感值应脱敏。
+已下载内容可在客户端继续播放，这与普通下载一致，不能承诺撤销后收回已交付字节。
+
+回归验证应覆盖：所有文件类型携带旧 Cookie、Range 和伪造媒体头仍扣次；播放器外壳不扣次、正文只请求一次；
+音频/视频首开、拖动、刷新、多标签页；撤销、到期、删除、资源更新后不能利用耗尽链接取新内容。
+必须用真实浏览器确认播放、拖动过程中没有追加正文请求，不能只检查 HTTP 请求头。
 
 ### 远程资源
 

@@ -16,19 +16,13 @@ import (
 	"plainmote/internal/store"
 )
 
-// deliveryPrefix is the one path the service serves resources under. The
-// token after it is the whole address: there is no user-chosen path any more,
-// so nothing about a link says what it points at or who owns it.
+// deliveryPrefix serves shares; each request for resource bytes consumes one
+// use. The token selects the share; the trailing filename is decorative.
 const deliveryPrefix = "/d/"
 
-const deliveryCookie = "plainmote_delivery"
-
-// Browsers turn a top-level audio or video response into a generated media
-// document whose <source> points back at the same URL. The source needs this
-// one permission to load. The sandbox must retain the response's origin too:
-// Chromium puts crossorigin=anonymous on its generated player, and an opaque
-// sandbox origin would turn that same URL into a cross-origin request. Scripts,
-// frames and every other subresource remain blocked.
+// Raw content is sandboxed with scripts and frames blocked. Same-origin media
+// remains allowed for authenticated raw previews, including Chromium's native
+// player. The public Blob player uses its own policy in renderMediaPlayer.
 const deliveredContentSecurityPolicy = "sandbox allow-same-origin; default-src 'none'; media-src 'self'"
 
 // shareAddress builds the address a link is handed out as: the token routes,
@@ -66,6 +60,7 @@ func splitDeliveryPath(urlPath string) (token string, ok bool) {
 }
 
 func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Vary", "Accept")
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -77,55 +72,38 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusNotFound, "not found")
 		return
 	}
-	now := time.Now().UTC()
+	// HTML negotiation affects presentation only. Every request for bytes below
+	// consumes one use, regardless of Cookie, Range or other client headers.
+	if wantsMediaPlayer(r) {
+		media, err := a.db.IsMediaShare(r.Context(), token)
+		if err != nil {
+			a.serverError(w, "identify media share", err)
+			return
+		}
+		if media {
+			a.renderMediaPlayer(w, r)
+			return
+		}
+	}
 	meta := a.requestMetadata(r)
-	var grant string
-	if cookie, cookieErr := r.Cookie(deliveryCookie); cookieErr == nil {
-		grant = cookie.Value
-	}
-	result, resumed, err := a.db.ResumeDelivery(r.Context(), token, grant, now)
-	if err == nil && !resumed {
-		result, err = a.db.ConsumeToken(r.Context(), token, meta, now)
-	}
+	result, err := a.db.ConsumeToken(r.Context(), token, meta, time.Now().UTC())
 	if err != nil {
 		a.serverError(w, "consume token", err)
 		return
 	}
 	if !result.Allowed {
-		// A token nobody issued belongs to no resource, so the refusal has no
-		// owner to read it. It is counted rather than stored; every refusal
-		// that does belong to a link was already written by ConsumeToken.
 		if result.Reason == store.ReasonInvalid {
 			a.recordProbe(probeUnknown)
 		}
 		writePlainError(w, http.StatusUnauthorized, "link is not valid")
 		return
 	}
-	if !resumed {
-		grant, expires, err := a.db.IssueDeliveryGrant(token, result.LinkID, now)
-		if err != nil {
-			a.serverError(w, "issue delivery grant", err)
-			return
-		}
-		http.SetCookie(w, &http.Cookie{
-			Name: deliveryCookie, Value: grant, Path: deliveryPrefix + token,
-			Expires: expires, MaxAge: int(time.Until(expires).Seconds()),
-			HttpOnly: true,
-			Secure:   strings.HasPrefix(strings.ToLower(a.baseURL(r)), "https://"),
-			SameSite: http.SameSiteLaxMode,
-		})
-	}
 	resource := result.Resource
-
 	contentType := resource.ContentType
 	filenameType := contentType
 	var body io.ReadCloser
 	var size int64
-	var servedRange *byteRange
 	if resource.Remote() {
-		// Nothing is cached: every request goes back to the upstream, and its
-		// content type is passed through unchanged. A failure is hard - the
-		// token has already been spent, so the miss is logged separately.
 		fetched, upstreamType, err := a.upstream.Fetch(r.Context(), resource.OriginURL)
 		if err != nil {
 			a.recordAccess(r, result, store.OutcomeUpstreamError, meta, http.StatusBadGateway, err.Error())
@@ -134,70 +112,34 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		}
 		contentType, size = store.SafeContentType(upstreamType), int64(len(fetched))
 		filenameType = contentType
-		servedRange, err = parseByteRange(r.Header.Get("Range"), size)
-		if err != nil {
-			a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusRequestedRangeNotSatisfiable, "link accepted; invalid byte range")
-			w.Header().Set("Accept-Ranges", "bytes")
-			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", size))
-			writePlainError(w, http.StatusRequestedRangeNotSatisfiable, "requested range is not satisfiable")
-			return
-		}
-		if servedRange != nil {
-			fetched = fetched[servedRange.start : servedRange.end+1]
-		}
 		body = io.NopCloser(bytes.NewReader(fetched))
 	} else {
 		contentType = store.ContentTypeWithEncoding(contentType, resource.ContentEncoding)
-		size = resource.ContentSize
-		servedRange, err = parseByteRange(r.Header.Get("Range"), size)
-		if err != nil {
-			a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusRequestedRangeNotSatisfiable, "link accepted; invalid byte range")
-			w.Header().Set("Accept-Ranges", "bytes")
-			w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", size))
-			writePlainError(w, http.StatusRequestedRangeNotSatisfiable, "requested range is not satisfiable")
-			return
-		}
-		if servedRange == nil {
-			body, size, err = a.db.OpenContent(r.Context(), resource)
-		} else {
-			var opened int64
-			body, opened, err = a.db.OpenContentRange(r.Context(), resource, servedRange.start, servedRange.end)
-			if err == nil && opened != servedRange.length() {
-				_ = body.Close()
-				err = fmt.Errorf("blob range length %d, want %d", opened, servedRange.length())
-			}
-		}
+		body, size, err = a.db.OpenContent(r.Context(), resource)
 		if err != nil {
 			a.serverError(w, "open content", err)
 			return
 		}
 	}
 	defer body.Close()
-	// The use was already spent when the token was consumed, so refusing to
-	// deliver here would cost the caller the resource without buying back the
-	// record it failed to write. Delivery goes ahead; the miss goes to stderr.
-	status := http.StatusOK
-	responseSize := size
-	if servedRange != nil {
-		status = http.StatusPartialContent
-		responseSize = servedRange.length()
-	}
-	a.recordAccess(r, result, store.OutcomeSuccess, meta, status, "link accepted")
+	a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusOK, "link accepted")
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", contentDisposition(deliveryFilename(resource, filenameType)))
+	disposition := contentDisposition(deliveryFilename(resource, filenameType))
+	if (!store.TextLike(contentType) && !strings.HasPrefix(contentType, "image/")) || r.URL.Query().Get("download") == "1" {
+		disposition = strings.Replace(disposition, "inline;", "attachment;", 1)
+	}
+	w.Header().Set("Content-Disposition", disposition)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", deliveredContentSecurityPolicy)
-	w.Header().Set("Accept-Ranges", "bytes")
-	if servedRange != nil {
-		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", servedRange.start, servedRange.end, size))
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	// Public delivery is always full-body. In particular, Range never opens an
+	// exemption from accounting, and a retry is a new counted request.
+	w.Header().Set("Accept-Ranges", "none")
+	if size > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	}
-	if responseSize > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(responseSize, 10))
-	}
-	w.WriteHeader(status)
-	// Streamed rather than buffered, so a large object costs a copy buffer
-	// instead of its whole size in memory.
+	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, body)
 }
 
@@ -331,6 +273,22 @@ func (a *App) requestMetadata(r *http.Request) store.RequestMeta {
 	if query.Has("token") {
 		query.Set("token", "[redacted]")
 	}
+	if query.Has("grant") {
+		query.Set("grant", "[redacted]")
+	}
+	referer := r.Referer()
+	if parsed, err := url.Parse(referer); err == nil {
+		parsed.Path = redactDeliveryPath(parsed.Path)
+		parsed.RawPath = ""
+		values := parsed.Query()
+		for _, key := range []string{"token", "grant"} {
+			if values.Has(key) {
+				values.Set(key, "[redacted]")
+			}
+		}
+		parsed.RawQuery = values.Encode()
+		referer = parsed.String()
+	}
 	return store.RequestMeta{
 		RemoteIP:       a.clientIP(r),
 		RemoteAddr:     r.RemoteAddr,
@@ -338,7 +296,7 @@ func (a *App) requestMetadata(r *http.Request) store.RequestMeta {
 		Query:          query.Encode(),
 		Proto:          r.Proto,
 		UserAgent:      r.UserAgent(),
-		Referer:        r.Referer(),
+		Referer:        referer,
 		Forwarded:      r.Header.Get("Forwarded"),
 		XForwardedFor:  r.Header.Get("X-Forwarded-For"),
 		CFConnectingIP: r.Header.Get("CF-Connecting-IP"),

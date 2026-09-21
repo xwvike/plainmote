@@ -95,6 +95,7 @@ type pageData struct {
 	LogOutcome          string
 	Outcomes            []string
 	Resource            Resource
+	MediaSource         string
 	Shares              []linkView
 	ShareOpen           bool
 	DeleteOpen          bool
