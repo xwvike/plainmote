@@ -17,6 +17,7 @@ import (
 // POST to "/" so the one unauthenticated write in the service can be rate
 // limited at the edge by a single rule, without touching the reads.
 const pastePath = "/paste"
+const pasteSavePath = "/paste/save"
 
 // pasteTTLChoices are the lifetimes the page offers. Minutes only: this is a
 // handoff, and store.AnonymousMaxTTL refuses anything longer whatever arrives.
@@ -57,9 +58,9 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 	a.renderHome(w, r, a.homePage(r), http.StatusOK)
 }
 
-// homePage is the page as it stands with nothing submitted. The account, if
-// there is one, only changes the top bar and one line of copy: what the box
-// does is the same either way, and saying so is the point.
+// homePage is the page as it stands with nothing submitted. Signing in does
+// not change what the box creates; it only lets the result be adopted by the
+// account afterward when the person explicitly asks to keep it.
 func (a *App) homePage(r *http.Request) pageData {
 	data := pageData{
 		Active:       "home",
@@ -113,7 +114,11 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	filename := strings.TrimSpace(r.FormValue("filename"))
 	ttl, ttlValue := parsePasteTTL(r.FormValue("ttl"))
 
-	resource, link, err := a.db.CreateAnonymousPaste(r.Context(), filename, []byte(content), ttl, time.Now().UTC())
+	creatorID := ""
+	if user, _, ok := a.currentUser(r); ok {
+		creatorID = user.ID
+	}
+	resource, link, err := a.db.CreateAnonymousPasteFor(r.Context(), creatorID, filename, []byte(content), ttl, time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, store.ErrInternal) {
 			fmt.Fprintf(os.Stderr, "create paste: %v\n", err)
@@ -124,12 +129,59 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	data := a.pasteResultPage(r, resource, link)
+	a.renderHome(w, r, data, http.StatusOK)
+}
+
+func (a *App) pasteResultPage(r *http.Request, resource Resource, link Link) pageData {
 	data := a.homePage(r)
 	data.PasteURL = a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))
+	data.PasteResourceID = resource.ID
 	data.PasteExpires = *link.ExpiresAt
 	data.PasteFilename = resource.Filename
 	data.PasteSize = resource.ContentSize
-	a.renderHome(w, r, data, http.StatusOK)
+	return data
+}
+
+func (a *App) handleSavePaste(w http.ResponseWriter, r *http.Request) {
+	user, sessionID, ok := a.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !a.checkCSRF(r, sessionID) {
+		writePlainError(w, http.StatusForbidden, "invalid csrf token")
+		return
+	}
+	resourceID := strings.TrimSpace(r.FormValue("resource_id"))
+	now := time.Now().UTC()
+	resource, link, err := a.db.ClaimableAnonymousPaste(r.Context(), user.ID, resourceID, now)
+	if errors.Is(err, store.ErrNotFound) {
+		writePlainError(w, http.StatusGone, "临时分享已失效，无法保存")
+		return
+	}
+	if err != nil {
+		a.serverError(w, "read paste claim", err)
+		return
+	}
+	claimed, err := a.db.ClaimAnonymousPaste(r.Context(), user.ID, resourceID, now)
+	if err != nil {
+		data := a.pasteResultPage(r, resource, link)
+		if errors.Is(err, store.ErrNotFound) {
+			data.Error = "临时分享已失效，无法保存。"
+			a.renderHome(w, r, data, http.StatusGone)
+			return
+		}
+		message, status := a.writeErrorText("save quick share", err)
+		data.Error = message
+		a.renderHome(w, r, data, status)
+		return
+	}
+	http.Redirect(w, r, "/resources/"+claimed.ID, http.StatusSeeOther)
 }
 
 // refusePaste hands the submission back. A refused paste that comes back with

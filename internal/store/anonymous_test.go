@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -134,6 +135,42 @@ func TestAnonymousLineEndingsAreNormalised(t *testing.T) {
 	}
 	if string(body) != "a\nb\n" {
 		t.Fatalf("line endings must be normalised on the way in, got %q", body)
+	}
+}
+
+func TestClaimAnonymousPasteCanRetryAfterQuotaRefusal(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	resource, original, err := db.CreateAnonymousPasteFor(ctx, user.ID, "keep.txt", []byte("keep me\n"), 5*time.Minute, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// testDatabase already creates one owned resource. A ceiling of one must
+	// refuse the transfer without consuming the creator's claim.
+	if _, err := db.db.Exec(ctx, `UPDATE plans SET max_resources = 1 WHERE is_default`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ClaimAnonymousPaste(ctx, user.ID, resource.ID, now); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("claim over quota: %v", err)
+	}
+	if _, link, err := db.ClaimableAnonymousPaste(ctx, user.ID, resource.ID, now); err != nil || link.Token != original.Token {
+		t.Fatalf("quota refusal consumed the claim: link=%+v error=%v", link, err)
+	}
+
+	if _, err := db.db.Exec(ctx, `UPDATE plans SET max_resources = 2 WHERE is_default`); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := db.ClaimAnonymousPaste(ctx, user.ID, resource.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed.ID != resource.ID || claimed.OwnerID != user.ID {
+		t.Fatalf("claim changed the resource: %+v", claimed)
+	}
+	shares, err := db.ListShares(ctx, user.ID, resource.ID, now)
+	if err != nil || len(shares) != 1 || shares[0].Token != original.Token {
+		t.Fatalf("claim changed the share: %+v error=%v", shares, err)
 	}
 }
 

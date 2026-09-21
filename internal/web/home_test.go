@@ -51,6 +51,9 @@ func TestAnyoneCanPasteAndGetALink(t *testing.T) {
 		t.Fatalf("paste: %d %s", response.Code, response.Body.String())
 	}
 	page := response.Body.String()
+	if strings.Contains(page, "保存到我的资源") {
+		t.Fatal("an anonymous visitor must not be offered an account save action")
+	}
 	address := findDeliveryAddress(t, page)
 
 	fetched := httptest.NewRecorder()
@@ -155,6 +158,106 @@ func TestSignedInVisitorIsToldThePasteIsTemporary(t *testing.T) {
 	}
 }
 
+func TestSignedInVisitorCanSaveAPasteAsAResource(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	app := newTestApp(db, user.GitHubID)
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const content = "名称: 临时节点\nport: 7890\n"
+	pasteRequest := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste", strings.NewReader(url.Values{
+		"content": {content}, "filename": {"节点.yaml"}, "ttl": {"5"},
+	}.Encode()))
+	pasteRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	pasteRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	pasteRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+	paste := httptest.NewRecorder()
+	app.handler.ServeHTTP(paste, pasteRequest)
+	if paste.Code != http.StatusOK {
+		t.Fatalf("paste: %d %s", paste.Code, paste.Body.String())
+	}
+	page := paste.Body.String()
+	if !strings.Contains(page, "保存到我的资源") || !strings.Contains(page, `action="/paste/save"`) {
+		t.Fatal("a signed-in paste result must offer an explicit save action")
+	}
+	address := findDeliveryAddress(t, page)
+	resourceID := findPasteResourceID(t, page)
+
+	// The visit happens while the paste is still anonymous. Saving must move
+	// this history into the account together with the resource and link.
+	delivery := httptest.NewRecorder()
+	app.handler.ServeHTTP(delivery, httptest.NewRequest(http.MethodGet, "https://cfg.test"+address, nil))
+	if delivery.Code != http.StatusOK || delivery.Body.String() != content {
+		t.Fatalf("temporary delivery before save: %d %q", delivery.Code, delivery.Body.String())
+	}
+
+	other, err := db.UpsertUser(ctx, "999999", "other", "Other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherSession, otherCSRF, _, err := db.CreateSession(ctx, other.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignRequest := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste/save", strings.NewReader(url.Values{
+		"csrf": {otherCSRF}, "resource_id": {resourceID},
+	}.Encode()))
+	foreignRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	foreignRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: otherSession})
+	foreignRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: otherCSRF})
+	foreign := httptest.NewRecorder()
+	app.handler.ServeHTTP(foreign, foreignRequest)
+	if foreign.Code != http.StatusGone {
+		t.Fatalf("another account claimed the quick share: %d", foreign.Code)
+	}
+
+	saveRequest := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste/save", strings.NewReader(url.Values{
+		"csrf": {csrf}, "resource_id": {resourceID},
+	}.Encode()))
+	saveRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	saveRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	saveRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+	saved := httptest.NewRecorder()
+	app.handler.ServeHTTP(saved, saveRequest)
+	if saved.Code != http.StatusSeeOther || !strings.HasPrefix(saved.Header().Get("Location"), "/resources/") {
+		t.Fatalf("save: status %d location %q body %q", saved.Code, saved.Header().Get("Location"), saved.Body.String())
+	}
+	if got := strings.TrimPrefix(saved.Header().Get("Location"), "/resources/"); got != resourceID {
+		t.Fatalf("save redirected to resource %q, want original %q", got, resourceID)
+	}
+	resource, err := db.ResourceForOwner(ctx, user.ID, resourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := db.ReadContent(ctx, resource)
+	if err != nil || string(body) != content {
+		t.Fatalf("saved resource: body %q error %v", body, err)
+	}
+	shares, err := db.ListShares(ctx, user.ID, resourceID, time.Now().UTC())
+	if err != nil || len(shares) != 1 {
+		t.Fatalf("inherited shares: %d %v", len(shares), err)
+	}
+	token, ok := splitDeliveryPath(address)
+	if !ok || shares[0].Token != token || shares[0].UsedCount != 1 {
+		t.Fatalf("share was replaced while saving: %+v", shares[0])
+	}
+	settingsRequest := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+resourceID+"?share="+shares[0].ID, nil)
+	settingsRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	settingsRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+	settings := httptest.NewRecorder()
+	app.handler.ServeHTTP(settings, settingsRequest)
+	settingsPage := settings.Body.String()
+	if settings.Code != http.StatusOK || !strings.Contains(settingsPage, `value="custom" checked`) || !strings.Contains(settingsPage, `name="ttl_custom" value="5m"`) {
+		t.Fatalf("inherited minute lifetime must be shown as custom: %d %s", settings.Code, settingsPage)
+	}
+	logs, err := db.ListAccess(ctx, user.ID, resourceID, "", 10)
+	if err != nil || len(logs) != 1 {
+		t.Fatalf("inherited access history: %d %v", len(logs), err)
+	}
+}
+
 func findDeliveryAddress(t *testing.T, page string) string {
 	t.Helper()
 	const marker = "https://cfg.test/d/"
@@ -167,6 +270,21 @@ func findDeliveryAddress(t *testing.T, page string) string {
 		rest = rest[:end]
 	}
 	return rest
+}
+
+func findPasteResourceID(t *testing.T, page string) string {
+	t.Helper()
+	const marker = `name="resource_id" value="`
+	start := strings.Index(page, marker)
+	if start < 0 {
+		t.Fatalf("no paste resource id on the page: %s", page)
+	}
+	rest := page[start+len(marker):]
+	end := strings.IndexByte(rest, '"')
+	if end < 0 {
+		t.Fatalf("unterminated paste resource id on the page: %s", page)
+	}
+	return rest[:end]
 }
 
 // TestAnonymousCanBeTurnedOff is what makes this deployable by someone who

@@ -97,7 +97,9 @@ func (a *App) templateSet() *template.Template {
 				return "off"
 			}
 		},
-		"remainText": remainText,
+		"outcomeText":        accessOutcomeText,
+		"outcomeDescription": accessOutcomeDescription,
+		"remainText":         remainText,
 		// untilText says how long is left in the words someone would use when
 		// passing the link on. The absolute time is next to it; this is the
 		// part that makes it mean something without doing arithmetic.

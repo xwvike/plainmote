@@ -94,6 +94,16 @@ CREATE TABLE IF NOT EXISTS links (
 );
 CREATE INDEX IF NOT EXISTS links_resource_idx ON links(resource_id);
 
+-- A signed-in creator may explicitly keep a quick share. The resource remains
+-- anonymous until then, and this row binds that one action to the account that
+-- created it; possessing the public link alone is not enough to claim it.
+CREATE TABLE IF NOT EXISTS paste_claims (
+  resource_id UUID PRIMARY KEY REFERENCES resources(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS paste_claims_user_idx ON paste_claims(user_id);
+
 CREATE TABLE IF NOT EXISTS access_logs (
   id UUID PRIMARY KEY,
   -- The log outlives what it describes. owner_id says who may read the row and

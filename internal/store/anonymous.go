@@ -54,6 +54,16 @@ var errAnonymousTTL = fmt.Errorf("有效期最短 %d 分钟，最长 %d 分钟",
 // litter, and a link with no paste is a dead address; neither is worth having
 // on its own.
 func (d *Store) CreateAnonymousPaste(ctx context.Context, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	return d.CreateAnonymousPasteFor(ctx, "", filename, content, ttl, now)
+}
+
+// CreateAnonymousPasteFor keeps the paste anonymous while remembering which
+// signed-in account may explicitly adopt it. An empty creator is the public
+// flow and leaves no claim behind.
+func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	if creatorID != "" && (!validUUIDs(creatorID) || creatorID == AnonymousUserID) {
+		return Resource{}, Link{}, ErrNotFound
+	}
 	if ttl <= 0 {
 		ttl = AnonymousDefaultTTL
 	}
@@ -113,13 +123,113 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, '', $9, $9)
 			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now); err != nil {
 			return fmt.Errorf("create paste: %w: %w", ErrInternal, err)
 		}
-		return d.insertLink(ctx, tx, &link, now)
+		if err := d.insertLink(ctx, tx, &link, now); err != nil {
+			return err
+		}
+		if creatorID != "" {
+			if _, err := tx.Exec(ctx, `
+INSERT INTO paste_claims(resource_id, user_id, created_at)
+VALUES($1, $2, $3)
+`, resource.ID, creatorID, now); err != nil {
+				return fmt.Errorf("create paste claim: %w: %w", ErrInternal, err)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		_ = d.blobs.Delete(ctx, resource.ContentKey)
 		return Resource{}, Link{}, err
 	}
 	return resource, link, nil
+}
+
+func (d *Store) ClaimableAnonymousPaste(ctx context.Context, userID, resourceID string, now time.Time) (Resource, Link, error) {
+	if !validUUIDs(userID, resourceID) {
+		return Resource{}, Link{}, ErrNotFound
+	}
+	return d.claimableAnonymousPaste(ctx, d.db, userID, resourceID, now, false)
+}
+
+func (d *Store) claimableAnonymousPaste(ctx context.Context, q storeQuerier, userID, resourceID string, now time.Time, lock bool) (Resource, Link, error) {
+	resourceQuery := `
+SELECT r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size,
+       r.content_type, r.content_encoding, r.origin_url, r.created_at, r.updated_at
+FROM paste_claims pc
+JOIN resources r ON r.id = pc.resource_id
+WHERE pc.resource_id = $1 AND pc.user_id = $2 AND r.owner_id = $3
+  AND EXISTS (
+    SELECT 1 FROM links l
+    WHERE l.resource_id = r.id AND l.revoked_at IS NULL
+      AND (l.expires_at IS NULL OR l.expires_at > $4)
+      AND (l.max_uses = 0 OR l.used_count < l.max_uses)
+  )`
+	if lock {
+		resourceQuery += ` FOR UPDATE OF r, pc`
+	}
+	var resource Resource
+	err := q.QueryRow(ctx, resourceQuery, resourceID, userID, AnonymousUserID, now).Scan(
+		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
+		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding,
+		&resource.OriginURL, &resource.CreatedAt, &resource.UpdatedAt,
+	)
+	if err != nil {
+		return Resource{}, Link{}, translateNotFound(err)
+	}
+	linkQuery := `SELECT ` + linkColumns + ` FROM links
+WHERE resource_id = $1 AND revoked_at IS NULL
+  AND (expires_at IS NULL OR expires_at > $2)
+  AND (max_uses = 0 OR used_count < max_uses)
+ORDER BY created_at DESC, id DESC LIMIT 1`
+	if lock {
+		linkQuery += ` FOR UPDATE`
+	}
+	link, err := d.scanLink(q.QueryRow(ctx, linkQuery, resourceID, now))
+	if err != nil {
+		return Resource{}, Link{}, translateNotFound(err)
+	}
+	return resource, link, nil
+}
+
+// ClaimAnonymousPaste turns the existing anonymous resource into an owned one.
+// Its link and object are left in place, so the address, remaining lifetime,
+// use count and previously recorded visits all follow it into the account.
+func (d *Store) ClaimAnonymousPaste(ctx context.Context, userID, resourceID string, now time.Time) (Resource, error) {
+	if !validUUIDs(userID, resourceID) {
+		return Resource{}, ErrNotFound
+	}
+	var resource Resource
+	err := d.withTx(ctx, func(tx pgx.Tx) error {
+		limit, usage, err := quotaGate(ctx, tx, userID, "", now)
+		if err != nil {
+			return err
+		}
+		resource, _, err = d.claimableAnonymousPaste(ctx, tx, userID, resourceID, now, true)
+		if err != nil {
+			return err
+		}
+		if usage.Resources+1 > limit.Resources {
+			return resourceQuotaError(limit.Resources, usage.Resources)
+		}
+		if usage.StorageBytes+resource.ContentSize > limit.StorageBytes {
+			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE resources SET owner_id = $1, updated_at = $2 WHERE id = $3`, userID, now, resourceID); err != nil {
+			return fmt.Errorf("claim paste resource: %w: %w", ErrInternal, err)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE access_logs SET owner_id = $1 WHERE resource_id = $2`, userID, resourceID); err != nil {
+			return fmt.Errorf("claim paste logs: %w: %w", ErrInternal, err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM paste_claims WHERE resource_id = $1 AND user_id = $2`, resourceID, userID); err != nil {
+			return fmt.Errorf("delete paste claim: %w: %w", ErrInternal, err)
+		}
+		resource.OwnerID = userID
+		resource.UpdatedAt = now
+		return nil
+	})
+	if err != nil {
+		return Resource{}, err
+	}
+	return resource, nil
 }
 
 // pruneAnonymous removes pastes nothing can reach any more. An anonymous link

@@ -42,6 +42,14 @@ func TestAllPagesRender(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for i := 0; i < 21; i++ {
+		if err := db.RecordAccess(ctx, store.AccessEvent{
+			OwnerID: user.ID, ResourceID: resource.ID, ResourceName: resource.Name,
+			Outcome: store.OutcomeSuccess, Status: http.StatusOK,
+		}, meta); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	app := &App{
 		db: db,
@@ -86,7 +94,8 @@ func TestAllPagesRender(t *testing.T) {
 		{"dashboard page 2", "/resources/?size=10&page=2", `class="pgn on">2<`},
 		{"dashboard search", "/resources/?q=" + resource.Name, resource.Filename},
 		{"dashboard no match", "/resources/?q=%25_nothing", "没有匹配"},
-		{"logs", "/logs", "success"},
+		{"logs", "/logs", "成功"},
+		{"logs page 2", "/logs?size=20&page=2", `class="pgn on">2<`},
 		{"new resource", "/resources/new", "从文件载入内容"},
 		{"new resource, remote", "/resources/new?kind=remote", "远程地址"},
 		{"resource", "/resources/" + resource.ID, "新建分享"},
@@ -96,7 +105,7 @@ func TestAllPagesRender(t *testing.T) {
 		// so a save confirms itself by changing that line.
 		{"resource states what is live", "/resources/" + resource.ID, "条分享正在提供"},
 		{"unshared resource says so", "/resources/" + remote.ID, "尚无分享"},
-		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "expired"},
+		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "已过期"},
 	} {
 		response := get(tc.path)
 		body := response.Body.String()
@@ -120,5 +129,17 @@ func TestAllPagesRender(t *testing.T) {
 	}
 	if response := get("/resources/?size=10&page=99"); response.Code != http.StatusSeeOther {
 		t.Fatalf("out-of-range page: expected redirect, got %d", response.Code)
+	}
+	if response := get("/logs?size=20&page=99"); response.Code != http.StatusSeeOther {
+		t.Fatalf("out-of-range log page: expected redirect, got %d", response.Code)
+	}
+	logPage := get("/logs").Body.String()
+	if !strings.Contains(logPage, `href="/resources/`+resource.ID+`"`) {
+		t.Fatal("access log did not link its live resource")
+	}
+	for _, internal := range []string{"User-Agent", "X-Forwarded-For", "CF-Connecting-IP", "CF-Ray", "Forwarded", "Proto / TLS", "Query", "请求路径"} {
+		if strings.Contains(logPage, internal) {
+			t.Fatalf("access log page exposed internal HTTP field %q", internal)
+		}
 	}
 }

@@ -57,6 +57,10 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		return
 	}
 
+	pager := buildPager(page, size, total, pageSizes, func(number int) string {
+		return dashboardURL(search, size, number)
+	})
+	pager.Query = search
 	a.renderTemplate(w, http.StatusOK, "dashboard.html", pageData{
 		User:      user,
 		CSRF:      csrfValue(r),
@@ -65,7 +69,7 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		SignedIn:  true,
 		Resources: resources,
 		Quota:     quota,
-		Pager:     buildPager(search, page, size, total),
+		Pager:     pager,
 	})
 }
 
@@ -119,9 +123,9 @@ func dashboardURL(search string, size, page int) string {
 	return dashboardPath + "?" + values.Encode()
 }
 
-func buildPager(search string, page, size, total int) pager {
+func buildPager(page, size, total int, sizes []int, pageURL func(int) string) pager {
 	last := lastPage(total, size)
-	result := pager{Query: search, Size: size, Sizes: pageSizes, Total: total}
+	result := pager{Size: size, Sizes: sizes, Total: total}
 	if total > 0 {
 		result.From = (page-1)*size + 1
 		result.To = page * size
@@ -130,10 +134,10 @@ func buildPager(search string, page, size, total int) pager {
 		}
 	}
 	if page > 1 {
-		result.PrevURL = dashboardURL(search, size, page-1)
+		result.PrevURL = pageURL(page - 1)
 	}
 	if page < last {
-		result.NextURL = dashboardURL(search, size, page+1)
+		result.NextURL = pageURL(page + 1)
 	}
 
 	first := 1
@@ -149,7 +153,7 @@ func buildPager(search string, page, size, total int) pager {
 	for number := first; number <= last && number < first+pageWindow; number++ {
 		result.Links = append(result.Links, pageLink{
 			Num:     number,
-			URL:     dashboardURL(search, size, number),
+			URL:     pageURL(number),
 			Current: number == page,
 		})
 	}

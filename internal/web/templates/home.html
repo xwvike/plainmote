@@ -15,8 +15,7 @@
     </div>
 
     {{if .PasteURL}}
-    {{/* The address is what the visitor came for, so the page becomes it. The
-         content is not shown again: it has been handed over. */}}
+    {{/* The address is what the visitor came for, so the page becomes it. */}}
     <div class="panel">
       <div class="pt"><span class="sec">分享链接已生成</span></div>
       <div class="pb">
@@ -32,9 +31,18 @@
         <p class="hint">到期后链接将无法访问，内容随后由服务自动清理</p>
       </div>
     </div>
-    <div class="savebar">
+    <div class="savebar paste-result-actions">
       <a class="btn pri" href="/">再分享一份</a>
-      {{if not .SignedIn}}<span class="hint live">如需长期保存和管理，请<a href="/login">登录</a></span>{{end}}
+      {{if .SignedIn}}
+      <form class="inline" method="post" action="/paste/save">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="resource_id" value="{{.PasteResourceID}}">
+        <button type="submit">保存到我的资源</button>
+      </form>
+      <span class="hint live">保存后当前分享仍按原时间到期</span>
+      {{else}}
+      <span class="hint live">如需长期保存和管理，请<a href="/login">登录</a></span>
+      {{end}}
     </div>
 
     {{else}}

@@ -170,8 +170,29 @@ func (d *Store) RecordAccess(ctx context.Context, event AccessEvent, meta Reques
 }
 
 func (d *Store) ListAccess(ctx context.Context, ownerID, resourceID, outcome string, limit int) ([]AccessLog, error) {
+	logs, _, err := d.ListAccessPage(ctx, ownerID, resourceID, outcome, limit, 0)
+	return logs, err
+}
+
+func (d *Store) ListAccessPage(ctx context.Context, ownerID, resourceID, outcome string, limit, offset int) ([]AccessLog, int, error) {
 	if !validUUIDs(ownerID) || resourceID != "" && !validUUIDs(resourceID) {
-		return nil, ErrNotFound
+		return nil, 0, ErrNotFound
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var total int
+	if err := d.db.QueryRow(ctx, `
+SELECT COUNT(*)
+FROM access_logs
+WHERE owner_id = $1
+  AND ($2 = '' OR resource_id = NULLIF($2, '')::uuid)
+  AND ($3 = '' OR outcome = $3)
+`, ownerID, resourceID, outcome).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count access logs: %w: %w", ErrInternal, err)
 	}
 	// The owner is on the row, so a deleted resource takes nothing with it.
 	// The join is only there for the displayed name, which prefers the live
@@ -190,11 +211,11 @@ LEFT JOIN resources r ON r.id = a.resource_id
 WHERE a.owner_id = $1
   AND ($2 = '' OR a.resource_id = NULLIF($2, '')::uuid)
   AND ($3 = '' OR a.outcome = $3)
-ORDER BY a.occurred_at DESC
-LIMIT $4
-`, ownerID, resourceID, outcome, limit)
+ORDER BY a.occurred_at DESC, a.id DESC
+LIMIT $4 OFFSET $5
+`, ownerID, resourceID, outcome, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	logs := make([]AccessLog, 0, limit)
@@ -208,11 +229,11 @@ LIMIT $4
 			&item.ContentLength, &item.TLS, &item.Method, &item.Path, &item.Status,
 			&item.Detail, &item.Hits, &item.FirstAt, &item.OccurredAt,
 		); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		logs = append(logs, item)
 	}
-	return logs, rows.Err()
+	return logs, total, rows.Err()
 }
 
 const (

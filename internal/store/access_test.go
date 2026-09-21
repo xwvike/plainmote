@@ -113,6 +113,42 @@ func TestFoldingIsBoundedByItsWindow(t *testing.T) {
 	}
 }
 
+func TestListAccessPageReturnsTotalAndStablePages(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	event := AccessEvent{
+		OwnerID: user.ID, ResourceID: resource.ID, ResourceName: resource.Name,
+		Outcome: OutcomeSuccess, Status: 200,
+	}
+	for i := 0; i < 25; i++ {
+		if err := db.RecordAccess(ctx, event, RequestMeta{Method: "GET", Path: "/d/example"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	first, total, err := db.ListAccessPage(ctx, user.ID, resource.ID, OutcomeSuccess, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 25 || len(first) != 10 {
+		t.Fatalf("first page: total=%d rows=%d, want 25 and 10", total, len(first))
+	}
+	last, total, err := db.ListAccessPage(ctx, user.ID, resource.ID, OutcomeSuccess, 10, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 25 || len(last) != 5 {
+		t.Fatalf("last page: total=%d rows=%d, want 25 and 5", total, len(last))
+	}
+	for _, older := range last {
+		for _, newer := range first {
+			if older.ID == newer.ID {
+				t.Fatalf("row %s appeared on two pages", older.ID)
+			}
+		}
+	}
+}
+
 // TestDeliveriesAreNeverFolded keeps the fold off the outcome the owner
 // published the link to get.
 func TestDeliveriesAreNeverFolded(t *testing.T) {

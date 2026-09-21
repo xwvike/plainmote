@@ -393,7 +393,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		}
 	}
 
-	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares)
+	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares, now)
 
 	// The list is on the page, so the only thing left to open is one share's
 	// terms. A stale id opens nothing rather than an empty dialog.
@@ -412,15 +412,56 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	a.renderTemplate(w, status, "resource.html", data)
 }
 
-func buildShareViews(base string, resource Resource, servedType string, shares []Link) []linkView {
+func buildShareViews(base string, resource Resource, servedType string, shares []Link, now time.Time) []linkView {
 	views := make([]linkView, 0, len(shares))
 	for _, share := range shares {
+		ttlChoice, ttlCustom := shareTTLForm(share, now)
 		views = append(views, linkView{
-			Link: share,
-			URL:  base + shareAddress(share.Token, deliveryFilename(resource, servedType)),
+			Link:      share,
+			URL:       base + shareAddress(share.Token, deliveryFilename(resource, servedType)),
+			TTLChoice: ttlChoice,
+			TTLCustom: ttlCustom,
 		})
 	}
 	return views
+}
+
+// shareTTLForm maps the stored deadline back to the choices in the settings
+// dialog. Quick shares use minute-sized lifetimes, so after one is adopted it
+// belongs in the custom choice instead of pretending to be a 24-hour share.
+func shareTTLForm(link Link, now time.Time) (choice, custom string) {
+	if link.ExpiresAt == nil {
+		return "never", ""
+	}
+	ttl := link.ExpiresAt.Sub(link.CreatedAt)
+	switch ttl {
+	case time.Hour:
+		return "1h", ""
+	case 24 * time.Hour:
+		return "24h", ""
+	case 7 * 24 * time.Hour:
+		return "168h", ""
+	default:
+		return "custom", shareDurationInput(link.ExpiresAt.Sub(now))
+	}
+}
+
+func shareDurationInput(duration time.Duration) string {
+	if remainder := duration % time.Second; remainder != 0 {
+		duration += time.Second - remainder
+	}
+	switch {
+	case duration > 0 && duration%(24*time.Hour) == 0:
+		return strconv.FormatInt(int64(duration/(24*time.Hour)), 10) + "d"
+	case duration > 0 && duration%time.Hour == 0:
+		return strconv.FormatInt(int64(duration/time.Hour), 10) + "h"
+	case duration > 0 && duration%time.Minute == 0:
+		return strconv.FormatInt(int64(duration/time.Minute), 10) + "m"
+	case duration > 0 && duration%time.Second == 0:
+		return strconv.FormatInt(int64(duration/time.Second), 10) + "s"
+	default:
+		return duration.String()
+	}
 }
 
 // renderShareFragment refreshes the part of a resource page changed by a
@@ -451,7 +492,7 @@ func (a *App) renderShareFragment(w http.ResponseWriter, r *http.Request, user U
 			servedType = fetched
 		}
 	}
-	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares)
+	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares, time.Now().UTC())
 	a.renderTemplate(w, http.StatusOK, "share-fragment", data)
 }
 

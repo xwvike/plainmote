@@ -75,14 +75,15 @@ type pageData struct {
 
 	// The home page, both halves of it: the form as it was submitted when a
 	// paste was refused, and the address when one was made.
-	PasteContent  string
-	PasteFilename string
-	PasteTTL      string
-	PasteChoices  []ttlChoice
-	PasteURL      string
-	PasteExpires  time.Time
-	PasteSize     int64
-	MaxPaste      int64
+	PasteContent    string
+	PasteFilename   string
+	PasteTTL        string
+	PasteChoices    []ttlChoice
+	PasteURL        string
+	PasteResourceID string
+	PasteExpires    time.Time
+	PasteSize       int64
+	MaxPaste        int64
 
 	// ContentText is the body loaded for the editor. It is only filled in for
 	// a resource small and textual enough to show, so a large or non-text one is
@@ -141,8 +142,10 @@ type ttlChoice struct {
 
 // linkView pairs a link with the address a viewer copies.
 type linkView struct {
-	Link Link
-	URL  string
+	Link      Link
+	URL       string
+	TTLChoice string
+	TTLCustom string
 }
 
 func (a *App) routes() http.Handler {
@@ -161,6 +164,7 @@ func (a *App) routes() http.Handler {
 	// rather than existing and refusing.
 	if a.cfg.AnonymousEnabled {
 		mux.HandleFunc(pastePath, a.handlePaste)
+		mux.HandleFunc(pasteSavePath, a.handleSavePaste)
 	}
 	mux.HandleFunc("/", a.handleHome)
 	return a.noIndex(mux)
