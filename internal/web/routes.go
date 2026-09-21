@@ -58,6 +58,7 @@ type pageData struct {
 	MaxContent       int64
 	Error            string
 	LoginURL         string
+	SignInURL        string
 	RegistrationMode auth.RegistrationMode
 	Resources        []Resource
 	Quota            store.UserQuota
@@ -81,6 +82,7 @@ type pageData struct {
 	PasteChoices    []ttlChoice
 	PasteURL        string
 	PasteResourceID string
+	PasteClaimable  bool
 	PasteExpires    time.Time
 	PasteSize       int64
 	MaxPaste        int64
@@ -164,6 +166,7 @@ func (a *App) routes() http.Handler {
 	// rather than existing and refusing.
 	if a.cfg.AnonymousEnabled {
 		mux.HandleFunc(pastePath, a.handlePaste)
+		mux.HandleFunc(pasteResultPrefix, a.handlePasteResult)
 		mux.HandleFunc(pasteSavePath, a.handleSavePaste)
 	}
 	mux.HandleFunc("/", a.handleHome)

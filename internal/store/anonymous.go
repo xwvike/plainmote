@@ -57,9 +57,10 @@ func (d *Store) CreateAnonymousPaste(ctx context.Context, filename string, conte
 	return d.CreateAnonymousPasteFor(ctx, "", filename, content, ttl, now)
 }
 
-// CreateAnonymousPasteFor keeps the paste anonymous while remembering which
-// signed-in account may explicitly adopt it. An empty creator is the public
-// flow and leaves no claim behind.
+// CreateAnonymousPasteFor keeps the paste anonymous while remembering who may
+// explicitly adopt it. A signed-in creator is bound to that account; the
+// anonymous sentinel means possession of the separate result address is the
+// claim until the visitor signs in.
 func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
 	if creatorID != "" && (!validUUIDs(creatorID) || creatorID == AnonymousUserID) {
 		return Resource{}, Link{}, ErrNotFound
@@ -126,13 +127,15 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, '', $9, $9)
 		if err := d.insertLink(ctx, tx, &link, now); err != nil {
 			return err
 		}
-		if creatorID != "" {
-			if _, err := tx.Exec(ctx, `
+		claimOwner := creatorID
+		if claimOwner == "" {
+			claimOwner = AnonymousUserID
+		}
+		if _, err := tx.Exec(ctx, `
 INSERT INTO paste_claims(resource_id, user_id, created_at)
 VALUES($1, $2, $3)
-`, resource.ID, creatorID, now); err != nil {
-				return fmt.Errorf("create paste claim: %w: %w", ErrInternal, err)
-			}
+`, resource.ID, claimOwner, now); err != nil {
+			return fmt.Errorf("create paste claim: %w: %w", ErrInternal, err)
 		}
 		return nil
 	})
@@ -150,13 +153,51 @@ func (d *Store) ClaimableAnonymousPaste(ctx context.Context, userID, resourceID 
 	return d.claimableAnonymousPaste(ctx, d.db, userID, resourceID, now, false)
 }
 
+// AnonymousPasteResult reads the live paste represented by the private result
+// address. It does not consume the public share or expose the body.
+func (d *Store) AnonymousPasteResult(ctx context.Context, resourceID string, now time.Time) (Resource, Link, error) {
+	if !validUUIDs(resourceID) {
+		return Resource{}, Link{}, ErrNotFound
+	}
+	resourceQuery := `
+SELECT r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size,
+       r.content_type, r.content_encoding, r.origin_url, r.created_at, r.updated_at
+FROM paste_claims pc
+JOIN resources r ON r.id = pc.resource_id
+WHERE pc.resource_id = $1 AND r.owner_id = $2
+  AND EXISTS (
+    SELECT 1 FROM links l
+    WHERE l.resource_id = r.id AND l.revoked_at IS NULL
+      AND (l.expires_at IS NULL OR l.expires_at > $3)
+      AND (l.max_uses = 0 OR l.used_count < l.max_uses)
+  )`
+	var resource Resource
+	err := d.db.QueryRow(ctx, resourceQuery, resourceID, AnonymousUserID, now).Scan(
+		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
+		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding,
+		&resource.OriginURL, &resource.CreatedAt, &resource.UpdatedAt,
+	)
+	if err != nil {
+		return Resource{}, Link{}, translateNotFound(err)
+	}
+	link, err := d.scanLink(d.db.QueryRow(ctx, `SELECT `+linkColumns+` FROM links
+WHERE resource_id = $1 AND revoked_at IS NULL
+  AND (expires_at IS NULL OR expires_at > $2)
+  AND (max_uses = 0 OR used_count < max_uses)
+ORDER BY created_at DESC, id DESC LIMIT 1`, resourceID, now))
+	if err != nil {
+		return Resource{}, Link{}, translateNotFound(err)
+	}
+	return resource, link, nil
+}
+
 func (d *Store) claimableAnonymousPaste(ctx context.Context, q storeQuerier, userID, resourceID string, now time.Time, lock bool) (Resource, Link, error) {
 	resourceQuery := `
 SELECT r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size,
        r.content_type, r.content_encoding, r.origin_url, r.created_at, r.updated_at
 FROM paste_claims pc
 JOIN resources r ON r.id = pc.resource_id
-WHERE pc.resource_id = $1 AND pc.user_id = $2 AND r.owner_id = $3
+WHERE pc.resource_id = $1 AND pc.user_id IN ($2, $3) AND r.owner_id = $3
   AND EXISTS (
     SELECT 1 FROM links l
     WHERE l.resource_id = r.id AND l.revoked_at IS NULL
@@ -219,7 +260,7 @@ func (d *Store) ClaimAnonymousPaste(ctx context.Context, userID, resourceID stri
 		if _, err := tx.Exec(ctx, `UPDATE access_logs SET owner_id = $1 WHERE resource_id = $2`, userID, resourceID); err != nil {
 			return fmt.Errorf("claim paste logs: %w: %w", ErrInternal, err)
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM paste_claims WHERE resource_id = $1 AND user_id = $2`, resourceID, userID); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM paste_claims WHERE resource_id = $1 AND user_id IN ($2, $3)`, resourceID, userID, AnonymousUserID); err != nil {
 			return fmt.Errorf("delete paste claim: %w: %w", ErrInternal, err)
 		}
 		resource.OwnerID = userID

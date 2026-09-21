@@ -34,5 +34,5 @@ func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 		_ = a.db.DeleteSession(r.Context(), sessionID)
 	}
 	a.clearSessionCookies(w)
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

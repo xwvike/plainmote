@@ -22,6 +22,24 @@ func postPaste(t *testing.T, app *App, form url.Values, headers map[string]strin
 	return response
 }
 
+func getPasteResult(t *testing.T, app *App, posted *httptest.ResponseRecorder, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	if posted.Code != http.StatusSeeOther {
+		t.Fatalf("paste must redirect to a GET result: %d %s", posted.Code, posted.Body.String())
+	}
+	location := posted.Header().Get("Location")
+	if !strings.HasPrefix(location, pasteResultPrefix) {
+		t.Fatalf("paste result location = %q", location)
+	}
+	request := httptest.NewRequest(http.MethodGet, "https://cfg.test"+location, nil)
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
+	}
+	response := httptest.NewRecorder()
+	app.handler.ServeHTTP(response, request)
+	return response
+}
+
 // TestAnyoneCanPasteAndGetALink is the front door working: no account, no
 // cookie, one box, and an address that delivers what was typed.
 func TestAnyoneCanPasteAndGetALink(t *testing.T) {
@@ -42,17 +60,21 @@ func TestAnyoneCanPasteAndGetALink(t *testing.T) {
 		t.Fatal("the home page must not carry a noindex meta tag")
 	}
 
-	response := postPaste(t, app, url.Values{
+	posted := postPaste(t, app, url.Values{
 		"content":  {"port: 7890\n"},
 		"filename": {"notes.txt"},
 		"ttl":      {"5"},
 	}, nil)
+	response := getPasteResult(t, app, posted)
 	if response.Code != http.StatusOK {
-		t.Fatalf("paste: %d %s", response.Code, response.Body.String())
+		t.Fatalf("paste result: %d %s", response.Code, response.Body.String())
 	}
 	page := response.Body.String()
 	if strings.Contains(page, "保存到我的资源") {
 		t.Fatal("an anonymous visitor must not be offered an account save action")
+	}
+	if !strings.Contains(page, `name="robots" content="noindex, nofollow, noarchive"`) {
+		t.Fatal("the private paste result must carry its noindex meta tag")
 	}
 	address := findDeliveryAddress(t, page)
 
@@ -103,9 +125,10 @@ func TestPasteLifetimeCannotBeChosenFreely(t *testing.T) {
 
 	// A value that is not on the menu falls back to the default rather than
 	// being taken at face value or costing the visitor their paste.
-	response := postPaste(t, app, url.Values{"content": {"x"}, "ttl": {"1440"}}, nil)
+	posted := postPaste(t, app, url.Values{"content": {"x"}, "ttl": {"1440"}}, nil)
+	response := getPasteResult(t, app, posted)
 	if response.Code != http.StatusOK {
-		t.Fatalf("paste: %d %s", response.Code, response.Body.String())
+		t.Fatalf("paste result: %d %s", response.Code, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), "1 分钟后") {
 		t.Fatalf("an unknown lifetime must become the default, got %s", response.Body.String())
@@ -123,12 +146,12 @@ func TestPasteRefusesADrivenCrossSitePost(t *testing.T) {
 		t.Fatalf("a cross-site post must be refused, got %d", foreign.Code)
 	}
 	own := postPaste(t, app, url.Values{"content": {"x"}}, map[string]string{"Origin": "https://cfg.test"})
-	if own.Code != http.StatusOK {
+	if own.Code != http.StatusSeeOther {
 		t.Fatalf("the page's own form must work, got %d", own.Code)
 	}
 	// No Origin at all is curl, not an attack, and is let through.
 	bare := postPaste(t, app, url.Values{"content": {"x"}}, nil)
-	if bare.Code != http.StatusOK {
+	if bare.Code != http.StatusSeeOther {
 		t.Fatalf("a request with no Origin must be allowed, got %d", bare.Code)
 	}
 }
@@ -173,10 +196,14 @@ func TestSignedInVisitorCanSaveAPasteAsAResource(t *testing.T) {
 	pasteRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	pasteRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
 	pasteRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
-	paste := httptest.NewRecorder()
-	app.handler.ServeHTTP(paste, pasteRequest)
+	posted := httptest.NewRecorder()
+	app.handler.ServeHTTP(posted, pasteRequest)
+	paste := getPasteResult(t, app, posted,
+		&http.Cookie{Name: sessionCookie, Value: session},
+		&http.Cookie{Name: csrfCookie, Value: csrf},
+	)
 	if paste.Code != http.StatusOK {
-		t.Fatalf("paste: %d %s", paste.Code, paste.Body.String())
+		t.Fatalf("paste result: %d %s", paste.Code, paste.Body.String())
 	}
 	page := paste.Body.String()
 	if !strings.Contains(page, "保存到我的资源") || !strings.Contains(page, `action="/paste/save"`) {
@@ -255,6 +282,34 @@ func TestSignedInVisitorCanSaveAPasteAsAResource(t *testing.T) {
 	logs, err := db.ListAccess(ctx, user.ID, resourceID, "", 10)
 	if err != nil || len(logs) != 1 {
 		t.Fatalf("inherited access history: %d %v", len(logs), err)
+	}
+}
+
+func TestAnonymousPasteCanReturnFromLoginAndBeSaved(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	app := newTestApp(db, user.GitHubID)
+	posted := postPaste(t, app, url.Values{"content": {"keep after login"}, "ttl": {"5"}}, nil)
+	result := getPasteResult(t, app, posted)
+	if result.Code != http.StatusOK {
+		t.Fatalf("anonymous result: %d %s", result.Code, result.Body.String())
+	}
+	resultPath := posted.Header().Get("Location")
+	wantLogin := `/login?next=` + url.QueryEscape(resultPath)
+	if !strings.Contains(result.Body.String(), `href="`+wantLogin+`"`) {
+		t.Fatalf("result login must return to %q: %s", resultPath, result.Body.String())
+	}
+
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterLogin := getPasteResult(t, app, posted,
+		&http.Cookie{Name: sessionCookie, Value: session},
+		&http.Cookie{Name: csrfCookie, Value: csrf},
+	)
+	if afterLogin.Code != http.StatusOK || !strings.Contains(afterLogin.Body.String(), "保存到我的资源") {
+		t.Fatalf("the result capability must remain claimable after login: %d %s", afterLogin.Code, afterLogin.Body.String())
 	}
 }
 

@@ -174,6 +174,27 @@ func TestClaimAnonymousPasteCanRetryAfterQuotaRefusal(t *testing.T) {
 	}
 }
 
+func TestAnonymousPasteCanBeClaimedAfterTheVisitorSignsIn(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	resource, original, err := db.CreateAnonymousPaste(ctx, "later.txt", []byte("keep later\n"), 5*time.Minute, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := db.ClaimAnonymousPaste(ctx, user.ID, resource.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed.ID != resource.ID || claimed.OwnerID != user.ID {
+		t.Fatalf("anonymous result was not transferred: %+v", claimed)
+	}
+	shares, err := db.ListShares(ctx, user.ID, resource.ID, now)
+	if err != nil || len(shares) != 1 || shares[0].Token != original.Token {
+		t.Fatalf("claim replaced the public share: %+v error=%v", shares, err)
+	}
+}
+
 // TestExpiredAnonymousPastesArePruned closes the loop: the address dying is
 // what makes the body collectable, and nothing else has to ask for it.
 func TestExpiredAnonymousPastesArePruned(t *testing.T) {

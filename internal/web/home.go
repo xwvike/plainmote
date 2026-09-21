@@ -17,6 +17,7 @@ import (
 // POST to "/" so the one unauthenticated write in the service can be rate
 // limited at the edge by a single rule, without touching the reads.
 const pastePath = "/paste"
+const pasteResultPrefix = "/paste/"
 const pasteSavePath = "/paste/save"
 
 // pasteTTLChoices are the lifetimes the page offers. Minutes only: this is a
@@ -66,6 +67,7 @@ func (a *App) homePage(r *http.Request) pageData {
 		Active:       "home",
 		Indexable:    true,
 		BaseURL:      a.baseURL(r),
+		SignInURL:    "/login",
 		PasteTTL:     pasteTTLChoices[0].Value,
 		PasteChoices: pasteTTLChoices,
 		MaxPaste:     store.AnonymousMaxBytes,
@@ -118,7 +120,7 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	if user, _, ok := a.currentUser(r); ok {
 		creatorID = user.ID
 	}
-	resource, link, err := a.db.CreateAnonymousPasteFor(r.Context(), creatorID, filename, []byte(content), ttl, time.Now().UTC())
+	resource, _, err := a.db.CreateAnonymousPasteFor(r.Context(), creatorID, filename, []byte(content), ttl, time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, store.ErrInternal) {
 			fmt.Fprintf(os.Stderr, "create paste: %v\n", err)
@@ -129,12 +131,50 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	http.Redirect(w, r, pasteResultPrefix+resource.ID, http.StatusSeeOther)
+}
+
+func (a *App) handlePasteResult(w http.ResponseWriter, r *http.Request) {
+	if !a.cfg.AnonymousEnabled {
+		writePlainError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	resourceID := strings.TrimPrefix(r.URL.Path, pasteResultPrefix)
+	if resourceID == "" || strings.Contains(resourceID, "/") {
+		writePlainError(w, http.StatusNotFound, "not found")
+		return
+	}
+	now := time.Now().UTC()
+	resource, link, err := a.db.AnonymousPasteResult(r.Context(), resourceID, now)
+	if errors.Is(err, store.ErrNotFound) {
+		writePlainError(w, http.StatusGone, "临时分享已失效")
+		return
+	}
+	if err != nil {
+		a.serverError(w, "read paste result", err)
+		return
+	}
 	data := a.pasteResultPage(r, resource, link)
+	data.SignInURL = "/login?next=" + url.QueryEscape(r.URL.RequestURI())
+	if user, _, ok := a.currentUser(r); ok {
+		if _, _, err := a.db.ClaimableAnonymousPaste(r.Context(), user.ID, resourceID, now); err == nil {
+			data.PasteClaimable = true
+		} else if !errors.Is(err, store.ErrNotFound) {
+			a.serverError(w, "read paste claim", err)
+			return
+		}
+	}
 	a.renderHome(w, r, data, http.StatusOK)
 }
 
 func (a *App) pasteResultPage(r *http.Request, resource Resource, link Link) pageData {
 	data := a.homePage(r)
+	data.Indexable = false
 	data.PasteURL = a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))
 	data.PasteResourceID = resource.ID
 	data.PasteExpires = *link.ExpiresAt
@@ -171,6 +211,7 @@ func (a *App) handleSavePaste(w http.ResponseWriter, r *http.Request) {
 	claimed, err := a.db.ClaimAnonymousPaste(r.Context(), user.ID, resourceID, now)
 	if err != nil {
 		data := a.pasteResultPage(r, resource, link)
+		data.PasteClaimable = true
 		if errors.Is(err, store.ErrNotFound) {
 			data.Error = "临时分享已失效，无法保存。"
 			a.renderHome(w, r, data, http.StatusGone)

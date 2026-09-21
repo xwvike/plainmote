@@ -33,15 +33,17 @@
     </div>
     <div class="savebar paste-result-actions">
       <a class="btn pri" href="/">再分享一份</a>
-      {{if .SignedIn}}
+      {{if .PasteClaimable}}
       <form class="inline" method="post" action="/paste/save">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="resource_id" value="{{.PasteResourceID}}">
         <button type="submit">保存到我的资源</button>
       </form>
       <span class="hint live">保存后当前分享仍按原时间到期</span>
+      {{else if .SignedIn}}
+      <span class="hint live">这份临时分享只能由创建它的账号保存</span>
       {{else}}
-      <span class="hint live">如需长期保存和管理，请<a href="/login">登录</a></span>
+      <span class="hint live">如需长期保存和管理，请<a href="{{.SignInURL}}">登录</a></span>
       {{end}}
     </div>
 
@@ -94,7 +96,7 @@
       <section>
         <h2>创建个人账户</h2>
         <p>登录后可以长期保存和修改内容，并为分享提供有效期和使用次数设置！更提供媒体资源和文件的分享能力！</p>
-        <p class="hint">{{if .SignedIn}}<a href="/resources/">前往我的资源 →</a>{{else}}<a href="/login">使用 GitHub 登录 →</a>{{end}}</p>
+        <p class="hint">{{if .SignedIn}}<a href="/resources/">前往我的资源 →</a>{{else}}<a href="{{.SignInURL}}">使用 GitHub 登录 →</a>{{end}}</p>
       </section>
     </div>
 
