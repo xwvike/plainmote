@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -93,6 +94,27 @@ func TestEveryLocaleHasEveryMessage(t *testing.T) {
 	}
 }
 
+func TestEveryTranslationKeepsItsPlaceholders(t *testing.T) {
+	bracePattern := regexp.MustCompile(`\{[a-z_]+\}`)
+	formatPattern := regexp.MustCompile(`%(?:\[[0-9]+\])?[-+#0-9 .]*[a-zA-Z]`)
+	signature := func(value string) string {
+		parts := bracePattern.FindAllString(value, -1)
+		for _, match := range formatPattern.FindAllString(value, -1) {
+			parts = append(parts, match[len(match)-1:])
+		}
+		slices.Sort(parts)
+		return strings.Join(parts, "|")
+	}
+	for key, values := range messageTable {
+		want := signature(values[0])
+		for index, locale := range []string{"en", "zh-CN", "zh-TW", "ja", "fr", "de"} {
+			if got := signature(values[index]); got != want {
+				t.Errorf("message %q placeholders for %s = %q, want %q", key, locale, got, want)
+			}
+		}
+	}
+}
+
 func TestEveryTemplateMessageExists(t *testing.T) {
 	paths, err := fs.Glob(webAssets, "templates/*.html")
 	if err != nil {
@@ -122,13 +144,43 @@ func TestDynamicMessagesFormatCleanly(t *testing.T) {
 			countText(locale, 2, "shares"),
 			shareStatus(locale, 1, false, "", time.Now()),
 			shareStatus(locale, 2, true, "https://example.com/file", time.Now()),
+			deleteWarning(locale, 1),
 			deleteWarning(locale, 2),
+		}
+		for _, duration := range []time.Duration{
+			24 * time.Hour, 25 * time.Hour, 26 * time.Hour, 49 * time.Hour, 50 * time.Hour,
+			time.Hour, time.Hour + time.Minute, time.Hour + 2*time.Minute,
+			2 * time.Hour, 2*time.Hour + time.Minute, 2*time.Hour + 2*time.Minute,
+			time.Minute, 2 * time.Minute,
+		} {
+			values = append(values, remainingText(locale, duration))
 		}
 		for _, value := range values {
 			if strings.Contains(value, "%!") || strings.TrimSpace(value) == "" {
 				t.Errorf("invalid dynamic message for %s: %q", locale, value)
 			}
 		}
+	}
+}
+
+func TestRemainingTimeUsesNaturalSingularForms(t *testing.T) {
+	for _, test := range []struct {
+		locale string
+		left   time.Duration
+		want   string
+	}{
+		{"en", 24 * time.Hour, "1 day left"},
+		{"fr", 25 * time.Hour, "Encore 1 jour et 1 heure"},
+		{"de", 49 * time.Hour, "Noch 2 Tage 1 Stunde"},
+		{"ja", 61 * time.Minute, "残り1時間1分"},
+		{"zh-TW", time.Minute, "剩 1 分鐘"},
+	} {
+		if got := remainingText(test.locale, test.left); got != test.want {
+			t.Errorf("remainingText(%q, %s) = %q, want %q", test.locale, test.left, got, test.want)
+		}
+	}
+	if got := deleteWarning("fr", 1); got != "Cette ressource sera supprimée définitivement et 1 partage actif sera révoqué." {
+		t.Fatalf("French singular delete warning = %q", got)
 	}
 }
 
@@ -185,5 +237,36 @@ func TestLanguageSwitcherRendering(t *testing.T) {
 		if !strings.Contains(vary, "Accept-Language") || !strings.Contains(vary, "Cookie") {
 			t.Fatalf("language-dependent page has Vary %q", vary)
 		}
+	}
+}
+
+func TestIndexableHomeHasLocalizedDiscoveryMetadata(t *testing.T) {
+	app := &App{cfg: Config{AnonymousEnabled: true}}
+	app.templates = app.templateSet()
+	request := httptest.NewRequest(http.MethodGet, "https://plainmote.example/", nil)
+	request.Header.Set("Accept-Language", "zh-CN")
+	response := httptest.NewRecorder()
+	app.renderTemplate(response, request, http.StatusOK, "home.html", pageData{
+		BaseURL: "https://plainmote.example", Indexable: true, MaxPaste: 1024,
+	})
+	body := response.Body.String()
+	for _, expected := range []string{
+		`<meta name="description" content="无需登录即可安全、隐秘地分享文本`,
+		`<meta name="keywords" content="安全分享, 隐秘分享`,
+		`<link rel="canonical" href="https://plainmote.example/">`,
+		`<meta property="og:locale" content="zh_CN">`,
+		`<meta property="og:url" content="https://plainmote.example/">`,
+		`<meta name="twitter:card" content="summary">`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("home metadata is missing %q", expected)
+		}
+	}
+
+	response = httptest.NewRecorder()
+	app.renderTemplate(response, request, http.StatusOK, "home.html", pageData{BaseURL: "https://plainmote.example"})
+	body = response.Body.String()
+	if strings.Contains(body, `rel="canonical"`) || strings.Contains(body, `property="og:`) {
+		t.Fatal("a non-indexable paste result exposed homepage discovery metadata")
 	}
 }

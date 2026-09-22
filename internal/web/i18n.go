@@ -108,6 +108,23 @@ var languageLabels = map[string]string{
 	"de":    "DE",
 }
 
+func openGraphLocale(locale string) string {
+	switch locale {
+	case "zh-CN":
+		return "zh_CN"
+	case "zh-TW":
+		return "zh_TW"
+	case "ja":
+		return "ja_JP"
+	case "fr":
+		return "fr_FR"
+	case "de":
+		return "de_DE"
+	default:
+		return "en_US"
+	}
+}
+
 func translate(locale, key string) string {
 	if catalog := messageCatalogs[locale]; catalog != nil {
 		if value := catalog[key]; value != "" {

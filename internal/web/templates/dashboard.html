@@ -23,27 +23,29 @@
         <span class="sp hint">{{countText .Locale .Pager.Total "items"}} · {{tr .Locale "used"}} {{.Quota.Usage.Resources}}/{{.Quota.Limit.Resources}} · {{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</span>
       </div>
       {{if .Resources}}
-      <table class="fx">
-        <colgroup><col style="width:240px"><col><col style="width:210px"><col style="width:130px"><col style="width:150px"></colgroup>
-        <thead><tr><th>{{tr .Locale "name"}}</th><th>{{tr .Locale "filename"}}</th><th>{{tr .Locale "type"}}</th><th>{{tr .Locale "status"}}</th><th class="r">{{tr .Locale "updated"}}</th></tr></thead>
-        <tbody>
-          {{range .Resources}}
-          <tr>
-            <td class="trunc"><a href="/resources/{{.ID}}">{{.Name}}</a></td>
-            <td><span class="fl"><span class="mono trunc" title="{{.Filename}}">{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">{{tr $.Locale "remote"}}</span>{{end}}</span></td>
-            <td>
-              {{if .Remote}}<span class="fl"><span class="tag">{{tr $.Locale "upstream"}}</span><span class="mono trunc" title="{{.OriginURL}}">{{originHost .OriginURL}}</span></span>
-              {{else}}<span class="mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
-            </td>
-            <td>
-              {{if .LiveShares}}<span class="st on"><i></i><span>{{countText $.Locale .LiveShares "shares"}}</span></span>
-              {{else}}<span class="st off"><i></i><span>{{tr $.Locale "not_shared"}}</span></span>{{end}}
-            </td>
-            <td class="num">{{formatMinute .UpdatedAt}}</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="fx">
+          <colgroup><col style="width:240px"><col><col style="width:210px"><col style="width:130px"><col style="width:150px"></colgroup>
+          <thead><tr><th>{{tr .Locale "name"}}</th><th>{{tr .Locale "filename"}}</th><th>{{tr .Locale "type"}}</th><th>{{tr .Locale "status"}}</th><th class="r">{{tr .Locale "updated"}}</th></tr></thead>
+          <tbody>
+            {{range .Resources}}
+            <tr>
+              <td class="trunc"><a href="/resources/{{.ID}}">{{.Name}}</a></td>
+              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}">{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">{{tr $.Locale "remote"}}</span>{{end}}</span></td>
+              <td>
+                {{if .Remote}}<span class="fl"><span class="tag">{{tr $.Locale "upstream"}}</span><span class="mono trunc" title="{{.OriginURL}}">{{originHost .OriginURL}}</span></span>
+                {{else}}<span class="mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
+              </td>
+              <td>
+                {{if .LiveShares}}<span class="st on"><i></i><span>{{countText $.Locale .LiveShares "shares"}}</span></span>
+                {{else}}<span class="st off"><i></i><span>{{tr $.Locale "not_shared"}}</span></span>{{end}}
+              </td>
+              <td class="num">{{formatMinute .UpdatedAt}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
       <div class="pf">
         <div class="pg">
           <span class="hint">{{pageSummary .Locale .Pager.From .Pager.To .Pager.Total "items"}}</span>
@@ -60,7 +62,7 @@
         </div>
       </div>
       {{else}}
-      <p class="empty">{{if .Pager.Query}}{{tr .Locale "no_matching_resources"}}「{{.Pager.Query}}」{{else}}{{tr .Locale "no_resources"}}{{end}}</p>
+      <p class="empty">{{if .Pager.Query}}{{tr .Locale "no_matching_resources"}}<span class="mono">{{.Pager.Query}}</span>{{else}}{{tr .Locale "no_resources"}}{{end}}</p>
       {{end}}
     </div>
   </main>

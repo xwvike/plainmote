@@ -62,7 +62,8 @@ var editorEncodingOptions = []encodingOption{
 
 func (a *App) templateSet() *template.Template {
 	return template.Must(template.New("pages").Funcs(template.FuncMap{
-		"tr": translate,
+		"tr":              translate,
+		"openGraphLocale": openGraphLocale,
 		"formatTime": func(value time.Time) string {
 			if value.IsZero() {
 				return "-"
@@ -116,7 +117,10 @@ func remainText(locale string, value *time.Time) string {
 	if value == nil {
 		return translate(locale, "remain_never")
 	}
-	left := time.Until(*value)
+	return remainingText(locale, time.Until(*value))
+}
+
+func remainingText(locale string, left time.Duration) string {
 	if left <= 0 {
 		return translate(locale, "remain_expired")
 	}
@@ -124,18 +128,49 @@ func remainText(locale string, value *time.Time) string {
 	case left >= 24*time.Hour:
 		days := int(left / (24 * time.Hour))
 		hours := int((left % (24 * time.Hour)) / time.Hour)
+		if days == 1 {
+			switch hours {
+			case 0:
+				return translate(locale, "remain_day")
+			case 1:
+				return translate(locale, "remain_day_hour")
+			default:
+				return fmt.Sprintf(translate(locale, "remain_day_hours"), hours)
+			}
+		}
 		if hours == 0 {
 			return fmt.Sprintf(translate(locale, "remain_days"), days)
 		}
+		if hours == 1 {
+			return fmt.Sprintf(translate(locale, "remain_days_hour"), days)
+		}
 		return fmt.Sprintf(translate(locale, "remain_days_hours"), days, hours)
 	case left >= time.Hour:
+		hours := int(left / time.Hour)
 		minutes := int((left % time.Hour) / time.Minute)
-		if minutes == 0 {
-			return fmt.Sprintf(translate(locale, "remain_hours"), int(left/time.Hour))
+		if hours == 1 {
+			switch minutes {
+			case 0:
+				return translate(locale, "remain_hour")
+			case 1:
+				return translate(locale, "remain_hour_minute")
+			default:
+				return fmt.Sprintf(translate(locale, "remain_hour_minutes"), minutes)
+			}
 		}
-		return fmt.Sprintf(translate(locale, "remain_hours_minutes"), int(left/time.Hour), minutes)
+		if minutes == 0 {
+			return fmt.Sprintf(translate(locale, "remain_hours"), hours)
+		}
+		if minutes == 1 {
+			return fmt.Sprintf(translate(locale, "remain_hours_minute"), hours)
+		}
+		return fmt.Sprintf(translate(locale, "remain_hours_minutes"), hours, minutes)
 	case left >= time.Minute:
-		return fmt.Sprintf(translate(locale, "remain_minutes"), int(left/time.Minute))
+		minutes := int(left / time.Minute)
+		if minutes == 1 {
+			return translate(locale, "remain_minute")
+		}
+		return fmt.Sprintf(translate(locale, "remain_minutes"), minutes)
 	default:
 		return translate(locale, "remain_less_minute")
 	}
@@ -215,6 +250,9 @@ func shareStatus(locale string, count int, remote bool, origin string, updated t
 func deleteWarning(locale string, shares int) string {
 	if shares == 0 {
 		return translate(locale, "delete_warning")
+	}
+	if shares == 1 {
+		return translate(locale, "delete_warning_share")
 	}
 	return fmt.Sprintf(translate(locale, "delete_warning_shares"), shares)
 }

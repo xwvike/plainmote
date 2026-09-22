@@ -4,13 +4,33 @@
   {{template "htmlhead" .}}
   <title>PlainMote · {{tr .Locale "home_title"}}</title>
   <meta name="description" content="{{tr .Locale "home_description"}}">
+  {{if .Indexable}}<meta name="keywords" content="{{tr .Locale "home_keywords"}}">
+  <meta name="application-name" content="PlainMote">
+  <meta name="theme-color" content="#17479e">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="{{.BaseURL}}/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="PlainMote">
+  <meta property="og:locale" content="{{openGraphLocale .Locale}}">
+  <meta property="og:title" content="PlainMote · {{tr .Locale "home_title"}}">
+  <meta property="og:description" content="{{tr .Locale "home_description"}}">
+  <meta property="og:url" content="{{.BaseURL}}/">
+  <meta property="og:image" content="{{.BaseURL}}/static/logo.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="256">
+  <meta property="og:image:height" content="256">
+  <meta property="og:image:alt" content="PlainMote">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="PlainMote · {{tr .Locale "home_title"}}">
+  <meta name="twitter:description" content="{{tr .Locale "home_description"}}">
+  <meta name="twitter:image" content="{{.BaseURL}}/static/logo.png">{{end}}
 </head>
 <body>
   {{template "topbar" .}}
   <main class="page">
 
     <div class="lede">
-      <h1>{{tr .Locale "home_heading"}}</h1>
+      <h1>{{tr .Locale "home_title"}}</h1>
       <p>{{tr .Locale "home_subheading"}}</p>
     </div>
 
@@ -26,7 +46,7 @@
         </div>
         <span class="st on">
           <i></i>
-          <span>{{tr .Locale "valid_until"}} {{formatTime .PasteExpires}}（{{untilText .Locale .PasteExpires}}）· {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
+          <span>{{tr .Locale "valid_until"}} {{formatTime .PasteExpires}} ({{untilText .Locale .PasteExpires}}) · {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
         </span>
         <p class="hint">{{tr .Locale "paste_expiry_note"}}</p>
       </div>

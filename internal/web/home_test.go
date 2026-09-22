@@ -173,7 +173,7 @@ func TestSignedInVisitorIsToldThePasteIsTemporary(t *testing.T) {
 	app.handler.ServeHTTP(response, request)
 
 	page := response.Body.String()
-	if !strings.Contains(page, "This is a temporary share") {
+	if !strings.Contains(page, "Temporary share · Long-term storage") {
 		t.Fatal("a signed-in visitor must be told the box still creates a temporary share")
 	}
 	if !strings.Contains(page, `href="/resources/"`) {

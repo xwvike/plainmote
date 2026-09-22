@@ -70,7 +70,7 @@ func TestLoginExplainsRestrictedRegistrationModes(t *testing.T) {
 		want string
 	}{
 		{auth.RegistrationAllowlist, "Only approved GitHub accounts can sign in."},
-		{auth.RegistrationClosed, "New accounts are currently closed."},
+		{auth.RegistrationClosed, "New account registration is currently closed."},
 	} {
 		app := &App{cfg: Config{RegistrationMode: tc.mode}}
 		app.templates = app.templateSet()
