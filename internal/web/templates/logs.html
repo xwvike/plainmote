@@ -1,40 +1,40 @@
 {{define "logs.html"}}<!doctype html>
-<html lang="zh-CN">
+<html lang="{{.Locale}}">
 <head>
-  {{template "htmlhead"}}
-  <title>访问记录 - PlainMote</title>
+  {{template "htmlhead" .}}
+  <title>{{tr .Locale "access_logs"}} · PlainMote</title>
 </head>
 <body>
   {{template "topbar" .}}
   <main class="page">
     <div class="ph">
-      <h1>访问记录</h1>
-      <span class="cnt sp">{{.Pager.Total}} 条</span>
+      <h1>{{tr .Locale "access_logs"}}</h1>
+      <span class="cnt sp">{{countText .Locale .Pager.Total "entries"}}</span>
     </div>
     <form class="panel log-filter" method="get" action="/logs">
-      <label class="pick log-filter-resource"><span>资源</span>
+      <label class="pick log-filter-resource"><span>{{tr .Locale "resource"}}</span>
         <select name="resource">
-          <option value="">全部资源</option>
+          <option value="">{{tr .Locale "all_resources"}}</option>
           {{range .Resources}}<option value="{{.ID}}"{{if eq .ID $.LogResource}} selected{{end}}>{{.Name}}</option>{{end}}
         </select>
       </label>
-      <label class="pick log-filter-outcome"><span>结果</span>
+      <label class="pick log-filter-outcome"><span>{{tr .Locale "result"}}</span>
         <select name="outcome">
-          <option value="">全部结果</option>
-          {{range .Outcomes}}<option value="{{.}}"{{if eq . $.LogOutcome}} selected{{end}}>{{outcomeText .}}</option>{{end}}
+          <option value="">{{tr .Locale "all_results"}}</option>
+          {{range .Outcomes}}<option value="{{.}}"{{if eq . $.LogOutcome}} selected{{end}}>{{outcomeText $.Locale .}}</option>{{end}}
         </select>
       </label>
       <input type="hidden" name="size" value="{{.Pager.Size}}">
-      <button type="submit">筛选</button>
-      {{if or .LogResource .LogOutcome}}<a class="btn" href="/logs">清除</a>{{end}}
+      <button type="submit">{{tr .Locale "filter"}}</button>
+      {{if or .LogResource .LogOutcome}}<a class="btn" href="/logs">{{tr .Locale "clear"}}</a>{{end}}
     </form>
     <div class="panel lg">
-      <div class="lgh"><span>时间</span><span>结果</span><span>资源</span><span>使用的分享</span><span>来源 IP</span><span>次数</span><span></span></div>
+      <div class="lgh"><span>{{tr .Locale "time"}}</span><span>{{tr .Locale "result"}}</span><span>{{tr .Locale "resource"}}</span><span>{{tr .Locale "share_used"}}</span><span>{{tr .Locale "source_ip"}}</span><span>{{tr .Locale "count"}}</span><span></span></div>
       {{range .AccessLogs}}
       <details>
         <summary>
           <span class="tm">{{formatTime .OccurredAt}}</span>
-          <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{outcomeText .Outcome}}</span></span>
+          <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{outcomeText $.Locale .Outcome}}</span></span>
           <span class="trunc" title="{{.ResourceName}}">{{if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</span>
           <span class="trunc" title="{{.LinkName}}">{{if .LinkName}}{{.LinkName}}{{else}}<span class="mut">—</span>{{end}}</span>
           <span class="mono">{{.RemoteIP}}</span>
@@ -43,35 +43,35 @@
         </summary>
         <div class="exp">
           <dl class="kv">
-            <dt>资源</dt><dd>{{if .ResourceID}}<a href="/resources/{{.ResourceID}}">{{.ResourceName}}</a>{{else if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</dd>
-            <dt>文件名</dt><dd>{{if .ResourceFile}}{{.ResourceFile}}{{else}}<span class="mut">—</span>{{end}}</dd>
-            <dt>使用的分享</dt><dd>{{if .LinkName}}{{.LinkName}}{{else}}<span class="mut">—</span>{{end}}</dd>
-            <dt>来源 IP</dt><dd>{{if .RemoteIP}}{{.RemoteIP}}{{else}}<span class="mut">—</span>{{end}}</dd>
-            <dt>访问次数</dt><dd>{{.Hits}}</dd>
+            <dt>{{tr $.Locale "resource"}}</dt><dd>{{if .ResourceID}}<a href="/resources/{{.ResourceID}}">{{.ResourceName}}</a>{{else if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>{{tr $.Locale "filename"}}</dt><dd>{{if .ResourceFile}}{{.ResourceFile}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>{{tr $.Locale "share_used"}}</dt><dd>{{if .LinkName}}{{.LinkName}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>{{tr $.Locale "source_ip"}}</dt><dd>{{if .RemoteIP}}{{.RemoteIP}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>{{tr $.Locale "access_count"}}</dt><dd>{{.Hits}}</dd>
           </dl>
           <dl class="kv">
-            <dt>结果</dt><dd>{{outcomeDescription .Outcome}}</dd>
+            <dt>{{tr $.Locale "result"}}</dt><dd>{{outcomeDescription $.Locale .Outcome}}</dd>
             {{if gt .Hits 1}}
-            <dt>首次访问</dt><dd>{{formatTime .FirstAt}}</dd>
-            <dt>最近访问</dt><dd>{{formatTime .OccurredAt}}</dd>
+            <dt>{{tr $.Locale "first_access"}}</dt><dd>{{formatTime .FirstAt}}</dd>
+            <dt>{{tr $.Locale "latest_access"}}</dt><dd>{{formatTime .OccurredAt}}</dd>
             {{else}}
-            <dt>访问时间</dt><dd>{{formatTime .OccurredAt}}</dd>
+            <dt>{{tr $.Locale "access_time"}}</dt><dd>{{formatTime .OccurredAt}}</dd>
             {{end}}
           </dl>
         </div>
       </details>
       {{else}}
-      <p class="empty">没有符合条件的访问记录。</p>
+      <p class="empty">{{tr .Locale "no_access_logs"}}</p>
       {{end}}
       {{if .AccessLogs}}
       <div class="pf">
         <div class="pg">
-          <span class="hint">第 {{.Pager.From}}–{{.Pager.To}} 条，共 {{.Pager.Total}} 条</span>
+          <span class="hint">{{pageSummary .Locale .Pager.From .Pager.To .Pager.Total "entries"}}</span>
           <form class="psize" method="get" action="/logs">
             <input type="hidden" name="resource" value="{{.LogResource}}">
             <input type="hidden" name="outcome" value="{{.LogOutcome}}">
-            <label>每页 <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
-            <button type="submit" class="sm">应用</button>
+            <label>{{tr .Locale "per_page"}} <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+            <button type="submit" class="sm">{{tr .Locale "apply"}}</button>
           </form>
           <span class="pages">
             {{if .Pager.PrevURL}}<a class="pgn" href="{{.Pager.PrevURL}}">&lsaquo;</a>{{else}}<span class="pgn dis">&lsaquo;</span>{{end}}

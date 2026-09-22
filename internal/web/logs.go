@@ -17,43 +17,43 @@ const defaultLogPageSize = 20
 
 var logPageSizes = []int{20, 50, 100}
 
-func accessOutcomeText(outcome string) string {
+func accessOutcomeText(locale, outcome string) string {
 	switch outcome {
 	case store.OutcomeSuccess:
-		return "成功"
+		return translate(locale, "outcome_success")
 	case store.OutcomeExpired:
-		return "已过期"
+		return translate(locale, "outcome_expired")
 	case store.OutcomeExhausted:
-		return "次数已用完"
+		return translate(locale, "outcome_exhausted")
 	case store.OutcomeRevoked:
-		return "已撤销"
+		return translate(locale, "outcome_revoked")
 	case store.OutcomeUpstreamError:
-		return "回源失败"
+		return translate(locale, "outcome_upstream_error")
 	case "invalid":
-		return "链接无效"
+		return translate(locale, "outcome_invalid")
 	case "missing_token":
-		return "缺少链接"
+		return translate(locale, "outcome_missing_token")
 	default:
-		return "未知结果"
+		return translate(locale, "outcome_unknown")
 	}
 }
 
-func accessOutcomeDescription(outcome string) string {
+func accessOutcomeDescription(locale, outcome string) string {
 	switch outcome {
 	case store.OutcomeSuccess:
-		return "资源已成功交付"
+		return translate(locale, "outcome_desc_success")
 	case store.OutcomeExpired:
-		return "访问时分享已经过期"
+		return translate(locale, "outcome_desc_expired")
 	case store.OutcomeExhausted:
-		return "分享的可用次数已经用完"
+		return translate(locale, "outcome_desc_exhausted")
 	case store.OutcomeRevoked:
-		return "访问时分享已经撤销"
+		return translate(locale, "outcome_desc_revoked")
 	case store.OutcomeUpstreamError:
-		return "未能从远程地址获取资源"
+		return translate(locale, "outcome_desc_upstream_error")
 	case "invalid", "missing_token":
-		return "请求没有对应的有效分享"
+		return translate(locale, "outcome_desc_invalid")
 	default:
-		return "访问没有完成"
+		return translate(locale, "outcome_desc_unknown")
 	}
 }
 
@@ -98,7 +98,7 @@ func (a *App) handleLogs(w http.ResponseWriter, r *http.Request) {
 	pager := buildPager(page, size, total, logPageSizes, func(number int) string {
 		return logsURL(resourceID, outcome, size, number)
 	})
-	a.renderTemplate(w, http.StatusOK, "logs.html", pageData{
+	a.renderTemplate(w, r, http.StatusOK, "logs.html", pageData{
 		User: user, CSRF: csrfValue(r), Active: "logs", BaseURL: a.baseURL(r), SignedIn: true,
 		AccessLogs: logs, Resources: resources,
 		LogResource: resourceID, LogOutcome: outcome, Outcomes: accessOutcomes,

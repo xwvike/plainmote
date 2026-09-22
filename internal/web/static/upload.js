@@ -66,6 +66,12 @@ export function sizeText(size) {
 
 const controllers = new WeakMap();
 
+function message(name, values = {}) {
+  let text = document.body.dataset[name] || "";
+  for (const [key, value] of Object.entries(values)) text = text.replaceAll(`{${key}}`, value);
+  return text;
+}
+
 // Metadata alone gives the controls a duration, but browsers are allowed to
 // leave the video surface blank until playback starts. A tiny seek asks for
 // the first decodable frame without autoplaying or preloading the whole file.
@@ -226,10 +232,10 @@ function enhanceUpload(input) {
     } else if (kind === "file" || listeners.size === 0) {
       showFile(file);
     } else {
-      showText(file, `正在读取 ${file.name}…`);
+      showText(file, message("msgUploadReading", { name: file.name }));
     }
     if (oversize) {
-      setStatus(`文件大小为 ${sizeText(file.size)}，超过 ${sizeText(maxBytes)} 上限。`);
+      setStatus(message("msgUploadOversize", { size: sizeText(file.size), limit: sizeText(maxBytes) }));
     }
     notify({ file, kind, version: currentVersion, oversize });
   };

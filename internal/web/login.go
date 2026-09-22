@@ -17,7 +17,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("error") != "" {
 		data.Error = r.URL.Query().Get("error")
 	}
-	a.renderTemplate(w, http.StatusOK, "login.html", data)
+	a.renderTemplate(w, r, http.StatusOK, "login.html", data)
 }
 
 func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {

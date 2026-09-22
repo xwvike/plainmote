@@ -1,23 +1,23 @@
 {{define "share-status"}}<span class="st live {{if .Shares}}on{{else}}off{{end}}" data-share-status>
   <i></i>
-  <span>{{if .Shares}}{{len .Shares}} 条分享正在提供{{if .Resource.Remote}} {{originHost .Resource.OriginURL}} 的实时内容{{else}} {{formatTime .Resource.UpdatedAt}} 的版本{{end}}{{else}}尚无分享，当前无法通过链接访问{{end}}</span>
+  <span>{{if .Shares}}{{shareStatus .Locale (len .Shares) .Resource.Remote .Resource.OriginURL .Resource.UpdatedAt}}{{else}}{{tr .Locale "no_live_shares"}}{{end}}</span>
 </span>{{end}}
 
 {{define "share-panel"}}<div class="panel" data-share-panel>
   <div class="pt">
-    <span class="sec">分享</span>
+    <span class="sec">{{tr .Locale "sharing"}}</span>
     <span class="sp">
       {{if .Shares}}
       <form method="post" action="/resources/{{.Resource.ID}}/share" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="revoke_all">
-        <button type="submit" class="sm">全部撤销</button>
+        <button type="submit" class="sm">{{tr .Locale "revoke_all"}}</button>
       </form>
       {{end}}
       <form method="post" action="/resources/{{.Resource.ID}}/share" class="inline" data-share-create>
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="create">
-        <button type="submit" class="sm pri">新建分享</button>
+        <button type="submit" class="sm pri">{{tr .Locale "new_share"}}</button>
       </form>
     </span>
   </div>
@@ -26,21 +26,21 @@
     <ul class="shl">
       {{range .Shares}}
       <li>
-        <input type="text" readonly value="{{.URL}}" aria-label="分享链接" onfocus="this.select()">
-        <button type="button" class="sm" data-copy="{{.URL}}">复制</button>
-        <span class="ttl">{{if .Link.Name}}{{.Link.Name}} · {{end}}{{remainText .Link.ExpiresAt}}{{if .Link.MaxUses}} · 限 {{.Link.MaxUses}} 次{{end}} · 已用 {{.Link.UsedCount}}</span>
-        <a class="btn sm" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}">设置</a>
+        <input type="text" readonly value="{{.URL}}" aria-label="{{tr $.Locale "share_link"}}" onfocus="this.select()">
+        <button type="button" class="sm" data-copy="{{.URL}}">{{tr $.Locale "copy"}}</button>
+        <span class="ttl">{{if .Link.Name}}{{.Link.Name}} · {{end}}{{remainText $.Locale .Link.ExpiresAt}}{{if .Link.MaxUses}} · {{tr $.Locale "limited_to"}} {{.Link.MaxUses}}{{end}} · {{tr $.Locale "used_count"}} {{.Link.UsedCount}}</span>
+        <a class="btn sm" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}">{{tr $.Locale "settings"}}</a>
         <form method="post" action="/resources/{{$.Resource.ID}}/share" class="inline">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="action" value="revoke">
           <input type="hidden" name="share_id" value="{{.Link.ID}}">
-          <button type="submit" class="sm">撤销</button>
+          <button type="submit" class="sm">{{tr $.Locale "revoke"}}</button>
         </form>
       </li>
       {{end}}
     </ul>
     {{else}}
-    <p class="ro">尚无分享，当前无法通过链接访问</p>
+    <p class="ro">{{tr .Locale "no_live_shares"}}</p>
     {{end}}
   </div>
 </div>{{end}}

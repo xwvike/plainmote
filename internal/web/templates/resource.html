@@ -1,20 +1,27 @@
 {{define "resource.html"}}<!doctype html>
-<html lang="zh-CN">
+<html lang="{{.Locale}}">
 <head>
-  {{template "htmlhead"}}
-  <title>{{if .IsNew}}新建{{else}}{{.Resource.Name}}{{end}} - PlainMote</title>
+  {{template "htmlhead" .}}
+  <title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{.Resource.Name}}{{end}} · PlainMote</title>
 </head>
-<body>
+<body data-msg-editor-reopening="{{tr .Locale "editor_reopening"}}"
+      data-msg-editor-read-failed="{{tr .Locale "editor_read_failed"}}"
+      data-msg-editor-reopen-failed="{{tr .Locale "editor_reopen_failed"}}"
+      data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
+      data-msg-editor-detect-failed="{{tr .Locale "editor_detect_failed"}}"
+      data-msg-editor-file-reopen-failed="{{tr .Locale "editor_file_reopen_failed"}}"
+      data-msg-upload-reading="{{tr .Locale "upload_reading"}}"
+      data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}">
   {{template "topbar" .}}
   <main class="page{{if not .IsNew}} resource-detail{{end}}">
-    <div class="crumb"><a href="/resources/">资源</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}引用地址{{else}}新建资源{{end}}{{else}}{{.Resource.Name}}{{end}}</span></div>
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}{{else}}{{.Resource.Name}}{{end}}</span></div>
     {{if .IsNew}}
-    <div class="ph"><h1>{{if eq .NewKind "remote"}}引用地址{{else}}新建资源{{end}}</h1></div>
+    <div class="ph"><h1>{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}</h1></div>
     {{else}}
     <div class="ph">
       <h1>{{.Resource.Name}}</h1>
       <span class="sp">
-        <a class="btn" href="/resources/{{.Resource.ID}}?delete=1">删除</a>
+        <a class="btn" href="/resources/{{.Resource.ID}}?delete=1">{{tr .Locale "delete"}}</a>
       </span>
     </div>
     {{end}}
@@ -29,31 +36,31 @@
           <div class="pt">
             {{/* While creating a reference the panel is the address; once it
                  exists the panel is what that address returns. */}}
-            <span class="sec">{{if and .IsNew $remote}}远程地址{{else}}内容{{end}}</span>
-            {{if and $remote (not .IsNew)}}<span class="tag">只读</span>{{end}}
+            <span class="sec">{{if and .IsNew $remote}}{{tr .Locale "remote_url"}}{{else}}{{tr .Locale "content"}}{{end}}</span>
+            {{if and $remote (not .IsNew)}}<span class="tag">{{tr .Locale "read_only"}}</span>{{end}}
             {{if not $remote}}
             {{/* Next to the title, because this is how the content gets in -
                  the pickers on the right are about how it is stored. The status
                  follows the control that produces it: it is the only line in
                  this flow that says out loud what just happened. */}}
-            <input type="file" name="upload" aria-label="{{if .IsNew}}从文件载入内容{{else}}替换文件{{end}}" data-upload data-max-bytes="{{.MaxContent}}" class="pickfile">
+            <input type="file" name="upload" aria-label="{{if .IsNew}}{{tr .Locale "load_from_file"}}{{else}}{{tr .Locale "replace_file"}}{{end}}" data-upload data-max-bytes="{{.MaxContent}}" class="pickfile">
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             {{end}}
             <span class="sp">
               {{if and (not $remote) (or .Resource.Editable .IsNew)}}
               <span class="text-controls" data-text-controls>
-              <label class="encoding-picker"><span>文件编码</span><select name="content_encoding" data-encoding-select aria-label="文件编码" title="选择用于保存的文件编码">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
-              <button type="button" class="sm encoding-reopen" data-reopen-encoding title="使用所选文件编码重新打开原始内容，会替换编辑器中的当前内容">通过编码重新打开</button>
-              <label class="encoding-picker eol-picker"><span>行尾序列</span><select name="content_eol" data-eol-select aria-label="行尾序列" title="选择行尾序列">
+              <label class="encoding-picker"><span>{{tr .Locale "file_encoding"}}</span><select name="content_encoding" data-encoding-select aria-label="{{tr .Locale "file_encoding"}}" title="{{tr .Locale "file_encoding_title"}}">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+              <button type="button" class="sm encoding-reopen" data-reopen-encoding title="{{tr .Locale "reopen_encoding_title"}}">{{tr .Locale "reopen_encoding"}}</button>
+              <label class="encoding-picker eol-picker"><span>{{tr .Locale "eol_sequence"}}</span><select name="content_eol" data-eol-select aria-label="{{tr .Locale "eol_sequence"}}" title="{{tr .Locale "eol_title"}}">
                 <option value="lf"{{if eq .ContentEOL "lf"}} selected{{end}}>LF</option>
                 <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>
               </select></label>
               </span>
               {{end}}
               <em data-content-meta style="font:400 10.5px var(--mono);font-style:normal;color:var(--ink3)">
-                {{if $remote}}{{if .UpstreamTextPreview}}取自上游 · {{bytesText (len .UpstreamText)}}{{else if .UpstreamType}}{{.UpstreamType}}{{else if .UpstreamError}}上游未取到{{else if not .IsNew}}填入地址后点「拉取」{{end}}
-                {{else if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / 上限 {{bytesText .MaxContent}}
-                {{else if .IsNew}}上限 {{bytesText .MaxContent}}
+                {{if $remote}}{{if .UpstreamTextPreview}}{{tr .Locale "from_upstream"}} · {{bytesText (len .UpstreamText)}}{{else if .UpstreamType}}{{.UpstreamType}}{{else if .UpstreamError}}{{tr .Locale "upstream_unavailable"}}{{else if not .IsNew}}{{tr .Locale "enter_url_fetch"}}{{end}}
+                {{else if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / {{tr .Locale "limit"}} {{bytesText .MaxContent}}
+                {{else if .IsNew}}{{tr .Locale "limit"}} {{bytesText .MaxContent}}
                 {{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}}
               </em>
             </span>
@@ -65,27 +72,27 @@
               <div class="f">
                 <span class="fl">
                   <input id="origin_url" type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" placeholder="https://example.com/clash.yaml" required autofocus>
-                  <button type="submit" name="action" value="preview" formnovalidate title="读取上游内容，不保存">拉取</button>
+                  <button type="submit" name="action" value="preview" formnovalidate title="{{tr .Locale "fetch_title"}}">{{tr .Locale "fetch"}}</button>
                 </span>
               </div>
               <input type="hidden" name="filename" value="{{.Resource.Filename}}">
               {{end}}
               {{if .UpstreamError}}<p class="err">{{.UpstreamError}}</p>{{end}}
               {{if .UpstreamTextPreview}}
-              <textarea rows="18" spellcheck="false" disabled aria-label="资源内容" data-preview data-filename="{{.Resource.Filename}}" data-content-type="{{.UpstreamType}}">{{.UpstreamText}}</textarea>
+              <textarea rows="18" spellcheck="false" disabled aria-label="{{tr .Locale "resource_content"}}" data-preview data-filename="{{.Resource.Filename}}" data-content-type="{{.UpstreamType}}">{{.UpstreamText}}</textarea>
               {{else if .UpstreamType}}
-              <p class="ro">非文本内容，不提供预览</p>
+              <p class="ro">{{tr .Locale "no_text_preview"}}</p>
               {{else if not .UpstreamError}}
-              <p class="ro">点击拉取，预览上游内容</p>
+              <p class="ro">{{tr .Locale "fetch_to_preview"}}</p>
               {{end}}
             {{else if .Resource.Editable}}
-            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
+            <textarea name="content" rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
             {{else if .IsNew}}
             {{/* Carries ContentText, because this is also the page a refused
                  creation comes back on and the body has to survive it. Empty on
                  a fresh screen, and with no data-raw-url either way: nothing is
                  stored yet to re-read. */}}
-            <textarea name="content" rows="18" spellcheck="false" aria-label="资源内容" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}">{{.ContentText}}</textarea>
+            <textarea name="content" rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}">{{.ContentText}}</textarea>
             {{else}}
               {{if hasPrefix .Resource.ContentType "image/"}}
               <div class="media-stage" data-current-content><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{.Resource.Name}}"></div>
@@ -98,7 +105,7 @@
                 <div class="file-card">
                   <strong>{{.Resource.Filename}}</strong>
                   <span>{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}</span>
-                  <a class="btn sm" href="/resources/{{.Resource.ID}}/raw" target="_blank" rel="noopener">打开文件</a>
+                  <a class="btn sm" href="/resources/{{.Resource.ID}}/raw" target="_blank" rel="noopener">{{tr .Locale "open_file"}}</a>
                 </div>
               </div>
               {{end}}
@@ -108,19 +115,19 @@
 
 
       <div class="savebar">
-        <button type="submit" class="pri">{{if .IsNew}}创建资源{{else}}保存{{end}}</button>
+        <button type="submit" class="pri">{{if .IsNew}}{{tr .Locale "create_resource"}}{{else}}{{tr .Locale "save"}}{{end}}</button>
         {{if .IsNew}}
-        <a class="btn" href="/resources/">取消</a>
-        <label class="pick"><span>名称</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="选填" style="width:140px"></label>
+        <a class="btn" href="/resources/">{{tr .Locale "cancel"}}</a>
+        <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "optional"}}" style="width:140px"></label>
         {{if not $remote}}
-        <label class="pick"><span>文件名</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="选填" style="width:150px"></label>
+        <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
         {{end}}
-        <span class="hint live">{{if $remote}}<a href="/resources/new">改回直接编辑</a>{{else}}<a href="/resources/new?kind=remote">改为引用远程地址</a>{{end}}</span>
+        <span class="hint live">{{if $remote}}<a href="/resources/new">{{tr .Locale "switch_direct_edit"}}</a>{{else}}<a href="/resources/new?kind=remote">{{tr .Locale "switch_remote"}}</a>{{end}}</span>
         {{else}}
-        <a class="btn" href="/resources/{{.Resource.ID}}" data-revert>放弃修改</a>
-        <label class="pick"><span>名称</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="留空则用文件名" style="width:140px"></label>
-        <label class="pick"><span>文件名</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="选填" style="width:150px"></label>
-        {{if .Resource.Remote}}<label class="pick"><span>远程地址</span><input type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" style="width:220px" required></label>{{end}}
+        <a class="btn" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>
+        <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "name_filename_fallback"}}" style="width:140px"></label>
+        <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
+        {{if .Resource.Remote}}<label class="pick"><span>{{tr .Locale "remote_url"}}</span><input type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" style="width:220px" required></label>{{end}}
         {{/* What is live right now, stated whenever the page is open rather than
              announced once after a save. Saving changes this line, which is the
              confirmation - no dialog, and nothing that disappears. */}}
@@ -135,7 +142,7 @@
          dialog is left for changing one's terms, which is rare. */}}
     {{template "share-panel" .}}
 
-    <p class="meta">{{.Resource.ID}} · {{if .Resource.Remote}}引用 · {{originHost .Resource.OriginURL}}{{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}} · 创建 {{formatTime .Resource.CreatedAt}} · 更新 {{formatTime .Resource.UpdatedAt}}</p>
+    <p class="meta">{{.Resource.ID}} · {{if .Resource.Remote}}{{tr .Locale "reference"}} · {{originHost .Resource.OriginURL}}{{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}} · {{tr .Locale "created"}} {{formatTime .Resource.CreatedAt}} · {{tr .Locale "updated"}} {{formatTime .Resource.UpdatedAt}}</p>
     {{end}}
 
   </main>
@@ -144,8 +151,8 @@
   <div class="scrim"></div>
   <dialog class="dlg" open>
     <header>
-      <b>分享设置</b>
-      <a class="x" href="/resources/{{.Resource.ID}}" aria-label="关闭">&times;</a>
+      <b>{{tr .Locale "share_settings"}}</b>
+      <a class="x" href="/resources/{{.Resource.ID}}" aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       <form method="post" action="/resources/{{.Resource.ID}}/share" style="display:grid;gap:12px">
@@ -153,35 +160,35 @@
         <input type="hidden" name="action" value="update">
         <input type="hidden" name="share_id" value="{{.FocusShare.Link.ID}}">
         <label class="f">
-          <span class="lr"><span>分享链接</span><em>修改后地址不变</em></span>
+          <span class="lr"><span>{{tr .Locale "share_link"}}</span><em>{{tr .Locale "address_unchanged"}}</em></span>
           <span class="fl">
             <input type="text" readonly value="{{.FocusShare.URL}}" style="font-family:var(--mono);font-size:11px">
-            <button type="button" class="pri" data-copy="{{.FocusShare.URL}}">复制</button>
+            <button type="button" class="pri" data-copy="{{.FocusShare.URL}}">{{tr .Locale "copy"}}</button>
           </span>
         </label>
         <dl class="fg">
-          <dt>备注</dt>
-          <dd><input type="text" name="name" value="{{.FocusShare.Link.Name}}" placeholder="备注，可留空"></dd>
-          <dt>存活时长</dt>
+          <dt>{{tr .Locale "note"}}</dt>
+          <dd><input type="text" name="name" value="{{.FocusShare.Link.Name}}" placeholder="{{tr .Locale "note_optional"}}"></dd>
+          <dt>{{tr .Locale "lifetime"}}</dt>
           <dd class="rr">
-            <label><input type="radio" name="ttl" value="1h" {{if eq .FocusShare.TTLChoice "1h"}}checked{{end}}>1 小时</label>
-            <label><input type="radio" name="ttl" value="24h" {{if eq .FocusShare.TTLChoice "24h"}}checked{{end}}>24 小时</label>
-            <label><input type="radio" name="ttl" value="168h" {{if eq .FocusShare.TTLChoice "168h"}}checked{{end}}>7 天</label>
-            <label><input type="radio" name="ttl" value="never" {{if eq .FocusShare.TTLChoice "never"}}checked{{end}}>永不过期</label>
-            <label><input type="radio" name="ttl" value="custom" {{if eq .FocusShare.TTLChoice "custom"}}checked{{end}}>自定义<input type="text" name="ttl_custom" value="{{.FocusShare.TTLCustom}}" placeholder="2h" title="s, m, h, d"></label>
+            <label><input type="radio" name="ttl" value="1h" {{if eq .FocusShare.TTLChoice "1h"}}checked{{end}}>{{tr .Locale "one_hour"}}</label>
+            <label><input type="radio" name="ttl" value="24h" {{if eq .FocusShare.TTLChoice "24h"}}checked{{end}}>{{tr .Locale "twenty_four_hours"}}</label>
+            <label><input type="radio" name="ttl" value="168h" {{if eq .FocusShare.TTLChoice "168h"}}checked{{end}}>{{tr .Locale "seven_days"}}</label>
+            <label><input type="radio" name="ttl" value="never" {{if eq .FocusShare.TTLChoice "never"}}checked{{end}}>{{tr .Locale "never_expires"}}</label>
+            <label><input type="radio" name="ttl" value="custom" {{if eq .FocusShare.TTLChoice "custom"}}checked{{end}}>{{tr .Locale "custom"}}<input type="text" name="ttl_custom" value="{{.FocusShare.TTLCustom}}" placeholder="2h" title="s, m, h, d"></label>
           </dd>
-          <dt>使用次数</dt>
+          <dt>{{tr .Locale "use_limit"}}</dt>
           <dd class="rr">
-            <label><input type="radio" name="uses" value="1" {{if eq .FocusShare.Link.MaxUses 1}}checked{{end}}>仅一次</label>
-            <label><input type="radio" name="uses" value="2" {{if eq .FocusShare.Link.MaxUses 2}}checked{{end}}>2 次</label>
-            <label><input type="radio" name="uses" value="10" {{if eq .FocusShare.Link.MaxUses 10}}checked{{end}}>10 次</label>
-            <label><input type="radio" name="uses" value="0" {{if eq .FocusShare.Link.MaxUses 0}}checked{{end}}>不限次数</label>
+            <label><input type="radio" name="uses" value="1" {{if eq .FocusShare.Link.MaxUses 1}}checked{{end}}>{{tr .Locale "once"}}</label>
+            <label><input type="radio" name="uses" value="2" {{if eq .FocusShare.Link.MaxUses 2}}checked{{end}}>2 {{tr .Locale "times"}}</label>
+            <label><input type="radio" name="uses" value="10" {{if eq .FocusShare.Link.MaxUses 10}}checked{{end}}>10 {{tr .Locale "times"}}</label>
+            <label><input type="radio" name="uses" value="0" {{if eq .FocusShare.Link.MaxUses 0}}checked{{end}}>{{tr .Locale "unlimited"}}</label>
           </dd>
         </dl>
         <div class="fl" style="justify-content:flex-end">
-          <span class="hint" style="margin-right:auto">时长与次数从此刻重新计算</span>
-          <a class="btn" href="/resources/{{.Resource.ID}}">取消</a>
-          <button type="submit" class="pri">应用</button>
+          <span class="hint" style="margin-right:auto">{{tr .Locale "terms_restart_now"}}</span>
+          <a class="btn" href="/resources/{{.Resource.ID}}">{{tr .Locale "cancel"}}</a>
+          <button type="submit" class="pri">{{tr .Locale "apply"}}</button>
         </div>
       </form>
     </div>
@@ -192,19 +199,19 @@
   <div class="scrim"></div>
   <dialog class="dlg" open>
     <header>
-      <b>删除「{{.Resource.Name}}」</b>
-      <a class="x" href="/resources/{{.Resource.ID}}" aria-label="关闭">&times;</a>
+      <b>{{tr .Locale "delete"}} “{{.Resource.Name}}”</b>
+      <a class="x" href="/resources/{{.Resource.ID}}" aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
-      <p class="ro">将同时删除正文与 {{len .Shares}} 条分享，已发出的链接立即失效。此操作不可撤销。</p>
-      <p class="hint">访问记录保留</p>
+      <p class="ro">{{deleteWarning .Locale (len .Shares)}}</p>
+      <p class="hint">{{tr .Locale "logs_retained"}}</p>
     </div>
     <footer>
-      <a class="btn" href="/resources/{{.Resource.ID}}">取消</a>
+      <a class="btn" href="/resources/{{.Resource.ID}}">{{tr .Locale "cancel"}}</a>
       <form method="post" action="/resources/{{.Resource.ID}}" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="delete">
-        <button type="submit" class="pri">确认删除</button>
+        <button type="submit" class="pri">{{tr .Locale "confirm_delete"}}</button>
       </form>
     </footer>
   </dialog>
@@ -221,7 +228,7 @@
       if (!button) return;
       var value = button.getAttribute('data-copy');
       if (navigator.clipboard) navigator.clipboard.writeText(value);
-      else window.prompt('复制链接', value);
+      else window.prompt('{{tr .Locale "copy_link"}}', value);
     });
   </script>
 </body>

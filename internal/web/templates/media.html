@@ -1,5 +1,5 @@
 {{define "media.html"}}<!doctype html>
-<html lang="zh-CN">
+<html lang="{{.Locale}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,7 +10,14 @@
   <script src="/static/media.js" defer></script>
 </head>
 <body>
-  <main data-media-source="{{.MediaSource}}"><p role="status">正在加载…</p></main>
-  <noscript><p>播放需要启用 JavaScript，或<a href="{{.MediaSource}}" download>下载文件</a>。</p></noscript>
+  <div class="media-language">{{template "language-switch" .}}</div>
+  <main data-media-source="{{.MediaSource}}"
+        data-link-expired="{{tr .Locale "media_link_expired"}}"
+        data-load-failed="{{tr .Locale "media_load_failed"}}"
+        data-type-changed="{{tr .Locale "media_type_changed"}}"
+        data-unsupported="{{tr .Locale "media_unsupported"}}"
+        data-download="{{tr .Locale "media_download"}}"
+        data-network-failed="{{tr .Locale "media_network_failed"}}"><p role="status">{{tr .Locale "media_loading"}}</p></main>
+  <noscript><p>{{tr .Locale "media_noscript_before"}}<a href="{{.MediaSource}}" download>{{tr .Locale "media_download"}}</a>.</p></noscript>
 </body>
 </html>{{end}}

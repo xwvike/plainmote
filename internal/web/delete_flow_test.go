@@ -53,7 +53,7 @@ func TestDeleteFlowThroughRouter(t *testing.T) {
 
 	// The confirm step names what goes and says the log stays.
 	confirm := do(http.MethodGet, "/resources/"+resource.ID+"?delete=1", nil)
-	if confirm.Code != http.StatusOK || !strings.Contains(confirm.Body.String(), "确认删除") {
+	if confirm.Code != http.StatusOK || !strings.Contains(confirm.Body.String(), "Delete resource") {
 		t.Fatalf("delete confirm: status %d body %q", confirm.Code, confirm.Body.String())
 	}
 

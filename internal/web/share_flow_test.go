@@ -63,7 +63,7 @@ func TestShareFlowThroughRouter(t *testing.T) {
 	if page.Code != http.StatusOK {
 		t.Fatalf("resource page: %d", page.Code)
 	}
-	if !strings.Contains(body, "/d/") || !strings.Contains(body, "复制") {
+	if !strings.Contains(body, "/d/") || !strings.Contains(body, "Copy") {
 		t.Fatal("the new address must be on the page, ready to copy")
 	}
 
@@ -155,7 +155,7 @@ func TestShareFlowThroughRouter(t *testing.T) {
 		t.Fatal(err)
 	}
 	listed := do(http.MethodGet, "/resources/"+resource.ID, nil)
-	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), "新建分享") {
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), "New share") {
 		t.Fatalf("the resource page should carry the share list: %d", listed.Code)
 	}
 	after2, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
@@ -172,7 +172,7 @@ func TestShareFlowThroughRouter(t *testing.T) {
 		t.Fatal(err)
 	}
 	page2 := do(http.MethodGet, "/resources/"+resource.ID+"?share="+permanent.ID, nil).Body.String()
-	if !strings.Contains(page2, "永不过期") {
+	if !strings.Contains(page2, "Never expires") {
 		t.Fatal("the dialog must offer a never-expiring option")
 	}
 
@@ -213,7 +213,7 @@ func TestCreateShareReturnsARefreshableFragment(t *testing.T) {
 	if err != nil || len(shares) != 1 {
 		t.Fatalf("created shares: %d %v", len(shares), err)
 	}
-	if !strings.Contains(body, shares[0].Token) || !strings.Contains(body, "1 条分享正在提供") {
+	if !strings.Contains(body, shares[0].Token) || !strings.Contains(body, "1 active share") {
 		t.Fatal("fragment does not contain the new share and updated status")
 	}
 
@@ -349,18 +349,18 @@ func TestSharesAreOnThePageNotBehindIt(t *testing.T) {
 	// No query, no click: every live address is already there, with the
 	// actions that act on them.
 	plain := page("")
-	for _, wanted := range []string{older.Token, fresh.Token, "老链接", "新建分享", "全部撤销", "撤销"} {
+	for _, wanted := range []string{older.Token, fresh.Token, "老链接", "New share", "Revoke all", "Revoke"} {
 		if !strings.Contains(plain, wanted) {
 			t.Errorf("the resource page must carry %q without being asked", wanted)
 		}
 	}
-	if strings.Contains(plain, "存活时长") {
+	if strings.Contains(plain, "Lifetime") {
 		t.Error("the per-share settings form must stay behind its own step")
 	}
 
 	// One share's terms are the one thing still worth a dialog.
 	focused := page("?share=" + fresh.ID)
-	if !strings.Contains(focused, "存活时长") || !strings.Contains(focused, "使用次数") {
+	if !strings.Contains(focused, "Lifetime") || !strings.Contains(focused, "Use limit") {
 		t.Error("the focused dialog must carry the terms")
 	}
 	if !strings.Contains(focused, fresh.Token) {
@@ -368,7 +368,7 @@ func TestSharesAreOnThePageNotBehindIt(t *testing.T) {
 	}
 
 	// A share that is gone opens nothing rather than an empty dialog.
-	if stale := page("?share=" + resource.ID); strings.Contains(stale, "存活时长") {
+	if stale := page("?share=" + resource.ID); strings.Contains(stale, "Lifetime") {
 		t.Error("an unknown share must not open the settings dialog")
 	}
 }

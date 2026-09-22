@@ -16,6 +16,12 @@ import {
 } from "./vendor/codemirror.js";
 import { uploadController } from "./upload.js";
 
+function message(name, values = {}) {
+  let text = document.body.dataset[name] || "";
+  for (const [key, value] of Object.entries(values)) text = text.replaceAll(`{${key}}`, value);
+  return text;
+}
+
 const LANGUAGES = {
   yaml: () => yaml(),
   json: () => json(),
@@ -406,7 +412,7 @@ function enhance(textarea) {
           syntaxHighlighting(highlight),
           theme,
           EditorView.contentAttributes.of({
-            "aria-label": textarea.getAttribute("aria-label") || "资源内容",
+            "aria-label": textarea.getAttribute("aria-label") || "Resource content",
             "aria-multiline": "true",
             spellcheck: "false",
           }),
@@ -516,7 +522,7 @@ function enhance(textarea) {
       let bytes = sourceBytes;
 
       if (!bytes && textarea.dataset.rawUrl) {
-        setUploadStatus(`正在通过 ${encoding} 重新打开…`);
+        setUploadStatus(message("msgEditorReopening", { encoding }));
         try {
           const response = await fetch(textarea.dataset.rawUrl, { cache: "no-store" });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -524,7 +530,7 @@ function enhance(textarea) {
         } catch (error) {
           if (version !== operationVersion) return;
           setEncoding(encoding, false);
-          setUploadStatus(`无法读取原始文件，请稍后重试。`);
+          setUploadStatus(message("msgEditorReadFailed"));
           console.error("editor: cannot read resource for decoding", error);
           return;
         }
@@ -537,7 +543,7 @@ function enhance(textarea) {
       } catch (error) {
         if (version !== operationVersion) return;
         setEncoding(encoding, false);
-        setUploadStatus(`无法使用 ${encoding} 重新打开，请选择其他文件编码。`);
+        setUploadStatus(message("msgEditorReopenFailed", { encoding }));
       }
     };
 
@@ -614,7 +620,7 @@ function enhance(textarea) {
           editorDirty = false;
           documentEdited = false;
           updateReopenAvailability();
-          uploads.showFile(file, `无法读取 ${file.name}，请重新选择文件。`);
+          uploads.showFile(file, message("msgEditorFileFailed", { name: file.name }));
           console.error("editor: cannot read uploaded file", error);
           return;
         }
@@ -630,7 +636,7 @@ function enhance(textarea) {
           documentEdited = false;
           if (encodingSelect) encodingSelect.dataset.valid = "false";
           if (kind === "text") {
-            uploads.showText(file, `无法自动识别 ${file.name} 的文件编码，请选择文件编码，然后点「通过编码重新打开」。`);
+            uploads.showText(file, message("msgEditorDetectFailed", { name: file.name }));
           } else {
             uploads.showFile(file);
           }
@@ -645,7 +651,7 @@ function enhance(textarea) {
           documentEdited = false;
           if (encodingSelect) encodingSelect.dataset.valid = "false";
           if (kind === "text") {
-            uploads.showText(file, `${file.name} 无法使用 ${encoding} 重新打开，请选择其他文件编码，然后点「通过编码重新打开」。`);
+            uploads.showText(file, message("msgEditorFileReopenFailed", { name: file.name, encoding }));
           } else {
             uploads.showFile(file);
           }
@@ -690,7 +696,7 @@ function preview(textarea) {
         languageFor(tokenFor(textarea.dataset.filename, textarea.dataset.contentType)),
         keymap.of(searchKeymap),
         EditorView.contentAttributes.of({
-          "aria-label": textarea.getAttribute("aria-label") || "资源内容",
+          "aria-label": textarea.getAttribute("aria-label") || "Resource content",
           "aria-readonly": "true",
           spellcheck: "false",
         }),

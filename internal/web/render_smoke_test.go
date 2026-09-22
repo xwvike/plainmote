@@ -84,28 +84,28 @@ func TestAllPagesRender(t *testing.T) {
 	// The login page is only reachable while signed out.
 	anon := httptest.NewRecorder()
 	app.handler.ServeHTTP(anon, httptest.NewRequest(http.MethodGet, "https://cfg.test/login?error=denied", nil))
-	if anon.Code != http.StatusOK || !strings.Contains(anon.Body.String(), "使用 GitHub 登录") {
+	if anon.Code != http.StatusOK || !strings.Contains(anon.Body.String(), "Continue with GitHub") {
 		t.Fatalf("login: status %d body %q", anon.Code, anon.Body.String())
 	}
 
 	for _, tc := range []struct{ name, path, want string }{
-		{"home", "/", "生成分享链接"},
-		{"dashboard", "/resources/", "新建资源"},
+		{"home", "/", "Create share link"},
+		{"dashboard", "/resources/", "New resource"},
 		{"dashboard page 2", "/resources/?size=10&page=2", `class="pgn on">2<`},
 		{"dashboard search", "/resources/?q=" + resource.Name, resource.Filename},
-		{"dashboard no match", "/resources/?q=%25_nothing", "没有匹配"},
-		{"logs", "/logs", "成功"},
+		{"dashboard no match", "/resources/?q=%25_nothing", "No resources match"},
+		{"logs", "/logs", "Successful"},
 		{"logs page 2", "/logs?size=20&page=2", `class="pgn on">2<`},
-		{"new resource", "/resources/new", "从文件载入内容"},
-		{"new resource, remote", "/resources/new?kind=remote", "远程地址"},
-		{"resource", "/resources/" + resource.ID, "新建分享"},
-		{"resource remote", "/resources/" + remote.ID, "远程地址"},
-		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "确认删除"},
+		{"new resource", "/resources/new", "Load from file"},
+		{"new resource, remote", "/resources/new?kind=remote", "Remote URL"},
+		{"resource", "/resources/" + resource.ID, "New share"},
+		{"resource remote", "/resources/" + remote.ID, "Remote URL"},
+		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "Delete resource"},
 		// The save bar states what is live rather than what saving would do,
 		// so a save confirms itself by changing that line.
-		{"resource states what is live", "/resources/" + resource.ID, "条分享正在提供"},
-		{"unshared resource says so", "/resources/" + remote.ID, "尚无分享"},
-		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "已过期"},
+		{"resource states what is live", "/resources/" + resource.ID, "active shares"},
+		{"unshared resource says so", "/resources/" + remote.ID, "No active shares"},
+		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "Expired"},
 	} {
 		response := get(tc.path)
 		body := response.Body.String()

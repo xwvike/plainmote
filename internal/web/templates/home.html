@@ -1,49 +1,49 @@
 {{define "home.html"}}<!doctype html>
-<html lang="zh-CN">
+<html lang="{{.Locale}}">
 <head>
   {{template "htmlhead" .}}
-  <title>PlainMote - 临时分享文本</title>
-  <meta name="description" content="粘贴一段文本，生成最长有效 30 分钟的分享链接。无需登录，内容始终以纯文本显示。登录后可以长期保存和管理资源。">
+  <title>PlainMote · {{tr .Locale "home_title"}}</title>
+  <meta name="description" content="{{tr .Locale "home_description"}}">
 </head>
 <body>
   {{template "topbar" .}}
   <main class="page">
 
     <div class="lede">
-      <h1>在互联网隐秘安全的分享你输入的内容</h1>
-      <p>无需登录！输入任何内容，分享链接最长有效 30 分钟！</p>
+      <h1>{{tr .Locale "home_heading"}}</h1>
+      <p>{{tr .Locale "home_subheading"}}</p>
     </div>
 
     {{if .PasteURL}}
     {{/* The address is what the visitor came for, so the page becomes it. */}}
     <div class="panel">
-      <div class="pt"><span class="sec">分享链接已生成</span></div>
+      <div class="pt"><span class="sec">{{tr .Locale "paste_created"}}</span></div>
       <div class="pb">
         <div class="pfx">
-          <input type="text" readonly value="{{.PasteURL}}" aria-label="分享链接" autofocus
+          <input type="text" readonly value="{{.PasteURL}}" aria-label="{{tr .Locale "share_link"}}" autofocus
                  onfocus="this.select()" style="font-family:var(--mono);font-size:12px">
-          <button type="button" class="btn" data-copy="{{.PasteURL}}">复制</button>
+          <button type="button" class="btn" data-copy="{{.PasteURL}}">{{tr .Locale "copy"}}</button>
         </div>
         <span class="st on">
           <i></i>
-          <span>有效至 {{formatTime .PasteExpires}}（{{untilText .PasteExpires}}）· {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
+          <span>{{tr .Locale "valid_until"}} {{formatTime .PasteExpires}}（{{untilText .Locale .PasteExpires}}）· {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
         </span>
-        <p class="hint">到期后链接将无法访问，内容随后由服务自动清理</p>
+        <p class="hint">{{tr .Locale "paste_expiry_note"}}</p>
       </div>
     </div>
     <div class="savebar paste-result-actions">
-      <a class="btn pri" href="/">再分享一份</a>
+      <a class="btn pri" href="/">{{tr .Locale "paste_another"}}</a>
       {{if .PasteClaimable}}
       <form class="inline" method="post" action="/paste/save">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="resource_id" value="{{.PasteResourceID}}">
-        <button type="submit">保存到我的资源</button>
+        <button type="submit">{{tr .Locale "save_to_resources"}}</button>
       </form>
-      <span class="hint live">保存后当前分享仍按原时间到期</span>
+      <span class="hint live">{{tr .Locale "save_keeps_expiry"}}</span>
       {{else if .SignedIn}}
-      <span class="hint live">这份临时分享只能由创建它的账号保存</span>
+      <span class="hint live">{{tr .Locale "paste_owner_only"}}</span>
       {{else}}
-      <span class="hint live">如需长期保存和管理，请<a href="{{.SignInURL}}">登录</a></span>
+      <span class="hint live">{{tr .Locale "paste_login_prefix"}}<a href="{{.SignInURL}}">{{tr .Locale "login"}}</a></span>
       {{end}}
     </div>
 
@@ -56,28 +56,28 @@
            interaction. */}}
       <div class="panel">
         <div class="pt">
-          <span class="sec">内容</span>
-          <span class="sp hint">上限 {{bytesText .MaxPaste}}</span>
+          <span class="sec">{{tr .Locale "content"}}</span>
+          <span class="sp hint">{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
         </div>
         <div class="pb paste-body">
           <textarea name="content" spellcheck="false" autofocus
-                    aria-label="要分享的内容" placeholder="输入或粘贴要分享的内容">{{.PasteContent}}</textarea>
+                    aria-label="{{tr .Locale "paste_content_label"}}" placeholder="{{tr .Locale "paste_content_placeholder"}}">{{.PasteContent}}</textarea>
         </div>
       </div>
       <div class="savebar">
-        <button type="submit" class="pri">生成分享链接</button>
-        <label class="ttl-picker"><span>有效期</span>
-          <select name="ttl" aria-label="链接有效期">
-            {{range .PasteChoices}}<option value="{{.Value}}"{{if eq .Value $.PasteTTL}} selected{{end}}>{{.Label}}</option>{{end}}
+        <button type="submit" class="pri">{{tr .Locale "create_share_link"}}</button>
+        <label class="ttl-picker"><span>{{tr .Locale "lifetime"}}</span>
+          <select name="ttl" aria-label="{{tr .Locale "link_lifetime"}}">
+            {{range .PasteChoices}}<option value="{{.Value}}"{{if eq .Value $.PasteTTL}} selected{{end}}>{{pasteTTLText $.Locale .Value}}</option>{{end}}
           </select>
         </label>
-        <label class="ttl-picker"><span>文件名（可选）</span>
+        <label class="ttl-picker"><span>{{tr .Locale "filename_optional"}}</span>
           <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="notes.txt"
-                 aria-label="文件名（可选）" style="width:150px">
+                 aria-label="{{tr .Locale "filename_optional"}}" style="width:150px">
         </label>
         <span class="st off live">
           <i></i>
-          <span>{{if .SignedIn}}此处创建的是临时分享；需要长期保存，请使用<a href="/resources/">我的资源</a>{{else}}到期后链接将无法访问，内容随后自动清理{{end}}</span>
+          <span>{{if .SignedIn}}{{tr .Locale "signed_paste_note"}}<a href="/resources/">{{tr .Locale "nav_resources"}}</a>{{else}}{{tr .Locale "anonymous_paste_note"}}{{end}}</span>
         </span>
       </div>
     </form>
@@ -85,18 +85,17 @@
 
     <div class="tell">
       <section>
-        <h2>临时分享</h2>
-        <p>分享链接最长有效 30 分钟，到期后无法继续访问，PlainMote会自动清理。
-           放心将配置、日志或错误信息临时发给别人。</p>
+        <h2>{{tr .Locale "feature_temporary_title"}}</h2>
+        <p>{{tr .Locale "feature_temporary_body"}}</p>
       </section>
       <section>
-        <h2>始终保留原始内容</h2>
-        <p>无论填写什么，PlainMote都会原汁原味保留每一字节的字符。</p>
+        <h2>{{tr .Locale "feature_original_title"}}</h2>
+        <p>{{tr .Locale "feature_original_body"}}</p>
       </section>
       <section>
-        <h2>创建个人账户</h2>
-        <p>登录后可以长期保存和修改内容，并为分享提供有效期和使用次数设置！更提供媒体资源和文件的分享能力！</p>
-        <p class="hint">{{if .SignedIn}}<a href="/resources/">前往我的资源 →</a>{{else}}<a href="{{.SignInURL}}">使用 GitHub 登录 →</a>{{end}}</p>
+        <h2>{{tr .Locale "feature_account_title"}}</h2>
+        <p>{{tr .Locale "feature_account_body"}}</p>
+        <p class="hint">{{if .SignedIn}}<a href="/resources/">{{tr .Locale "go_to_resources"}} →</a>{{else}}<a href="{{.SignInURL}}">{{tr .Locale "login_github"}} →</a>{{end}}</p>
       </section>
     </div>
 
@@ -107,7 +106,7 @@
       if (!button) return;
       var value = button.getAttribute('data-copy');
       if (navigator.clipboard) navigator.clipboard.writeText(value);
-      else window.prompt('复制链接', value);
+      else window.prompt('{{tr .Locale "copy_link"}}', value);
     });
   </script>
 </body>

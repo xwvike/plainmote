@@ -59,6 +59,8 @@ type pageData struct {
 	Error            string
 	LoginURL         string
 	SignInURL        string
+	Locale           string
+	Language         languageView
 	RegistrationMode auth.RegistrationMode
 	Resources        []Resource
 	Quota            store.UserQuota
@@ -139,7 +141,6 @@ type encodingOption struct {
 // minutes, which is the only unit an anonymous paste is ever measured in.
 type ttlChoice struct {
 	Value string
-	Label string
 }
 
 // linkView pairs a link with the address a viewer copies.
@@ -158,6 +159,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/auth/github", a.handleGitHubLogin)
 	mux.HandleFunc("/auth/github/callback", a.handleGitHubCallback)
 	mux.HandleFunc("/logout", a.handleLogout)
+	mux.HandleFunc("/language", a.handleLanguage)
 	mux.HandleFunc("/resources/", a.handleResources)
 	mux.HandleFunc("/logs", a.handleLogs)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)

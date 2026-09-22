@@ -14,21 +14,27 @@
 
 {{define "mark"}}<img class="mk" src="/static/logo.png" alt="" width="18" height="18" decoding="async">{{end}}
 
+{{define "language-switch"}}{{if .Language.ShowSwitch}}<nav class="lang-switch" aria-label="{{tr .Locale "language_switch"}}">
+  <a class="lang-cell{{if ne .Locale "en"}} on{{end}}" href="{{.Language.NativeURL}}" lang="{{.Language.NativeLocale}}"{{if ne .Locale "en"}} aria-current="true"{{end}}>{{.Language.NativeLabel}}</a>
+  <a class="lang-cell{{if eq .Locale "en"}} on{{end}}" href="{{.Language.EnglishURL}}" lang="en"{{if eq .Locale "en"}} aria-current="true"{{end}}>EN</a>
+</nav>{{end}}{{end}}
+
 {{define "topbar"}}<div class="top"><div class="topin">
     <span class="brand"><a href="/">{{template "mark"}}<b>PlainMote</b></a></span>
     <nav class="nav">
-      {{if .Anonymous}}<a href="/"{{if eq .Active "home"}} class="on" aria-current="page"{{end}}>快速分享</a>{{end}}
+      {{if .Anonymous}}<a href="/"{{if eq .Active "home"}} class="on" aria-current="page"{{end}}>{{tr .Locale "nav_quick_share"}}</a>{{end}}
       {{if .SignedIn}}
-      <a href="/resources/"{{if eq .Active "resources"}} class="on" aria-current="page"{{end}}>我的资源</a>
-      <a href="/logs"{{if eq .Active "logs"}} class="on" aria-current="page"{{end}}>访问记录</a>
+      <a href="/resources/"{{if eq .Active "resources"}} class="on" aria-current="page"{{end}}>{{tr .Locale "nav_resources"}}</a>
+      <a href="/logs"{{if eq .Active "logs"}} class="on" aria-current="page"{{end}}>{{tr .Locale "nav_access_logs"}}</a>
       {{end}}
     </nav>
     <div class="rt">
+      {{template "language-switch" .}}
       {{if .SignedIn}}
       <span class="who">{{.User.Login}}</span>
-      <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="sm">退出</button></form>
+      <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="sm">{{tr .Locale "logout"}}</button></form>
       {{else}}
-      <a class="btn sm" href="{{if .SignInURL}}{{.SignInURL}}{{else}}/login{{end}}">登录</a>
+      <a class="btn sm" href="{{if .SignInURL}}{{.SignInURL}}{{else}}/login{{end}}">{{tr .Locale "login"}}</a>
       {{end}}
     </div>
   </div></div>{{end}}

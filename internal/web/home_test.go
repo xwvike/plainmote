@@ -51,7 +51,7 @@ func TestAnyoneCanPasteAndGetALink(t *testing.T) {
 	if home.Code != http.StatusOK {
 		t.Fatalf("the home page must open without a session, got %d", home.Code)
 	}
-	if body := home.Body.String(); !strings.Contains(body, `action="/paste"`) || !strings.Contains(body, "登录") {
+	if body := home.Body.String(); !strings.Contains(body, `action="/paste"`) || !strings.Contains(body, "Sign in") {
 		t.Fatal("the home page must offer the box and a way to sign in")
 	}
 	// The meta tag and the response header have to agree, or the one page meant
@@ -70,7 +70,7 @@ func TestAnyoneCanPasteAndGetALink(t *testing.T) {
 		t.Fatalf("paste result: %d %s", response.Code, response.Body.String())
 	}
 	page := response.Body.String()
-	if strings.Contains(page, "保存到我的资源") {
+	if strings.Contains(page, "Save to my resources") {
 		t.Fatal("an anonymous visitor must not be offered an account save action")
 	}
 	if !strings.Contains(page, `name="robots" content="noindex, nofollow, noarchive"`) {
@@ -130,7 +130,7 @@ func TestPasteLifetimeCannotBeChosenFreely(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("paste result: %d %s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), "1 分钟后") {
+	if !strings.Contains(response.Body.String(), "in about 1 minute") {
 		t.Fatalf("an unknown lifetime must become the default, got %s", response.Body.String())
 	}
 }
@@ -173,7 +173,7 @@ func TestSignedInVisitorIsToldThePasteIsTemporary(t *testing.T) {
 	app.handler.ServeHTTP(response, request)
 
 	page := response.Body.String()
-	if !strings.Contains(page, "此处创建的是临时分享") {
+	if !strings.Contains(page, "This is a temporary share") {
 		t.Fatal("a signed-in visitor must be told the box still creates a temporary share")
 	}
 	if !strings.Contains(page, `href="/resources/"`) {
@@ -206,7 +206,7 @@ func TestSignedInVisitorCanSaveAPasteAsAResource(t *testing.T) {
 		t.Fatalf("paste result: %d %s", paste.Code, paste.Body.String())
 	}
 	page := paste.Body.String()
-	if !strings.Contains(page, "保存到我的资源") || !strings.Contains(page, `action="/paste/save"`) {
+	if !strings.Contains(page, "Save to my resources") || !strings.Contains(page, `action="/paste/save"`) {
 		t.Fatal("a signed-in paste result must offer an explicit save action")
 	}
 	address := findDeliveryAddress(t, page)
@@ -308,7 +308,7 @@ func TestAnonymousPasteCanReturnFromLoginAndBeSaved(t *testing.T) {
 		&http.Cookie{Name: sessionCookie, Value: session},
 		&http.Cookie{Name: csrfCookie, Value: csrf},
 	)
-	if afterLogin.Code != http.StatusOK || !strings.Contains(afterLogin.Body.String(), "保存到我的资源") {
+	if afterLogin.Code != http.StatusOK || !strings.Contains(afterLogin.Body.String(), "Save to my resources") {
 		t.Fatalf("the result capability must remain claimable after login: %d %s", afterLogin.Code, afterLogin.Body.String())
 	}
 }

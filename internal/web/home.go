@@ -23,10 +23,10 @@ const pasteSavePath = "/paste/save"
 // pasteTTLChoices are the lifetimes the page offers. Minutes only: this is a
 // handoff, and store.AnonymousMaxTTL refuses anything longer whatever arrives.
 var pasteTTLChoices = []ttlChoice{
-	{Value: "1", Label: "1 分钟"},
-	{Value: "5", Label: "5 分钟"},
-	{Value: "10", Label: "10 分钟"},
-	{Value: "30", Label: "30 分钟"},
+	{Value: "1"},
+	{Value: "5"},
+	{Value: "10"},
+	{Value: "30"},
 }
 
 // pasteFormMaxBytes is what the handler will read at all. The store enforces
@@ -79,7 +79,7 @@ func (a *App) homePage(r *http.Request) pageData {
 }
 
 func (a *App) renderHome(w http.ResponseWriter, r *http.Request, data pageData, status int) {
-	a.renderTemplate(w, status, "home.html", data)
+	a.renderTemplate(w, r, status, "home.html", data)
 }
 
 func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +152,7 @@ func (a *App) handlePasteResult(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	resource, link, err := a.db.AnonymousPasteResult(r.Context(), resourceID, now)
 	if errors.Is(err, store.ErrNotFound) {
-		writePlainError(w, http.StatusGone, "临时分享已失效")
+		writeLocalizedError(w, r, http.StatusGone, "error_paste_expired")
 		return
 	}
 	if err != nil {
@@ -201,7 +201,7 @@ func (a *App) handleSavePaste(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	resource, link, err := a.db.ClaimableAnonymousPaste(r.Context(), user.ID, resourceID, now)
 	if errors.Is(err, store.ErrNotFound) {
-		writePlainError(w, http.StatusGone, "临时分享已失效，无法保存")
+		writeLocalizedError(w, r, http.StatusGone, "error_paste_expired_save")
 		return
 	}
 	if err != nil {

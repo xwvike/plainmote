@@ -61,7 +61,7 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		return dashboardURL(search, size, number)
 	})
 	pager.Query = search
-	a.renderTemplate(w, http.StatusOK, "dashboard.html", pageData{
+	a.renderTemplate(w, r, http.StatusOK, "dashboard.html", pageData{
 		User:      user,
 		CSRF:      csrfValue(r),
 		Active:    "resources",

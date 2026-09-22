@@ -47,13 +47,13 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	if !strings.Contains(page, `data-editor data-filename="example.conf" data-content-type="text/plain; charset=utf-8"`) {
 		t.Error("the textarea must carry the source metadata used by the browser editor")
 	}
-	if !strings.Contains(page, `aria-label="资源内容"`) {
+	if !strings.Contains(page, `aria-label="Resource content"`) {
 		t.Error("the editor source must provide an accessible name")
 	}
-	if !strings.Contains(page, `data-encoding-select aria-label="文件编码"`) ||
+	if !strings.Contains(page, `data-encoding-select aria-label="File Encoding"`) ||
 		!strings.Contains(page, `data-reopen-encoding`) ||
-		!strings.Contains(page, `>通过编码重新打开</button>`) ||
-		!strings.Contains(page, `<span>行尾序列</span>`) {
+		!strings.Contains(page, `>Reopen with Encoding</button>`) ||
+		!strings.Contains(page, `<span>End of Line Sequence</span>`) {
 		t.Error("the editor must expose its file encoding, reopen, and end-of-line controls")
 	}
 	if !strings.Contains(page, `<script type="module" src="/static/editor.js">`) {

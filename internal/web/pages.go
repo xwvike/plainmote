@@ -62,6 +62,7 @@ var editorEncodingOptions = []encodingOption{
 
 func (a *App) templateSet() *template.Template {
 	return template.Must(template.New("pages").Funcs(template.FuncMap{
+		"tr": translate,
 		"formatTime": func(value time.Time) string {
 			if value.IsZero() {
 				return "-"
@@ -100,48 +101,122 @@ func (a *App) templateSet() *template.Template {
 		"outcomeText":        accessOutcomeText,
 		"outcomeDescription": accessOutcomeDescription,
 		"remainText":         remainText,
-		// untilText says how long is left in the words someone would use when
-		// passing the link on. The absolute time is next to it; this is the
-		// part that makes it mean something without doing arithmetic.
-		"untilText": func(at time.Time) string {
-			left := time.Until(at).Round(time.Minute)
-			if left < time.Minute {
-				return "不到 1 分钟后"
-			}
-			return fmt.Sprintf("约 %d 分钟后", int(left/time.Minute))
-		},
+		"untilText":          untilText,
+		"pasteTTLText":       pasteTTLText,
+		"pageSummary":        pageSummary,
+		"countText":          countText,
+		"shareStatus":        shareStatus,
+		"deleteWarning":      deleteWarning,
 	}).ParseFS(webAssets, "templates/*.html"))
 }
 
 // remainText renders how long a share has left in the terms a person thinks
 // in, rather than as an absolute timestamp.
-func remainText(value *time.Time) string {
+func remainText(locale string, value *time.Time) string {
 	if value == nil {
-		return "不过期"
+		return translate(locale, "remain_never")
 	}
 	left := time.Until(*value)
 	if left <= 0 {
-		return "已过期"
+		return translate(locale, "remain_expired")
 	}
 	switch {
 	case left >= 24*time.Hour:
 		days := int(left / (24 * time.Hour))
 		hours := int((left % (24 * time.Hour)) / time.Hour)
 		if hours == 0 {
-			return fmt.Sprintf("剩 %d 天", days)
+			return fmt.Sprintf(translate(locale, "remain_days"), days)
 		}
-		return fmt.Sprintf("剩 %d 天 %d 小时", days, hours)
+		return fmt.Sprintf(translate(locale, "remain_days_hours"), days, hours)
 	case left >= time.Hour:
 		minutes := int((left % time.Hour) / time.Minute)
 		if minutes == 0 {
-			return fmt.Sprintf("剩 %d 小时", int(left/time.Hour))
+			return fmt.Sprintf(translate(locale, "remain_hours"), int(left/time.Hour))
 		}
-		return fmt.Sprintf("剩 %d 小时 %d 分钟", int(left/time.Hour), minutes)
+		return fmt.Sprintf(translate(locale, "remain_hours_minutes"), int(left/time.Hour), minutes)
 	case left >= time.Minute:
-		return fmt.Sprintf("剩 %d 分钟", int(left/time.Minute))
+		return fmt.Sprintf(translate(locale, "remain_minutes"), int(left/time.Minute))
 	default:
-		return "剩不到 1 分钟"
+		return translate(locale, "remain_less_minute")
 	}
+}
+
+func untilText(locale string, at time.Time) string {
+	left := time.Until(at).Round(time.Minute)
+	if left < time.Minute {
+		return translate(locale, "until_less_minute")
+	}
+	if left < 2*time.Minute {
+		return translate(locale, "until_one_minute")
+	}
+	return fmt.Sprintf(translate(locale, "until_minutes"), int(left/time.Minute))
+}
+
+func pasteTTLText(locale, value string) string {
+	minutes, err := time.ParseDuration(value + "m")
+	if err != nil {
+		return value
+	}
+	count := int(minutes / time.Minute)
+	if count == 1 {
+		return translate(locale, "one_minute")
+	}
+	return fmt.Sprintf(translate(locale, "minutes"), count)
+}
+
+func pageSummary(locale string, from, to, total int, unitKey string) string {
+	if total == 1 {
+		unitKey = singularUnitKey(unitKey)
+	}
+	return fmt.Sprintf(translate(locale, "page_summary"), from, to, total, translate(locale, unitKey))
+}
+
+func countText(locale string, count int, unitKey string) string {
+	key := unitKey + "_count"
+	if count == 1 {
+		key = singularUnitKey(unitKey) + "_count"
+		if value := translate(locale, key); value != key {
+			return value
+		}
+	}
+	return fmt.Sprintf(translate(locale, key), count)
+}
+
+func singularUnitKey(unitKey string) string {
+	switch unitKey {
+	case "items":
+		return "item"
+	case "entries":
+		return "entry"
+	case "shares":
+		return "share"
+	default:
+		return strings.TrimSuffix(unitKey, "s")
+	}
+}
+
+func shareStatus(locale string, count int, remote bool, origin string, updated time.Time) string {
+	if remote {
+		parsed, err := url.Parse(origin)
+		if err == nil && parsed.Host != "" {
+			origin = parsed.Host
+		}
+		if count == 1 {
+			return fmt.Sprintf(translate(locale, "share_status_remote_one"), origin)
+		}
+		return fmt.Sprintf(translate(locale, "share_status_remote"), count, origin)
+	}
+	if count == 1 {
+		return fmt.Sprintf(translate(locale, "share_status_local_one"), updated.Local().Format("2006-01-02 15:04:05"))
+	}
+	return fmt.Sprintf(translate(locale, "share_status_local"), count, updated.Local().Format("2006-01-02 15:04:05"))
+}
+
+func deleteWarning(locale string, shares int) string {
+	if shares == 0 {
+		return translate(locale, "delete_warning")
+	}
+	return fmt.Sprintf(translate(locale, "delete_warning_shares"), shares)
 }
 
 // bytesText accepts both int (len of a slice) and int64 (a configured limit).
@@ -165,12 +240,18 @@ func bytesText(value any) string {
 	}
 }
 
-func (a *App) renderTemplate(w http.ResponseWriter, status int, name string, data pageData) {
+func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int, name string, data pageData) {
 	// A deployment-wide fact, set at the one place every page goes through
 	// rather than at each of the handlers that build a pageData. The top bar
 	// names the home page after it, and getting that from only some of them
 	// would leave the navigation disagreeing with itself.
 	data.Anonymous = a.cfg.AnonymousEnabled
+	data.Language = requestLanguage(r)
+	data.Locale = data.Language.Locale
+	data.Error = localizePageError(data.Locale, data.Error)
+	data.UpstreamError = localizePageError(data.Locale, data.UpstreamError)
+	w.Header().Add("Vary", "Accept-Language")
+	w.Header().Add("Vary", "Cookie")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if status != http.StatusOK {

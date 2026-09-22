@@ -34,5 +34,5 @@ func (a *App) renderMediaPlayer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'self'; media-src blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	// EscapedPath preserves reserved characters in the decorative filename.
-	a.renderTemplate(w, http.StatusOK, "media.html", pageData{MediaSource: r.URL.EscapedPath() + "?raw=1"})
+	a.renderTemplate(w, r, http.StatusOK, "media.html", pageData{MediaSource: r.URL.EscapedPath() + "?raw=1"})
 }

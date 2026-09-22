@@ -90,7 +90,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		data := a.basePage(r, user)
 		data.IsNew = true
 		data.NewKind = newResourceKind(r.URL.Query().Get("kind"))
-		a.renderTemplate(w, http.StatusOK, "resource.html", data)
+		a.renderTemplate(w, r, http.StatusOK, "resource.html", data)
 		return
 	}
 	if r.Method != http.MethodPost || !a.checkCSRF(r, sessionID) {
@@ -104,7 +104,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		data.NewKind = newResourceKind(r.FormValue("kind"))
 		data.Resource = Resource{Name: form.Name, Filename: form.Filename, OriginURL: form.OriginURL}
 		a.previewUpstream(r.Context(), &data, form.OriginURL)
-		a.renderTemplate(w, http.StatusOK, "resource.html", data)
+		a.renderTemplate(w, r, http.StatusOK, "resource.html", data)
 		return
 	}
 	if err == nil {
@@ -129,7 +129,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	data.ContentEncoding = form.ContentEncoding
 	data.ContentEOL = form.ContentEOL
 	data.ContentText = body
-	a.renderTemplate(w, status, "resource.html", data)
+	a.renderTemplate(w, r, status, "resource.html", data)
 }
 
 // editableText is what a refused save can put back in the editor. A browser
@@ -409,7 +409,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		data.DeleteOpen = true
 	}
 
-	a.renderTemplate(w, status, "resource.html", data)
+	a.renderTemplate(w, r, status, "resource.html", data)
 }
 
 func buildShareViews(base string, resource Resource, servedType string, shares []Link, now time.Time) []linkView {
@@ -493,7 +493,7 @@ func (a *App) renderShareFragment(w http.ResponseWriter, r *http.Request, user U
 		}
 	}
 	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares, time.Now().UTC())
-	a.renderTemplate(w, http.StatusOK, "share-fragment", data)
+	a.renderTemplate(w, r, http.StatusOK, "share-fragment", data)
 }
 
 // previewUpstream reads the address exactly as a public request would and fills

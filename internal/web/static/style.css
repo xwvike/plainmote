@@ -54,6 +54,12 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
 .nav a.on { background: oklch(0.932 0.004 255); color: var(--ink); }
 .top .rt { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .who { font: 400 11.5px var(--mono); color: var(--ink2); }
+.lang-switch { display: grid; grid-template-columns: repeat(2, 25px); grid-template-rows: 25px; height: 27px; border: 1px solid var(--line2); background: var(--panel); }
+.lang-cell { display: grid; place-items: center; color: var(--ink3); font: 600 9.5px/1 var(--mono); letter-spacing: .02em; }
+.lang-cell + .lang-cell { border-left: 1px solid var(--line2); }
+.lang-cell:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
+.lang-cell.on { background: var(--ink); color: var(--panel); }
+.signin-language { position: fixed; top: 14px; right: 14px; }
 
 .page { width: var(--col); margin: 0 auto; padding: 16px 0 32px; display: grid; gap: 14px; align-content: start; }
 /* Leave enough of an existing resource's first viewport for the save bar and
