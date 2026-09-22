@@ -17,6 +17,11 @@ PlainMote 是一个使用 Go 编写的无状态资源分发服务。登录用户
 
 服务直接启动，不包含 CLI 子命令。容器本地没有持久化状态，可以让多个副本共享 PostgreSQL、对象存储和 Token 密钥。
 
+界面内置英语、简体中文、繁体中文、日语、法语和德语。服务根据浏览器的 `Accept-Language`
+选择语言；无法匹配时使用英语，且不显示语言切换器。匹配到非英语语言时，顶部显示由该语言和 `EN`
+组成的双格切换器，选择结果通过 `plainmote_language` Cookie 保留。这个选择只在浏览器匹配到的语言与英语之间切换，
+不会向用户展示一长列与其无关的语言。
+
 ## 资源与分享
 
 上传正文先写入对象存储，再写入 PostgreSQL。替换正文会创建新的对象 Key，数据库切换成功后再删除旧对象。对象 Key 格式为：
@@ -153,13 +158,19 @@ docker compose -f compose.dev.yaml down -v
 
 ## 生产部署
 
-生产 Compose 只运行无状态应用，PostgreSQL 和 S3/R2 由外部提供：
+生产 Compose 只运行无状态应用，PostgreSQL 和 S3/R2 由外部提供。完整的镜像构建、GHCR 推送、
+OAuth App、首次启动、升级和回滚步骤见 [`docs/deployment.md`](docs/deployment.md)。
+
+复制环境变量模板并固定要部署的镜像版本：
 
 ```bash
-docker compose up --build -d
+cp .env.example .env
+docker compose pull
+docker compose up -d --remove-orphans
 ```
 
-镜像入口就是 Web 服务本身，不需要 `command`、配置文件或持久化目录挂载。健康检查入口为 `/healthz`。
+生产 Compose 不在服务器现场构建源码，镜像由 `PLAINMOTE_IMAGE` 指定。镜像入口就是 Web 服务本身，
+不需要 `command`、配置文件或持久化目录挂载。健康检查入口为 `/healthz`。
 
 容器默认只发布到 `127.0.0.1`。这个服务假定前面有一层入口，发布到所有接口等于给了一条绕过它的路。
 需要换绑定地址时用 `PLAINMOTE_BIND`。

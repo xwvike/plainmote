@@ -39,6 +39,8 @@ main
 - 分享属于资源，资源属于 GitHub 用户。
 - 分享 Token 以 AES-GCM 密文保存，同时保存 SHA-256 哈希用于查找。
 - Web 容器本地没有需要保留的数据。
+- 界面语言由 `Accept-Language` 决定，只支持英语、简体中文、繁体中文、日语、法语和德语；不支持的语言回退英语且不显示切换器。
+  命中非英语语言时，Cookie 只在该语言和英语之间保存选择。新增页面文案时必须补齐六种语言，并保留英语兜底。
 - `/` 是首页，对登录与否呈现同一个页面；账号的资源列表在 `/resources/`。首页按登录状态变身
   会让爬虫和用户看到两个东西，这是有意避开的。
 - 首页不加载 `editor.js`，也不加载 CodeMirror bundle。那个框就是一个 `textarea`。
@@ -85,10 +87,11 @@ main
 
 按顺序阅读：
 
-1. `compose.yaml`：生产容器边界和环境变量注入。
-2. `internal/config/config.go`：环境变量解析、默认值和启动校验。
-3. `internal/store/store.go`：`DATABASE_URL` 解析、连接池和启动探活。
-4. `internal/store/schema.go`：启动时执行 PostgreSQL schema。
+1. `docs/deployment.md`：镜像构建、外部依赖、首次启动、升级和回滚。
+2. `compose.yaml`：生产容器边界和环境变量注入。
+3. `internal/config/config.go`：环境变量解析、默认值和启动校验。
+4. `internal/store/store.go`：`DATABASE_URL` 解析、连接池和启动探活。
+5. `internal/store/schema.go`：启动时执行 PostgreSQL schema。
 
 生产环境通过一个连接 URI 同时配置 PostgreSQL 地址、端口、数据库、用户名和密码，例如：
 
@@ -99,6 +102,8 @@ postgres://plainmote:password@postgres.example.com:5432/plainmote?sslmode=requir
 需要确认的运行约束：
 
 - 进程不接收 CLI 子命令或配置文件路径，`app.Run()` 只读取环境变量。
+- 生产服务器只拉取 `PLAINMOTE_IMAGE` 指定的成品镜像，不现场构建源码。部署必须固定提交标签或镜像摘要，不能使用 `latest`。
+- 容器必须继续以非 root 用户运行，保持只读根文件系统、能力集清空和 `no-new-privileges`；运行期只写临时 `/tmp`。
 - `DATABASE_URL` 由 `pgxpool` 原生解析；生产 URI 应使用数据库服务商要求的 TLS 模式，并作为 Secret 注入，不能写入镜像、仓库或日志。
 - 启动会连接并 `Ping` PostgreSQL，然后执行内嵌 `schema.sql`；任一步失败都会终止进程。
 - 当前 schema 使用 `CREATE ... IF NOT EXISTS` 且没有迁移历史，因此应用数据库角色需要首次建表权限。多副本同时冷启动和生产环境是否允许应用持有 DDL 权限，需要在部署时明确决定。

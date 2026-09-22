@@ -2,11 +2,10 @@ name: plainmote
 
 services:
   plainmote:
-    build:
-      context: .
-    image: plainmote:local
+    image: "${PLAINMOTE_IMAGE:?set PLAINMOTE_IMAGE to a versioned image}"
     restart: unless-stopped
     init: true
+    stop_grace_period: 15s
     # Loopback by default; set PLAINMOTE_BIND to 0.0.0.0 to publish wider.
     ports:
       - "${PLAINMOTE_BIND:-127.0.0.1}:${PLAINMOTE_PORT:-8964}:8964"
@@ -18,7 +17,13 @@ services:
     cap_drop:
       - ALL
     user: "65532:65532"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
+      PLAINMOTE_LISTEN: ":8964"
       DATABASE_URL: "${DATABASE_URL:?set DATABASE_URL}"
       PLAINMOTE_PUBLIC_URL: "${PLAINMOTE_PUBLIC_URL:?set PLAINMOTE_PUBLIC_URL}"
       PLAINMOTE_BLOB_ENDPOINT: "${PLAINMOTE_BLOB_ENDPOINT:?set PLAINMOTE_BLOB_ENDPOINT}"
