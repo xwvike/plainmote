@@ -49,6 +49,7 @@
           <span>{{tr .Locale "valid_until"}} {{formatTime .PasteExpires}} ({{untilText .Locale .PasteExpires}}) · {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
         </span>
         <p class="hint">{{tr .Locale "paste_expiry_note"}}</p>
+        <p class="hint">{{tr .Locale "paste_result_private"}}</p>
       </div>
     </div>
     <div class="savebar paste-result-actions">

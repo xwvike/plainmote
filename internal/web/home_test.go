@@ -300,6 +300,10 @@ func TestAnonymousPasteCanReturnFromLoginAndBeSaved(t *testing.T) {
 	if !strings.Contains(result.Body.String(), `href="`+wantLogin+`"`) {
 		t.Fatalf("result login must return to %q: %s", resultPath, result.Body.String())
 	}
+	// Anyone signed in who holds this address can save the paste.
+	if !strings.Contains(result.Body.String(), "is not the share link") {
+		t.Fatal("the result page must say its own address is not for forwarding")
+	}
 
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
