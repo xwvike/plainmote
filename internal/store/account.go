@@ -174,11 +174,16 @@ func (d *Store) DeleteAccount(ctx context.Context, userID string) error {
 	// The account is gone at this point whatever happens below. A body that
 	// fails to delete costs storage, not correctness, and failing the request
 	// would tell someone whose account no longer exists to try again.
+	// Detach cleanup from the HTTP request: once the database commit succeeds,
+	// a client disconnect must not cancel every object deletion. The timeout
+	// still bounds a stalled object store.
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	defer cancel()
 	for _, key := range keys {
 		if key == "" {
 			continue
 		}
-		if err := d.blobs.Delete(ctx, key); err != nil {
+		if err := d.blobs.Delete(cleanupCtx, key); err != nil {
 			fmt.Fprintf(os.Stderr, "delete account %s: body %s: %v\n", userID, key, err)
 		}
 	}

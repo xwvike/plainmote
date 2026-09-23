@@ -220,6 +220,36 @@ func redactDeliveryPath(urlPath string) string {
 	return strings.Replace(urlPath, token, "[redacted]", 1)
 }
 
+func redactSensitiveQuery(rawQuery string) string {
+	if rawQuery == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return "[redacted]"
+	}
+	for _, key := range []string{"token", "grant"} {
+		if values.Has(key) {
+			values.Set(key, "[redacted]")
+		}
+	}
+	return values.Encode()
+}
+
+func redactSensitiveURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "[redacted]"
+	}
+	parsed.Path = redactDeliveryPath(parsed.Path)
+	parsed.RawPath = ""
+	parsed.RawQuery = redactSensitiveQuery(parsed.RawQuery)
+	return parsed.String()
+}
+
 func remoteIP(r *http.Request) string {
 	host := r.RemoteAddr
 	if parsed, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
@@ -269,34 +299,14 @@ func (a *App) clientIP(r *http.Request) string {
 }
 
 func (a *App) requestMetadata(r *http.Request) store.RequestMeta {
-	query := r.URL.Query()
-	if query.Has("token") {
-		query.Set("token", "[redacted]")
-	}
-	if query.Has("grant") {
-		query.Set("grant", "[redacted]")
-	}
-	referer := r.Referer()
-	if parsed, err := url.Parse(referer); err == nil {
-		parsed.Path = redactDeliveryPath(parsed.Path)
-		parsed.RawPath = ""
-		values := parsed.Query()
-		for _, key := range []string{"token", "grant"} {
-			if values.Has(key) {
-				values.Set(key, "[redacted]")
-			}
-		}
-		parsed.RawQuery = values.Encode()
-		referer = parsed.String()
-	}
 	return store.RequestMeta{
 		RemoteIP:       a.clientIP(r),
 		RemoteAddr:     r.RemoteAddr,
 		Host:           r.Host,
-		Query:          query.Encode(),
+		Query:          redactSensitiveQuery(r.URL.RawQuery),
 		Proto:          r.Proto,
 		UserAgent:      r.UserAgent(),
-		Referer:        referer,
+		Referer:        redactSensitiveURL(r.Referer()),
 		Forwarded:      r.Header.Get("Forwarded"),
 		XForwardedFor:  r.Header.Get("X-Forwarded-For"),
 		CFConnectingIP: r.Header.Get("CF-Connecting-IP"),

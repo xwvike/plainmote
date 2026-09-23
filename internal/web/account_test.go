@@ -75,7 +75,12 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 	}
 	if err := db.RecordAccess(ctx, store.AccessEvent{
 		OwnerID: user.ID, ResourceID: resource.ID, LinkID: share.ID, Outcome: store.OutcomeSuccess, Status: 200,
-	}, store.RequestMeta{Method: "GET", RemoteIP: "203.0.113.9", UserAgent: "curl/8"}); err != nil {
+	}, store.RequestMeta{
+		Method: "GET", RemoteIP: "203.0.113.9", UserAgent: "curl/8",
+		Path:    "/d/" + share.Token + "/example.conf",
+		Query:   "token=" + url.QueryEscape(share.Token),
+		Referer: "https://cfg.test/d/" + share.Token + "/example.conf?grant=" + url.QueryEscape(share.Token),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	client := signedIn(t, db, user)

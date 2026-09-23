@@ -7,6 +7,19 @@ import (
 	"time"
 )
 
+type cancelOnDeleteBlobs struct {
+	*memoryBlobs
+	cancel context.CancelFunc
+}
+
+func (b *cancelOnDeleteBlobs) Delete(ctx context.Context, key string) error {
+	b.cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return b.memoryBlobs.Delete(ctx, key)
+}
+
 func TestDeleteAccountRemovesEverythingItOwns(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
@@ -110,6 +123,23 @@ func TestDeleteAccountRefusesTheAnonymousAccount(t *testing.T) {
 	db, _, _ := testDatabase(t)
 	if err := db.DeleteAccount(context.Background(), AnonymousUserID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("the anonymous account must not be deletable, got %v", err)
+	}
+}
+
+func TestDeleteAccountFinishesObjectCleanupAfterRequestCancellation(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	base := db.blobs.(*memoryBlobs)
+	ctx, cancel := context.WithCancel(context.Background())
+	db.blobs = &cancelOnDeleteBlobs{memoryBlobs: base, cancel: cancel}
+
+	if err := db.DeleteAccount(ctx, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatal("the test blob store did not cancel the request context")
+	}
+	if got := base.count(); got != 0 {
+		t.Fatalf("request cancellation left %d object(s) behind", got)
 	}
 }
 

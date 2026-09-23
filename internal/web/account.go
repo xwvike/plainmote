@@ -277,8 +277,8 @@ func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Ac
 		line, err := json.Marshal(exportAccessLog{
 			ID: entry.ID, ResourceID: entry.ResourceID, ResourceName: entry.ResourceName, ResourceFile: entry.ResourceFile,
 			LinkID: entry.LinkID, LinkName: entry.LinkName, Outcome: entry.Outcome, Status: entry.Status, Detail: entry.Detail,
-			RemoteIP: entry.RemoteIP, RemoteAddr: entry.RemoteAddr, Method: entry.Method, Host: entry.Host, Path: entry.Path,
-			Query: entry.Query, Proto: entry.Proto, TLS: entry.TLS, UserAgent: entry.UserAgent, Referer: entry.Referer,
+			RemoteIP: entry.RemoteIP, RemoteAddr: entry.RemoteAddr, Method: entry.Method, Host: entry.Host, Path: redactDeliveryPath(entry.Path),
+			Query: redactSensitiveQuery(entry.Query), Proto: entry.Proto, TLS: entry.TLS, UserAgent: entry.UserAgent, Referer: redactSensitiveURL(entry.Referer),
 			Forwarded: entry.Forwarded, XForwardedFor: entry.XForwardedFor, CFConnectingIP: entry.CFConnectingIP,
 			CFRay: entry.CFRay, ContentLength: entry.ContentLength, Hits: entry.Hits, FirstAt: entry.FirstAt, OccurredAt: entry.OccurredAt,
 		})
