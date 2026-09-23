@@ -311,7 +311,12 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	// inline script. same-origin keeps a path such as /paste/<id> - which is
 	// what lets a quick share be saved - out of the Referer sent to the font
 	// host.
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	// The media player arrives here with a stricter policy that already has
+	// frame-ancestors. Keep it intact instead of replacing it with the common
+	// page policy.
+	if w.Header().Get("Content-Security-Policy") == "" {
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	}
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// A handler that already chose a stricter policy - the media player and the

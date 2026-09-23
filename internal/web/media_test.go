@@ -99,6 +99,12 @@ func TestSingleUseBrowserMediaFetch(t *testing.T) {
 			if len(page.Result().Cookies()) != 0 || page.Header().Get("Cache-Control") != "no-store" || page.Header().Get("Referrer-Policy") != "no-referrer" {
 				t.Fatal("player cached or issued a credential")
 			}
+			csp := page.Header().Get("Content-Security-Policy")
+			for _, directive := range []string{"default-src 'none'", "media-src blob:", "frame-ancestors 'none'"} {
+				if !strings.Contains(csp, directive) {
+					t.Fatalf("media player CSP lost %q: %q", directive, csp)
+				}
+			}
 			if player := page.Body.String(); !strings.Contains(player, `<html lang="en">`) ||
 				!strings.Contains(player, `>Loading…</p>`) || strings.Contains(player, "media-language") ||
 				strings.Contains(player, "正在加载") {
