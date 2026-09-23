@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,7 @@ func TestEditorContentUsesSelectedEncoding(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/resources/new", bytes.NewBufferString(values.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	form, err := readResourceForm(request, 1<<20)
+	form, err := readResourceForm(httptest.NewRecorder(), request, 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +37,7 @@ func TestEditorRejectsCharactersTheSelectedEncodingCannotRepresent(t *testing.T)
 	}
 	request := httptest.NewRequest(http.MethodPost, "/resources/new", bytes.NewBufferString(values.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if _, err := readResourceForm(request, 1<<20); err == nil {
+	if _, err := readResourceForm(httptest.NewRecorder(), request, 1<<20); err == nil {
 		t.Fatal("GBK save must reject a character it cannot represent")
 	}
 }
@@ -63,11 +64,43 @@ func TestUploadedBytesAreNotReencoded(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodPost, "/resources/new", &body)
 	request.Header.Set("Content-Type", writer.FormDataContentType())
-	form, err := readResourceForm(request, 1<<20)
+	form, err := readResourceForm(httptest.NewRecorder(), request, 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !form.Uploaded || form.ContentEncoding != "gb18030" || !bytes.Equal(form.Content, original) {
 		t.Fatalf("upload changed bytes: uploaded:%v encoding:%q got:%x want:%x", form.Uploaded, form.ContentEncoding, form.Content, original)
+	}
+}
+
+// TestChunkedUploadIsBoundedToo covers the request the length check never saw:
+// chunked transfer declares no length, so the old guard let the whole body
+// through to ParseMultipartForm, which spills to disk without a ceiling.
+func TestChunkedUploadIsBoundedToo(t *testing.T) {
+	const limit = 1 << 20
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("upload", "big.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(bytes.Repeat([]byte("a"), 4*limit)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/resources/new", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.ContentLength = -1 // what a chunked request looks like to the handler
+	request.TransferEncoding = []string{"chunked"}
+
+	_, err = readResourceForm(httptest.NewRecorder(), request, limit)
+	// Refusing it is not the point - the old code refused it too, after the
+	// multipart parser had already written all of it to disk. The point is
+	// that reading stopped at the limit, which is what MaxBytesError reports.
+	var tooLarge *http.MaxBytesError
+	if !errors.As(err, &tooLarge) {
+		t.Fatalf("reading must stop at the limit, got %v", err)
 	}
 }

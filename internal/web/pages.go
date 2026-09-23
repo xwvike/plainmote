@@ -304,11 +304,29 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	w.Header().Add("Vary", "Cookie")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	// No page here is meant to be framed. The session cookie is SameSite=Lax,
+	// so a cross-site frame already loads signed out; this closes the rest,
+	// including a same-site host framing the delete and revoke buttons. The
+	// policy stops at frame-ancestors because two templates still carry an
+	// inline script. same-origin keeps a path such as /paste/<id> - which is
+	// what lets a quick share be saved - out of the Referer sent to the font
+	// host.
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// A handler that already chose a stricter policy - the media player and the
+	// delivery path send none at all - keeps it.
+	if w.Header().Get("Referrer-Policy") == "" {
+		w.Header().Set("Referrer-Policy", "same-origin")
+	}
 	if status != http.StatusOK {
 		w.WriteHeader(status)
 	}
 	if err := a.templates.ExecuteTemplate(w, name, data); err != nil {
-		fmt.Fprintf(w, "template error: %v", err)
+		// The marker stays on the page so a broken template is visible and the
+		// render tests can see it; the detail names template internals.
+		fmt.Fprintf(os.Stderr, "template %s: %v\n", name, err)
+		_, _ = io.WriteString(w, "template error")
 	}
 }
 

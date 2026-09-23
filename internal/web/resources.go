@@ -100,7 +100,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		writePlainError(w, http.StatusForbidden, "invalid request")
 		return
 	}
-	form, err := readResourceForm(r, a.cfg.MaxContent)
+	form, err := readResourceForm(w, r, a.cfg.MaxContent)
 	if err == nil && r.FormValue("action") == actionPreview {
 		data := a.basePage(r, user)
 		data.IsNew = true
@@ -177,11 +177,17 @@ type resourceForm struct {
 	ContentGiven bool
 }
 
-func readResourceForm(r *http.Request, maxBytes int64) (resourceForm, error) {
+func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (resourceForm, error) {
 	var form resourceForm
-	if r.ContentLength > maxBytes+64*1024 {
+	limit := maxBytes + 64*1024
+	if r.ContentLength > limit {
 		return form, errors.New("content is too large")
 	}
+	// The length check above only sees a declared length. A chunked request
+	// declares none, and ParseMultipartForm spills whatever does not fit in
+	// memory to a temporary file with no ceiling of its own - on /tmp, which
+	// is tmpfs in the production container. Bounding the reader bounds both.
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	multipartForm := strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data")
 	if multipartForm {
 		if err := r.ParseMultipartForm(maxBytes + 1); err != nil {
@@ -280,7 +286,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
 			return
 		}
-		form, err := readResourceForm(r, a.cfg.MaxContent)
+		form, err := readResourceForm(w, r, a.cfg.MaxContent)
 		if err != nil {
 			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest, nil)
 			return

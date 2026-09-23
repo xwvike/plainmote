@@ -82,3 +82,33 @@ func TestNothingHereIsIndexable(t *testing.T) {
 		t.Fatalf("the share must still deliver, got %d", delivered.Code)
 	}
 }
+
+// TestPagesCannotBeFramed covers the pages that carry buttons worth tricking
+// someone into pressing. SameSite=Lax already keeps a cross-site frame signed
+// out; these headers close the rest.
+func TestPagesCannotBeFramed(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	app := newTestApp(db, user.GitHubID)
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/", "/login", "/resources/", "/resources/" + resource.ID, "/resources/" + resource.ID + "?delete=1", "/logs"} {
+		request := httptest.NewRequest(http.MethodGet, "https://cfg.test"+path, nil)
+		request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+		request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			continue
+		}
+		h := response.Header()
+		if h.Get("X-Frame-Options") != "DENY" || !strings.Contains(h.Get("Content-Security-Policy"), "frame-ancestors 'none'") {
+			t.Errorf("%s can be framed: X-Frame-Options=%q CSP=%q", path, h.Get("X-Frame-Options"), h.Get("Content-Security-Policy"))
+		}
+		if h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Referrer-Policy") != "same-origin" {
+			t.Errorf("%s is missing nosniff or the referrer policy", path)
+		}
+	}
+}
