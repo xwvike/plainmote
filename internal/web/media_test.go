@@ -86,6 +86,7 @@ func TestSingleUseBrowserMediaFetch(t *testing.T) {
 			get := func(target, accept string) *httptest.ResponseRecorder {
 				r := httptest.NewRequest(http.MethodGet, "https://cfg.test"+target, nil)
 				r.Header.Set("Accept", accept)
+				r.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
 				w := httptest.NewRecorder()
 				app.Handler().ServeHTTP(w, r)
 				return w
@@ -97,6 +98,11 @@ func TestSingleUseBrowserMediaFetch(t *testing.T) {
 			}
 			if len(page.Result().Cookies()) != 0 || page.Header().Get("Cache-Control") != "no-store" || page.Header().Get("Referrer-Policy") != "no-referrer" {
 				t.Fatal("player cached or issued a credential")
+			}
+			if player := page.Body.String(); !strings.Contains(player, `<html lang="en">`) ||
+				!strings.Contains(player, `>Loading…</p>`) || strings.Contains(player, "media-language") ||
+				strings.Contains(player, "正在加载") {
+				t.Fatal("media player must remain English without a language switch")
 			}
 			match := regexp.MustCompile(`data-media-source="([^"]+)"`).FindStringSubmatch(page.Body.String())
 			if len(match) != 2 {

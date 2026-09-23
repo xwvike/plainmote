@@ -263,12 +263,12 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .fg { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 12px; align-items: center; }
 .fg > dt { font-size: 11px; font-weight: 500; color: var(--ink2); }
 .fg > dd { margin: 0; }
-/* One address per row: the link takes the width, its state and the two things
-   you can do to it sit at the end. */
+/* Keep every share on one row. The address only needs enough room to identify
+   the link because the adjacent button copies the complete value. */
 .shl { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.shl > li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
-.shl > li > input[readonly] { flex: 1 1 auto; min-width: 0; height: 22px; font: 400 11.5px var(--mono); }
-.shl .ttl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font: 400 11px var(--mono); color: var(--ink3); white-space: nowrap; }
+.shl > li { display: grid; grid-template-columns: minmax(72px, 300px) max-content minmax(0, 1fr) max-content max-content; align-items: center; gap: 8px; min-width: 0; }
+.shl > li > input[readonly] { min-width: 0; width: 100%; height: 22px; overflow: hidden; text-overflow: ellipsis; font: 400 11.5px var(--mono); }
+.shl .ttl { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 400 11px var(--mono); color: var(--ink3); white-space: nowrap; }
 .table-scroll { max-width: 100%; overflow-x: auto; }
 .table-scroll > table { min-width: 760px; }
 /* The record, kept but not given a panel of its own. */
@@ -400,6 +400,5 @@ details.pan[open] .chev { transform: rotate(90deg); }
   .savebar .live { flex-basis: 100%; margin-left: 0; }
   .savebar .pick { flex: 1 1 220px; max-width: 100%; }
   .savebar .pick input { min-width: 0; max-width: 100%; }
-  .shl > li > input[readonly] { flex-basis: 100%; }
   .fg { grid-template-columns: minmax(0, 1fr); }
 }

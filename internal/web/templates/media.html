@@ -1,5 +1,5 @@
 {{define "media.html"}}<!doctype html>
-<html lang="{{.Locale}}">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,14 +10,13 @@
   <script src="/static/media.js" defer></script>
 </head>
 <body>
-  <div class="media-language">{{template "language-switch" .}}</div>
   <main data-media-source="{{.MediaSource}}"
-        data-link-expired="{{tr .Locale "media_link_expired"}}"
-        data-load-failed="{{tr .Locale "media_load_failed"}}"
-        data-type-changed="{{tr .Locale "media_type_changed"}}"
-        data-unsupported="{{tr .Locale "media_unsupported"}}"
-        data-download="{{tr .Locale "media_download"}}"
-        data-network-failed="{{tr .Locale "media_network_failed"}}"><p role="status">{{tr .Locale "media_loading"}}</p></main>
-  <noscript><p>{{tr .Locale "media_noscript_before"}}<a href="{{.MediaSource}}" download>{{tr .Locale "media_download"}}</a></p></noscript>
+        data-link-expired="The share link has expired or its use limit was reached."
+        data-load-failed="The file could not be loaded. Try again later."
+        data-type-changed="The file type changed and can no longer be played."
+        data-unsupported="Your browser cannot play this format. You can "
+        data-download="download the file"
+        data-network-failed="The file could not be loaded. Check your connection."><p role="status">Loading…</p></main>
+  <noscript><p>Enable JavaScript to play this file, or <a href="{{.MediaSource}}" download>download the file</a>.</p></noscript>
 </body>
 </html>{{end}}
