@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/mail"
 	"net/netip"
 	"net/url"
 	"os"
@@ -34,6 +35,8 @@ type Config struct {
 	AllowedIDs       map[string]bool
 	RegistrationMode auth.RegistrationMode
 	TokenKey         []byte
+	Operator         string
+	ContactEmail     string
 }
 
 // Load reads deployment settings from the process environment. The service
@@ -115,6 +118,13 @@ func Load() (Config, error) {
 	}
 	cfg.MaxContent = int64(maxContentMiB) << 20
 	cfg.TokenKey, err = parseSecretKey(os.Getenv("PLAINMOTE_TOKEN_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
+	// The contact address is what publishes the privacy policy and terms: both
+	// tell the reader to write to it, so without one there is nothing to show.
+	cfg.Operator = strings.TrimSpace(os.Getenv("PLAINMOTE_OPERATOR"))
+	cfg.ContactEmail, err = parseContactEmail(os.Getenv("PLAINMOTE_CONTACT_EMAIL"))
 	if err != nil {
 		return Config{}, err
 	}
@@ -235,4 +245,18 @@ func parseSecretKey(raw string) ([]byte, error) {
 		return []byte(value), nil
 	}
 	return nil, errors.New("PLAINMOTE_TOKEN_KEY must be 32 bytes, 64 hex characters, or base64")
+}
+
+// parseContactEmail takes a bare address only. A display name or angle
+// brackets would end up inside a mailto: link and on the page as typed.
+func parseContactEmail(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	address, err := mail.ParseAddress(value)
+	if err != nil || address.Name != "" || address.Address != value {
+		return "", fmt.Errorf("PLAINMOTE_CONTACT_EMAIL must be a bare email address such as ops@example.com")
+	}
+	return value, nil
 }

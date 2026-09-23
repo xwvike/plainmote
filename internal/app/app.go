@@ -54,6 +54,10 @@ func Run() error {
 		TrustedProxies:   cfg.TrustedProxies,
 		RegistrationMode: cfg.RegistrationMode,
 		AnonymousEnabled: cfg.AnonymousEnabled,
+		LogRetention:     cfg.LogRetention,
+		Operator:         cfg.Operator,
+		ContactEmail:     cfg.ContactEmail,
+		BlobEndpoint:     cfg.BlobEndpoint,
 	}, db, upstream.New(cfg.MaxContent), auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
 
 	fmt.Fprintf(os.Stderr, "listening on %s\n", cfg.Listen)

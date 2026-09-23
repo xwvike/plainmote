@@ -39,6 +39,10 @@ type Config struct {
 	TrustedProxies   []netip.Prefix
 	RegistrationMode auth.RegistrationMode
 	AnonymousEnabled bool
+	LogRetention     time.Duration
+	Operator         string
+	ContactEmail     string
+	BlobEndpoint     string
 }
 
 func New(cfg Config, db *store.Store, source upstreamFetcher, github *auth.GitHub) *App {
@@ -75,6 +79,9 @@ type pageData struct {
 	// Anonymous is whether this deployment takes pastes from anyone at all.
 	// With it off the home page is what the service is, and nothing more.
 	Anonymous bool
+	// LegalLinks is whether the about, privacy, terms and contact pages exist.
+	LegalLinks bool
+	Legal      legalView
 
 	// The home page, both halves of it: the form as it was submitted when a
 	// paste was refused, and the address when one was made.
@@ -170,6 +177,11 @@ func (a *App) routes() http.Handler {
 		mux.HandleFunc(pastePath, a.handlePaste)
 		mux.HandleFunc(pasteResultPrefix, a.handlePasteResult)
 		mux.HandleFunc(pasteSavePath, a.handleSavePaste)
+	}
+	if a.cfg.ContactEmail != "" {
+		for _, page := range legalPages {
+			mux.HandleFunc("/"+page, a.handleLegal)
+		}
 	}
 	mux.HandleFunc("/", a.handleHome)
 	return a.noIndex(mux)

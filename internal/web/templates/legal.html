@@ -1,0 +1,32 @@
+{{define "legal.html"}}<!doctype html>
+<html lang="{{if .Legal.Chinese}}zh-CN{{else}}en{{end}}">
+<head>
+  {{template "htmlhead" .}}
+  <title>{{template "legal-title" .}} · PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page">
+    <article class="doc">
+      {{if eq .Legal.Page "about"}}{{if .Legal.Chinese}}{{template "about-zh" .}}{{else}}{{template "about-en" .}}{{end}}
+      {{else if eq .Legal.Page "privacy"}}{{if .Legal.Chinese}}{{template "privacy-zh" .}}{{else}}{{template "privacy-en" .}}{{end}}
+      {{else if eq .Legal.Page "terms"}}{{if .Legal.Chinese}}{{template "terms-zh" .}}{{else}}{{template "terms-en" .}}{{end}}
+      {{else}}{{if .Legal.Chinese}}{{template "contact-zh" .}}{{else}}{{template "contact-en" .}}{{end}}{{end}}
+    </article>
+  </main>
+  {{template "footer" .}}
+</body>
+</html>{{end}}
+
+{{define "legal-title"}}{{if .Legal.Chinese}}{{if eq .Legal.Page "about"}}关于{{else if eq .Legal.Page "privacy"}}隐私政策{{else if eq .Legal.Page "terms"}}服务条款{{else}}联系我们{{end}}{{else}}{{if eq .Legal.Page "about"}}About{{else if eq .Legal.Page "privacy"}}Privacy Policy{{else if eq .Legal.Page "terms"}}Terms of Service{{else}}Contact us{{end}}{{end}}{{end}}
+
+{{define "legal-email"}}<a href="mailto:{{.Legal.Email}}">{{.Legal.Email}}</a>{{end}}
+
+{{define "footer"}}{{if .LegalLinks}}<footer class="foot">
+  <nav aria-label="PlainMote">
+    <a href="/about"{{if eq .Active "about"}} aria-current="page"{{end}}>{{tr .Locale "legal_about"}}</a>
+    <a href="/privacy"{{if eq .Active "privacy"}} aria-current="page"{{end}}>{{tr .Locale "legal_privacy"}}</a>
+    <a href="/terms"{{if eq .Active "terms"}} aria-current="page"{{end}}>{{tr .Locale "legal_terms"}}</a>
+    <a href="/contact"{{if eq .Active "contact"}} aria-current="page"{{end}}>{{tr .Locale "legal_contact"}}</a>
+  </nav>
+</footer>{{end}}{{end}}

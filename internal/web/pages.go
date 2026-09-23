@@ -102,6 +102,8 @@ func (a *App) templateSet() *template.Template {
 		"countText":          countText,
 		"shareStatus":        shareStatus,
 		"deleteWarning":      deleteWarning,
+		"legalDuration":      legalDuration,
+		"legalBytes":         legalBytes,
 	}).ParseFS(webAssets, "templates/*.html"))
 }
 
@@ -296,6 +298,7 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	// names the home page after it, and getting that from only some of them
 	// would leave the navigation disagreeing with itself.
 	data.Anonymous = a.cfg.AnonymousEnabled
+	data.LegalLinks = a.cfg.ContactEmail != ""
 	data.Language = requestLanguage(r)
 	data.Locale = data.Language.Locale
 	data.Error = localizePageError(data.Locale, data.Error)

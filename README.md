@@ -78,6 +78,16 @@ Token 是唯一的路由依据；文件名只用于下载名称和类型提示�
 
 匿名写入的入口是 `POST /paste`，单独一条路径，方便在边缘按一条规则限流。
 
+## 关于、隐私政策与服务条款
+
+设置 `PLAINMOTE_CONTACT_EMAIL` 后，服务提供 `/about`、`/privacy`、`/terms` 和 `/contact` 四个页面，
+首页、登录页和列表页底部出现对应链接。隐私政策和服务条款都要求读者通过邮件联系运营者，没有联系方式时
+这四个路径不存在。正文只有简体中文和英文：中文界面显示中文版，其余语言显示英文版。
+
+正文中的会话有效期、访问记录保留期、单份内容上限和匿名分享限制直接取自当前配置，改配置不需要改文本。
+其余内容描述的是 PlainMote 本身的行为；修改代码使其处理的信息发生变化时（例如接入新的登录方式），
+应在同一个提交中更新 `internal/web/templates/legal_*.html` 和 `legalUpdated`。
+
 ## 配额
 
 每个用户的资源数量和存储总量由套餐决定，`plans` 表里标记为默认的那条在注册时自动授予。配额只作用于
@@ -126,6 +136,8 @@ Token 使用 256 位安全随机数生成。PostgreSQL 保存 SHA-256 查找索�
 | `PLAINMOTE_LOG_RETENTION` | `720h` | 访问记录保留时长，`0` 表示永久保留 |
 | `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | 新用户注册策略：`open`、`allowlist` 或 `closed` |
 | `PLAINMOTE_ANONYMOUS` | `false` | 是否开放首页的匿名分享 |
+| `PLAINMOTE_OPERATOR` | 空 | 运营者名称，显示在关于、隐私政策和服务条款中 |
+| `PLAINMOTE_CONTACT_EMAIL` | 空 | 联系邮箱；设置后才提供 `/about`、`/privacy`、`/terms`、`/contact` |
 | `GITHUB_ALLOWED_IDS` | 空 | `allowlist` 模式下允许注册的 GitHub 数字用户 ID，逗号分隔 |
 
 OAuth 只负责确认 GitHub 身份。注册策略只应用于数据库中尚不存在的新用户：`open` 允许注册，

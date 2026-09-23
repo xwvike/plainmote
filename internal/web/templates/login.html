@@ -20,6 +20,7 @@
       {{if eq .RegistrationMode "allowlist"}}<p class="hint signin-note">{{tr .Locale "login_allowlist"}}</p>{{end}}
       {{if eq .RegistrationMode "closed"}}<p class="hint signin-note">{{tr .Locale "login_closed"}}</p>{{end}}
     </div>
+    {{template "footer" .}}
   </main>
 </body>
 </html>{{end}}

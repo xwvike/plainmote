@@ -114,3 +114,30 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadContactEmail(t *testing.T) {
+	for _, tc := range []struct {
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{value: "", want: ""},
+		{value: " ops@example.com ", want: "ops@example.com"},
+		{value: "Ops <ops@example.com>", wantErr: true},
+		{value: "<ops@example.com>", wantErr: true},
+		{value: "not an address", wantErr: true},
+	} {
+		setRequiredEnvironment(t)
+		t.Setenv("PLAINMOTE_CONTACT_EMAIL", tc.value)
+		cfg, err := Load()
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("%q: expected an error", tc.value)
+			}
+			continue
+		}
+		if err != nil || cfg.ContactEmail != tc.want {
+			t.Errorf("%q: got %q, %v", tc.value, cfg.ContactEmail, err)
+		}
+	}
+}

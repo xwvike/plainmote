@@ -150,6 +150,10 @@ openssl rand -hex 32
 `PLAINMOTE_TOKEN_KEY` 必须长期备份，并在所有副本之间保持一致。它不是可以随时轮换的登录密码；丢失或替换后，
 数据库里已有的分享 Token 将无法解密。
 
+需要对外公开的实例应设置 `PLAINMOTE_CONTACT_EMAIL`（可同时设置 `PLAINMOTE_OPERATOR`），以提供隐私政策、
+服务条款、关于和联系页面。接入 Google 等第三方 OAuth 时，审核要求这些页面位于已验证的域名下；
+`https://<域名>/about` 可以作为应用首页，`/privacy` 和 `/terms` 分别填入隐私政策和服务条款地址。
+
 限制 `.env` 的读取权限：
 
 ```bash

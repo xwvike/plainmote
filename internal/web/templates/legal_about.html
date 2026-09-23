@@ -1,0 +1,39 @@
+{{define "about-zh"}}
+<h1>关于</h1>
+<p class="doc-lede">PlainMote 是一项资源分发服务。用户可在此存储文本或文件，并为不同接收者分别创建分享链接；每条链接可独立设置有效期与使用次数，可单独撤销，每次访问均有记录。</p>
+
+<h2>主要功能</h2>
+<ul>
+  <li><strong>独立的分享链接：</strong>同一资源可创建多条链接，分别设置有效期和使用次数，撤销其中一条不影响其他链接。</li>
+  <li><strong>免登录访问：</strong>接收者打开链接即可获取内容，无需注册或登录。</li>
+  <li><strong>访问记录：</strong>每次通过链接的访问均记录时间、来源 IP 和客户端信息，仅资源所有者可见。</li>
+  <li><strong>远程资源：</strong>可仅保存公网地址，每次访问时由服务器实时从源站获取内容。</li>
+  {{if .Legal.Anonymous}}<li><strong>临时分享：</strong>无需登录，在首页粘贴文本即可生成有效期最长 {{legalDuration true .Legal.AnonymousTTL}}的链接。</li>{{end}}
+</ul>
+
+<h2>隐私与安全</h2>
+<p>本服务不展示广告，不使用分析脚本或第三方跟踪工具。分享链接即为访问凭证，为防止链接经搜索引擎收录而泄露，分享链接及账号相关页面均禁止搜索引擎收录。本服务处理的信息详见<a href="/privacy">《隐私政策》</a>。</p>
+
+<h2>运营者</h2>
+<p>{{if .Legal.Operator}}PlainMote 由 {{.Legal.Operator}} 运营。{{end}}如有疑问、建议或需要举报，请通过<a href="/contact">联系我们</a>页面所列方式与我们联系。</p>
+{{end}}
+
+{{define "about-en"}}
+<h1>About</h1>
+<p class="doc-lede">PlainMote is a resource distribution service. Users store text or files and create a separate share link for each recipient. Each link has its own validity period and use limit, can be revoked individually, and records every access.</p>
+
+<h2>Features</h2>
+<ul>
+  <li><strong>Independent share links:</strong> a single resource can have multiple links, each with its own validity period and use limit. Revoking one link does not affect the others.</li>
+  <li><strong>Access without an account:</strong> recipients retrieve content simply by opening the link, with no registration or sign-in required.</li>
+  <li><strong>Access records:</strong> each access through a link records the time, source IP address and client information, visible only to the resource owner.</li>
+  <li><strong>Remote resources:</strong> a resource can consist of a public URL only, with the content fetched live from the origin server by the Service on each access.</li>
+  {{if .Legal.Anonymous}}<li><strong>Quick shares:</strong> paste text on the home page, without signing in, to generate a link valid for up to {{legalDuration false .Legal.AnonymousTTL}}.</li>{{end}}
+</ul>
+
+<h2>Privacy and security</h2>
+<p>The Service displays no advertising and uses no analytics scripts or third-party tracking tools. Because a share link serves as the access credential, share links and account pages are excluded from search engine indexing to prevent links from being exposed. Details of the information the Service processes are set out in the <a href="/privacy">Privacy Policy</a>.</p>
+
+<h2>Operator</h2>
+<p>{{if .Legal.Operator}}PlainMote is operated by {{.Legal.Operator}}. {{end}}For questions, suggestions or reports, please use the methods listed on the <a href="/contact">Contact</a> page.</p>
+{{end}}

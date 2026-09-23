@@ -362,6 +362,27 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .file-card strong { max-width: 100%; overflow-wrap: anywhere; font: 500 13px var(--sans); }
 .file-card span { max-width: 100%; overflow-wrap: anywhere; color: var(--ink3); font: 400 10.5px var(--mono); }
 
+/* Long-form text: the about, privacy, terms and contact pages. The rest of the
+   interface is a dense 12-13px tool; a policy is read top to bottom, so it gets
+   a reading measure and body size instead. */
+.doc { width: min(720px, 100%); display: grid; gap: 12px; padding-block: 8px 24px; font-size: 14px; line-height: 1.75; }
+.doc h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.014em; line-height: 1.3; }
+.doc h2 { margin-top: 18px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.doc h3 { margin: 6px 0 0; font-size: 14px; font-weight: 600; }
+.doc p, .doc ul, .doc ol { margin: 0; }
+.doc ul, .doc ol { padding-left: 1.3em; display: grid; gap: 6px; }
+.doc code { font: 400 12.5px var(--mono); }
+/* The clause markers - （一） and (a) - are part of the text, as in a printed contract. */
+.doc .doc-items { list-style: none; padding-left: 0; }
+.doc-meta { font: 400 11.5px var(--mono); color: var(--ink3); }
+.doc-lede { font-size: 15px; color: var(--ink2); }
+.foot { width: var(--col); margin: 0 auto; padding: 14px 0 28px; border-top: 1px solid var(--line); }
+.foot nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.foot a { font-size: 11.5px; color: var(--ink3); }
+.foot a:hover, .foot a[aria-current] { color: var(--ink); }
+.signin .foot { width: 344px; max-width: 100%; margin-top: 14px; padding: 0; border: 0; }
+.signin .foot nav { justify-content: center; }
+
 /* Below the fixed column width the page goes fluid: the shell stops being a
    centred column and takes the viewport, less a margin. */
 @media (max-width: 1180px) {
@@ -369,6 +390,7 @@ details.pan[open] .chev { transform: rotate(90deg); }
   .tell { grid-template-columns: minmax(0, 1fr); }
   .topin { width: calc(100% - 20px); }
   .page { width: calc(100% - 20px); padding-top: 12px; }
+  .foot { width: calc(100% - 20px); }
 }
 
 @media (max-width: 900px) {

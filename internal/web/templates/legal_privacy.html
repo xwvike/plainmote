@@ -1,0 +1,153 @@
+{{define "privacy-zh"}}
+<h1>隐私政策</h1>
+<p class="doc-meta">更新日期：{{.Legal.Updated}}</p>
+<p>PlainMote（{{.Legal.Site}}，以下简称“本服务”）{{if .Legal.Operator}}由 {{.Legal.Operator}}（以下简称“我们”）运营{{else}}的运营者以下简称“我们”{{end}}。本政策说明您使用本服务时我们收集哪些信息、如何使用和存储这些信息，以及您享有的权利。</p>
+
+<h2>要点</h2>
+<ul>
+  <li>本服务不展示广告，不使用任何分析或跟踪工具，不出售用户信息。</li>
+  <li>使用 GitHub 登录时，本服务仅读取您的公开资料，不获取邮箱地址。</li>
+  <li>通过分享链接访问内容时，本服务会记录访问者的 IP 地址和浏览器信息，该记录对链接创建者可见。</li>
+</ul>
+
+<h2>一、我们收集的信息</h2>
+<h3>（一）账号信息</h3>
+<p>您使用 GitHub 登录时，本服务仅读取您的 GitHub 公开资料，并保存您的 GitHub 用户 ID、用户名、显示名称和头像地址。本服务不获取您的邮箱地址、代码仓库或其他 GitHub 数据，也不保存 GitHub 授予的访问令牌。</p>
+
+<h3>（二）登录状态</h3>
+<p>登录后，本服务通过 Cookie 维持您的登录状态。登录有效期为 {{legalDuration true .Legal.SessionTTL}}，退出登录后立即失效。</p>
+
+<h3>（三）您存储的内容</h3>
+<p>包括您创建的资源的正文、名称和文件名等信息（远程资源仅保存其源地址），以及分享链接的备注、有效期、次数上限、使用次数和撤销状态。{{if .Legal.R2}}资源正文存放于 Cloudflare R2 对象存储，并以加密形式保存。{{end}}我们在技术上能够访问上述内容，但仅在排查故障、处理滥用举报或依法需要时查看。</p>
+
+<h3>（四）分享链接访问记录</h3>
+<p>通过分享链接获取内容时，无论请求成功或被拒绝，本服务均会生成访问记录，内容包括访问时间、访问结果、IP 地址、浏览器与设备信息、来源页面以及请求地址等网络请求信息。</p>
+<p>访问记录归属于资源所有者，所有者可在“访问记录”页面查看。因此，当您打开他人发送的链接时，链接创建者可以看到您的 IP 地址和浏览器信息。即时通讯软件生成链接预览时发起的请求同样会被记录。</p>
+{{if .Legal.Anonymous}}
+<h3>（五）临时分享</h3>
+<p>首页的临时分享无需登录即可使用。本服务保存您提交的文本和文件名，链接最长在 {{legalDuration true .Legal.AnonymousTTL}}后失效，失效后相关内容将被删除。本服务不记录临时分享创建者的 IP 地址。在登录状态下创建的临时分享会与您的账号关联，仅用于支持您随后将其保存至个人资源。</p>
+<p>临时分享的访问记录不归属于任何账号，任何用户均无法查看。创建者将临时分享保存至个人资源后，此前的访问记录随之归属其账号。</p>
+{{end}}
+<h3>（{{if .Legal.Anonymous}}六{{else}}五{{end}}）Cookie</h3>
+<p>本服务仅使用提供服务所必需的 Cookie，用于维持登录状态、保障登录与表单提交的安全，以及记录您选择的界面语言，不用于跟踪或广告。本服务不使用浏览器本地存储。</p>
+
+<h2>二、我们如何使用信息</h2>
+<p>我们仅将上述信息用于以下目的：提供本服务，包括登录、内容存储与分发，以及向资源所有者展示访问记录；保障服务安全，调查和处理滥用行为；排查和修复故障。我们不会将上述信息用于广告投放、用户画像或机器学习模型训练，也不会出售上述信息。</p>
+
+<h2>三、我们如何共享和披露信息</h2>
+<ul>
+  <li><strong>GitHub：</strong>登录时您将跳转至 GitHub 完成授权，该过程适用 GitHub 的隐私政策。</li>
+  <li><strong>Google Fonts：</strong>页面字体由 Google Fonts 提供，加载字体时您的浏览器会向 Google 发送 IP 地址等信息。</li>
+  {{if .Legal.R2}}<li><strong>Cloudflare：</strong>资源正文存储于 Cloudflare R2，适用 Cloudflare 的隐私政策。</li>
+  {{end}}<li><strong>基础设施服务商：</strong>为本服务提供网络传输等基础设施的服务商，可能在提供服务的过程中处理相关技术数据。</li>
+</ul>
+<p>除上述情形及法律法规要求外，我们不会向任何第三方披露您的信息。</p>
+
+<h2>四、我们如何存储信息</h2>
+<ul>
+  <li>账号信息：在账号存续期间保存。</li>
+  <li>登录状态：过期或退出登录时失效。</li>
+  <li>资源与分享链接：保存至您主动删除。删除资源将同时删除其正文及全部分享链接。</li>
+  <li>访问记录：{{if .Legal.LogRetention}}保存 {{legalDuration true .Legal.LogRetention}}后自动删除；删除资源不会提前删除其访问记录。{{else}}不自动删除；删除资源亦不会删除其访问记录。{{end}}</li>
+  {{if .Legal.Anonymous}}<li>临时分享：链接失效后删除。</li>{{end}}
+</ul>
+<p>已删除的数据可能在短期备份中保留，并将在相应备份过期后一并清除。</p>
+
+<h2>五、您的权利</h2>
+<ul>
+  <li>登录后，您可以随时查看、修改和删除您的资源与分享链接，并查看相应的访问记录。</li>
+  <li>本服务暂不提供账号自助注销功能。如需注销账号，请发送邮件至 {{template "legal-email" .}} 并注明您的 GitHub 用户名；我们可能要求您证明对该 GitHub 账号的控制权。注销账号将一并删除您的全部资源、分享链接及访问记录。我们将在收到请求后 30 日内处理。</li>
+  <li>您可以通过上述邮箱申请获取我们保存的与您相关的信息副本。</li>
+  <li>若您并非本服务用户，但您的 IP 地址出现在他人的访问记录中，您可以联系我们申请删除相关记录。</li>
+  <li>您可以随时在 GitHub 设置中撤销对本服务的授权。撤销授权不影响您的账号，下次登录时需重新授权。</li>
+</ul>
+
+<h2>六、我们如何保护信息</h2>
+<p>我们采取合理的技术和管理措施保护您的信息，但任何安全措施都无法做到万无一失。分享链接即为访问凭证，任何持有链接的人均可获取相应内容，请仅将链接发送给预期的接收者。</p>
+
+<h2>七、未成年人保护</h2>
+<p>本服务不面向未满 14 周岁的未成年人。如您认为有未成年人向本服务提供了个人信息，请联系我们予以删除。</p>
+
+<h2>八、本政策的更新</h2>
+<p>本政策修订时，我们将同步更新页首的更新日期。如修订扩大了信息收集或使用的范围，我们将在修订生效前于本页予以说明。</p>
+
+<h2>九、联系我们</h2>
+<p>如您对本政策或您的个人信息有任何疑问，请发送邮件至 {{template "legal-email" .}}。</p>
+{{end}}
+
+{{define "privacy-en"}}
+<h1>Privacy Policy</h1>
+<p class="doc-meta">Last updated: {{.Legal.Updated}}</p>
+<p>PlainMote ({{.Legal.Site}}, the “Service”) is operated by {{if .Legal.Operator}}{{.Legal.Operator}} (“we”){{else}}its operator (“we”){{end}}. This policy describes the information we collect when you use the Service, how that information is used and stored, and the rights available to you.</p>
+
+<h2>Key points</h2>
+<ul>
+  <li>The Service displays no advertising, uses no analytics or tracking tools, and does not sell user information.</li>
+  <li>When you sign in with GitHub, the Service reads your public profile only and does not obtain your email address.</li>
+  <li>When content is accessed through a share link, the Service records the visitor’s IP address and browser information, and this record is visible to the creator of the link.</li>
+</ul>
+
+<h2>1. Information we collect</h2>
+<h3>1.1 Account information</h3>
+<p>When you sign in with GitHub, the Service reads only your public GitHub profile and stores your GitHub user ID, username, display name and avatar URL. The Service does not obtain your email address, repositories or any other GitHub data, and does not store the access token granted by GitHub.</p>
+
+<h3>1.2 Sign-in state</h3>
+<p>After you sign in, the Service uses a cookie to keep you signed in. A sign-in remains valid for {{legalDuration false .Legal.SessionTTL}} and ends immediately when you sign out.</p>
+
+<h3>1.3 Content you store</h3>
+<p>This includes the body, name, filename and similar details of the resources you create (for remote resources, only the source URL), together with the note, validity period, use limit, use count and revocation status of your share links. {{if .Legal.R2}}Resource bodies are held in Cloudflare R2 object storage in encrypted form. {{end}}We are technically able to access this content, but do so only to diagnose faults, handle abuse reports or where required by law.</p>
+
+<h3>1.4 Share link access records</h3>
+<p>Whenever content is requested through a share link, whether the request is served or refused, the Service creates an access record containing network request information such as the time, outcome, IP address, browser and device information, referring page and requested address.</p>
+<p>Access records belong to the owner of the resource, who can view them on the Access history page. Consequently, when you open a link sent to you by someone else, the creator of that link can see your IP address and browser information. Requests made by messaging applications to generate link previews are recorded in the same way.</p>
+{{if .Legal.Anonymous}}
+<h3>1.5 Quick shares</h3>
+<p>Quick shares on the home page can be created without an account. The Service stores the text and filename you submit. The link expires after at most {{legalDuration false .Legal.AnonymousTTL}}, after which the related content is deleted. The Service does not record the IP address of the person who creates a quick share. A quick share created while signed in is associated with your account solely so that you can later save it to your resources.</p>
+<p>Access records for quick shares do not belong to any account and cannot be viewed by any user. If the creator saves a quick share to their resources, its existing access records are transferred to that account.</p>
+{{end}}
+<h3>1.{{if .Legal.Anonymous}}6{{else}}5{{end}} Cookies</h3>
+<p>The Service uses only cookies that are strictly necessary to provide it: to keep you signed in, to secure sign-in and form submissions, and to remember your chosen interface language. They are not used for tracking or advertising. The Service does not use browser local storage.</p>
+
+<h2>2. How we use information</h2>
+<p>We use the information above only to: provide the Service, including sign-in, content storage and delivery, and displaying access records to resource owners; maintain the security of the Service and investigate and address abuse; and diagnose and fix faults. We do not use this information for advertising, profiling or training machine learning models, and we do not sell it.</p>
+
+<h2>3. How we share and disclose information</h2>
+<ul>
+  <li><strong>GitHub:</strong> signing in redirects you to GitHub for authorization, and that process is governed by GitHub’s privacy policy.</li>
+  <li><strong>Google Fonts:</strong> page fonts are provided by Google Fonts, and when they load, your browser sends information such as your IP address to Google.</li>
+  {{if .Legal.R2}}<li><strong>Cloudflare:</strong> resource bodies are stored in Cloudflare R2, and Cloudflare’s privacy policy applies.</li>
+  {{end}}<li><strong>Infrastructure providers:</strong> providers of network transport and other infrastructure for the Service may process related technical data in the course of providing their services.</li>
+</ul>
+<p>Except as described above or as required by law, we do not disclose your information to any third party.</p>
+
+<h2>4. How we store information</h2>
+<ul>
+  <li>Account information: retained for as long as the account exists.</li>
+  <li>Sign-in state: ends on expiry or sign-out.</li>
+  <li>Resources and share links: retained until you delete them. Deleting a resource also deletes its body and all of its share links.</li>
+  <li>Access records: {{if .Legal.LogRetention}}deleted automatically after {{legalDuration false .Legal.LogRetention}}. Deleting a resource does not cause its access records to be deleted earlier.{{else}}not deleted automatically. Deleting a resource does not delete its access records.{{end}}</li>
+  {{if .Legal.Anonymous}}<li>Quick shares: deleted after the link expires.</li>{{end}}
+</ul>
+<p>Deleted data may remain in short-term backups and is removed when the relevant backups expire.</p>
+
+<h2>5. Your rights</h2>
+<ul>
+  <li>When signed in, you may view, modify and delete your resources and share links at any time, and view their access records.</li>
+  <li>The Service does not currently offer self-service account deletion. To delete your account, email {{template "legal-email" .}} and include your GitHub username; we may ask you to demonstrate control of that GitHub account. Deleting an account also deletes all of its resources, share links and access records. We will process the request within 30 days of receipt.</li>
+  <li>You may request a copy of the information we hold about you at the same address.</li>
+  <li>If you are not a user of the Service but your IP address appears in another user’s access records, you may contact us to request deletion of the relevant records.</li>
+  <li>You may revoke the Service’s authorization in your GitHub settings at any time. This does not affect your account; you will be asked to authorize again the next time you sign in.</li>
+</ul>
+
+<h2>6. How we protect information</h2>
+<p>We take reasonable technical and organisational measures to protect your information, but no security measure is completely infallible. A share link serves as the access credential, and anyone who holds it can retrieve the corresponding content; please send links only to their intended recipients.</p>
+
+<h2>7. Children</h2>
+<p>The Service is not directed at children under the age of 14. If you believe that a child has provided personal information to the Service, please contact us so that it can be deleted.</p>
+
+<h2>8. Changes to this policy</h2>
+<p>When this policy is revised, we will update the date at the top of this page. If a revision expands the scope of information collected or its use, we will state this on this page before the revision takes effect.</p>
+
+<h2>9. Contact us</h2>
+<p>If you have any questions about this policy or your personal information, please email {{template "legal-email" .}}.</p>
+{{end}}

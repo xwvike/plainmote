@@ -1,0 +1,107 @@
+{{define "terms-zh"}}
+<h1>服务条款</h1>
+<p class="doc-meta">更新日期：{{.Legal.Updated}}</p>
+<p>PlainMote（{{.Legal.Site}}，以下简称“本服务”）{{if .Legal.Operator}}由 {{.Legal.Operator}}（以下简称“我们”）运营{{else}}的运营者以下简称“我们”{{end}}。本条款规定您使用本服务的条件。您使用本服务，即视为同意本条款；如不同意，请停止使用。</p>
+
+<h2>一、服务内容</h2>
+<p>本服务提供资源存储，并支持通过可撤销的链接向他人分发资源。本服务免费并按现状提供，我们不对服务的可用性作出承诺，亦不保证数据不会丢失，请您自行备份重要内容。我们有权随时修改、暂停或终止本服务的全部或部分功能；如决定终止服务，我们将尽可能提前在本服务内公告。</p>
+
+<h2>二、账号</h2>
+<p>账号通过 GitHub 登录创建，我们有权限制注册范围。您应对您账号下发生的全部活动负责；如发现账号被盗用，请及时联系我们。</p>
+
+<h2>三、用户内容</h2>
+<p>您对您上传或创建的内容保留全部权利。为提供本服务，您授予我们存储、复制您的内容，并依照您设置的分享规则向链接持有者传输该内容的许可。该许可于相应内容删除时终止。</p>
+<p>您保证对您在本服务中存储和分发的内容，包括远程资源所指向的内容，享有合法权利。</p>
+
+<h2>四、分享链接</h2>
+<p>分享链接即为访问凭证：任何持有链接的人均可在其有效期及次数限制内获取相应内容，无需登录。撤销、过期或删除仅能阻止此后的访问，无法收回已被获取的内容。即时通讯软件生成链接预览时发起的请求同样计入使用次数。</p>
+<p>每个账号的资源数量与存储空间受所属套餐限制，单份内容不得超过 {{legalBytes .Legal.MaxContent}}；当前用量与上限显示于资源列表页面。</p>
+{{if .Legal.Anonymous}}<p>首页临时分享面向所有访问者开放：链接最长在 {{legalDuration true .Legal.AnonymousTTL}}后失效，正文不得超过 {{legalBytes .Legal.AnonymousSize}}，且一律以纯文本形式交付。</p>{{end}}
+
+<h2>五、使用规范</h2>
+<p>您在使用本服务时不得从事下列行为：</p>
+<ol class="doc-items">
+  <li>（一）存储或分发违法内容，或侵犯他人著作权、商标权、隐私权等合法权益的内容；</li>
+  <li>（二）分发恶意软件，或利用本服务实施网络钓鱼、诈骗；</li>
+  <li>（三）存储或分发任何涉及未成年人的色情或性剥削内容；</li>
+  <li>（四）骚扰他人，或未经同意公开他人的个人信息；</li>
+  <li>（五）利用本服务传播垃圾信息；</li>
+  <li>（六）攻击、探测或干扰本服务，或规避配额、使用次数、访问频率等限制，包括通过自动化手段批量创建临时分享；</li>
+  <li>（七）利用远程资源功能攻击第三方，或访问第三方的非公开系统。</li>
+</ol>
+
+<h2>六、违规处理</h2>
+<p>如您的内容或账号违反本条款，或为保护本服务、其他用户或第三方的合法权益，或依据法律法规要求，我们有权删除相关内容、撤销链接、限制或停用账号，且无需事先通知。在条件允许时，我们将告知处理原因。</p>
+
+<h2>七、举报与投诉</h2>
+<p>如您发现违规内容，或认为某项内容侵犯了您的合法权益，请发送邮件至 {{template "legal-email" .}}，并附上完整的分享链接及理由。我们将在核实后予以处理。</p>
+
+<h2>八、免责声明</h2>
+<p>在法律允许的最大范围内，本服务按“现状”及“现有”基础提供，我们不作任何明示或默示的保证，包括但不限于对适销性、特定用途适用性及不侵权的保证。</p>
+
+<h2>九、责任限制</h2>
+<p>在法律允许的最大范围内，对于因使用或无法使用本服务而产生的任何间接、附带、特殊或后果性损失，包括但不限于数据丢失、利润损失及业务中断，我们均不承担责任。依法不得排除或限制的责任不受本条影响。</p>
+
+<h2>十、终止</h2>
+<p>您可以随时停止使用本服务，并依照<a href="/privacy">《隐私政策》</a>申请注销账号。</p>
+
+<h2>十一、条款变更</h2>
+<p>本条款修订时，我们将同步更新页首的更新日期；重大修订将在生效前于本页予以说明。修订生效后您继续使用本服务的，视为接受修订后的条款。</p>
+
+<h2>十二、联系我们</h2>
+<p>如您对本条款有任何疑问，请发送邮件至 {{template "legal-email" .}}。</p>
+{{end}}
+
+{{define "terms-en"}}
+<h1>Terms of Service</h1>
+<p class="doc-meta">Last updated: {{.Legal.Updated}}</p>
+<p>PlainMote ({{.Legal.Site}}, the “Service”) is operated by {{if .Legal.Operator}}{{.Legal.Operator}} (“we”){{else}}its operator (“we”){{end}}. These terms set out the conditions under which you may use the Service. By using the Service, you agree to these terms; if you do not agree, please stop using the Service.</p>
+
+<h2>1. The Service</h2>
+<p>The Service provides resource storage and allows resources to be distributed to others through revocable links. The Service is provided free of charge and on an “as is” basis. We make no commitment regarding availability and do not guarantee against data loss; please keep your own backups of important content. We may modify, suspend or discontinue all or part of the Service at any time. If we decide to discontinue the Service, we will make reasonable efforts to announce this within the Service in advance.</p>
+
+<h2>2. Accounts</h2>
+<p>Accounts are created by signing in with GitHub, and we may restrict who is able to register. You are responsible for all activity that occurs under your account. If you become aware that your account has been compromised, please contact us promptly.</p>
+
+<h2>3. User content</h2>
+<p>You retain all rights to the content you upload or create. To provide the Service, you grant us a licence to store and copy your content and to transmit it to link holders in accordance with the sharing rules you set. This licence terminates when the relevant content is deleted.</p>
+<p>You warrant that you hold the necessary rights to the content you store and distribute through the Service, including the content to which your remote resources point.</p>
+
+<h2>4. Share links</h2>
+<p>A share link serves as the access credential: anyone who holds it can retrieve the corresponding content within its validity period and use limit without signing in. Revocation, expiry or deletion prevents only subsequent access and cannot recall content that has already been retrieved. Requests made by messaging applications to generate link previews also count towards the use limit.</p>
+<p>The number of resources and the storage available to each account are limited by its plan, and a single item may not exceed {{legalBytes .Legal.MaxContent}}. Current usage and limits are shown on the resource list page.</p>
+{{if .Legal.Anonymous}}<p>Quick shares on the home page are available to all visitors. Links expire after at most {{legalDuration false .Legal.AnonymousTTL}}, the text may not exceed {{legalBytes .Legal.AnonymousSize}}, and content is always delivered as plain text.</p>{{end}}
+
+<h2>5. Acceptable use</h2>
+<p>When using the Service, you must not:</p>
+<ol class="doc-items">
+  <li>(a) store or distribute unlawful content, or content that infringes the copyright, trademark rights, privacy or other lawful rights of others;</li>
+  <li>(b) distribute malware, or use the Service for phishing or fraud;</li>
+  <li>(c) store or distribute any material depicting the sexual abuse or exploitation of minors;</li>
+  <li>(d) harass others, or disclose another person’s personal information without their consent;</li>
+  <li>(e) use the Service to distribute spam;</li>
+  <li>(f) attack, probe or interfere with the Service, or circumvent quotas, use limits, rate limits or other restrictions, including by creating quick shares in bulk by automated means;</li>
+  <li>(g) use the remote resource feature to attack third parties or to access their non-public systems.</li>
+</ol>
+
+<h2>6. Enforcement</h2>
+<p>Where your content or account violates these terms, where necessary to protect the lawful rights of the Service, other users or third parties, or where required by law, we may remove content, revoke links, and restrict or disable accounts without prior notice. Where circumstances permit, we will inform you of the reason.</p>
+
+<h2>7. Reports and complaints</h2>
+<p>If you discover content that violates these terms, or believe that content infringes your lawful rights, please email {{template "legal-email" .}} with the full share link and the grounds for your report. We will take action once the report has been verified.</p>
+
+<h2>8. Disclaimer</h2>
+<p>To the maximum extent permitted by law, the Service is provided on an “as is” and “as available” basis, without warranties of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose and non-infringement.</p>
+
+<h2>9. Limitation of liability</h2>
+<p>To the maximum extent permitted by law, we shall not be liable for any indirect, incidental, special or consequential loss arising from the use of, or inability to use, the Service, including but not limited to loss of data, loss of profits and business interruption. Nothing in this section excludes or limits any liability that cannot be excluded or limited by law.</p>
+
+<h2>10. Termination</h2>
+<p>You may stop using the Service at any time and request deletion of your account in accordance with the <a href="/privacy">Privacy Policy</a>.</p>
+
+<h2>11. Changes to these terms</h2>
+<p>When these terms are revised, we will update the date at the top of this page, and material revisions will be stated on this page before they take effect. Your continued use of the Service after a revision takes effect constitutes acceptance of the revised terms.</p>
+
+<h2>12. Contact us</h2>
+<p>If you have any questions about these terms, please email {{template "legal-email" .}}.</p>
+{{end}}
