@@ -76,9 +76,24 @@ func (a *App) clearSessionCookies(w http.ResponseWriter) {
 	}
 }
 
+// safeNext accepts a path on this site and nothing else. Checking for a leading
+// "/" and refusing "//" is not enough on its own, because browsers repair a URL
+// before resolving it: a backslash is read as a slash and tabs and newlines are
+// dropped, so "/\evil.com" and "/\t/evil.com" both land on another host. Rather
+// than predict that repair, anything it could act on is refused, and what is
+// left has to parse as a bare path with no scheme and no host.
 func safeNext(value string) string {
-	if strings.HasPrefix(value, "/") && !strings.HasPrefix(value, "//") {
-		return value
+	if !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
+		return ""
 	}
-	return ""
+	for _, r := range value {
+		if r == '\\' || r < 0x20 || r == 0x7f {
+			return ""
+		}
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "" || parsed.Host != "" || parsed.Opaque != "" {
+		return ""
+	}
+	return value
 }
