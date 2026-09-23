@@ -60,7 +60,7 @@
 <h2>五、您的权利</h2>
 <ul>
   <li>登录后，您可以随时查看、修改和删除您的资源与分享链接，并查看相应的访问记录。</li>
-  <li>您可以在“账号”页面导出您的数据，导出内容包括账号信息、全部资源及其分享链接设置，以及访问记录；导出文件不包含分享链接地址。每个账号每 {{legalDuration true .Legal.ExportWindow}}最多可导出 {{.Legal.ExportLimit}} 次。</li>
+  <li>您可以在“账号”页面导出您的数据，导出内容包括基本账号信息、已存储的文件、远程资源地址和访问记录；导出文件不包含分享链接地址或分享设置。每个账号每 {{legalDuration true .Legal.ExportWindow}}最多可导出 {{.Legal.ExportLimit}} 次。</li>
   <li>您可以在“账号”页面删除账号。删除后，账号及其资源、分享链接、访问记录和其他关联数据将从在线服务中移除，已发出的链接立即失效，且无法通过本服务恢复；短期备份按上述期限清除。</li>
   <li>如您无法登录，也可以发送邮件至 {{template "legal-email" .}} 并注明您的 GitHub 用户名，申请删除账号或获取数据副本；我们可能要求您证明对该 GitHub 账号的控制权，并将在收到请求后 30 日内处理。</li>
   <li>若您并非本服务用户，但您的 IP 地址出现在他人的访问记录中，您可以联系我们申请删除相关记录。</li>
@@ -142,7 +142,7 @@
 <h2>5. Your rights</h2>
 <ul>
   <li>When signed in, you may view, modify and delete your resources and share links at any time, and view their access records.</li>
-  <li>You may export your data from the Account page. The export contains your account information, all resources with their share link settings, and the access records; share link addresses are not included. Each account may export up to {{.Legal.ExportLimit}} times every {{legalDuration false .Legal.ExportWindow}}.</li>
+  <li>You may export your data from the Account page. The export contains basic account information, stored files, remote resource addresses and access records; share link addresses and settings are not included. Each account may export up to {{.Legal.ExportLimit}} times every {{legalDuration false .Legal.ExportWindow}}.</li>
   <li>You may delete your account from the Account page. The account and its resources, share links, access records and other associated data are removed from the active Service, links already sent stop working immediately, and the data cannot be restored through the Service; short-term backups are cleared as described above.</li>
   <li>If you are unable to sign in, you may email {{template "legal-email" .}} with your GitHub username to request account deletion or a copy of your data; we may ask you to demonstrate control of that GitHub account, and will process the request within 30 days of receipt.</li>
   <li>If you are not a user of the Service but your IP address appears in another user’s access records, you may contact us to request deletion of the relevant records.</li>

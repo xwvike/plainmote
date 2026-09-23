@@ -143,7 +143,7 @@ func TestDeleteAccountFinishesObjectCleanupAfterRequestCancellation(t *testing.T
 	}
 }
 
-func TestExportIsTheAccountsWholeHistory(t *testing.T) {
+func TestExportReadsOnlyTheAccountsResourcesAndLogs(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
 	other, err := db.UpsertUser(ctx, "200", "bob", "Bob", "")
@@ -153,17 +153,6 @@ func TestExportIsTheAccountsWholeHistory(t *testing.T) {
 	if _, err := db.CreateResource(ctx, other.ID, "Not mine", "no.txt", []byte("x"), "", ""); err != nil {
 		t.Fatal(err)
 	}
-	live, err := db.CreateShare(ctx, user.ID, resource.ID, "live", time.Hour, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	revoked, err := db.CreateShare(ctx, user.ID, resource.ID, "revoked", time.Hour, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.RevokeLink(ctx, user.ID, resource.ID, revoked.ID); err != nil {
-		t.Fatal(err)
-	}
 	for _, owner := range []string{user.ID, other.ID} {
 		if err := db.RecordAccess(ctx, AccessEvent{OwnerID: owner, Outcome: OutcomeSuccess, Status: 200},
 			RequestMeta{Method: "GET", RemoteIP: "203.0.113.9"}); err != nil {
@@ -171,17 +160,13 @@ func TestExportIsTheAccountsWholeHistory(t *testing.T) {
 		}
 	}
 
-	resources, links, err := db.ExportResources(ctx, user.ID)
+	resources, err := db.ExportResources(ctx, user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(resources) != 1 || resources[0].ID != resource.ID {
 		t.Fatalf("export must hold exactly the account's resources: %+v", resources)
 	}
-	if len(links) != 2 || links[0].ID != live.ID || links[1].ID != revoked.ID || links[1].RevokedAt == nil {
-		t.Fatalf("export must hold every link, revoked ones included: %+v", links)
-	}
-
 	var logs int
 	if err := db.EachAccessLog(ctx, user.ID, func(AccessLog) error { logs++; return nil }); err != nil {
 		t.Fatal(err)

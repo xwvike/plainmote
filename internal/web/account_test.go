@@ -69,6 +69,10 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	note, err := db.CreateResource(ctx, user.ID, "Notes", "", []byte("remember this\n"), "utf-8", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	remote, err := db.CreateResource(ctx, user.ID, "Upstream", "remote.txt", nil, "", "https://example.com/remote.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -108,23 +112,23 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 		reader.Close()
 	}
 
-	var account exportAccount
-	if err := json.Unmarshal(files["account.json"], &account); err != nil || account.Login != "alice" {
-		t.Fatalf("account.json: %v %s", err, files["account.json"])
+	if account := string(files["account.txt"]); !strings.Contains(account, "GitHub username: alice") || !strings.Contains(account, "Display name: Alice") {
+		t.Fatalf("account.txt: %s", account)
 	}
-	var resources []exportResource
-	if err := json.Unmarshal(files["resources.json"], &resources); err != nil || len(resources) != 2 {
-		t.Fatalf("resources.json: %v %s", err, files["resources.json"])
+	if _, ok := files["account.json"]; ok {
+		t.Fatal("the export still contains account.json")
 	}
-	local, upstream := resources[0], resources[1]
-	if local.ID != resource.ID || local.File != "files/"+resource.ID+"/example.conf" || len(local.Links) != 1 || local.Links[0].MaxUses != 3 {
-		t.Fatalf("local resource entry: %+v", local)
+	if _, ok := files["resources.json"]; ok {
+		t.Fatal("the export still contains resources.json")
 	}
-	if string(files[local.File]) != "answer=42\n" {
-		t.Fatalf("the body in the archive is %q", files[local.File])
+	if body := string(files["files/"+resource.ID+"/example.conf"]); body != "answer=42\n" {
+		t.Fatalf("the named file body is %q", body)
 	}
-	if upstream.ID != remote.ID || upstream.OriginURL != "https://example.com/remote.txt" || upstream.File != "" {
-		t.Fatalf("a remote resource must be described, not fetched: %+v", upstream)
+	if body := string(files["files/"+note.ID+"/Notes.txt"]); body != "remember this\n" {
+		t.Fatalf("the editor resource did not receive a .txt filename: %q", body)
+	}
+	if shortcut := string(files["files/"+remote.ID+"/remote.txt.url"]); !strings.Contains(shortcut, "URL=https://example.com/remote.txt") {
+		t.Fatalf("the remote resource shortcut is %q", shortcut)
 	}
 	var logs []exportAccessLog
 	if err := json.Unmarshal(files["access_logs.json"], &logs); err != nil || len(logs) != 1 || logs[0].RemoteIP != "203.0.113.9" {

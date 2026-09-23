@@ -18,21 +18,6 @@ type Account struct {
 	CreatedAt time.Time
 }
 
-// ExportLink is a share link as the export describes it. The token is left
-// out on purpose: an export is a file people keep and pass around, and every
-// token in it would be a working address to the content.
-type ExportLink struct {
-	ID         string
-	ResourceID string
-	Name       string
-	MaxUses    int
-	UsedCount  int
-	ExpiresAt  *time.Time
-	RevokedAt  *time.Time
-	LastUsedAt *time.Time
-	CreatedAt  time.Time
-}
-
 func (d *Store) Account(ctx context.Context, userID string) (Account, error) {
 	if !validUUIDs(userID) || userID == AnonymousUserID {
 		return Account{}, ErrNotFound
@@ -48,20 +33,18 @@ SELECT id, github_id, login, name, avatar_url, created_at FROM users WHERE id = 
 	return account, nil
 }
 
-// ExportResources returns every resource the account owns, oldest first, with
-// every link each one has ever had - revoked and expired ones included, since
-// the export is the account's history and not its current view.
-func (d *Store) ExportResources(ctx context.Context, ownerID string) ([]Resource, []ExportLink, error) {
+// ExportResources returns every resource the account owns, oldest first.
+func (d *Store) ExportResources(ctx context.Context, ownerID string) ([]Resource, error) {
 	if !validUUIDs(ownerID) {
-		return nil, nil, ErrNotFound
+		return nil, ErrNotFound
 	}
 	rows, err := d.db.Query(ctx, `
 SELECT id, owner_id, name, filename, content_key, content_size, content_type,
        content_encoding, origin_url, created_at, updated_at
 FROM resources WHERE owner_id = $1 ORDER BY created_at, id
-`, ownerID)
+	`, ownerID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("export resources: %w: %w", ErrInternal, err)
+		return nil, fmt.Errorf("export resources: %w: %w", ErrInternal, err)
 	}
 	resources, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Resource, error) {
 		var r Resource
@@ -70,28 +53,9 @@ FROM resources WHERE owner_id = $1 ORDER BY created_at, id
 		return r, err
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("export resources: %w: %w", ErrInternal, err)
+		return nil, fmt.Errorf("export resources: %w: %w", ErrInternal, err)
 	}
-
-	rows, err = d.db.Query(ctx, `
-SELECT l.id, l.resource_id, l.name, l.max_uses, l.used_count, l.expires_at, l.revoked_at, l.last_used_at, l.created_at
-FROM links l JOIN resources r ON r.id = l.resource_id
-WHERE r.owner_id = $1 ORDER BY l.created_at, l.id
-`, ownerID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("export links: %w: %w", ErrInternal, err)
-	}
-	links, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ExportLink, error) {
-		var l ExportLink
-		var expires, revoked, lastUsed pgtype.Timestamptz
-		err := row.Scan(&l.ID, &l.ResourceID, &l.Name, &l.MaxUses, &l.UsedCount, &expires, &revoked, &lastUsed, &l.CreatedAt)
-		l.ExpiresAt, l.RevokedAt, l.LastUsedAt = timePointer(expires), timePointer(revoked), timePointer(lastUsed)
-		return l, err
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("export links: %w: %w", ErrInternal, err)
-	}
-	return resources, links, nil
+	return resources, nil
 }
 
 // EachAccessLog streams the account's access log, oldest first. It is a

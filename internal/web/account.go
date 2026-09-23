@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -130,7 +132,7 @@ func (a *App) handleAccountExport(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, "export account", err)
 		return
 	}
-	resources, links, err := a.db.ExportResources(ctx, user.ID)
+	resources, err := a.db.ExportResources(ctx, user.ID)
 	if err != nil {
 		a.serverError(w, "export resources", err)
 		return
@@ -154,47 +156,13 @@ func (a *App) handleAccountExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	archive := zip.NewWriter(w)
-	if err := a.writeExport(r, archive, account, resources, links, now); err != nil {
+	if err := a.writeExport(r, archive, account, resources, now); err != nil {
 		fmt.Fprintf(os.Stderr, "export account %s: %v\n", user.ID, err)
 		return
 	}
 	if err := archive.Close(); err != nil {
 		fmt.Fprintf(os.Stderr, "export account %s: %v\n", user.ID, err)
 	}
-}
-
-type exportAccount struct {
-	GitHubID   string    `json:"github_id"`
-	Login      string    `json:"login"`
-	Name       string    `json:"name"`
-	AvatarURL  string    `json:"avatar_url"`
-	CreatedAt  time.Time `json:"created_at"`
-	ExportedAt time.Time `json:"exported_at"`
-}
-
-type exportResource struct {
-	ID              string       `json:"id"`
-	Name            string       `json:"name"`
-	Filename        string       `json:"filename"`
-	ContentType     string       `json:"content_type"`
-	ContentEncoding string       `json:"content_encoding,omitempty"`
-	Size            int64        `json:"size"`
-	OriginURL       string       `json:"origin_url,omitempty"`
-	File            string       `json:"file,omitempty"`
-	CreatedAt       time.Time    `json:"created_at"`
-	UpdatedAt       time.Time    `json:"updated_at"`
-	Links           []exportLink `json:"links"`
-}
-
-type exportLink struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	MaxUses    int        `json:"max_uses"`
-	UsedCount  int        `json:"used_count"`
-	ExpiresAt  *time.Time `json:"expires_at"`
-	RevokedAt  *time.Time `json:"revoked_at"`
-	LastUsedAt *time.Time `json:"last_used_at"`
-	CreatedAt  time.Time  `json:"created_at"`
 }
 
 type exportAccessLog struct {
@@ -227,40 +195,9 @@ type exportAccessLog struct {
 	OccurredAt     time.Time `json:"occurred_at"`
 }
 
-func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Account, resources []Resource, links []store.ExportLink, now time.Time) error {
+func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Account, resources []Resource, now time.Time) error {
 	ctx := r.Context()
-	if err := writeExportJSON(archive, "account.json", now, exportAccount{
-		GitHubID: account.User.GitHubID, Login: account.User.Login, Name: account.User.Name,
-		AvatarURL: account.User.AvatarURL, CreatedAt: account.CreatedAt, ExportedAt: now,
-	}); err != nil {
-		return err
-	}
-
-	byResource := make(map[string][]exportLink, len(resources))
-	for _, link := range links {
-		byResource[link.ResourceID] = append(byResource[link.ResourceID], exportLink{
-			ID: link.ID, Name: link.Name, MaxUses: link.MaxUses, UsedCount: link.UsedCount,
-			ExpiresAt: link.ExpiresAt, RevokedAt: link.RevokedAt, LastUsedAt: link.LastUsedAt, CreatedAt: link.CreatedAt,
-		})
-	}
-	described := make([]exportResource, 0, len(resources))
-	for _, resource := range resources {
-		item := exportResource{
-			ID: resource.ID, Name: resource.Name, Filename: resource.Filename,
-			ContentType: resource.ContentType, ContentEncoding: resource.ContentEncoding,
-			Size: resource.ContentSize, OriginURL: resource.OriginURL,
-			CreatedAt: resource.CreatedAt, UpdatedAt: resource.UpdatedAt,
-			Links: byResource[resource.ID],
-		}
-		if item.Links == nil {
-			item.Links = []exportLink{}
-		}
-		if resource.ContentKey != "" {
-			item.File = exportBodyPath(resource)
-		}
-		described = append(described, item)
-	}
-	if err := writeExportJSON(archive, "resources.json", now, described); err != nil {
+	if err := writeExportAccount(archive, account, now); err != nil {
 		return err
 	}
 
@@ -302,14 +239,17 @@ func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Ac
 		return err
 	}
 
-	// Remote resources are described, not fetched: the export is what this
-	// service holds, and requesting every upstream on the owner's behalf would
-	// be a different thing entirely.
+	// Remote resources become small .url files. The export preserves the saved
+	// address without fetching an upstream on the owner's behalf.
 	for _, resource := range resources {
-		if resource.ContentKey == "" {
-			continue
+		var err error
+		switch {
+		case resource.OriginURL != "":
+			err = writeExportRemote(archive, resource)
+		case resource.ContentKey != "":
+			err = a.writeExportBody(r, archive, resource)
 		}
-		if err := a.writeExportBody(r, archive, resource); err != nil {
+		if err != nil {
 			return fmt.Errorf("resource %s: %w", resource.ID, err)
 		}
 	}
@@ -330,27 +270,91 @@ func (a *App) writeExportBody(r *http.Request, archive *zip.Writer, resource Res
 	return err
 }
 
-func writeExportJSON(archive *zip.Writer, name string, now time.Time, value any) error {
-	entry, err := archive.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: now})
+func writeExportAccount(archive *zip.Writer, account store.Account, now time.Time) error {
+	entry, err := archive.CreateHeader(&zip.FileHeader{Name: "account.txt", Method: zip.Deflate, Modified: now})
 	if err != nil {
 		return err
 	}
-	encoder := json.NewEncoder(entry)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(value)
+	_, err = fmt.Fprintf(entry, "GitHub ID: %s\nGitHub username: %s\nDisplay name: %s\nAvatar URL: %s\nRegistered: %s\nExported: %s\n",
+		exportText(account.User.GitHubID), exportText(account.User.Login), exportText(account.User.Name),
+		exportText(account.User.AvatarURL), account.CreatedAt.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339))
+	return err
 }
 
-// exportBodyPath puts each body in a directory named after its resource, so
-// two resources with the same filename cannot overwrite each other when the
-// archive is unpacked. The filename has already been validated not to contain
-// a separator; the check is repeated because a path inside an archive is
-// resolved by whatever tool unpacks it, not by this service.
+func writeExportRemote(archive *zip.Writer, resource Resource) error {
+	entry, err := archive.CreateHeader(&zip.FileHeader{Name: exportBodyPath(resource), Method: zip.Deflate, Modified: resource.UpdatedAt})
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(entry, "[InternetShortcut]\r\nURL=%s\r\n", exportText(resource.OriginURL))
+	return err
+}
+
+// exportBodyPath puts each body in a directory named after its resource so
+// duplicate filenames cannot overwrite each other. Editor-created resources
+// may have no filename; those receive a readable name and a MIME-based suffix.
 func exportBodyPath(resource Resource) string {
-	name := resource.Filename
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+	name := exportText(strings.TrimSpace(resource.Filename))
+	if name == "" {
+		name = exportText(strings.TrimSpace(resource.Name))
+	}
+	name = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == '/' || r == '\\' {
+			return '_'
+		}
+		return r
+	}, name)
+	name = strings.Trim(name, " .")
+	if name == "" || name == "." || name == ".." {
 		name = "content"
 	}
+	if resource.OriginURL != "" {
+		if !strings.HasSuffix(strings.ToLower(name), ".url") {
+			name += ".url"
+		}
+	} else if path.Ext(name) == "" {
+		name += exportExtension(resource.ContentType)
+	}
 	return "files/" + resource.ID + "/" + name
+}
+
+func exportExtension(contentType string) string {
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	if extension, ok := map[string]string{
+		"text/plain":               ".txt",
+		"text/markdown":            ".md",
+		"text/html":                ".html",
+		"text/css":                 ".css",
+		"text/csv":                 ".csv",
+		"application/json":         ".json",
+		"application/xml":          ".xml",
+		"application/javascript":   ".js",
+		"application/pdf":          ".pdf",
+		"application/zip":          ".zip",
+		"application/gzip":         ".gz",
+		"image/png":                ".png",
+		"image/jpeg":               ".jpg",
+		"image/gif":                ".gif",
+		"image/webp":               ".webp",
+		"image/svg+xml":            ".svg",
+		"audio/mpeg":               ".mp3",
+		"audio/ogg":                ".ogg",
+		"audio/wav":                ".wav",
+		"video/mp4":                ".mp4",
+		"video/webm":               ".webm",
+		"application/octet-stream": ".bin",
+	}[mediaType]; ok {
+		return extension
+	}
+	if strings.HasPrefix(mediaType, "text/") {
+		return ".txt"
+	}
+	return ".bin"
+}
+
+func exportText(value string) string {
+	value = strings.ReplaceAll(value, "\r", " ")
+	return strings.ReplaceAll(value, "\n", " ")
 }
 
 // exportFilePart keeps the download name to characters every browser and
