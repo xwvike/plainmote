@@ -17,12 +17,15 @@ import (
 	"plainmote/internal/store"
 )
 
-// What a freshly opened share dialog hands you: alive long enough to be
-// useful, and spent after one fetch, so a link that is forwarded or left in a
-// chat log does not keep working. Both are one click away from being widened.
+// The terms a new share starts with. The lifetime is what limits it, not a use
+// count: a link sent through a chat app is fetched first by that app's preview
+// crawler, so a single-use default was spent before the recipient ever saw it.
+// An hour keeps a forwarded link from staying useful for long, and lands on a
+// preset the settings dialog can show as selected. Both are one click away
+// from being changed.
 const (
-	defaultShareTTL  = 24 * time.Hour
-	defaultShareUses = 1
+	defaultShareTTL  = time.Hour
+	defaultShareUses = 0
 )
 
 func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {

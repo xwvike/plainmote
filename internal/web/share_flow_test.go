@@ -72,13 +72,17 @@ func TestShareFlowThroughRouter(t *testing.T) {
 		t.Fatalf("expected exactly one share: %d %v", len(shares), err)
 	}
 	share := shares[0]
-	// A new share is single-use by default: a link that gets forwarded or
-	// sits in a chat log should not keep working.
-	if share.MaxUses != 1 {
-		t.Fatalf("a new share should be single-use, got max_uses=%d", share.MaxUses)
+	// A new share is limited by time, not by uses: a chat app's preview
+	// crawler fetches a link before the recipient does, and a single-use
+	// default was spent on the crawler.
+	if share.MaxUses != 0 {
+		t.Fatalf("a new share should not be use-limited, got max_uses=%d", share.MaxUses)
 	}
 	if share.ExpiresAt == nil {
 		t.Fatal("a new share should expire")
+	}
+	if got := share.ExpiresAt.Sub(share.CreatedAt); got != defaultShareTTL {
+		t.Fatalf("a new share should last %s, got %s", defaultShareTTL, got)
 	}
 	if !strings.Contains(body, share.Token) {
 		t.Fatal("the dialog must show a link that already works")
@@ -370,5 +374,46 @@ func TestSharesAreOnThePageNotBehindIt(t *testing.T) {
 	// A share that is gone opens nothing rather than an empty dialog.
 	if stale := page("?share=" + resource.ID); strings.Contains(stale, "Lifetime") {
 		t.Error("an unknown share must not open the settings dialog")
+	}
+}
+
+// TestDefaultShareSurvivesALinkPreview is the failure that changed the
+// defaults: a share pasted into Telegram, Slack or Discord is fetched by that
+// app's crawler first. With the default terms, the person it was sent to still
+// has to be able to open it afterwards.
+func TestDefaultShareSurvivesALinkPreview(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	app := newTestApp(db, user.GitHubID)
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "https://cfg.test/resources/"+resource.ID+"/share",
+		strings.NewReader(url.Values{"csrf": {csrf}, "action": {"create"}}.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+	request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+	app.handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	shares, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
+	if err != nil || len(shares) != 1 {
+		t.Fatalf("expected one share: %d %v", len(shares), err)
+	}
+	address := "https://cfg.test" + shareAddress(shares[0].Token, resource.Filename)
+
+	for _, fetch := range []struct{ who, agent, accept string }{
+		{"Telegram's preview", "TelegramBot (like TwitterBot)", "text/html"},
+		{"Slack's preview", "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)", "*/*"},
+		{"the recipient", "Mozilla/5.0", "text/html,*/*"},
+	} {
+		get := httptest.NewRequest(http.MethodGet, address, nil)
+		get.Header.Set("User-Agent", fetch.agent)
+		get.Header.Set("Accept", fetch.accept)
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, get)
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s got %d; the link must still work for whoever comes next", fetch.who, response.Code)
+		}
 	}
 }
