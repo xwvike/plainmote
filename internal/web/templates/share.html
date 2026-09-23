@@ -26,10 +26,16 @@
     <ul class="shl">
       {{range .Shares}}
       <li>
+        {{if .Link.Unreadable}}
+        {{/* Still live for whoever holds the address - delivery never decrypts -
+             so it stays in the list and stays revocable. */}}
+        <span class="unreadable">{{tr $.Locale "share_link_unreadable"}}</span>
+        {{else}}
         <input type="text" readonly value="{{.URL}}" aria-label="{{tr $.Locale "share_link"}}" onfocus="this.select()">
         <button type="button" class="sm" data-copy="{{.URL}}">{{tr $.Locale "copy"}}</button>
+        {{end}}
         <span class="ttl">{{if .Link.Name}}{{.Link.Name}} · {{end}}{{remainText $.Locale .Link.ExpiresAt}}{{if .Link.MaxUses}} · {{tr $.Locale "limited_to"}} {{.Link.MaxUses}}{{end}} · {{tr $.Locale "used_count"}} {{.Link.UsedCount}}</span>
-        <a class="btn sm" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}">{{tr $.Locale "settings"}}</a>
+        {{if not .Link.Unreadable}}<a class="btn sm" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}">{{tr $.Locale "settings"}}</a>{{end}}
         <form method="post" action="/resources/{{$.Resource.ID}}/share" class="inline">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="action" value="revoke">

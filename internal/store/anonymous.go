@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -186,7 +187,7 @@ WHERE resource_id = $1 AND revoked_at IS NULL
   AND (max_uses = 0 OR used_count < max_uses)
 ORDER BY created_at DESC, id DESC LIMIT 1`, resourceID, now))
 	if err != nil {
-		return Resource{}, Link{}, translateNotFound(err)
+		return Resource{}, Link{}, pasteLinkError(err)
 	}
 	return resource, link, nil
 }
@@ -226,7 +227,7 @@ ORDER BY created_at DESC, id DESC LIMIT 1`
 	}
 	link, err := d.scanLink(q.QueryRow(ctx, linkQuery, resourceID, now))
 	if err != nil {
-		return Resource{}, Link{}, translateNotFound(err)
+		return Resource{}, Link{}, pasteLinkError(err)
 	}
 	return resource, link, nil
 }
@@ -328,4 +329,15 @@ RETURNING content_key
 			return removed, nil
 		}
 	}
+}
+
+// pasteLinkError reads a quick share whose address can no longer be decrypted
+// as gone rather than broken. The page exists to show that address; without
+// it there is nothing to show, and the paste lives for minutes at most.
+func pasteLinkError(err error) error {
+	if errors.Is(err, errTokenUnreadable) {
+		fmt.Fprintf(os.Stderr, "quick share: %v\n", err)
+		return ErrNotFound
+	}
+	return translateNotFound(err)
 }

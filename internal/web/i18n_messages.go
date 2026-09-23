@@ -122,6 +122,7 @@ var messageTable = map[string][6]string{
 	"settings":                  {"Settings", "设置", "設定", "設定", "Paramètres", "Einstellungen"},
 	"seven_days":                {"7 days", "7 天", "7 天", "7日", "7 jours", "7 Tage"},
 	"share_link":                {"Share link", "分享链接", "分享連結", "共有リンク", "Lien de partage", "Freigabelink"},
+	"share_link_unreadable":     {"Address unreadable: the token key has changed", "地址无法读取：令牌密钥已更换", "網址無法讀取：權杖金鑰已更換", "URLを読み取れません：トークン鍵が変更されました", "Adresse illisible : la clé des jetons a changé", "Adresse nicht lesbar: Der Token-Schlüssel wurde geändert"},
 	"share_settings":            {"Share settings", "分享设置", "分享設定", "共有設定", "Paramètres du partage", "Freigabeeinstellungen"},
 	"share_used":                {"Share", "分享", "分享", "共有", "Partage", "Freigabe"},
 	"shares":                    {"shares", "个分享", "個分享", "件の共有", "partages", "Freigaben"},

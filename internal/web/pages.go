@@ -312,8 +312,21 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	}
 }
 
+// renderError answers a page that could not be built. A 4xx carries a message
+// the handler wrote for the person reading it. A 5xx carries whatever failed
+// underneath - pgx, S3, a key that no longer decrypts - and that text names
+// relations, object keys and hosts, so it goes to stderr behind one sentence.
 func (a *App) renderError(w http.ResponseWriter, status int, err error) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if status >= http.StatusInternalServerError {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "render %d: %v\n", status, err)
+		}
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, "internal error\n")
+		return
+	}
 	w.WriteHeader(status)
 	if err != nil {
 		_, _ = io.WriteString(w, err.Error()+"\n")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,7 +25,16 @@ type Link struct {
 	RevokedAt  *time.Time
 	LastUsedAt *time.Time
 	CreatedAt  time.Time
+	// Unreadable marks a link whose stored token no longer decrypts with the
+	// configured key. Delivery looks links up by hash and never decrypts, so
+	// the link still works for whoever holds the address; only its owner can
+	// no longer see what that address is.
+	Unreadable bool
 }
+
+// errTokenUnreadable is a stored token that the configured key cannot open -
+// almost always PLAINMOTE_TOKEN_KEY having been changed or restored wrongly.
+var errTokenUnreadable = errors.New("share token cannot be decrypted with the configured key")
 
 func (l Link) Live(now time.Time) bool {
 	switch {
@@ -87,14 +97,18 @@ func (d *Store) scanLink(row rowScanner) (Link, error) {
 	); err != nil {
 		return Link{}, err
 	}
-	token, err := d.cipher.open(ciphertext)
-	if err != nil {
-		return Link{}, err
-	}
-	link.Token = token
 	link.ExpiresAt = timePointer(expires)
 	link.RevokedAt = timePointer(revoked)
 	link.LastUsedAt = timePointer(lastUsed)
+	token, err := d.cipher.open(ciphertext)
+	if err != nil {
+		// Everything but the token is still returned, so a caller that can
+		// live without the address - a list the owner revokes from - can keep
+		// the row instead of failing the page it is on.
+		link.Unreadable = true
+		return link, fmt.Errorf("%w: link %s: %v", errTokenUnreadable, link.ID, err)
+	}
+	link.Token = token
 	return link, nil
 }
 
@@ -214,6 +228,13 @@ ORDER BY created_at DESC, id DESC`, resourceID, now)
 	links := make([]Link, 0)
 	for rows.Next() {
 		link, err := d.scanLink(rows)
+		if errors.Is(err, errTokenUnreadable) {
+			// One undecryptable row used to fail the whole resource page. The
+			// link still works for its holder and has to stay revocable, so it
+			// is listed without an address and the cause goes to the log.
+			fmt.Fprintf(os.Stderr, "list shares: %v\n", err)
+			err = nil
+		}
 		if err != nil {
 			return nil, err
 		}

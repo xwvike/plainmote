@@ -402,7 +402,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	// terms. A stale id opens nothing rather than an empty dialog.
 	if focusID := strings.TrimSpace(r.URL.Query().Get("share")); focusID != "" {
 		for _, view := range data.Shares {
-			if view.Link.ID == focusID {
+			if view.Link.ID == focusID && !view.Link.Unreadable {
 				data.FocusShare = view
 				data.ShareOpen = true
 				break
@@ -419,9 +419,13 @@ func buildShareViews(base string, resource Resource, servedType string, shares [
 	views := make([]linkView, 0, len(shares))
 	for _, share := range shares {
 		ttlChoice, ttlCustom := shareTTLForm(share, now)
+		address := ""
+		if !share.Unreadable {
+			address = base + shareAddress(share.Token, deliveryFilename(resource, servedType))
+		}
 		views = append(views, linkView{
 			Link:      share,
-			URL:       base + shareAddress(share.Token, deliveryFilename(resource, servedType)),
+			URL:       address,
 			TTLChoice: ttlChoice,
 			TTLCustom: ttlCustom,
 		})
