@@ -226,3 +226,44 @@ curl --fail --silent --show-error http://127.0.0.1:8964/healthz
 - 多副本必须共享 PostgreSQL、S3/R2 和同一份 `PLAINMOTE_TOKEN_KEY`。
 - 应用不承担边缘限流；匿名写入和公开交付的抗攻击规则必须在入口层配置。
 - `/d/*`、登录页面和资源页面都不应被 CDN 缓存。
+
+## 8. 时间与时区
+
+数据库中的业务时间使用 `timestamptz` 保存，应用写入和比较的都是同一个绝对时间。生产 PostgreSQL 建议把
+`timezone` 与 `log_timezone` 都设为 `UTC`，这样数据库日志、人工查询和跨地区排障不会混用服务器本地时区。
+宿主机可以继续使用运维人员习惯的时区；它只影响 systemd 定时器和宿主机日志的显示。
+
+页面输出包含 UTC 时间点的 `<time datetime="...">`，浏览器再使用自己的时区和当前界面语言完成格式化。因此日本用户
+会看到日本时间，其他地区用户也不需要在账号中单独设置时区。浏览器禁用 JavaScript 时，页面会明确显示 UTC 作为
+后备值。切换界面语言只改变日期的展示格式，不改变时间点或浏览器时区。
+
+## 9. 磁盘、日志与备份
+
+PostgreSQL 没有适合生产环境的“数据库最大 5 GiB”配置。给数据目录设置硬文件系统配额会让写入在配额耗尽时直接
+遇到 `ENOSPC`，可能中断事务、检查点和 WAL 写入。应同时监控以下三个值，并在仍有处理空间时预警：
+
+```sql
+SELECT pg_size_pretty(pg_database_size(current_database()));
+```
+
+```bash
+du -sh /path/to/postgres/data
+df -h /
+journalctl --disk-usage
+```
+
+数据库逻辑大小不包含 WAL、表膨胀、容器日志和备份，所以不能只看 SQL 查询结果。对于约 20 GiB 的根分区，可以从
+下面的阈值开始，再根据增长速度调整：
+
+- 数据库逻辑大小达到 3 GiB 时警告，4 GiB 时严重告警。
+- PostgreSQL 数据目录达到 4 GiB 时警告，5 GiB 时严重告警。
+- 根分区可用空间低于 3 GiB 时警告，低于 1.5 GiB 时严重告警。
+
+`PLAINMOTE_LOG_RETENTION` 默认只保留 30 天访问记录。普通 `VACUUM` 会让删除后的空间供 PostgreSQL 重用，但不会立即
+把文件缩小并归还给操作系统；不要把定期 `VACUUM FULL` 当作日常清理方案，因为它会锁表并额外占用临时磁盘空间。
+
+Compose 已把每个容器的 JSON 日志限制为 3 个、每个 10 MiB。宿主机的 journald 也应设置 `SystemMaxUse` 和
+`SystemKeepFree`，否则系统服务日志仍可能持续占用根分区。
+
+数据库至少每天执行一次 `pg_dump -Fc`，并用 `pg_restore --list` 验证备份可读。保存在数据库同一块磁盘上的备份只能
+应对误删或逻辑损坏，不能应对磁盘或 VPS 丢失；生产备份还应使用独立凭据复制到另一台机器或独立对象存储。

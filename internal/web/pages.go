@@ -64,17 +64,11 @@ func (a *App) templateSet() *template.Template {
 	return template.Must(template.New("pages").Funcs(template.FuncMap{
 		"tr":              translate,
 		"openGraphLocale": openGraphLocale,
-		"formatTime": func(value time.Time) string {
-			if value.IsZero() {
-				return "-"
-			}
-			return value.Local().Format("2006-01-02 15:04:05")
+		"formatTime": func(value time.Time) template.HTML {
+			return localTimeMarkup(value, false)
 		},
-		"formatMinute": func(value time.Time) string {
-			if value.IsZero() {
-				return "-"
-			}
-			return value.Local().Format("2006-01-02 15:04")
+		"formatMinute": func(value time.Time) template.HTML {
+			return localTimeMarkup(value, true)
 		},
 		"bytesText": bytesText,
 		"hasPrefix": strings.HasPrefix,
@@ -230,21 +224,39 @@ func singularUnitKey(unitKey string) string {
 	}
 }
 
-func shareStatus(locale string, count int, remote bool, origin string, updated time.Time) string {
+func localTimeMarkup(value time.Time, minute bool) template.HTML {
+	if value.IsZero() {
+		return "-"
+	}
+	value = value.UTC()
+	fallbackLayout := "2006-01-02 15:04:05"
+	precision := "second"
+	if minute {
+		fallbackLayout = "2006-01-02 15:04"
+		precision = "minute"
+	}
+	markup := fmt.Sprintf(`<time datetime="%s" data-local-time="%s">%s UTC</time>`,
+		value.Format(time.RFC3339), precision, value.Format(fallbackLayout))
+	return template.HTML(markup)
+}
+
+func shareStatus(locale string, count int, remote bool, origin string, updated time.Time) template.HTML {
 	if remote {
 		parsed, err := url.Parse(origin)
 		if err == nil && parsed.Host != "" {
 			origin = parsed.Host
 		}
+		origin = template.HTMLEscapeString(origin)
 		if count == 1 {
-			return fmt.Sprintf(translate(locale, "share_status_remote_one"), origin)
+			return template.HTML(fmt.Sprintf(translate(locale, "share_status_remote_one"), origin))
 		}
-		return fmt.Sprintf(translate(locale, "share_status_remote"), count, origin)
+		return template.HTML(fmt.Sprintf(translate(locale, "share_status_remote"), count, origin))
 	}
+	updatedMarkup := localTimeMarkup(updated, false)
 	if count == 1 {
-		return fmt.Sprintf(translate(locale, "share_status_local_one"), updated.Local().Format("2006-01-02 15:04:05"))
+		return template.HTML(fmt.Sprintf(translate(locale, "share_status_local_one"), updatedMarkup))
 	}
-	return fmt.Sprintf(translate(locale, "share_status_local"), count, updated.Local().Format("2006-01-02 15:04:05"))
+	return template.HTML(fmt.Sprintf(translate(locale, "share_status_local"), count, updatedMarkup))
 }
 
 func deleteWarning(locale string, shares int) string {

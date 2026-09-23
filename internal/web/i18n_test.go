@@ -142,8 +142,8 @@ func TestDynamicMessagesFormatCleanly(t *testing.T) {
 			pageSummary(locale, 1, 1, 1, "entries"),
 			countText(locale, 1, "shares"),
 			countText(locale, 2, "shares"),
-			shareStatus(locale, 1, false, "", time.Now()),
-			shareStatus(locale, 2, true, "https://example.com/file", time.Now()),
+			string(shareStatus(locale, 1, false, "", time.Now())),
+			string(shareStatus(locale, 2, true, "https://example.com/file", time.Now())),
 			deleteWarning(locale, 1),
 			deleteWarning(locale, 2),
 		}
