@@ -56,7 +56,8 @@ func TestAnyoneCanPasteAndGetALink(t *testing.T) {
 	}
 	// The meta tag and the response header have to agree, or the one page meant
 	// to be found de-indexes itself from inside the document.
-	if strings.Contains(home.Body.String(), `name="robots"`) {
+	// It may say so positively; what it must never say is noindex.
+	if strings.Contains(home.Body.String(), "noindex") {
 		t.Fatal("the home page must not carry a noindex meta tag")
 	}
 
