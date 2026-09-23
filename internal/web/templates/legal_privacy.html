@@ -28,7 +28,10 @@
 <p>首页的临时分享无需登录即可使用。本服务保存您提交的文本和文件名，链接最长在 {{legalDuration true .Legal.AnonymousTTL}}后失效，失效后相关内容将被删除。本服务不记录临时分享创建者的 IP 地址。在登录状态下创建的临时分享会与您的账号关联，仅用于支持您随后将其保存至个人资源。</p>
 <p>临时分享的访问记录不归属于任何账号，任何用户均无法查看。创建者将临时分享保存至个人资源后，此前的访问记录随之归属其账号。</p>
 {{end}}
-<h3>（{{if .Legal.Anonymous}}六{{else}}五{{end}}）Cookie</h3>
+<h3>（{{if .Legal.Anonymous}}六{{else}}五{{end}}）数据导出记录</h3>
+<p>您导出数据时，本服务记录导出时间，仅用于限制导出频率，并在 {{legalDuration true .Legal.ExportWindow}}后删除。</p>
+
+<h3>（{{if .Legal.Anonymous}}七{{else}}六{{end}}）Cookie</h3>
 <p>本服务仅使用提供服务所必需的 Cookie，用于维持登录状态、保障登录与表单提交的安全，以及记录您选择的界面语言，不用于跟踪或广告。本服务不使用浏览器本地存储。</p>
 
 <h2>二、我们如何使用信息</h2>
@@ -45,8 +48,9 @@
 
 <h2>四、我们如何存储信息</h2>
 <ul>
-  <li>账号信息：在账号存续期间保存。</li>
+  <li>账号信息：在账号存续期间保存，删除账号时立即删除。</li>
   <li>登录状态：过期或退出登录时失效。</li>
+  <li>数据导出记录：{{legalDuration true .Legal.ExportWindow}}后删除。</li>
   <li>资源与分享链接：保存至您主动删除。删除资源将同时删除其正文及全部分享链接。</li>
   <li>访问记录：{{if .Legal.LogRetention}}保存 {{legalDuration true .Legal.LogRetention}}后自动删除；删除资源不会提前删除其访问记录。{{else}}不自动删除；删除资源亦不会删除其访问记录。{{end}}</li>
   {{if .Legal.Anonymous}}<li>临时分享：链接失效后删除。</li>{{end}}
@@ -56,8 +60,9 @@
 <h2>五、您的权利</h2>
 <ul>
   <li>登录后，您可以随时查看、修改和删除您的资源与分享链接，并查看相应的访问记录。</li>
-  <li>本服务暂不提供账号自助注销功能。如需注销账号，请发送邮件至 {{template "legal-email" .}} 并注明您的 GitHub 用户名；我们可能要求您证明对该 GitHub 账号的控制权。注销账号将一并删除您的全部资源、分享链接及访问记录。我们将在收到请求后 30 日内处理。</li>
-  <li>您可以通过上述邮箱申请获取我们保存的与您相关的信息副本。</li>
+  <li>您可以在“账号”页面导出您的数据，导出内容包括账号信息、全部资源及其分享链接设置，以及访问记录；导出文件不包含分享链接地址。每个账号每 {{legalDuration true .Legal.ExportWindow}}最多可导出 {{.Legal.ExportLimit}} 次。</li>
+  <li>您可以在“账号”页面删除账号。删除账号将立即并永久删除您的全部资源、分享链接、访问记录及其他与账号关联的数据，且无法恢复。</li>
+  <li>如您无法登录，也可以发送邮件至 {{template "legal-email" .}} 并注明您的 GitHub 用户名，申请删除账号或获取数据副本；我们可能要求您证明对该 GitHub 账号的控制权，并将在收到请求后 30 日内处理。</li>
   <li>若您并非本服务用户，但您的 IP 地址出现在他人的访问记录中，您可以联系我们申请删除相关记录。</li>
   <li>您可以随时在 GitHub 设置中撤销对本服务的授权。撤销授权不影响您的账号，下次登录时需重新授权。</li>
 </ul>
@@ -105,7 +110,10 @@
 <p>Quick shares on the home page can be created without an account. The Service stores the text and filename you submit. The link expires after at most {{legalDuration false .Legal.AnonymousTTL}}, after which the related content is deleted. The Service does not record the IP address of the person who creates a quick share. A quick share created while signed in is associated with your account solely so that you can later save it to your resources.</p>
 <p>Access records for quick shares do not belong to any account and cannot be viewed by any user. If the creator saves a quick share to their resources, its existing access records are transferred to that account.</p>
 {{end}}
-<h3>1.{{if .Legal.Anonymous}}6{{else}}5{{end}} Cookies</h3>
+<h3>1.{{if .Legal.Anonymous}}6{{else}}5{{end}} Data export records</h3>
+<p>When you export your data, the Service records the time of the export solely to limit how often exports can be made, and deletes the record after {{legalDuration false .Legal.ExportWindow}}.</p>
+
+<h3>1.{{if .Legal.Anonymous}}7{{else}}6{{end}} Cookies</h3>
 <p>The Service uses only cookies that are strictly necessary to provide it: to keep you signed in, to secure sign-in and form submissions, and to remember your chosen interface language. They are not used for tracking or advertising. The Service does not use browser local storage.</p>
 
 <h2>2. How we use information</h2>
@@ -122,8 +130,9 @@
 
 <h2>4. How we store information</h2>
 <ul>
-  <li>Account information: retained for as long as the account exists.</li>
+  <li>Account information: retained for as long as the account exists, and deleted immediately when the account is deleted.</li>
   <li>Sign-in state: ends on expiry or sign-out.</li>
+  <li>Data export records: deleted after {{legalDuration false .Legal.ExportWindow}}.</li>
   <li>Resources and share links: retained until you delete them. Deleting a resource also deletes its body and all of its share links.</li>
   <li>Access records: {{if .Legal.LogRetention}}deleted automatically after {{legalDuration false .Legal.LogRetention}}. Deleting a resource does not cause its access records to be deleted earlier.{{else}}not deleted automatically. Deleting a resource does not delete its access records.{{end}}</li>
   {{if .Legal.Anonymous}}<li>Quick shares: deleted after the link expires.</li>{{end}}
@@ -133,8 +142,9 @@
 <h2>5. Your rights</h2>
 <ul>
   <li>When signed in, you may view, modify and delete your resources and share links at any time, and view their access records.</li>
-  <li>The Service does not currently offer self-service account deletion. To delete your account, email {{template "legal-email" .}} and include your GitHub username; we may ask you to demonstrate control of that GitHub account. Deleting an account also deletes all of its resources, share links and access records. We will process the request within 30 days of receipt.</li>
-  <li>You may request a copy of the information we hold about you at the same address.</li>
+  <li>You may export your data from the Account page. The export contains your account information, all resources with their share link settings, and the access records; share link addresses are not included. Each account may export up to {{.Legal.ExportLimit}} times every {{legalDuration false .Legal.ExportWindow}}.</li>
+  <li>You may delete your account from the Account page. Deletion immediately and permanently removes all of its resources, share links, access records and other data associated with the account, and cannot be undone.</li>
+  <li>If you are unable to sign in, you may email {{template "legal-email" .}} with your GitHub username to request account deletion or a copy of your data; we may ask you to demonstrate control of that GitHub account, and will process the request within 30 days of receipt.</li>
   <li>If you are not a user of the Service but your IP address appears in another user’s access records, you may contact us to request deletion of the relevant records.</li>
   <li>You may revoke the Service’s authorization in your GitHub settings at any time. This does not affect your account; you will be asked to authorize again the next time you sign in.</li>
 </ul>

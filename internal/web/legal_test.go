@@ -89,7 +89,7 @@ func TestLegalPagesRenderInChineseOrEnglish(t *testing.T) {
 // changed setting cannot leave the text promising something else.
 func TestPrivacyPolicyStatesTheConfiguredFacts(t *testing.T) {
 	kept := getLegal(legalApp(Config{ContactEmail: "ops@example.com", LogRetention: 168 * time.Hour, SessionTTL: 36 * time.Hour}), "/privacy", "").Body.String()
-	for _, want := range []string{"deleted automatically after 7 days", "remains valid for 36 hours"} {
+	for _, want := range []string{"deleted automatically after 7 days", "remains valid for 36 hours", "up to 2 times every 24 hours", "1.5 Data export records", "1.6 Cookies"} {
 		if !strings.Contains(kept, want) {
 			t.Errorf("privacy policy is missing %q", want)
 		}
@@ -99,7 +99,7 @@ func TestPrivacyPolicyStatesTheConfiguredFacts(t *testing.T) {
 	}
 
 	forever := getLegal(legalApp(Config{ContactEmail: "ops@example.com", AnonymousEnabled: true, PublicURL: "http://cfg.test"}), "/privacy", "zh-CN").Body.String()
-	for _, want := range []string{"访问记录：不自动删除", "临时分享", "链接最长在 30 分钟后失效"} {
+	for _, want := range []string{"访问记录：不自动删除", "临时分享", "链接最长在 30 分钟后失效", "每个账号每 24 小时最多可导出 2 次", "（六）数据导出记录", "（七）Cookie"} {
 		if !strings.Contains(forever, want) {
 			t.Errorf("privacy policy is missing %q", want)
 		}
@@ -138,7 +138,8 @@ func TestLegalDuration(t *testing.T) {
 		zh, en string
 	}{
 		{720 * time.Hour, "30 天", "30 days"},
-		{24 * time.Hour, "1 天", "1 day"},
+		{24 * time.Hour, "24 小时", "24 hours"},
+		{48 * time.Hour, "2 天", "2 days"},
 		{36 * time.Hour, "36 小时", "36 hours"},
 		{90 * time.Minute, "90 分钟", "90 minutes"},
 		{time.Minute, "1 分钟", "1 minute"},

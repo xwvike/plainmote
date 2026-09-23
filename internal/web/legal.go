@@ -36,6 +36,8 @@ type legalView struct {
 	AnonymousTTL  time.Duration
 	AnonymousSize int64
 	MaxContent    int64
+	ExportLimit   int
+	ExportWindow  time.Duration
 }
 
 func (a *App) handleLegal(w http.ResponseWriter, r *http.Request) {
@@ -67,16 +69,19 @@ func (a *App) handleLegal(w http.ResponseWriter, r *http.Request) {
 		AnonymousTTL:  store.AnonymousMaxTTL,
 		AnonymousSize: store.AnonymousMaxBytes,
 		MaxContent:    a.cfg.MaxContent,
+		ExportLimit:   store.ExportLimit,
+		ExportWindow:  store.ExportWindow,
 	}
 	a.renderTemplate(w, r, http.StatusOK, "legal.html", data)
 }
 
 // legalDuration states a configured period in the largest whole unit it
-// divides into, so 720h reads as 30 days and 90m as 90 minutes.
+// divides into, so 720h reads as 30 days and 90m as 90 minutes. A single day
+// stays 24 hours: "every 24 hours" is how a rolling window is said.
 func legalDuration(chinese bool, d time.Duration) string {
 	value, zh, en := int64(d/time.Minute), "分钟", "minute"
 	switch {
-	case d >= 24*time.Hour && d%(24*time.Hour) == 0:
+	case d > 24*time.Hour && d%(24*time.Hour) == 0:
 		value, zh, en = int64(d/(24*time.Hour)), "天", "day"
 	case d >= time.Hour && d%time.Hour == 0:
 		value, zh, en = int64(d/time.Hour), "小时", "hour"

@@ -1,0 +1,76 @@
+{{define "account.html"}}<!doctype html>
+<html lang="{{.Locale}}">
+<head>
+  {{template "htmlhead" .}}
+  <title>{{tr .Locale "account"}} · PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page account">
+    <div class="ph"><h1>{{tr .Locale "account"}}</h1></div>
+    {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+
+    <section class="panel">
+      <div class="pt"><span class="sec">{{tr .Locale "account_info"}}</span></div>
+      <dl class="account-facts">
+        <div><dt>{{tr .Locale "account_login"}}</dt><dd>{{.Account.User.Login}}</dd></div>
+        <div><dt>{{tr .Locale "account_name"}}</dt><dd>{{if .Account.User.Name}}{{.Account.User.Name}}{{else}}<span class="mut">—</span>{{end}}</dd></div>
+        <div><dt>{{tr .Locale "account_created"}}</dt><dd>{{formatTime .Account.CreatedAt}}</dd></div>
+        <div><dt>{{tr .Locale "account_usage"}}</dt><dd>{{.Quota.Usage.Resources}}/{{.Quota.Limit.Resources}} · {{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</dd></div>
+      </dl>
+    </section>
+
+    <div class="account-grid">
+    <section class="panel">
+      <div class="pt"><span class="sec">{{tr .Locale "export_title"}}</span></div>
+      <div class="pb account-action">
+        <p class="hint">{{tr .Locale "export_body"}}</p>
+        <p class="hint">{{printf (tr .Locale "export_limit") .ExportWindow .ExportLimit}}{{if .Export.Remaining}}{{printf (tr .Locale "export_remaining") .Export.Remaining}}{{end}}</p>
+        <form method="post" action="/account/export" class="inline">
+          <input type="hidden" name="csrf" value="{{.CSRF}}">
+          <button type="submit"{{if not .Export.Remaining}} disabled{{end}}>{{tr .Locale "export_download"}}</button>
+        </form>
+        {{if not .Export.Remaining}}<p class="hint">{{tr .Locale "export_next"}}{{formatTime .Export.NextAt}}</p>{{end}}
+      </div>
+    </section>
+
+    <section class="panel account-danger">
+      <div class="pt"><span class="sec">{{tr .Locale "delete_account_title"}}</span></div>
+      <div class="pb account-action">
+        <p class="hint">{{tr .Locale "delete_account_body"}}</p>
+        <form method="post" action="/account/delete" class="account-confirm">
+          <input type="hidden" name="csrf" value="{{.CSRF}}">
+          <label><span>{{tr .Locale "delete_account_label"}}</span>
+            <input type="text" name="confirm" required autocomplete="off" spellcheck="false">
+          </label>
+          <button type="submit" class="bad">{{tr .Locale "delete_account_button"}}</button>
+        </form>
+      </div>
+    </section>
+    </div>
+  </main>
+
+  {{if .DeleteOpen}}
+  <div class="scrim"></div>
+  <dialog class="dlg" open>
+    <header>
+      <b>{{tr .Locale "delete_account_title"}} <q>{{.Account.User.Login}}</q></b>
+      <a class="x" href="/account" aria-label="{{tr .Locale "close"}}">&times;</a>
+    </header>
+    <div class="body">
+      <p class="ro">{{tr .Locale "delete_account_body"}}</p>
+    </div>
+    <footer>
+      <a class="btn" href="/account" autofocus>{{tr .Locale "cancel"}}</a>
+      <form method="post" action="/account/delete" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="confirm" value="{{.Account.User.Login}}">
+        <input type="hidden" name="final" value="1">
+        <button type="submit" class="bad">{{tr .Locale "delete_account_final"}}</button>
+      </form>
+    </footer>
+  </dialog>
+  {{end}}
+  {{template "footer" .}}
+</body>
+</html>{{end}}

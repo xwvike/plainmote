@@ -89,12 +89,8 @@ func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename
 	// normalised once here rather than being whatever the browser felt like.
 	content = []byte(ApplyEOL(string(content), "lf"))
 
-	name := filename
-	if name == "" {
-		name = "匿名内容"
-	}
 	resource := Resource{
-		ID: uuid.NewString(), OwnerID: AnonymousUserID, Name: name, Filename: filename,
+		ID: uuid.NewString(), OwnerID: AnonymousUserID, Name: filename, Filename: filename,
 		ContentType: anonymousContentType, ContentEncoding: anonymousEncoding,
 		ContentSize: int64(len(content)), CreatedAt: now, UpdatedAt: now,
 	}

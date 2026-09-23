@@ -14,6 +14,9 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if next := safeNext(r.URL.Query().Get("next")); next != "" {
 		data.LoginURL += "?next=" + url.QueryEscape(next)
 	}
+	if r.URL.Query().Get("deleted") == "1" {
+		data.Notice = translate(requestLanguage(r).Locale, "account_deleted")
+	}
 	if r.URL.Query().Get("error") != "" {
 		data.Error = r.URL.Query().Get("error")
 	}

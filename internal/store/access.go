@@ -296,6 +296,13 @@ WHERE id IN (SELECT id FROM sessions WHERE expires_at < $1 ORDER BY expires_at L
 	if err != nil {
 		return result, fmt.Errorf("prune anonymous pastes: %w", err)
 	}
+
+	if _, err = deleteInBatches(ctx, conn, `
+DELETE FROM account_exports
+WHERE id IN (SELECT id FROM account_exports WHERE created_at < $1 ORDER BY created_at LIMIT $2)
+`, now.Add(-ExportWindow)); err != nil {
+		return result, fmt.Errorf("prune account exports: %w", err)
+	}
 	return result, nil
 }
 

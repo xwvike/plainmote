@@ -101,12 +101,12 @@ func normalizeResourceInput(name, filename string, content []byte, contentEncodi
 	if originURL == "" {
 		contentType, detectedEncoding = DetectContent(filename, content, contentEncoding)
 	}
+	// An empty name falls back to the filename, and to nothing after that.
+	// The words for "untitled" belong to whoever is reading the page, so they
+	// are supplied when it is rendered rather than stored in one language.
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = filename
-	}
-	if name == "" {
-		name = "未命名资源"
 	}
 	return resourceInput{Name: name, Filename: filename, ContentType: contentType, Encoding: detectedEncoding, OriginURL: originURL, Content: content}, nil
 }

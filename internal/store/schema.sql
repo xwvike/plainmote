@@ -104,6 +104,19 @@ CREATE TABLE IF NOT EXISTS paste_claims (
 );
 CREATE INDEX IF NOT EXISTS paste_claims_user_idx ON paste_claims(user_id);
 
+-- Names used to be stored with a Chinese placeholder when none was given; the
+-- placeholder is now supplied at render time in the reader's language. This
+-- clears the ones already written and finds nothing to do after the first run.
+UPDATE resources SET name = '' WHERE name IN ('未命名资源', '匿名内容') AND filename = '';
+
+-- One row per data export, kept only as long as the rate window needs it.
+CREATE TABLE IF NOT EXISTS account_exports (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS account_exports_user_idx ON account_exports(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS access_logs (
   id UUID PRIMARY KEY,
   -- The log outlives what it describes. owner_id says who may read the row and
@@ -144,3 +157,7 @@ CREATE INDEX IF NOT EXISTS access_logs_fold_idx ON access_logs(link_id, outcome,
 CREATE INDEX IF NOT EXISTS access_logs_owner_idx ON access_logs(owner_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_resource_idx ON access_logs(resource_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_time_idx ON access_logs(occurred_at DESC);
+
+-- The access log copied the same placeholders; see the resources update above.
+UPDATE access_logs SET link_name = '' WHERE link_name = '未命名分享';
+UPDATE access_logs SET resource_name = '' WHERE resource_name IN ('未命名资源', '匿名内容') AND resource_file = '';

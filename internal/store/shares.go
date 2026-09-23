@@ -270,7 +270,7 @@ RETURNING id, resource_id, name
 		}
 		result.Resource = resource
 		result.LinkID = linkID
-		result.LinkName = displayLinkName(linkName)
+		result.LinkName = linkName
 		result.Allowed = true
 		result.Reason = OutcomeSuccess
 		return nil
@@ -303,7 +303,7 @@ WHERE l.token_hash = $1
 		return err
 	}
 	result.LinkID = linkID
-	result.LinkName = displayLinkName(name)
+	result.LinkName = name
 	reason, detail := OutcomeExhausted, "link is used up"
 	switch {
 	case revoked.Valid:
@@ -329,13 +329,6 @@ FROM resources WHERE id = $1
 		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding, &resource.OriginURL,
 	)
 	return resource, err
-}
-
-func displayLinkName(name string) string {
-	if name == "" {
-		return "未命名分享"
-	}
-	return name
 }
 
 // IsMediaShare only selects the browser presentation. It grants no access to

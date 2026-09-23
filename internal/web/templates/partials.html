@@ -32,7 +32,7 @@
     <div class="rt">
       {{template "language-switch" .}}
       {{if .SignedIn}}
-      <span class="who">{{.User.Login}}</span>
+      <a class="who" href="/account"{{if eq .Active "account"}} aria-current="page"{{end}}>{{.User.Login}}</a>
       <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="sm">{{tr .Locale "logout"}}</button></form>
       {{else}}
       <a class="btn sm" href="{{if .SignInURL}}{{.SignInURL}}{{else}}/login{{end}}">{{tr .Locale "login"}}</a>

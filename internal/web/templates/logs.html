@@ -15,7 +15,7 @@
       <label class="pick log-filter-resource"><span>{{tr .Locale "resource"}}</span>
         <select name="resource">
           <option value="">{{tr .Locale "all_resources"}}</option>
-          {{range .Resources}}<option value="{{.ID}}"{{if eq .ID $.LogResource}} selected{{end}}>{{.Name}}</option>{{end}}
+          {{range .Resources}}<option value="{{.ID}}"{{if eq .ID $.LogResource}} selected{{end}}>{{or .Name (tr $.Locale "untitled_resource")}}</option>{{end}}
         </select>
       </label>
       <label class="pick log-filter-outcome"><span>{{tr .Locale "result"}}</span>
@@ -35,17 +35,17 @@
         <summary>
           <span class="tm">{{formatTime .OccurredAt}}</span>
           <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{outcomeText $.Locale .Outcome}}</span></span>
-          <span class="trunc" title="{{.ResourceName}}">{{if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</span>
-          <span class="trunc" title="{{.LinkName}}">{{if .LinkName}}{{.LinkName}}{{else}}<span class="mut">—</span>{{end}}</span>
+          <span class="trunc" title="{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}">{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}</span>
+          <span class="trunc" title="{{or .LinkName (tr $.Locale "untitled_share")}}">{{or .LinkName (tr $.Locale "untitled_share")}}</span>
           <span class="mono">{{.RemoteIP}}</span>
           <span class="mono">{{.Hits}}</span>
           <svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>
         </summary>
         <div class="exp">
           <dl class="kv">
-            <dt>{{tr $.Locale "resource"}}</dt><dd>{{if .ResourceID}}<a href="/resources/{{.ResourceID}}">{{.ResourceName}}</a>{{else if .ResourceName}}{{.ResourceName}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>{{tr $.Locale "resource"}}</dt><dd>{{if .ResourceID}}<a href="/resources/{{.ResourceID}}">{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}</a>{{else}}{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}{{end}}</dd>
             <dt>{{tr $.Locale "filename"}}</dt><dd>{{if .ResourceFile}}{{.ResourceFile}}{{else}}<span class="mut">—</span>{{end}}</dd>
-            <dt>{{tr $.Locale "share_used"}}</dt><dd>{{if .LinkName}}{{.LinkName}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>{{tr $.Locale "share_used"}}</dt><dd>{{or .LinkName (tr $.Locale "untitled_share")}}</dd>
             <dt>{{tr $.Locale "source_ip"}}</dt><dd>{{if .RemoteIP}}{{.RemoteIP}}{{else}}<span class="mut">—</span>{{end}}</dd>
             <dt>{{tr $.Locale "access_count"}}</dt><dd>{{.Hits}}</dd>
           </dl>

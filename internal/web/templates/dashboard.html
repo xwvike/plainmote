@@ -30,7 +30,7 @@
           <tbody>
             {{range .Resources}}
             <tr>
-              <td class="trunc"><a href="/resources/{{.ID}}">{{.Name}}</a></td>
+              <td class="trunc"><a href="/resources/{{.ID}}">{{or .Name (tr $.Locale "untitled_resource")}}</a></td>
               <td><span class="fl"><span class="mono trunc" title="{{.Filename}}">{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">{{tr $.Locale "remote"}}</span>{{end}}</span></td>
               <td>
                 {{if .Remote}}<span class="fl"><span class="tag">{{tr $.Locale "upstream"}}</span><span class="mono trunc" title="{{.OriginURL}}">{{originHost .OriginURL}}</span></span>

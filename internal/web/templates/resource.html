@@ -2,7 +2,7 @@
 <html lang="{{.Locale}}">
 <head>
   {{template "htmlhead" .}}
-  <title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{.Resource.Name}}{{end}} · PlainMote</title>
+  <title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{or .Resource.Name (tr .Locale "untitled_resource")}}{{end}} · PlainMote</title>
 </head>
 <body data-msg-editor-reopening="{{tr .Locale "editor_reopening"}}"
       data-msg-editor-read-failed="{{tr .Locale "editor_read_failed"}}"
@@ -14,12 +14,12 @@
       data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}">
   {{template "topbar" .}}
   <main class="page{{if not .IsNew}} resource-detail{{end}}">
-    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}{{else}}{{.Resource.Name}}{{end}}</span></div>
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}{{else}}{{or .Resource.Name (tr .Locale "untitled_resource")}}{{end}}</span></div>
     {{if .IsNew}}
     <div class="ph"><h1>{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}</h1></div>
     {{else}}
     <div class="ph">
-      <h1>{{.Resource.Name}}</h1>
+      <h1>{{or .Resource.Name (tr .Locale "untitled_resource")}}</h1>
       <span class="sp">
         <a class="btn" href="/resources/{{.Resource.ID}}?delete=1">{{tr .Locale "delete"}}</a>
       </span>
@@ -95,11 +95,11 @@
             <textarea name="content" rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}">{{.ContentText}}</textarea>
             {{else}}
               {{if hasPrefix .Resource.ContentType "image/"}}
-              <div class="media-stage" data-current-content><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{.Resource.Name}}"></div>
+              <div class="media-stage" data-current-content><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{or .Resource.Name (tr .Locale "untitled_resource")}}"></div>
               {{else if hasPrefix .Resource.ContentType "audio/"}}
-              <div class="media-stage" data-current-content><audio class="resource-media resource-audio" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{.Resource.Name}}"></audio></div>
+              <div class="media-stage" data-current-content><audio class="resource-media resource-audio" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{or .Resource.Name (tr .Locale "untitled_resource")}}"></audio></div>
               {{else if hasPrefix .Resource.ContentType "video/"}}
-              <div class="media-stage" data-current-content><video class="resource-media resource-video" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{.Resource.Name}}" data-prime-video></video></div>
+              <div class="media-stage" data-current-content><video class="resource-media resource-video" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{or .Resource.Name (tr .Locale "untitled_resource")}}" data-prime-video></video></div>
               {{else}}
               <div class="media-stage" data-current-content>
                 <div class="file-card">
@@ -199,7 +199,7 @@
   <div class="scrim"></div>
   <dialog class="dlg" open>
     <header>
-      <b>{{tr .Locale "delete"}} <q>{{.Resource.Name}}</q></b>
+      <b>{{tr .Locale "delete"}} <q>{{or .Resource.Name (tr .Locale "untitled_resource")}}</q></b>
       <a class="x" href="/resources/{{.Resource.ID}}" aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">

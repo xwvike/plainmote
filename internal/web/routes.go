@@ -82,6 +82,15 @@ type pageData struct {
 	// LegalLinks is whether the about, privacy, terms and contact pages exist.
 	LegalLinks bool
 	Legal      legalView
+	// Account is the account page's subject; Notice is a one-line
+	// confirmation, used by the sign-in page after an account is deleted.
+	Account store.Account
+	Notice  string
+	// Export is the account's standing against the export limit, which the
+	// account page states and the export handler enforces.
+	Export       store.ExportAllowance
+	ExportLimit  int
+	ExportWindow int
 
 	// The home page, both halves of it: the form as it was submitted when a
 	// paste was refused, and the address when one was made.
@@ -169,6 +178,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/language", a.handleLanguage)
 	mux.HandleFunc("/resources/", a.handleResources)
 	mux.HandleFunc("/logs", a.handleLogs)
+	mux.HandleFunc(accountPath, a.handleAccount)
+	mux.HandleFunc(accountExportPath, a.handleAccountExport)
+	mux.HandleFunc(accountDeletePath, a.handleAccountDelete)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc("/robots.txt", a.handleRobots)
 	// Not registered at all when it is off, so the endpoint does not exist
