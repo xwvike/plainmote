@@ -59,11 +59,35 @@ func splitDeliveryPath(urlPath string) (token string, ok bool) {
 	return rest, true
 }
 
+// embeddedCrossSite reports a request that another site's page made for one
+// of its elements - an <img>, <video>, <iframe>, a fetch() - rather than a
+// person opening the link. A share address is something to open or download;
+// letting other pages load it as a subresource turns it into free hosting,
+// with every page view costing a use, a log row and a storage read here.
+//
+// It relies on Fetch Metadata, which browsers send and nothing else does. A
+// request without it - curl, a chat app building a preview, an old browser -
+// is not what embedding looks like and is let through; for the old browser,
+// Cross-Origin-Resource-Policy on the response keeps the bytes off the page.
+func embeddedCrossSite(r *http.Request) bool {
+	if r.Header.Get("Sec-Fetch-Site") != "cross-site" {
+		return false
+	}
+	return r.Header.Get("Sec-Fetch-Mode") != "navigate" || r.Header.Get("Sec-Fetch-Dest") != "document"
+}
+
 func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Vary", "Accept")
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	// Refused before the token is even read: an embed costs no use, no log row
+	// and no storage read, only a count in the per-minute probe line.
+	if embeddedCrossSite(r) {
+		a.recordProbe(probeEmbed)
+		writePlainError(w, http.StatusForbidden, "this link cannot be embedded in another site")
 		return
 	}
 	token, ok := splitDeliveryPath(r.URL.Path)
@@ -132,6 +156,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", deliveredContentSecurityPolicy)
+	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	// Public delivery is always full-body. In particular, Range never opens an
 	// exemption from accounting, and a retry is a new counted request.

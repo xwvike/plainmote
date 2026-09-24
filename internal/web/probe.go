@@ -15,10 +15,13 @@ const probeWindow = time.Minute
 const (
 	probeMalformed = "malformed"
 	probeUnknown   = "unknown"
+	// probeEmbed is another site's page loading a share address as an image,
+	// video, frame or fetch. It is refused before the token is looked at.
+	probeEmbed = "embed"
 )
 
 // probeReasons fixes the order of the folded line so two reports compare by eye.
-var probeReasons = []string{probeMalformed, probeUnknown}
+var probeReasons = []string{probeMalformed, probeUnknown, probeEmbed}
 
 // probeLog folds delivery probes that belong to nobody into at most one line
 // per window. These events cannot go in access_logs: every row there is read
