@@ -22,12 +22,14 @@ import (
 const AnonymousUserID = "00000000-0000-0000-0000-000000000001"
 
 const (
-	// AnonymousDefaultTTL is what the page offers first, and AnonymousMaxTTL is
-	// the ceiling a crafted request cannot get past. Both are minutes rather
-	// than days on purpose: this is a handoff, not storage. Nothing posted
-	// through the open endpoint can be reached for long, which is most of what
-	// keeps it from being worth abusing and all of what bounds its footprint.
-	AnonymousDefaultTTL = time.Minute
+	// AnonymousMinTTL and AnonymousMaxTTL bound what a crafted request can ask
+	// for, and AnonymousDefaultTTL is what the page preselects and what a
+	// request that names no lifetime gets. All are minutes rather than days on
+	// purpose: this is a handoff, not storage. Nothing posted through the open
+	// endpoint can be reached for long, which is most of what keeps it from
+	// being worth abusing and all of what bounds its footprint.
+	AnonymousMinTTL     = time.Minute
+	AnonymousDefaultTTL = 10 * time.Minute
 	AnonymousMaxTTL     = 30 * time.Minute
 
 	// AnonymousMaxBytes is far below the signed-in limit: enough for a config
@@ -48,7 +50,7 @@ const (
 
 // Minutes, not a Go duration: %s renders AnonymousMaxTTL as "30m0s".
 var errAnonymousTTL = fmt.Errorf("有效期最短 %d 分钟，最长 %d 分钟",
-	int(AnonymousDefaultTTL/time.Minute), int(AnonymousMaxTTL/time.Minute))
+	int(AnonymousMinTTL/time.Minute), int(AnonymousMaxTTL/time.Minute))
 
 // CreateAnonymousPaste writes the body and the one time-limited link that
 // reaches it in a single transaction. A paste with no link is unreachable
@@ -69,7 +71,7 @@ func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename
 	if ttl <= 0 {
 		ttl = AnonymousDefaultTTL
 	}
-	if ttl < AnonymousDefaultTTL || ttl > AnonymousMaxTTL {
+	if ttl < AnonymousMinTTL || ttl > AnonymousMaxTTL {
 		return Resource{}, Link{}, errAnonymousTTL
 	}
 	filename = strings.TrimSpace(filename)

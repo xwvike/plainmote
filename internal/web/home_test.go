@@ -131,7 +131,7 @@ func TestPasteLifetimeCannotBeChosenFreely(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("paste result: %d %s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), "in about 1 minute") {
+	if !strings.Contains(response.Body.String(), "in about 10 minutes") {
 		t.Fatalf("an unknown lifetime must become the default, got %s", response.Body.String())
 	}
 }
@@ -396,5 +396,24 @@ func TestAnonymousCanBeTurnedOff(t *testing.T) {
 	}
 	if tag := anon.Header().Get("X-Robots-Tag"); !strings.Contains(tag, "noindex") {
 		t.Fatalf("the root must not be indexable when it is a redirect, got %q", tag)
+	}
+}
+
+// The page preselects the store's default, and that default is one of the
+// choices it offers.
+func TestHomePreselectsTheDefaultLifetime(t *testing.T) {
+	if pasteDefaultTTL != "10" {
+		t.Fatalf("the default lifetime is %s minutes, want 10", pasteDefaultTTL)
+	}
+	app := &App{cfg: Config{PublicURL: "https://cfg.test", AnonymousEnabled: true}}
+	app.templates = app.templateSet()
+	app.handler = app.routes()
+	response := httptest.NewRecorder()
+	app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://cfg.test/", nil))
+	if !strings.Contains(response.Body.String(), `<option value="10" selected>`) {
+		t.Fatal("the home page does not preselect 10 minutes")
+	}
+	if ttl, value := parsePasteTTL(""); ttl != 10*time.Minute || value != "10" {
+		t.Fatalf("a missing lifetime falls back to %s (%s)", ttl, value)
 	}
 }

@@ -29,6 +29,10 @@ var pasteTTLChoices = []ttlChoice{
 	{Value: "30"},
 }
 
+// pasteDefaultTTL is the preselected choice, taken from the store's default so
+// the page and a request that names no lifetime cannot disagree.
+var pasteDefaultTTL = strconv.Itoa(int(store.AnonymousDefaultTTL / time.Minute))
+
 // pasteFormMaxBytes is what the handler will read at all. The store enforces
 // the real limit on the body; this one is about not reading a request that
 // cannot possibly be within it.
@@ -68,7 +72,7 @@ func (a *App) homePage(r *http.Request) pageData {
 		Indexable:    true,
 		BaseURL:      a.baseURL(r),
 		SignInURL:    "/login",
-		PasteTTL:     pasteTTLChoices[0].Value,
+		PasteTTL:     pasteDefaultTTL,
 		PasteChoices: pasteTTLChoices,
 		MaxPaste:     store.AnonymousMaxBytes,
 	}
@@ -229,7 +233,7 @@ func (a *App) handleSavePaste(w http.ResponseWriter, r *http.Request) {
 // an empty box has thrown away what the visitor wrote, and they have nowhere
 // else to get it from.
 func (a *App) refusePaste(w http.ResponseWriter, r *http.Request, content, filename, message string) {
-	a.refusePasteWith(w, r, content, filename, pasteTTLChoices[0].Value, message, http.StatusBadRequest)
+	a.refusePasteWith(w, r, content, filename, pasteDefaultTTL, message, http.StatusBadRequest)
 }
 
 func (a *App) refusePasteWith(w http.ResponseWriter, r *http.Request, content, filename, ttl, message string, status int) {
@@ -251,7 +255,7 @@ func parsePasteTTL(value string) (time.Duration, string) {
 			return time.Duration(minutes) * time.Minute, choice.Value
 		}
 	}
-	return store.AnonymousDefaultTTL, pasteTTLChoices[0].Value
+	return store.AnonymousDefaultTTL, pasteDefaultTTL
 }
 
 func (a *App) sameOriginPost(r *http.Request) bool {

@@ -83,6 +83,10 @@ func TestAnonymousTermsCannotBeStretched(t *testing.T) {
 	if got := link.ExpiresAt.Sub(now); got != AnonymousDefaultTTL {
 		t.Fatalf("expected the default ttl, got %s", got)
 	}
+	// The default is not the floor: a shorter lifetime is still a valid choice.
+	if _, _, err := db.CreateAnonymousPaste(ctx, "x.txt", []byte("x"), AnonymousMinTTL, now); err != nil {
+		t.Fatalf("the shortest lifetime must be accepted: %v", err)
+	}
 }
 
 // TestAnonymousPasteIsAlwaysServedAsText is the abuse boundary. Whatever the
