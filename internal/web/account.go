@@ -9,7 +9,6 @@ import (
 	"mime"
 	"net/http"
 	"os"
-	"path"
 	"strings"
 	"time"
 
@@ -291,31 +290,45 @@ func writeExportRemote(archive *zip.Writer, resource Resource) error {
 }
 
 // exportBodyPath puts each body in a directory named after its resource so
-// duplicate filenames cannot overwrite each other. Editor-created resources
-// may have no filename; those receive a readable name and a MIME-based suffix.
+// duplicate filenames cannot overwrite each other.
+//
+// A filename the owner set is kept exactly: Dockerfile, .env and .gitignore
+// are what this service is for, and an export that renamed them to
+// Dockerfile.txt or env.txt would hand back different files. Only a resource
+// with no filename - one typed into the editor - gets a name made up for it,
+// from its resource name plus an extension from its type. Either way the name
+// is kept to one path segment, since the archive is unpacked by tools this
+// service does not control.
 func exportBodyPath(resource Resource) string {
-	name := exportText(strings.TrimSpace(resource.Filename))
+	name := exportSegment(resource.Filename)
 	if name == "" {
-		name = exportText(strings.TrimSpace(resource.Name))
+		name = strings.Trim(exportSegment(resource.Name), " .")
+		if name == "" {
+			name = "content"
+		}
+		if resource.OriginURL == "" {
+			name += exportExtension(resource.ContentType)
+		}
 	}
-	name = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == '/' || r == '\\' {
+	if resource.OriginURL != "" && !strings.HasSuffix(strings.ToLower(name), ".url") {
+		name += ".url"
+	}
+	return "files/" + resource.ID + "/" + name
+}
+
+// exportSegment reduces a name to a single safe path segment: no separators,
+// no control characters, and never "." or "..".
+func exportSegment(value string) string {
+	name := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || r == '/' || r == '\\' {
 			return '_'
 		}
 		return r
-	}, name)
-	name = strings.Trim(name, " .")
-	if name == "" || name == "." || name == ".." {
-		name = "content"
+	}, strings.TrimSpace(value))
+	if name == "." || name == ".." {
+		return ""
 	}
-	if resource.OriginURL != "" {
-		if !strings.HasSuffix(strings.ToLower(name), ".url") {
-			name += ".url"
-		}
-	} else if path.Ext(name) == "" {
-		name += exportExtension(resource.ContentType)
-	}
-	return "files/" + resource.ID + "/" + name
+	return name
 }
 
 func exportExtension(contentType string) string {
