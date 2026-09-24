@@ -8,15 +8,19 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/media.css">
   <script src="/static/media.js" defer></script>
+  {{if .MediaAutoSave}}<noscript><meta http-equiv="refresh" content="0; url={{.MediaSource}}"></noscript>{{end}}
 </head>
 <body>
+  {{/* Without a script a browser starts the download itself through the
+       noscript refresh above; the button stays for one that blocks refreshes.
+       With a script, media.js replaces it with the player. */}}
   <main data-media-source="{{.MediaSource}}"
+        data-loading="Loading…"
         data-link-expired="The share link has expired or its use limit was reached."
         data-load-failed="The file could not be loaded. Try again later."
         data-type-changed="The file type changed and can no longer be played."
         data-unsupported="Your browser cannot play this format. You can "
         data-download="download the file"
-        data-network-failed="The file could not be loaded. Check your connection."><p role="status">Loading…</p></main>
-  <noscript><p>Enable JavaScript to play this file, or <a href="{{.MediaSource}}" download>download the file</a>.</p></noscript>
+        data-network-failed="The file could not be loaded. Check your connection."><p role="status"><a class="download" href="{{.MediaSource}}" download>Download file</a></p></main>
 </body>
 </html>{{end}}

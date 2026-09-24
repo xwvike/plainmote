@@ -31,7 +31,7 @@
              so it stays in the list and stays revocable. */}}
         <span class="unreadable">{{tr $.Locale "share_link_unreadable"}}</span>
         {{else}}
-        <input type="text" readonly value="{{.URL}}" aria-label="{{tr $.Locale "share_link"}}" onfocus="this.select()">
+        <code class="addr sm" tabindex="0" aria-label="{{tr $.Locale "share_link"}}">{{.URL}}</code>
         <button type="button" class="sm" data-copy="{{.URL}}">{{tr $.Locale "copy"}}</button>
         {{end}}
         <span class="ttl">{{if .Link.Name}}{{.Link.Name}} · {{end}}{{remainText $.Locale .Link.ExpiresAt}}{{if .Link.MaxUses}} · {{tr $.Locale "limited_to"}} {{.Link.MaxUses}}{{end}} · {{tr $.Locale "used_count"}} {{.Link.UsedCount}}</span>

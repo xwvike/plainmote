@@ -106,7 +106,8 @@ func TestSingleUseBrowserMediaFetch(t *testing.T) {
 				}
 			}
 			if player := page.Body.String(); !strings.Contains(player, `<html lang="en">`) ||
-				!strings.Contains(player, `>Loading…</p>`) || strings.Contains(player, "media-language") ||
+				!strings.Contains(player, `data-loading="Loading…"`) ||
+				!strings.Contains(player, `<a class="download" href="`+entry+`?raw=1" download>Download file</a>`) || strings.Contains(player, "media-language") ||
 				strings.Contains(player, "正在加载") {
 				t.Fatal("media player must remain English without a language switch")
 			}
@@ -179,5 +180,49 @@ func TestBrowserMediaDownloadAndLifecycle(t *testing.T) {
 				t.Fatalf("%s was allowed: %d", scenario, w.Code)
 			}
 		})
+	}
+}
+
+// Without scripts a browser opening a media link downloads it straight away.
+// Only a browser navigation gets the refresh that does it: a preview crawler
+// sends no Fetch Metadata, and following the refresh would spend a use.
+func TestMediaPlayerSavesDirectlyWithoutScriptForBrowsersOnly(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	resource, err := db.CreateResource(ctx, user.ID, "tone", "tone.mp3", []byte("0123456789"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	share, err := db.CreateShare(ctx, user.ID, resource.ID, "", time.Hour, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := newTestApp(db)
+	entry := shareAddress(share.Token, resource.Filename)
+	open := func(browser bool) string {
+		r := httptest.NewRequest(http.MethodGet, "https://cfg.test"+entry, nil)
+		r.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+		if browser {
+			r.Header.Set("Sec-Fetch-Mode", "navigate")
+			r.Header.Set("Sec-Fetch-Dest", "document")
+			r.Header.Set("Sec-Fetch-Site", "none")
+		}
+		w := httptest.NewRecorder()
+		app.Handler().ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("player shell: %d", w.Code)
+		}
+		return w.Body.String()
+	}
+	refresh := `<noscript><meta http-equiv="refresh" content="0; url=` + entry + `?raw=1"></noscript>`
+	if page := open(true); !strings.Contains(page, refresh) {
+		t.Fatalf("a browser opening the link must get the no-script download: %s", page)
+	}
+	if page := open(false); strings.Contains(page, "http-equiv") {
+		t.Fatal("a client without Fetch Metadata must not be handed a redirect to follow")
+	}
+	links, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
+	if err != nil || len(links) != 1 || links[0].UsedCount != 0 {
+		t.Fatalf("opening the player page must not spend the single use: %+v %v", links, err)
 	}
 }

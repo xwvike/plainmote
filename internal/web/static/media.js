@@ -14,6 +14,8 @@ function filenameFrom(response) {
 }
 
 async function loadMedia() {
+  // The page arrives with a download button for browsers that run no script.
+  container.querySelector("[role=status]").textContent = container.dataset.loading;
   try {
     const response = await fetch(container.dataset.mediaSource, {
       cache: "no-store", credentials: "same-origin", redirect: "error",

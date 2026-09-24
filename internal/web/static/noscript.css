@@ -1,0 +1,46 @@
+/* Loaded only inside <noscript>: what the pages look like when nothing runs.
+   Every control here would otherwise sit on the page doing nothing. */
+
+/* Leaving the page is how unsaved changes are discarded. */
+.savebar [data-revert] { display: inline-flex; }
+
+/* There is no clipboard to write to; the address field selects itself. */
+[data-copy] { display: none !important; }
+
+/* Encoding and line endings drive the editor. Hidden, not removed: the
+   selects still submit what the resource already uses, so a GBK file saved
+   from the plain textarea stays GBK. */
+[data-text-controls] { display: none !important; }
+
+/* Without the editor the textarea is the field itself, the same as the quick
+   share box: bordered, resizable, and no gutter kept for line numbers. */
+.panel-ed > .pb:has(> [data-editor]) { padding: 12px; gap: 12px; }
+.panel-ed > .pb > [data-editor] {
+  height: calc(var(--edh) - 24px);
+  padding: 6px 7px;
+  border: 1px solid var(--line2);
+  resize: vertical;
+}
+.panel-ed > .pb > [data-editor]:focus { border-color: var(--accent); }
+
+/* A file can be chosen but not shown before saving, so without a script the
+   content is the text box alone, as on the quick share page. */
+[data-upload], [data-upload-status] { display: none !important; }
+
+/* The share list drops the copy button's column. */
+.shl, .shl > li { grid-template-columns: minmax(0, 1fr) max-content max-content max-content; }
+@supports (grid-template-columns: subgrid) {
+  .shl > li { grid-template-columns: subgrid; }
+}
+.shl > li > .ttl { grid-column: 2; }
+.shl > li > a.btn { grid-column: 3; }
+.shl > li > form { grid-column: 4; }
+@media (max-width: 760px) {
+  .shl, .shl > li { grid-template-columns: minmax(0, 1fr) max-content max-content; }
+  @supports (grid-template-columns: subgrid) {
+    .shl > li { grid-template-columns: subgrid; }
+  }
+  .shl > li > a.btn { grid-column: 2; }
+  .shl > li > form { grid-column: 3; }
+  .shl > li > .ttl { grid-column: 1 / -1; grid-row: 2; }
+}

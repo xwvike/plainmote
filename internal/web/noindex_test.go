@@ -112,3 +112,32 @@ func TestPagesCannotBeFramed(t *testing.T) {
 		}
 	}
 }
+
+// With scripts off the pages load noscript.css, which removes controls that
+// would do nothing: the copy buttons and the editor's encoding controls.
+func TestNoScriptStylesheetIsLinkedAndServed(t *testing.T) {
+	app := &App{cfg: Config{PublicURL: "https://cfg.test", AnonymousEnabled: true}}
+	app.templates = app.templateSet()
+	app.handler = app.routes()
+	get := func(target string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://cfg.test"+target, nil))
+		return response
+	}
+	if !strings.Contains(get("/").Body.String(), `<noscript><link rel="stylesheet" href="/static/noscript.css"></noscript>`) {
+		t.Fatal("pages do not load the no-script stylesheet")
+	}
+	css := get("/static/noscript.css")
+	if css.Code != http.StatusOK || !strings.Contains(css.Header().Get("Content-Type"), "text/css") {
+		t.Fatalf("noscript.css: %d %q", css.Code, css.Header().Get("Content-Type"))
+	}
+	for _, rule := range []string{
+		"[data-copy] { display: none !important; }",
+		"[data-text-controls] { display: none !important; }",
+		"[data-upload], [data-upload-status] { display: none !important; }",
+	} {
+		if !strings.Contains(css.Body.String(), rule) {
+			t.Errorf("noscript.css is missing %q", rule)
+		}
+	}
+}

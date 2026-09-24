@@ -417,3 +417,33 @@ func TestDefaultShareSurvivesALinkPreview(t *testing.T) {
 		}
 	}
 }
+
+// A share address is shown as text that selects whole on one click, which
+// needs no script; a readonly input would need one to select itself.
+func TestShareAddressesSelectWithoutScript(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	share, err := db.CreateShare(ctx, user.ID, resource.ID, "", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := newTestApp(db, user.GitHubID)
+	for _, target := range []string{"/resources/" + resource.ID, "/resources/" + resource.ID + "?share=" + share.ID} {
+		r := httptest.NewRequest(http.MethodGet, "https://cfg.test"+target, nil)
+		r.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+		r.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+		w := httptest.NewRecorder()
+		app.handler.ServeHTTP(w, r)
+		page := w.Body.String()
+		if !strings.Contains(page, `<code class="addr`) || strings.Contains(page, `readonly value="https://cfg.test/d/`) {
+			t.Errorf("%s: the address is not a select-all field", target)
+		}
+		if strings.Contains(page, "onfocus=") {
+			t.Errorf("%s: the address still relies on an inline script", target)
+		}
+	}
+}

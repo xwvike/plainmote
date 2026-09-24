@@ -117,6 +117,7 @@ type pageData struct {
 	Outcomes            []string
 	Resource            Resource
 	MediaSource         string
+	MediaAutoSave       bool
 	Shares              []linkView
 	ShareOpen           bool
 	DeleteOpen          bool

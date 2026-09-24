@@ -40,8 +40,7 @@
       <div class="pt"><span class="sec">{{tr .Locale "paste_created"}}</span></div>
       <div class="pb">
         <div class="pfx">
-          <input type="text" readonly value="{{.PasteURL}}" aria-label="{{tr .Locale "share_link"}}" autofocus
-                 onfocus="this.select()" style="font-family:var(--mono);font-size:12px">
+          <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{.PasteURL}}</code>
           <button type="button" class="btn" data-copy="{{.PasteURL}}">{{tr .Locale "copy"}}</button>
         </div>
         <span class="st on">

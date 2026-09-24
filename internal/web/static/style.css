@@ -127,7 +127,20 @@ a:hover { color: var(--accent-d); text-decoration: underline; }
 .tell p { font-size: 12px; line-height: 1.6; color: var(--ink2); }
 .tell code { font: 400 11.5px var(--mono); color: var(--ink); }
 /* The address is the whole point of the result panel, so it gets the width. */
-.pfx > input[readonly] { min-width: 0; flex: 1; border: 1px solid var(--line2); }
+.pfx > .addr { flex: 1; }
+/* A share address: looks like a read-only field, and one click selects all of
+   it - user-select does that without a script, which a readonly input cannot.
+   It may be cut off on screen; what is selected and copied is the whole of it. */
+.addr {
+  display: block; min-width: 0; height: 26px; padding: 0 7px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid var(--line2); background: oklch(0.974 0.002 255);
+  font: 400 12px/24px var(--mono); color: var(--ink);
+  -webkit-user-select: all; user-select: all; cursor: text;
+}
+.addr.sm { height: 22px; font-size: 11.5px; line-height: 20px; }
+.addr:focus { outline: none; border-color: var(--accent); }
+.fl > .addr { flex: 1; }
 /* The save bar ends with a statement of what is live, not a note about what
    saving would do. It is pushed to the far end so it reads as the bar's
    outcome rather than as a label on the buttons. */
@@ -266,11 +279,25 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .fg > dd { margin: 0; }
 /* Keep every share on one row. The address only needs enough room to identify
    the link because the adjacent button copies the complete value. */
-.shl { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.shl > li { display: grid; grid-template-columns: minmax(72px, 300px) max-content minmax(0, 1fr) max-content max-content; align-items: center; gap: 8px; min-width: 0; }
-.shl > li > input[readonly] { min-width: 0; width: 100%; height: 22px; overflow: hidden; text-overflow: ellipsis; font: 400 11.5px var(--mono); }
-.shl .ttl { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 400 11px var(--mono); color: var(--ink3); white-space: nowrap; }
-.shl .unreadable { flex: 1 1 auto; min-width: 0; font-size: 11.5px; color: var(--bad); }
+/* The address takes whatever the rows have left; everything after it keeps its
+   natural width, on one line, pushed to the right. The columns belong to the
+   list, not to each row, so every address is as long as every other and the
+   buttons line up down the list. Cells are placed by column rather than by
+   order, because a row may lack some of them. */
+.shl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content; gap: 8px; }
+/* A browser without subgrid gives each row the same columns on its own: every
+   row still reads correctly, the addresses just differ in length. */
+.shl > li { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content; gap: 8px; align-items: center; min-width: 0; }
+@supports (grid-template-columns: subgrid) {
+  .shl > li { grid-template-columns: subgrid; }
+}
+.shl > li > .addr, .shl > li > .unreadable { grid-column: 1; width: 100%; }
+.shl > li > [data-copy] { grid-column: 2; }
+.shl > li > .ttl { grid-column: 3; }
+.shl > li > a.btn { grid-column: 4; }
+.shl > li > form { grid-column: 5; }
+.shl .ttl { font: 400 11px var(--mono); color: var(--ink3); white-space: nowrap; }
+.shl .unreadable { min-width: 0; font-size: 11.5px; color: var(--bad); }
 .table-scroll { max-width: 100%; overflow-x: auto; }
 .table-scroll > table { min-width: 760px; }
 /* The record, kept but not given a panel of its own. */
@@ -450,4 +477,13 @@ a.who:hover, a.who[aria-current] { color: var(--ink); }
   .savebar .pick { flex: 1 1 220px; max-width: 100%; }
   .savebar .pick input { min-width: 0; max-width: 100%; }
   .fg { grid-template-columns: minmax(0, 1fr); }
+  /* Too narrow for the address and the status side by side: the status gets
+     a line of its own under the row, so the address is not squeezed away. */
+  .shl, .shl > li { grid-template-columns: minmax(0, 1fr) max-content max-content max-content; }
+  @supports (grid-template-columns: subgrid) {
+    .shl > li { grid-template-columns: subgrid; }
+  }
+  .shl > li > a.btn { grid-column: 3; }
+  .shl > li > form { grid-column: 4; }
+  .shl > li > .ttl { grid-column: 1 / -1; grid-row: 2; }
 }

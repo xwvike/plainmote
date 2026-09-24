@@ -162,7 +162,7 @@
         <label class="f">
           <span class="lr"><span>{{tr .Locale "share_link"}}</span><em>{{tr .Locale "address_unchanged"}}</em></span>
           <span class="fl">
-            <input type="text" readonly value="{{.FocusShare.URL}}" style="font-family:var(--mono);font-size:11px">
+            <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{.FocusShare.URL}}</code>
             <button type="button" class="pri" data-copy="{{.FocusShare.URL}}">{{tr .Locale "copy"}}</button>
           </span>
         </label>
