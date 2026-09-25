@@ -32,5 +32,8 @@
     <a href="/privacy"{{if eq .Active "privacy"}} aria-current="page"{{end}}>{{tr .Locale "legal_privacy"}}</a>
     <a href="/terms"{{if eq .Active "terms"}} aria-current="page"{{end}}>{{tr .Locale "legal_terms"}}</a>
     <a href="/contact"{{if eq .Active "contact"}} aria-current="page"{{end}}>{{tr .Locale "legal_contact"}}</a>
+    {{/* Named as the file is, in every language: it is for tools, and the
+         people who look for it look for that name. */}}
+    <a href="/llms.txt">llms.txt</a>
   </nav>
 </footer>{{end}}{{end}}

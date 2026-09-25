@@ -80,8 +80,8 @@ func TestLegalPagesRenderInChineseOrEnglish(t *testing.T) {
 	if body := getLegal(live, "/privacy", "zh-CN").Body.String(); !strings.Contains(body, "PlainMote（plainmote.link，以下简称“本服务”）由 xwvike（以下简称“我们”）运营。") {
 		t.Error("the privacy policy does not introduce the service by its public domain and operator")
 	}
-	if login := getLegal(app, "/login", "").Body.String(); !strings.Contains(login, `href="/privacy"`) {
-		t.Error("the sign-in page does not link the privacy policy")
+	if login := getLegal(app, "/login", "").Body.String(); !strings.Contains(login, `href="/privacy"`) || !strings.Contains(login, `<a href="/llms.txt">llms.txt</a>`) {
+		t.Error("the sign-in page footer lacks the privacy policy or llms.txt")
 	}
 }
 
