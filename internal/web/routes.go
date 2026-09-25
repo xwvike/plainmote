@@ -227,6 +227,10 @@ func (a *App) indexable(path string) bool {
 	return slices.Contains(a.indexablePages(), path)
 }
 
+// crawlerFileCache keeps robots.txt and the sitemap cacheable, briefly: a CDN
+// honours it too, and a day of the previous rules outlasts any change to them.
+const crawlerFileCache = "public, max-age=3600"
+
 // staticPrefix holds the stylesheets, scripts and logo. They are not pages, but
 // a crawler needs them to render the pages that are, and the logo is the icon
 // a search result shows.
@@ -239,7 +243,7 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", crawlerFileCache)
 	if r.Method == http.MethodHead {
 		return
 	}
@@ -252,6 +256,9 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 		body.WriteString("Allow: " + page + "$\n")
 	}
 	if len(pages) > 0 {
+		// The sitemap too: the blanket Disallow below would otherwise keep a
+		// crawler from reading the very file this points it to.
+		body.WriteString("Allow: /sitemap.xml$\n")
 		body.WriteString("Allow: " + staticPrefix + "\n")
 	}
 	body.WriteString("Disallow: /\n")
@@ -274,7 +281,7 @@ func (a *App) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", crawlerFileCache)
 	if r.Method == http.MethodHead {
 		return
 	}

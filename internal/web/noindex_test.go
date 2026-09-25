@@ -102,7 +102,7 @@ func TestPublicPagesAreIndexable(t *testing.T) {
 	}
 
 	robots := get("/robots.txt").Body.String()
-	for _, line := range []string{"Allow: /$", "Allow: /about$", "Allow: /privacy$", "Allow: /terms$", "Allow: /contact$", "Allow: /static/", "Disallow: /", "Sitemap: https://plainmote.link/sitemap.xml"} {
+	for _, line := range []string{"Allow: /$", "Allow: /about$", "Allow: /privacy$", "Allow: /terms$", "Allow: /contact$", "Allow: /sitemap.xml$", "Allow: /static/", "Disallow: /", "Sitemap: https://plainmote.link/sitemap.xml"} {
 		if !strings.Contains(robots, line+"\n") {
 			t.Errorf("robots.txt is missing %q:\n%s", line, robots)
 		}
