@@ -2,8 +2,11 @@ package web
 
 import (
 	"context"
+	"encoding/json"
+	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -63,7 +66,6 @@ func TestNothingHereIsIndexable(t *testing.T) {
 		{"/resources/", true},
 		{"/logs", true},
 		{"/resources/" + resource.ID, true},
-		{"/static/style.css", false},
 		// The one that matters most: the address is the secret, and it is the
 		// only path a crawler can reach without a session.
 		{shareAddress(share.Token, resource.Filename), false},
@@ -86,6 +88,97 @@ func TestNothingHereIsIndexable(t *testing.T) {
 // TestPagesCannotBeFramed covers the pages that carry buttons worth tricking
 // someone into pressing. SameSite=Lax already keeps a cross-site frame signed
 // out; these headers close the rest.
+// The pages that say what the service is are meant to be found, and so is what
+// a crawler needs to render them. robots.txt, the sitemap and the response
+// headers must all agree on which those are.
+func TestPublicPagesAreIndexable(t *testing.T) {
+	app := &App{cfg: Config{PublicURL: "https://plainmote.link", AnonymousEnabled: true, ContactEmail: "ops@example.com", SessionTTL: time.Hour, MaxContent: 1 << 20}}
+	app.templates = app.templateSet()
+	app.handler = app.routes()
+	get := func(path string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://plainmote.link"+path, nil))
+		return response
+	}
+
+	robots := get("/robots.txt").Body.String()
+	for _, line := range []string{"Allow: /$", "Allow: /about$", "Allow: /privacy$", "Allow: /terms$", "Allow: /contact$", "Allow: /static/", "Disallow: /", "Sitemap: https://plainmote.link/sitemap.xml"} {
+		if !strings.Contains(robots, line+"\n") {
+			t.Errorf("robots.txt is missing %q:\n%s", line, robots)
+		}
+	}
+
+	sitemap := get("/sitemap.xml")
+	if sitemap.Code != http.StatusOK || !strings.HasPrefix(sitemap.Header().Get("Content-Type"), "application/xml") {
+		t.Fatalf("sitemap: %d %q", sitemap.Code, sitemap.Header().Get("Content-Type"))
+	}
+	var parsed struct {
+		URLs []struct {
+			Loc string `xml:"loc"`
+		} `xml:"url"`
+	}
+	if err := xml.Unmarshal(sitemap.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("sitemap is not valid XML: %v", err)
+	}
+	var locs []string
+	for _, u := range parsed.URLs {
+		locs = append(locs, u.Loc)
+	}
+	want := []string{"https://plainmote.link/", "https://plainmote.link/about", "https://plainmote.link/privacy", "https://plainmote.link/terms", "https://plainmote.link/contact"}
+	if strings.Join(locs, " ") != strings.Join(want, " ") {
+		t.Fatalf("sitemap lists %v, want %v", locs, want)
+	}
+
+	for _, page := range []string{"/about", "/privacy", "/terms", "/contact"} {
+		response := get(page)
+		if tag := response.Header().Get("X-Robots-Tag"); tag != "" {
+			t.Errorf("%s carries X-Robots-Tag %q", page, tag)
+		}
+		body := response.Body.String()
+		if strings.Contains(body, "noindex") {
+			t.Errorf("%s carries a noindex meta tag", page)
+		}
+		if !strings.Contains(body, `<link rel="canonical" href="https://plainmote.link`+page+`">`) || !strings.Contains(body, `<meta name="description" content="`) {
+			t.Errorf("%s lacks its canonical address or description", page)
+		}
+	}
+	for _, asset := range []string{"/static/style.css", "/static/logo.png"} {
+		if tag := get(asset).Header().Get("X-Robots-Tag"); tag != "" {
+			t.Errorf("%s carries X-Robots-Tag %q", asset, tag)
+		}
+	}
+	if tag := get("/login").Header().Get("X-Robots-Tag"); !strings.Contains(tag, "noindex") {
+		t.Errorf("/login must stay out of the index, got %q", tag)
+	}
+
+	home := get("/").Body.String()
+	ld := regexp.MustCompile(`<script type="application/ld\+json">(.*?)</script>`).FindStringSubmatch(home)
+	if ld == nil {
+		t.Fatal("the home page has no structured data")
+	}
+	var site map[string]string
+	if err := json.Unmarshal([]byte(ld[1]), &site); err != nil || site["@type"] != "WebSite" || site["name"] != "PlainMote" || site["url"] != "https://plainmote.link/" {
+		t.Fatalf("structured data: %v %v", site, err)
+	}
+}
+
+// With nothing public there is nothing to list.
+func TestNoSitemapWithoutPublicPages(t *testing.T) {
+	app := &App{cfg: Config{PublicURL: "https://plainmote.link"}}
+	app.templates = app.templateSet()
+	app.handler = app.routes()
+	response := httptest.NewRecorder()
+	app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://plainmote.link/sitemap.xml", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("sitemap without public pages: %d", response.Code)
+	}
+	robots := httptest.NewRecorder()
+	app.handler.ServeHTTP(robots, httptest.NewRequest(http.MethodGet, "https://plainmote.link/robots.txt", nil))
+	if body := robots.Body.String(); body != "User-agent: *\nDisallow: /\n" {
+		t.Fatalf("robots.txt without public pages: %q", body)
+	}
+}
+
 func TestPagesCannotBeFramed(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()

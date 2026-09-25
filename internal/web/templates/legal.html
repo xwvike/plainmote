@@ -3,6 +3,8 @@
 <head>
   {{template "htmlhead" .}}
   <title>{{template "legal-title" .}} · PlainMote</title>
+  <meta name="description" content="{{template "legal-description" .}}">
+  <link rel="canonical" href="{{.BaseURL}}/{{.Legal.Page}}">
 </head>
 <body>
   {{template "topbar" .}}
@@ -19,6 +21,8 @@
 </html>{{end}}
 
 {{define "legal-title"}}{{if .Legal.Chinese}}{{if eq .Legal.Page "about"}}关于{{else if eq .Legal.Page "privacy"}}隐私政策{{else if eq .Legal.Page "terms"}}服务条款{{else}}联系我们{{end}}{{else}}{{if eq .Legal.Page "about"}}About{{else if eq .Legal.Page "privacy"}}Privacy Policy{{else if eq .Legal.Page "terms"}}Terms of Service{{else}}Contact us{{end}}{{end}}{{end}}
+
+{{define "legal-description"}}{{if .Legal.Chinese}}{{if eq .Legal.Page "about"}}PlainMote 是一项资源分发服务：为每个接收者分别创建分享链接，可独立设置有效期与使用次数、单独撤销，并记录每次访问。{{else if eq .Legal.Page "privacy"}}PlainMote 隐私政策：本服务收集哪些信息、如何使用与存储这些信息，以及您享有的权利。{{else if eq .Legal.Page "terms"}}PlainMote 服务条款：使用本服务的条件、用户内容与分享链接规则、使用规范及责任限制。{{else}}联系 PlainMote：使用咨询、滥用举报、隐私与数据请求及安全漏洞报告。{{end}}{{else}}{{if eq .Legal.Page "about"}}PlainMote is a resource distribution service: a separate share link for each recipient, each with its own expiry and use limit, revocable on its own, with every access recorded.{{else if eq .Legal.Page "privacy"}}PlainMote privacy policy: what information the Service collects, how it is used and stored, and the rights available to you.{{else if eq .Legal.Page "terms"}}PlainMote terms of service: conditions of use, rules for content and share links, acceptable use and limitation of liability.{{else}}Contact PlainMote for questions, abuse reports, privacy and data requests, and security vulnerability reports.{{end}}{{end}}{{end}}
 
 {{define "legal-email"}}<a href="mailto:{{.Legal.Email}}">{{.Legal.Email}}</a>{{end}}
 

@@ -23,7 +23,10 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="PlainMote · {{tr .Locale "home_title"}}">
   <meta name="twitter:description" content="{{tr .Locale "home_description"}}">
-  <meta name="twitter:image" content="{{.BaseURL}}/static/logo.png">{{end}}
+  <meta name="twitter:image" content="{{.BaseURL}}/static/logo.png">
+  {{/* Data, not a script: it names the site so a search result can show
+       "PlainMote" rather than the bare domain. */}}
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "PlainMote", "url": {{printf "%s/" .BaseURL}}}</script>{{end}}
 </head>
 <body>
   {{template "topbar" .}}

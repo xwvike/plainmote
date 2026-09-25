@@ -47,7 +47,9 @@ func (a *App) handleLegal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := strings.TrimPrefix(r.URL.Path, "/")
-	data := pageData{Active: page, SignInURL: "/login"}
+	// These pages say what the service is, so unlike the rest of it they are
+	// meant to be found.
+	data := pageData{Active: page, SignInURL: "/login", Indexable: true, BaseURL: a.baseURL(r)}
 	if user, _, ok := a.currentUser(r); ok {
 		data.User, data.SignedIn, data.CSRF = user, true, csrfValue(r)
 	}

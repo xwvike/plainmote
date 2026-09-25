@@ -2,10 +2,13 @@ package web
 
 import (
 	"context"
+	"encoding/xml"
 	"html/template"
 	"io"
 	"net/http"
 	"net/netip"
+	"slices"
+	"strings"
 	"time"
 
 	"plainmote/internal/auth"
@@ -184,6 +187,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(accountDeletePath, a.handleAccountDelete)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc("/robots.txt", a.handleRobots)
+	mux.HandleFunc("/sitemap.xml", a.handleSitemap)
 	// Not registered at all when it is off, so the endpoint does not exist
 	// rather than existing and refusing.
 	if a.cfg.AnonymousEnabled {
@@ -200,14 +204,33 @@ func (a *App) routes() http.Handler {
 	return a.noIndex(mux)
 }
 
-// robotsTxt keeps crawlers off the whole service. There is nothing here to
-// find: every page needs a session, and the one public path serves secrets.
-// The home page is let through only where it is a page - with the box off it
-// redirects into the half of the service that needs an account.
-const (
-	robotsTxt     = "User-agent: *\nDisallow: /\n"
-	robotsTxtHome = "User-agent: *\nAllow: /$\nDisallow: /\n"
-)
+// indexablePages are the paths meant to be found: the home page, where it is a
+// page - with the box off it redirects into the half of the service that needs
+// an account - and the about, privacy, terms and contact pages where they
+// exist. Everything else needs a session or is somebody's secret. robots.txt,
+// the sitemap and the X-Robots-Tag header are all derived from this list, so
+// they cannot disagree about what may be indexed.
+func (a *App) indexablePages() []string {
+	var pages []string
+	if a.cfg.AnonymousEnabled {
+		pages = append(pages, "/")
+	}
+	if a.cfg.ContactEmail != "" {
+		for _, page := range legalPages {
+			pages = append(pages, "/"+page)
+		}
+	}
+	return pages
+}
+
+func (a *App) indexable(path string) bool {
+	return slices.Contains(a.indexablePages(), path)
+}
+
+// staticPrefix holds the stylesheets, scripts and logo. They are not pages, but
+// a crawler needs them to render the pages that are, and the logo is the icon
+// a search result shows.
+const staticPrefix = "/static/"
 
 func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -220,11 +243,52 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	body := robotsTxt
-	if a.cfg.AnonymousEnabled {
-		body = robotsTxtHome
+	var body strings.Builder
+	body.WriteString("User-agent: *\n")
+	pages := a.indexablePages()
+	// "$" anchors the end, so /about is allowed and /about?x is not; the
+	// longest matching rule wins, so these outrank the blanket Disallow.
+	for _, page := range pages {
+		body.WriteString("Allow: " + page + "$\n")
 	}
-	_, _ = io.WriteString(w, body)
+	if len(pages) > 0 {
+		body.WriteString("Allow: " + staticPrefix + "\n")
+	}
+	body.WriteString("Disallow: /\n")
+	if len(pages) > 0 {
+		body.WriteString("\nSitemap: " + strings.TrimRight(a.cfg.PublicURL, "/") + "/sitemap.xml\n")
+	}
+	_, _ = io.WriteString(w, body.String())
+}
+
+// handleSitemap lists the indexable pages. With none there is no sitemap.
+func (a *App) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	pages := a.indexablePages()
+	if len(pages) == 0 {
+		writePlainError(w, http.StatusNotFound, "not found")
+		return
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if r.Method == http.MethodHead {
+		return
+	}
+	base := strings.TrimRight(a.cfg.PublicURL, "/")
+	var body strings.Builder
+	body.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	body.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
+	for _, page := range pages {
+		body.WriteString("  <url><loc>")
+		_ = xml.EscapeText(&body, []byte(base+page))
+		body.WriteString("</loc></url>\n")
+	}
+	body.WriteString("</urlset>\n")
+	_, _ = io.WriteString(w, body.String())
 }
 
 // noIndex is the half of this that does not depend on a crawler asking first.
@@ -234,11 +298,10 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 // matters as much as noindex here: a cached copy would outlive a revoked link.
 func (a *App) noIndex(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The home page is the one thing here that is meant to be found, and
-		// only where it is a page: with the box off it redirects into the half
-		// of the service that needs an account, and has nothing to offer a
-		// crawler. Every other path is behind a session or is somebody's secret.
-		if r.URL.Path != "/" || !a.cfg.AnonymousEnabled {
+		// Indexable pages go without it, and so do static assets: a stylesheet
+		// or a logo is not a page to keep out of an index, and the logo is what
+		// a search result shows as the site's icon.
+		if !a.indexable(r.URL.Path) && !strings.HasPrefix(r.URL.Path, staticPrefix) {
 			w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
 		}
 		next.ServeHTTP(w, r)
