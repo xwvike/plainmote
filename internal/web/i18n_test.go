@@ -251,8 +251,12 @@ func TestIndexableHomeHasLocalizedDiscoveryMetadata(t *testing.T) {
 	})
 	body := response.Body.String()
 	for _, expected := range []string{
-		`<meta name="description" content="无需登录即可安全、隐秘地分享文本`,
-		`<meta name="keywords" content="安全分享, 隐秘分享`,
+		`<title>把想要分享的文本生成链接 · PlainMote</title>`,
+		`<meta name="description" content="无需登录，粘贴文本即可获得限时失效的分享链接`,
+		`<meta name="keywords" content="限时链接, 可撤销分享链接`,
+		`<h2>分享调试日志</h2>`,
+		`<h2>供程序读取的配置</h2>`,
+		`<h2>分发给多人</h2>`,
 		`<link rel="canonical" href="https://plainmote.example/">`,
 		`<meta property="og:locale" content="zh_CN">`,
 		`<meta property="og:url" content="https://plainmote.example/">`,

@@ -2,7 +2,7 @@
 <html lang="{{.Locale}}">
 <head>
   {{template "htmlhead" .}}
-  <title>PlainMote · {{tr .Locale "home_title"}}</title>
+  <title>{{tr .Locale "home_title"}} · PlainMote</title>
   <meta name="description" content="{{tr .Locale "home_description"}}">
   {{if .Indexable}}<meta name="keywords" content="{{tr .Locale "home_keywords"}}">
   <meta name="application-name" content="PlainMote">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="PlainMote">
   <meta property="og:locale" content="{{openGraphLocale .Locale}}">
-  <meta property="og:title" content="PlainMote · {{tr .Locale "home_title"}}">
+  <meta property="og:title" content="{{tr .Locale "home_title"}} · PlainMote">
   <meta property="og:description" content="{{tr .Locale "home_description"}}">
   <meta property="og:url" content="{{.BaseURL}}/">
   <meta property="og:image" content="{{.BaseURL}}/static/logo.png">
@@ -21,7 +21,7 @@
   <meta property="og:image:height" content="256">
   <meta property="og:image:alt" content="PlainMote">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="PlainMote · {{tr .Locale "home_title"}}">
+  <meta name="twitter:title" content="{{tr .Locale "home_title"}} · PlainMote">
   <meta name="twitter:description" content="{{tr .Locale "home_description"}}">
   <meta name="twitter:image" content="{{.BaseURL}}/static/logo.png">
   {{/* Data, not a script: it names the site so a search result can show
@@ -106,18 +106,19 @@
     </form>
     {{end}}
 
+    {{/* Three uses, not a feature list: what someone would actually do here. */}}
     <div class="tell">
       <section>
-        <h2>{{tr .Locale "feature_temporary_title"}}</h2>
-        <p>{{tr .Locale "feature_temporary_body"}}</p>
+        <h2>{{tr .Locale "example_logs_title"}}</h2>
+        <p>{{tr .Locale "example_logs_body"}}</p>
       </section>
       <section>
-        <h2>{{tr .Locale "feature_original_title"}}</h2>
-        <p>{{tr .Locale "feature_original_body"}}</p>
+        <h2>{{tr .Locale "example_config_title"}}</h2>
+        <p>{{tr .Locale "example_config_body"}}</p>
       </section>
       <section>
-        <h2>{{tr .Locale "feature_account_title"}}</h2>
-        <p>{{tr .Locale "feature_account_body"}}</p>
+        <h2>{{tr .Locale "example_people_title"}}</h2>
+        <p>{{tr .Locale "example_people_body"}}</p>
         <p class="hint">{{if .SignedIn}}<a href="/resources/">{{tr .Locale "go_to_resources"}} →</a>{{else}}<a href="{{.SignInURL}}">{{tr .Locale "login_github"}} →</a>{{end}}</p>
       </section>
     </div>
