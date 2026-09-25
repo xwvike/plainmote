@@ -102,7 +102,7 @@ func TestPublicPagesAreIndexable(t *testing.T) {
 	}
 
 	robots := get("/robots.txt").Body.String()
-	for _, line := range []string{"Allow: /$", "Allow: /about$", "Allow: /privacy$", "Allow: /terms$", "Allow: /contact$", "Allow: /sitemap.xml$", "Allow: /static/", "Disallow: /", "Sitemap: https://plainmote.link/sitemap.xml"} {
+	for _, line := range []string{"Allow: /$", "Allow: /about$", "Allow: /privacy$", "Allow: /terms$", "Allow: /contact$", "Allow: /sitemap.xml$", "Allow: /llms.txt$", "Allow: /static/", "Disallow: /", "Sitemap: https://plainmote.link/sitemap.xml"} {
 		if !strings.Contains(robots, line+"\n") {
 			t.Errorf("robots.txt is missing %q:\n%s", line, robots)
 		}
@@ -232,5 +232,40 @@ func TestNoScriptStylesheetIsLinkedAndServed(t *testing.T) {
 		if !strings.Contains(css.Body.String(), rule) {
 			t.Errorf("noscript.css is missing %q", rule)
 		}
+	}
+}
+
+// llms.txt describes what this deployment offers, and nothing it does not.
+func TestLLMsTextFollowsTheDeployment(t *testing.T) {
+	get := func(cfg Config, path string) *httptest.ResponseRecorder {
+		cfg.PublicURL, cfg.MaxContent = "https://plainmote.link", 4<<20
+		app := &App{cfg: cfg}
+		app.templates = app.templateSet()
+		app.handler = app.routes()
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://plainmote.link"+path, nil))
+		return response
+	}
+	full := get(Config{AnonymousEnabled: true, ContactEmail: "ops@example.com"}, "/llms.txt")
+	body := full.Body.String()
+	if full.Code != http.StatusOK || !strings.HasPrefix(body, "# PlainMote\n\n> ") {
+		t.Fatalf("llms.txt: %d %q", full.Code, body)
+	}
+	for _, want := range []string{
+		"cmd | curl -F 'content=<-' https://plainmote.link/paste",
+		"Default 10.", "at most 128 KiB", "up to 4 MiB each",
+		"`https://plainmote.link/d/<token>/<filename>`",
+		"- [Privacy Policy](https://plainmote.link/privacy)",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("llms.txt is missing %q", want)
+		}
+	}
+	noBox := get(Config{ContactEmail: "ops@example.com"}, "/llms.txt").Body.String()
+	if strings.Contains(noBox, "## Quick share") || strings.Contains(noBox, "/paste") {
+		t.Error("llms.txt offers a quick share this deployment does not have")
+	}
+	if closed := get(Config{}, "/llms.txt"); closed.Code != http.StatusNotFound {
+		t.Fatalf("llms.txt on a deployment with nothing public: %d", closed.Code)
 	}
 }

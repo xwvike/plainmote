@@ -123,10 +123,10 @@ func TestAnonymousPasteIsAlwaysServedAsText(t *testing.T) {
 	}
 }
 
-// TestAnonymousLineEndingsAreNormalised pins what a textarea does to the bytes:
-// the browser sends CRLF whatever was typed, and the stored paste should not be
-// at the mercy of that.
-func TestAnonymousLineEndingsAreNormalised(t *testing.T) {
+// TestAnonymousPasteKeepsItsBytes: the store keeps line endings as given. A
+// textarea's CRLF is undone before this, by the handler that knows it came
+// from one.
+func TestAnonymousPasteKeepsItsBytes(t *testing.T) {
 	db, _, _ := testDatabase(t)
 	ctx := context.Background()
 	resource, _, err := db.CreateAnonymousPaste(ctx, "", []byte("a\r\nb\r\n"), time.Minute, time.Now().UTC())
@@ -137,8 +137,8 @@ func TestAnonymousLineEndingsAreNormalised(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(body) != "a\nb\n" {
-		t.Fatalf("line endings must be normalised on the way in, got %q", body)
+	if string(body) != "a\r\nb\r\n" {
+		t.Fatalf("the stored bytes must be the ones given, got %q", body)
 	}
 }
 

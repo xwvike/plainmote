@@ -188,6 +188,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc("/robots.txt", a.handleRobots)
 	mux.HandleFunc("/sitemap.xml", a.handleSitemap)
+	mux.HandleFunc("/llms.txt", a.handleLLMs)
 	// Not registered at all when it is off, so the endpoint does not exist
 	// rather than existing and refusing.
 	if a.cfg.AnonymousEnabled {
@@ -259,6 +260,7 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 		// The sitemap too: the blanket Disallow below would otherwise keep a
 		// crawler from reading the very file this points it to.
 		body.WriteString("Allow: /sitemap.xml$\n")
+		body.WriteString("Allow: /llms.txt$\n")
 		body.WriteString("Allow: " + staticPrefix + "\n")
 	}
 	body.WriteString("Disallow: /\n")

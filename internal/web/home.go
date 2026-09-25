@@ -1,11 +1,15 @@
 package web
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -91,8 +95,22 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusNotFound, "not found")
 		return
 	}
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		// Opened in a terminal, the endpoint explains itself; opened in a
+		// browser, the page with the box is where it lives.
+		if wantsHTML(r) {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method == http.MethodGet {
+			_, _ = io.WriteString(w, a.pasteUsage(r))
+		}
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		w.Header().Set("Allow", "GET, HEAD, POST")
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
@@ -106,25 +124,29 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusForbidden, "cross-site post")
 		return
 	}
+	tooLarge := fmt.Sprintf("内容最大 %s", store.BytesText(store.AnonymousMaxBytes))
 	if r.ContentLength > pasteFormMaxBytes {
-		a.refusePaste(w, r, "", "", fmt.Sprintf("内容最大 %s", store.BytesText(store.AnonymousMaxBytes)))
+		a.refusePaste(w, r, "", "", tooLarge)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, pasteFormMaxBytes)
-	if err := r.ParseForm(); err != nil {
-		a.refusePaste(w, r, "", "", fmt.Sprintf("内容最大 %s", store.BytesText(store.AnonymousMaxBytes)))
+	content, filename, ttlChoice, err := readPasteForm(r)
+	if err != nil {
+		a.refusePaste(w, r, "", "", tooLarge)
 		return
 	}
-
-	content := r.FormValue("content")
-	filename := strings.TrimSpace(r.FormValue("filename"))
-	ttl, ttlValue := parsePasteTTL(r.FormValue("ttl"))
+	ttl, ttlValue := parsePasteTTL(ttlChoice)
+	if wantsHTML(r) {
+		// The page's textarea submits CRLF whatever was typed. What a terminal
+		// sends is exactly the file, and is kept as it is.
+		content = store.ApplyEOL(content, "lf")
+	}
 
 	creatorID := ""
 	if user, _, ok := a.currentUser(r); ok {
 		creatorID = user.ID
 	}
-	resource, _, err := a.db.CreateAnonymousPasteFor(r.Context(), creatorID, filename, []byte(content), ttl, time.Now().UTC())
+	resource, link, err := a.db.CreateAnonymousPasteFor(r.Context(), creatorID, filename, []byte(content), ttl, time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, store.ErrInternal) {
 			fmt.Fprintf(os.Stderr, "create paste: %v\n", err)
@@ -135,7 +157,96 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !wantsHTML(r) {
+		// A terminal gets the address and nothing else, so it can be piped on
+		// or captured with $(...). The result page is for a browser.
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, a.baseURL(r)+shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))+"\n")
+		return
+	}
 	http.Redirect(w, r, pasteResultPrefix+resource.ID, http.StatusSeeOther)
+}
+
+// readPasteForm reads the box's own form and what curl sends:
+//
+//   - a multipart body, from `curl -F 'content=<-'` (so a log can be piped
+//     straight in) or `curl -F content=@app.log`, whose part name becomes the
+//     filename unless one is given;
+//   - a urlencoded form with a content field, from the page or
+//     `curl --data-urlencode content@app.log`;
+//   - anything else as the content itself, byte for byte. This is what
+//     `curl --data-binary @app.log` sends - curl labels it a form, but it has
+//     no content field - and what a text/plain body is. Its lifetime and
+//     filename come from the query string, since the body has no room for them.
+func readPasteForm(r *http.Request) (content, filename, ttl string, err error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return "", "", "", err
+	}
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	switch mediaType {
+	case "multipart/form-data":
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		if err := r.ParseMultipartForm(pasteFormMaxBytes); err != nil {
+			return "", "", "", err
+		}
+		defer r.MultipartForm.RemoveAll()
+		content, filename, ttl = r.FormValue("content"), strings.TrimSpace(r.FormValue("filename")), r.FormValue("ttl")
+		if files := r.MultipartForm.File["content"]; content == "" && len(files) > 0 {
+			part, err := files[0].Open()
+			if err != nil {
+				return "", "", "", err
+			}
+			defer part.Close()
+			data, err := io.ReadAll(part)
+			if err != nil {
+				return "", "", "", err
+			}
+			content = string(data)
+			if filename == "" {
+				filename = path.Base(files[0].Filename)
+			}
+		}
+		return content, filename, ttl, nil
+	case "application/x-www-form-urlencoded":
+		if form, err := url.ParseQuery(string(body)); err == nil && form.Has("content") {
+			return form.Get("content"), strings.TrimSpace(form.Get("filename")), form.Get("ttl"), nil
+		}
+	}
+	query := r.URL.Query()
+	return string(body), strings.TrimSpace(query.Get("filename")), query.Get("ttl"), nil
+}
+
+// pasteUsage is what `curl .../paste` prints: every way in, and the limits.
+func (a *App) pasteUsage(r *http.Request) string {
+	endpoint := a.baseURL(r) + pastePath
+	return fmt.Sprintf(`PlainMote quick share: send text, get a link back.
+
+  cmd | curl -F 'content=<-' %[1]s
+  curl -F 'content=<app.log' %[1]s
+  curl -F content=@app.log %[1]s
+  curl --data-binary @app.log '%[1]s?ttl=30&filename=app.log'
+
+ttl       minutes until the link expires: 1, 5, 10 or 30 (default %[2]s)
+filename  name at the end of the link (a form field, or a query parameter
+          with --data-binary)
+
+The response is the link, on one line. The text must be UTF-8, at most %[3]s;
+it is kept byte for byte and served as plain text.
+`, endpoint, pasteDefaultTTL, legalBytes(store.AnonymousMaxBytes))
+}
+
+// wantsHTML tells a browser from a terminal. A browser submitting the form
+// always asks for text/html; curl asks for */* and gets plain text.
+func wantsHTML(r *http.Request) bool {
+	for _, value := range strings.Split(r.Header.Get("Accept"), ",") {
+		if mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(value)); err == nil && mediaType == "text/html" {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) handlePasteResult(w http.ResponseWriter, r *http.Request) {
@@ -237,6 +348,11 @@ func (a *App) refusePaste(w http.ResponseWriter, r *http.Request, content, filen
 }
 
 func (a *App) refusePasteWith(w http.ResponseWriter, r *http.Request, content, filename, ttl, message string, status int) {
+	if !wantsHTML(r) {
+		w.Header().Add("Vary", "Accept-Language")
+		writePlainError(w, status, localizePageError(requestLanguage(r).Locale, message))
+		return
+	}
 	data := a.homePage(r)
 	data.Error = message
 	data.PasteContent = content

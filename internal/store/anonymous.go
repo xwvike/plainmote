@@ -87,9 +87,9 @@ func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename
 	if !utf8.Valid(content) {
 		return Resource{}, Link{}, errors.New("内容必须是有效的 UTF-8 文本")
 	}
-	// A textarea submits CRLF whatever the user typed, so the stored bytes are
-	// normalised once here rather than being whatever the browser felt like.
-	content = []byte(ApplyEOL(string(content), "lf"))
+	// The bytes are stored as given. What a textarea does to line endings is
+	// the web layer's to undo; a paste piped in from a terminal is exactly
+	// what was sent, CRLF included.
 
 	resource := Resource{
 		ID: uuid.NewString(), OwnerID: AnonymousUserID, Name: filename, Filename: filename,

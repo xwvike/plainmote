@@ -83,6 +83,25 @@ Token 是唯一的路由依据；文件名只用于下载名称和类型提示�
 链接仍按原时间到期，保存不会暗中延长它。
 账号自己的资源列表在 `/resources/`。
 
+终端里也可以直接用 curl 创建临时分享，响应只有一行分享地址，方便管道传递或 `$(...)` 捕获：
+
+```bash
+journalctl -u app --since today | curl -F 'content=<-' https://plainmote.link/paste
+curl -F content=@app.log https://plainmote.link/paste                    # 以文件上传，文件名随之保留
+curl --data-binary @app.log 'https://plainmote.link/paste?ttl=30&filename=app.log'
+curl https://plainmote.link/paste                                        # 打印用法
+```
+
+同一个 `POST /paste` 按 `Accept` 区分调用方：浏览器提交表单时带 `text/html`，跳转到结果页；其他调用方收到
+`201` 和一行地址，出错时收到 `400` 和一行说明。正文可以是 multipart 表单、带 `content` 字段的 urlencoded 表单，
+或者原始正文（`--data-binary` 发出的 urlencoded 正文里没有 `content` 字段时，整个正文就是内容），原始正文的
+`ttl` 和 `filename` 从查询参数读取。浏览器文本框提交时会把换行变成 CRLF，这一步只对表单还原为 LF；终端提交的
+内容按原字节保存。内容必须是 UTF-8 文本，限制与页面相同。只接受 POST：边缘限流按这一条路径和方法配置，
+不再开放第二种写入方式。`GET /paste` 在终端里返回用法，在浏览器里跳转到首页。
+
+`/llms.txt` 按 llmstxt.org 的格式向语言模型说明服务和上面的 curl 用法，内容随部署配置生成：没有开放匿名分享
+时不写临时分享一节，没有公开页面时返回 404。
+
 匿名写入的入口是 `POST /paste`，单独一条路径，方便在边缘按一条规则限流。
 
 ## 账号：导出与删除

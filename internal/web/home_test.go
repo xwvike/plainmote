@@ -14,6 +14,9 @@ func postPaste(t *testing.T, app *App, form url.Values, headers map[string]strin
 	t.Helper()
 	request := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// What a browser sends with a form post; without it the endpoint answers
+	// as it would to curl.
+	request.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 	for k, v := range headers {
 		request.Header.Set(k, v)
 	}
@@ -195,6 +198,7 @@ func TestSignedInVisitorCanSaveAPasteAsAResource(t *testing.T) {
 		"content": {content}, "filename": {"节点.yaml"}, "ttl": {"5"},
 	}.Encode()))
 	pasteRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	pasteRequest.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 	pasteRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
 	pasteRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
 	posted := httptest.NewRecorder()
