@@ -18,6 +18,10 @@ const formatters = {
     second: "2-digit",
     hourCycle: "h23",
   }),
+  day: new Intl.DateTimeFormat(locale, {
+    month: "2-digit",
+    day: "2-digit",
+  }),
   zone: new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "long",
@@ -28,7 +32,7 @@ function localizeTime(element) {
   if (!(element instanceof HTMLTimeElement) || element.dataset.localized === "true") return;
   const value = new Date(element.dateTime);
   if (Number.isNaN(value.getTime())) return;
-  const precision = element.dataset.localTime === "minute" ? "minute" : "second";
+  const precision = ["minute", "day"].includes(element.dataset.localTime) ? element.dataset.localTime : "second";
   element.textContent = formatters[precision].format(value);
   element.title = formatters.zone.format(value);
   element.dataset.localized = "true";

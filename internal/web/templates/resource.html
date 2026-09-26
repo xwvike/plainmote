@@ -1,16 +1,12 @@
 {{define "resource.html"}}<!doctype html>
-<html lang="{{.Locale}}">
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
   <title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{or .Resource.Name (tr .Locale "untitled_resource")}}{{end}} · PlainMote</title>
 </head>
-<body data-msg-editor-reopening="{{tr .Locale "editor_reopening"}}"
-      data-msg-editor-read-failed="{{tr .Locale "editor_read_failed"}}"
-      data-msg-editor-reopen-failed="{{tr .Locale "editor_reopen_failed"}}"
-      data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
+<body data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
       data-msg-editor-detect-failed="{{tr .Locale "editor_detect_failed"}}"
       data-msg-editor-file-reopen-failed="{{tr .Locale "editor_file_reopen_failed"}}"
-      data-msg-upload-reading="{{tr .Locale "upload_reading"}}"
       data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}">
   {{template "topbar" .}}
   <main class="page{{if not .IsNew}} resource-detail{{end}}">
@@ -21,7 +17,7 @@
     <div class="ph">
       <h1>{{or .Resource.Name (tr .Locale "untitled_resource")}}</h1>
       <span class="sp">
-        <a class="btn" href="/resources/{{.Resource.ID}}?delete=1">{{tr .Locale "delete"}}</a>
+        <a class="txt danger" href="/resources/{{.Resource.ID}}?delete=1">{{tr .Locale "delete"}}</a>
       </span>
     </div>
     {{end}}
@@ -32,37 +28,49 @@
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       {{if .IsNew}}<input type="hidden" name="kind" value="{{.NewKind}}">{{end}}
 
-        <div class="panel panel-ed">
+        <div class="panel ruled panel-ed">
           <div class="pt">
             {{/* While creating a reference the panel is the address; once it
                  exists the panel is what that address returns. */}}
             <span class="sec">{{if and .IsNew $remote}}{{tr .Locale "remote_url"}}{{else}}{{tr .Locale "content"}}{{end}}</span>
             {{if and $remote (not .IsNew)}}<span class="tag">{{tr .Locale "read_only"}}</span>{{end}}
             {{if not $remote}}
-            {{/* Next to the title, because this is how the content gets in -
-                 the pickers on the right are about how it is stored. The status
-                 follows the control that produces it: it is the only line in
-                 this flow that says out loud what just happened. */}}
-            <input type="file" name="upload" aria-label="{{if .IsNew}}{{tr .Locale "load_from_file"}}{{else}}{{tr .Locale "replace_file"}}{{end}}" data-upload data-max-bytes="{{.MaxContent}}" class="pickfile">
+            {{/* Said out loud only when something goes wrong with a chosen file. */}}
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             {{end}}
             <span class="sp">
               {{if and (not $remote) (or .Resource.Editable .IsNew)}}
-              <span class="text-controls" data-text-controls>
-              <label class="encoding-picker"><span>{{tr .Locale "file_encoding"}}</span><select name="content_encoding" data-encoding-select aria-label="{{tr .Locale "file_encoding"}}" title="{{tr .Locale "file_encoding_title"}}">{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
-              <button type="button" class="sm encoding-reopen" data-reopen-encoding title="{{tr .Locale "reopen_encoding_title"}}">{{tr .Locale "reopen_encoding"}}</button>
-              <label class="encoding-picker eol-picker"><span>{{tr .Locale "eol_sequence"}}</span><select name="content_eol" data-eol-select aria-label="{{tr .Locale "eol_sequence"}}" title="{{tr .Locale "eol_title"}}">
-                <option value="lf"{{if eq .ContentEOL "lf"}} selected{{end}}>LF</option>
-                <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>
-              </select></label>
+              {{/* How the text is stored, shown and kept: the encoding and line
+                   endings are detected from the bytes, and a save writes them
+                   back the same way. Not a choice - this is not an editor for
+                   converting files. The selects are hidden and only carry the
+                   detected values into the form. */}}
+              <span class="tags" data-text-controls>
+                <span class="tag" data-encoding-label>{{range .TextEncodings}}{{if eq .Value $.ContentEncoding}}{{.Label}}{{end}}{{end}}</span>
+                <span class="tag" data-eol-label>{{if eq .ContentEOL "crlf"}}CRLF{{else}}LF{{end}}</span>
+                <select name="content_encoding" data-encoding-select hidden>{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+                <select name="content_eol" data-eol-select hidden>
+                  <option value="lf"{{if eq .ContentEOL "lf"}} selected{{end}}>LF</option>
+                  <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>
+                </select>
               </span>
               {{end}}
-              <em data-content-meta style="font:400 10.5px var(--mono);font-style:normal;color:var(--ink3)">
+              <em class="content-meta" data-content-meta>
                 {{if $remote}}{{if .UpstreamTextPreview}}{{tr .Locale "from_upstream"}} · {{bytesText (len .UpstreamText)}}{{else if .UpstreamType}}{{.UpstreamType}}{{else if .UpstreamError}}{{tr .Locale "upstream_unavailable"}}{{else if not .IsNew}}{{tr .Locale "enter_url_fetch"}}{{end}}
                 {{else if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / {{tr .Locale "limit"}} {{bytesText .MaxContent}}
                 {{else if .IsNew}}{{tr .Locale "limit"}} {{bytesText .MaxContent}}
                 {{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}}
               </em>
+              {{if not $remote}}
+              {{/* The way content gets in ends the row. A key, not the browser's
+                   picker, so it says what it does - load into an empty
+                   resource, replace a stored one - and not which file was
+                   picked: the content below shows that. */}}
+              <label class="btn sm upload-key" data-upload-key>
+                <input type="file" name="upload" class="sr" data-upload data-max-bytes="{{.MaxContent}}">
+                {{if .IsNew}}{{tr .Locale "load_from_file"}}{{else}}{{tr .Locale "replace_file"}}{{end}}
+              </label>
+              {{end}}
             </span>
           </div>
           <div class="pb" data-content-body>
@@ -117,21 +125,20 @@
       <div class="savebar">
         <button type="submit" class="pri">{{if .IsNew}}{{tr .Locale "create_resource"}}{{else}}{{tr .Locale "save"}}{{end}}</button>
         {{if .IsNew}}
-        <a class="btn" href="/resources/">{{tr .Locale "cancel"}}</a>
+        <a class="txt" href="/resources/">{{tr .Locale "cancel"}}</a>
         <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "optional"}}" style="width:140px"></label>
         {{if not $remote}}
         <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
         {{end}}
         <span class="hint live">{{if $remote}}<a href="/resources/new">{{tr .Locale "switch_direct_edit"}}</a>{{else}}<a href="/resources/new?kind=remote">{{tr .Locale "switch_remote"}}</a>{{end}}</span>
         {{else}}
-        <a class="btn" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>
+        <a class="txt" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>
         <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "name_filename_fallback"}}" style="width:140px"></label>
         <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
         {{if .Resource.Remote}}<label class="pick"><span>{{tr .Locale "remote_url"}}</span><input type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" style="width:220px" required></label>{{end}}
-        {{/* What is live right now, stated whenever the page is open rather than
-             announced once after a save. Saving changes this line, which is the
-             confirmation - no dialog, and nothing that disappears. */}}
-        {{template "share-status" .}}
+        {{/* Appears with the first change and goes with the save: the page
+             after a save is the confirmation. */}}
+        <span class="unsaved" data-unsaved>{{tr .Locale "unsaved"}}</span>
         {{end}}
       </div>
     </form>
@@ -162,27 +169,35 @@
         <label class="f">
           <span class="lr"><span>{{tr .Locale "share_link"}}</span><em>{{tr .Locale "address_unchanged"}}</em></span>
           <span class="fl">
-            <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{.FocusShare.URL}}</code>
-            <button type="button" class="pri" data-copy="{{.FocusShare.URL}}">{{tr .Locale "copy"}}</button>
+            <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{template "address" .FocusShare.URL}}</code>
+            <button type="button" class="pri" data-copy="{{.FocusShare.URL}}">{{template "copy-label" .}}</button>
           </span>
         </label>
         <dl class="fg">
           <dt>{{tr .Locale "note"}}</dt>
           <dd><input type="text" name="name" value="{{.FocusShare.Link.Name}}" placeholder="{{tr .Locale "note_optional"}}"></dd>
           <dt>{{tr .Locale "lifetime"}}</dt>
-          <dd class="rr">
-            <label><input type="radio" name="ttl" value="1h" {{if eq .FocusShare.TTLChoice "1h"}}checked{{end}}>{{tr .Locale "one_hour"}}</label>
-            <label><input type="radio" name="ttl" value="24h" {{if eq .FocusShare.TTLChoice "24h"}}checked{{end}}>{{tr .Locale "twenty_four_hours"}}</label>
-            <label><input type="radio" name="ttl" value="168h" {{if eq .FocusShare.TTLChoice "168h"}}checked{{end}}>{{tr .Locale "seven_days"}}</label>
-            <label><input type="radio" name="ttl" value="never" {{if eq .FocusShare.TTLChoice "never"}}checked{{end}}>{{tr .Locale "never_expires"}}</label>
-            <label><input type="radio" name="ttl" value="custom" {{if eq .FocusShare.TTLChoice "custom"}}checked{{end}}>{{tr .Locale "custom"}}<input type="text" name="ttl_custom" value="{{.FocusShare.TTLCustom}}" placeholder="2h" title="s, m, h, d"></label>
+          {{/* The same scale as the quick share box: stops on a rule, the
+               chosen one a grain of sand. Radios, so it posts with scripts
+               off. The custom stop reads the box beside the scale. */}}
+          <dd class="scale-field">
+            <span class="scale" role="radiogroup" aria-label="{{tr .Locale "lifetime"}}">
+              <label><input type="radio" name="ttl" value="1h"{{if eq .FocusShare.TTLChoice "1h"}} checked{{end}}><i></i><span>{{tr .Locale "one_hour"}}</span></label>
+              <label><input type="radio" name="ttl" value="24h"{{if eq .FocusShare.TTLChoice "24h"}} checked{{end}}><i></i><span>{{tr .Locale "twenty_four_hours"}}</span></label>
+              <label><input type="radio" name="ttl" value="168h"{{if eq .FocusShare.TTLChoice "168h"}} checked{{end}}><i></i><span>{{tr .Locale "seven_days"}}</span></label>
+              <label><input type="radio" name="ttl" value="never"{{if eq .FocusShare.TTLChoice "never"}} checked{{end}}><i></i><span>{{tr .Locale "never_expires"}}</span></label>
+              <label><input type="radio" name="ttl" value="custom"{{if eq .FocusShare.TTLChoice "custom"}} checked{{end}}><i></i><span>{{tr .Locale "custom"}}</span></label>
+            </span>
+            <input type="text" name="ttl_custom" value="{{.FocusShare.TTLCustom}}" placeholder="2h" title="s, m, h, d" aria-label="{{tr .Locale "custom"}}" class="mpath">
           </dd>
           <dt>{{tr .Locale "use_limit"}}</dt>
-          <dd class="rr">
-            <label><input type="radio" name="uses" value="1" {{if eq .FocusShare.Link.MaxUses 1}}checked{{end}}>{{tr .Locale "once"}}</label>
-            <label><input type="radio" name="uses" value="2" {{if eq .FocusShare.Link.MaxUses 2}}checked{{end}}>2 {{tr .Locale "times"}}</label>
-            <label><input type="radio" name="uses" value="10" {{if eq .FocusShare.Link.MaxUses 10}}checked{{end}}>10 {{tr .Locale "times"}}</label>
-            <label><input type="radio" name="uses" value="0" {{if eq .FocusShare.Link.MaxUses 0}}checked{{end}}>{{tr .Locale "unlimited"}}</label>
+          <dd class="scale-field">
+            <span class="scale count" role="radiogroup" aria-label="{{tr .Locale "use_limit"}}">
+              <label><input type="radio" name="uses" value="1"{{if eq .FocusShare.Link.MaxUses 1}} checked{{end}}><i></i><span>{{tr .Locale "once"}}</span></label>
+              <label><input type="radio" name="uses" value="2"{{if eq .FocusShare.Link.MaxUses 2}} checked{{end}}><i></i><span>2 {{tr .Locale "times"}}</span></label>
+              <label><input type="radio" name="uses" value="10"{{if eq .FocusShare.Link.MaxUses 10}} checked{{end}}><i></i><span>10 {{tr .Locale "times"}}</span></label>
+              <label><input type="radio" name="uses" value="0"{{if eq .FocusShare.Link.MaxUses 0}} checked{{end}}><i></i><span>{{tr .Locale "unlimited"}}</span></label>
+            </span>
           </dd>
         </dl>
         <div class="fl" style="justify-content:flex-end">
@@ -222,13 +237,23 @@
   {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
   <script type="module" src="/static/editor.js"></script>
   {{end}}
+  {{template "copy-status" .}}
   <script>
     document.addEventListener('click', function (event) {
       var button = event.target.closest('[data-copy]');
       if (!button) return;
       var value = button.getAttribute('data-copy');
-      if (navigator.clipboard) navigator.clipboard.writeText(value);
-      else window.prompt('{{tr .Locale "copy_link"}}', value);
+      if (!navigator.clipboard) { window.prompt('{{tr .Locale "copy_link"}}', value); return; }
+      navigator.clipboard.writeText(value).then(function () {
+        var status = document.querySelector('[data-copy-status]');
+        clearTimeout(button.copiedTimer);
+        button.classList.add('copied');
+        if (status) { status.textContent = ''; status.textContent = status.getAttribute('data-message'); }
+        button.copiedTimer = setTimeout(function () {
+          button.classList.remove('copied');
+          if (status) status.textContent = '';
+        }, 1400);
+      });
     });
   </script>
 </body>

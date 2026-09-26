@@ -293,6 +293,8 @@ func (a *App) pasteResultPage(r *http.Request, resource Resource, link Link) pag
 	data.PasteURL = a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))
 	data.PasteResourceID = resource.ID
 	data.PasteExpires = *link.ExpiresAt
+	data.PasteGauge = gaugeStyle(link.TermsAt, link.ExpiresAt)
+	data.PasteEnd = endStyle(link.ExpiresAt)
 	data.PasteFilename = resource.Filename
 	data.PasteSize = resource.ContentSize
 	return data

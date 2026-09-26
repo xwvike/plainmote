@@ -50,11 +50,19 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	if !strings.Contains(page, `aria-label="Resource content"`) {
 		t.Error("the editor source must provide an accessible name")
 	}
-	if !strings.Contains(page, `data-encoding-select aria-label="File Encoding"`) ||
-		!strings.Contains(page, `data-reopen-encoding`) ||
-		!strings.Contains(page, `>Reopen with Encoding</button>`) ||
-		!strings.Contains(page, `<span>End of Line Sequence</span>`) {
-		t.Error("the editor must expose its file encoding, reopen, and end-of-line controls")
+	// The encoding and line ending are shown, and carried into the form so a
+	// save writes the bytes back the same way - but they are not a choice.
+	if !strings.Contains(page, `<span class="tag" data-encoding-label>UTF-8</span>`) ||
+		!strings.Contains(page, `<span class="tag" data-eol-label>LF</span>`) ||
+		!strings.Contains(page, `<select name="content_encoding" data-encoding-select hidden>`) ||
+		!strings.Contains(page, `<select name="content_eol" data-eol-select hidden>`) {
+		t.Error("the editor must show its encoding and line ending and carry them into the form")
+	}
+	if strings.Contains(page, "data-reopen-encoding") {
+		t.Error("the encoding is detected, not chosen: no reopen control")
+	}
+	if !strings.Contains(page, `<label class="btn sm upload-key" data-upload-key>`) || !strings.Contains(page, "Replace file") {
+		t.Error("a stored resource offers to replace its file")
 	}
 	if !strings.Contains(page, `<script type="module" src="/static/editor.js">`) {
 		t.Error("the editor module must be linked")

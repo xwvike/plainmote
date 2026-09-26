@@ -54,7 +54,7 @@ func TestAnyoneCanPasteAndGetALink(t *testing.T) {
 	if home.Code != http.StatusOK {
 		t.Fatalf("the home page must open without a session, got %d", home.Code)
 	}
-	if body := home.Body.String(); !strings.Contains(body, `action="/paste"`) || !strings.Contains(body, "Sign in") {
+	if body := home.Body.String(); !strings.Contains(body, `action="/paste"`) || !strings.Contains(body, "Continue with GitHub") {
 		t.Fatal("the home page must offer the box and a way to sign in")
 	}
 	// The meta tag and the response header have to agree, or the one page meant
@@ -116,7 +116,7 @@ func TestPasteRefusalKeepsWhatWasTyped(t *testing.T) {
 	if !strings.Contains(page, "bad/name.txt") {
 		t.Fatal("a refused paste must come back with the filename too")
 	}
-	if !strings.Contains(page, `value="5" selected`) {
+	if !strings.Contains(page, `value="5" aria-label="5 minutes" checked`) {
 		t.Fatal("a refused paste must keep the chosen lifetime")
 	}
 }
@@ -157,31 +157,6 @@ func TestPasteRefusesADrivenCrossSitePost(t *testing.T) {
 	bare := postPaste(t, app, url.Values{"content": {"x"}}, nil)
 	if bare.Code != http.StatusSeeOther {
 		t.Fatalf("a request with no Origin must be allowed, got %d", bare.Code)
-	}
-}
-
-// TestSignedInVisitorIsToldThePasteIsTemporary closes the misreading this page
-// invites: the box does the same temporary handoff whoever is looking at it.
-func TestSignedInVisitorIsToldThePasteIsTemporary(t *testing.T) {
-	db, user, _ := testDatabase(t)
-	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
-	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/", nil)
-	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
-	request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
-	response := httptest.NewRecorder()
-	app.handler.ServeHTTP(response, request)
-
-	page := response.Body.String()
-	if !strings.Contains(page, "Temporary share · Long-term storage") {
-		t.Fatal("a signed-in visitor must be told the box still creates a temporary share")
-	}
-	if !strings.Contains(page, `href="/resources/"`) {
-		t.Fatal("a signed-in visitor must have a way to their own resources")
 	}
 }
 
@@ -324,12 +299,14 @@ func TestAnonymousPasteCanReturnFromLoginAndBeSaved(t *testing.T) {
 
 func findDeliveryAddress(t *testing.T, page string) string {
 	t.Helper()
-	const marker = "https://cfg.test/d/"
+	// The copy button carries the address whole; the text on the page sets
+	// the token apart in its own element.
+	const marker = `data-copy="https://cfg.test/d/`
 	start := strings.Index(page, marker)
 	if start < 0 {
 		t.Fatalf("no delivery address on the page: %s", page)
 	}
-	rest := page[start+len("https://cfg.test"):]
+	rest := page[start+len(`data-copy="https://cfg.test`):]
 	if end := strings.IndexAny(rest, `"<`); end >= 0 {
 		rest = rest[:end]
 	}
@@ -414,7 +391,7 @@ func TestHomePreselectsTheDefaultLifetime(t *testing.T) {
 	app.handler = app.routes()
 	response := httptest.NewRecorder()
 	app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://cfg.test/", nil))
-	if !strings.Contains(response.Body.String(), `<option value="10" selected>`) {
+	if !strings.Contains(response.Body.String(), `value="10" aria-label="10 minutes" checked>`) {
 		t.Fatal("the home page does not preselect 10 minutes")
 	}
 	if ttl, value := parsePasteTTL(""); ttl != 10*time.Minute || value != "10" {

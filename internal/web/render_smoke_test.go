@@ -101,9 +101,9 @@ func TestAllPagesRender(t *testing.T) {
 		{"resource", "/resources/" + resource.ID, "New share"},
 		{"resource remote", "/resources/" + remote.ID, "Remote URL"},
 		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "Delete resource"},
-		// The save bar states what is live rather than what saving would do,
-		// so a save confirms itself by changing that line.
-		{"resource states what is live", "/resources/" + resource.ID, "active shares"},
+		// The save bar carries its unsaved marker, shown by the editor once
+		// something changes.
+		{"resource has an unsaved marker", "/resources/" + resource.ID, `<span class="unsaved" data-unsaved>Unsaved</span>`},
 		{"unshared resource says so", "/resources/" + remote.ID, "No active shares"},
 		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "Expired"},
 	} {

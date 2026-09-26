@@ -142,8 +142,6 @@ func TestDynamicMessagesFormatCleanly(t *testing.T) {
 			pageSummary(locale, 1, 1, 1, "entries"),
 			countText(locale, 1, "shares"),
 			countText(locale, 2, "shares"),
-			string(shareStatus(locale, 1, false, "", time.Now())),
-			string(shareStatus(locale, 2, true, "https://example.com/file", time.Now())),
 			deleteWarning(locale, 1),
 			deleteWarning(locale, 2),
 		}
@@ -256,7 +254,8 @@ func TestIndexableHomeHasLocalizedDiscoveryMetadata(t *testing.T) {
 		`<meta name="keywords" content="限时链接, 可撤销分享链接`,
 		`<h2>分享调试日志</h2>`,
 		`<h2>供程序读取的配置</h2>`,
-		`<h2>分发给多人</h2>`,
+		`<h2>从终端分享</h2>`,
+		`curl -F <span>'content=&lt;-'</span> <span>https://plainmote.example/paste</span></code>`,
 		`<link rel="canonical" href="https://plainmote.example/">`,
 		`<meta property="og:locale" content="zh_CN">`,
 		`<meta property="og:url" content="https://plainmote.example/">`,

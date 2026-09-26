@@ -116,6 +116,11 @@ func TestUpdatingShareKeepsItsAddress(t *testing.T) {
 	if shares[0].Name != "同事 A" || shares[0].MaxUses != 1 {
 		t.Fatalf("terms were not applied: %+v", shares[0])
 	}
+	// The new expiry counts from the change, and the page's gauge counts
+	// with it: the terms began now, not when the link was made.
+	if !shares[0].TermsAt.After(shares[0].CreatedAt) || shares[0].ExpiresAt.Sub(shares[0].TermsAt) != 7*24*time.Hour {
+		t.Fatalf("terms did not restart: created %v, terms %v, expires %v", shares[0].CreatedAt, shares[0].TermsAt, shares[0].ExpiresAt)
+	}
 }
 
 // A share with no expiry and no use limit is permanent until it is revoked.
@@ -311,5 +316,92 @@ func TestFilenamesMayCollideAcrossOwners(t *testing.T) {
 	}
 	if _, err := db.CreateResource(ctx, bob.ID, "clash", "shared.yaml", []byte("b: 2\n"), "", ""); err != nil {
 		t.Fatalf("a second owner must be able to reuse a filename: %v", err)
+	}
+}
+
+// A link that stops working leaves the live list and shows up among the ended
+// ones, with why and when; the window and the limit bound that list.
+func TestEndedSharesSayWhyAndWhen(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	live, err := db.CreateShare(ctx, user.ID, resource.ID, "live", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoked, err := db.CreateShare(ctx, user.ID, resource.ID, "revoked", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	once, err := db.CreateShare(ctx, user.ID, resource.ID, "once", time.Hour, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RevokeLink(ctx, user.ID, resource.ID, revoked.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ConsumeToken(ctx, once.Token, RequestMeta{Method: "GET", RemoteIP: "198.51.100.7"}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC().Add(time.Second)
+	ended, err := db.ListEndedShares(ctx, user.ID, resource.ID, now, now.Add(-time.Hour), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[string]string{}
+	for _, link := range ended {
+		reason, at := link.Ending(now)
+		if at.IsZero() {
+			t.Errorf("%s ended with no time", link.Name)
+		}
+		reasons[link.Name] = reason
+	}
+	if len(ended) != 2 || reasons["revoked"] != "revoked" || reasons["once"] != "exhausted" {
+		t.Fatalf("ended links: %v", reasons)
+	}
+	if _, found := reasons[live.Name]; found {
+		t.Fatal("a live link is not ended")
+	}
+	if ended, _ := db.ListEndedShares(ctx, user.ID, resource.ID, now, now.Add(-time.Hour), 1); len(ended) != 1 {
+		t.Fatalf("the limit holds: %d", len(ended))
+	}
+	if ended, _ := db.ListEndedShares(ctx, user.ID, resource.ID, now, now.Add(time.Minute), 5); len(ended) != 0 {
+		t.Fatalf("the window holds: %d", len(ended))
+	}
+}
+
+// Only a link that no longer works can be deleted, and its access history
+// outlives it.
+func TestOnlyEndedLinksCanBeDeleted(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	live, err := db.CreateShare(ctx, user.ID, resource.ID, "live", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ended, err := db.CreateShare(ctx, user.ID, resource.ID, "ended", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RevokeLink(ctx, user.ID, resource.ID, ended.ID); err != nil {
+		t.Fatal(err)
+	}
+	// A refused visit after the revocation is on the record.
+	if _, err := db.ConsumeToken(ctx, ended.Token, RequestMeta{Method: "GET", RemoteIP: "198.51.100.7"}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := db.DeleteEndedLink(ctx, user.ID, resource.ID, live.ID, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a live link must not be deleted: %v", err)
+	}
+	if err := db.DeleteEndedLink(ctx, user.ID, resource.ID, ended.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := db.ListEndedShares(ctx, user.ID, resource.ID, now.Add(time.Second), now.Add(-time.Hour), 5); len(left) != 0 {
+		t.Fatalf("the deleted link is still listed: %d", len(left))
+	}
+	rows, err := db.ListAccess(ctx, user.ID, "", "", 100)
+	if err != nil || len(rows) != 1 || rows[0].LinkName != "ended" {
+		t.Fatalf("the access history must keep the deleted link's visit: %v %+v", err, rows)
 	}
 }

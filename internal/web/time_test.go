@@ -30,10 +30,3 @@ func TestLocalTimeMarkupMinuteAndZeroFallback(t *testing.T) {
 		t.Fatalf("zero time rendered as %q", got)
 	}
 }
-
-func TestShareStatusEscapesRemoteHost(t *testing.T) {
-	got := string(shareStatus("en", 1, true, `javascript:<script>`, time.Time{}))
-	if strings.Contains(got, "<script>") || !strings.Contains(got, "&lt;script&gt;") {
-		t.Fatalf("remote share status was not escaped: %q", got)
-	}
-}

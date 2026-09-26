@@ -11,7 +11,7 @@ export {
   crosshairCursor, highlightSpecialChars, dropCursor,
 } from "@codemirror/view";
 export {
-  defaultKeymap, history, historyKeymap,
+  defaultKeymap, history, historyKeymap, indentMore, indentLess,
 } from "@codemirror/commands";
 export {
   syntaxHighlighting, HighlightStyle, indentUnit, bracketMatching,

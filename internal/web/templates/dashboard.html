@@ -1,5 +1,5 @@
 {{define "dashboard.html"}}<!doctype html>
-<html lang="{{.Locale}}">
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
   <title>{{tr .Locale "resources"}} · PlainMote</title>
@@ -9,19 +9,19 @@
   <main class="page">
     <div class="ph">
       <h1>{{tr .Locale "resources"}}</h1>
+      <span class="cnt">{{countText .Locale .Pager.Total "items"}} · {{tr .Locale "used"}} {{.Quota.Usage.Resources}}/{{.Quota.Limit.Resources}} · {{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</span>
       <span class="sp"><a class="btn pri" href="/resources/new">{{tr .Locale "new_resource"}}</a></span>
     </div>
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    {{/* Filters sit above the list they narrow, on the page itself - the same
+         place on every list page, and no box of their own. */}}
+    <form class="filters" method="get" action="/resources/">
+      <input type="search" name="q" value="{{.Pager.Query}}" placeholder="{{tr .Locale "search_name_filename"}}" aria-label="{{tr .Locale "search_name_filename"}}">
+      <input type="hidden" name="size" value="{{.Pager.Size}}">
+      <button type="submit">{{tr .Locale "search"}}</button>
+      {{if .Pager.Query}}<a class="txt" href="/resources/">{{tr .Locale "clear"}}</a>{{end}}
+    </form>
     <div class="panel">
-      <div class="pt">
-        <form class="tb" method="get" action="/resources/">
-          <input type="search" name="q" value="{{.Pager.Query}}" placeholder="{{tr .Locale "search_name_filename"}}">
-          <input type="hidden" name="size" value="{{.Pager.Size}}">
-          <button type="submit">{{tr .Locale "search"}}</button>
-          {{if .Pager.Query}}<a class="btn" href="/resources/">{{tr .Locale "clear"}}</a>{{end}}
-        </form>
-        <span class="sp hint">{{countText .Locale .Pager.Total "items"}} · {{tr .Locale "used"}} {{.Quota.Usage.Resources}}/{{.Quota.Limit.Resources}} · {{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</span>
-      </div>
       {{if .Resources}}
       <div class="table-scroll">
         <table class="fx">

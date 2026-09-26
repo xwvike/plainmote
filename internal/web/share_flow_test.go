@@ -210,15 +210,15 @@ func TestCreateShareReturnsARefreshableFragment(t *testing.T) {
 		t.Fatalf("fragment create: %d %q", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
-	if strings.Contains(body, "<html") || !strings.Contains(body, "data-share-status") || !strings.Contains(body, "data-share-panel") {
+	if strings.Contains(body, "<html") || !strings.Contains(body, "data-share-panel") {
 		t.Fatalf("response is not the share fragment: %q", body)
 	}
 	shares, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
 	if err != nil || len(shares) != 1 {
 		t.Fatalf("created shares: %d %v", len(shares), err)
 	}
-	if !strings.Contains(body, shares[0].Token) || !strings.Contains(body, "1 active share") {
-		t.Fatal("fragment does not contain the new share and updated status")
+	if !strings.Contains(body, shares[0].Token) {
+		t.Fatal("fragment does not contain the new share")
 	}
 
 	pageRequest := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+resource.ID, nil)

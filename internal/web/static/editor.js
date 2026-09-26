@@ -10,7 +10,7 @@ import {
   crosshairCursor, defaultKeymap, drawSelection, dropCursor, EditorState,
   EditorView, highlightActiveLine, highlightActiveLineGutter,
   highlightSelectionMatches, highlightSpecialChars, HighlightStyle, history,
-  historyKeymap, indentOnInput, indentUnit, json, keymap,
+  historyKeymap, indentLess, indentMore, indentOnInput, indentUnit, json, keymap,
   lineNumbers, properties, rectangularSelection, search, searchKeymap, shell,
   StreamLanguage, syntaxHighlighting, tags, toml, xml, yaml,
 } from "./vendor/codemirror.js";
@@ -255,8 +255,8 @@ export { decodeBytes, detectFileEncoding, submissionSource, SUPPORTED_ENCODINGS 
 const highlight = HighlightStyle.define([
   { tag: [tags.propertyName, tags.definition(tags.propertyName)], color: "var(--accent)" },
   { tag: [tags.keyword, tags.modifier, tags.operatorKeyword], color: "var(--accent-d)" },
-  { tag: [tags.string, tags.special(tags.string)], color: "var(--ok)" },
-  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: "var(--warn)" },
+  { tag: [tags.string, tags.special(tags.string)], color: "var(--sand-ink)" },
+  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: "var(--ok)" },
   { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "var(--ink3)", fontStyle: "italic" },
   { tag: [tags.tagName, tags.angleBracket], color: "var(--accent)" },
   { tag: tags.attributeName, color: "var(--ink2)" },
@@ -281,36 +281,73 @@ const highlight = HighlightStyle.define([
 const theme = EditorView.theme({
   "&": { border: "0", background: "var(--panel)", color: "var(--ink)", height: "100%", overflow: "hidden" },
   "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "var(--mono)", fontSize: "12px", lineHeight: "1.65", minHeight: 0, overflow: "auto" },
-  ".cm-content": { minHeight: "100%", padding: "6px 0" },
-  ".cm-line": { padding: "0 7px" },
-  ".cm-gutters": { alignSelf: "stretch", background: "var(--head)", border: "none", borderRight: "1px solid var(--line)", color: "var(--ink3)", fontSize: "11px" },
-  // Translucent, so the selection layer beneath it still shows through. The
-  // gutter has no selection to hide and stays opaque.
-  ".cm-activeLine": { background: "var(--zebra-t)" },
-  ".cm-activeLineGutter": { background: "var(--zebra)", color: "var(--ink2)" },
+  ".cm-scroller": { fontFamily: "var(--mono)", fontSize: "12px", lineHeight: "1.75", minHeight: 0, overflow: "auto" },
+  ".cm-content": { minHeight: "100%", padding: "8px 0" },
+  ".cm-line": { padding: "0 14px" },
+  // The numbers sit in the page's own colour, set off by a hairline rather
+  // than a shaded column, the same size as the text they count.
+  ".cm-gutters": { alignSelf: "stretch", background: "var(--panel)", border: "none", borderRight: "1px solid var(--line)", color: "var(--ink3)", fontSize: "12px" },
+  ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 14px" },
+  // One band across the gutter and the text for the current line. Translucent,
+  // so the selection layer beneath it still shows through.
+  ".cm-activeLine": { background: "var(--line-on)" },
+  ".cm-activeLineGutter": { background: "var(--line-on)", color: "var(--ink2)" },
   ".cm-cursor": { borderLeftColor: "var(--ink)" },
   // Grey while the editor is not focused, accent while it is, the way every
   // other text field on the platform behaves.
   ".cm-selectionBackground, .cm-content ::selection": { background: "var(--sel-off)" },
   "&.cm-focused .cm-selectionBackground, &.cm-focused .cm-content ::selection": { background: "var(--sel)" },
-  ".cm-selectionMatch": { background: "color-mix(in oklab, var(--warn) 22%, white)" },
+  ".cm-selectionMatch": { background: "color-mix(in oklab, var(--sand) 22%, var(--panel))" },
   ".cm-panels": { background: "var(--head)", color: "var(--ink)", borderBottom: "1px solid var(--line)" },
   ".cm-panels input, .cm-panels button": { font: "400 11.5px var(--sans)" },
-  ".cm-searchMatch": { background: "color-mix(in oklab, var(--warn) 30%, white)" },
-  ".cm-searchMatch.cm-searchMatch-selected": { background: "color-mix(in oklab, var(--warn) 55%, white)" },
+  ".cm-searchMatch": { background: "color-mix(in oklab, var(--sand) 30%, var(--panel))" },
+  ".cm-searchMatch.cm-searchMatch-selected": { background: "color-mix(in oklab, var(--sand) 55%, var(--panel))" },
 });
+
+// The file's own indentation: tabs where its indented lines mostly start with
+// one, two spaces otherwise. Tab inserts this, so a YAML file never gets a
+// tab character and a Makefile never gets spaces.
+function detectIndent(text) {
+  let tabs = 0;
+  let spaces = 0;
+  for (const line of text.split("\n", 5000)) {
+    if (line.startsWith("\t")) tabs += 1;
+    else if (line.startsWith("  ")) spaces += 1;
+  }
+  return tabs > spaces ? "\t" : "  ";
+}
+
+// Tab indents, as in every editor: at a cursor it inserts one indent, over a
+// selection it indents the lines; Shift-Tab takes one away. Focus can still
+// leave the editor by keyboard - Escape then Tab, which CodeMirror handles.
+const tabKeymap = [{
+  key: "Tab",
+  run: (view) => {
+    if (view.state.selection.ranges.some((range) => !range.empty)) return indentMore(view);
+    view.dispatch(view.state.update(view.state.replaceSelection(view.state.facet(indentUnit)), {
+      scrollIntoView: true,
+      userEvent: "input",
+    }));
+    return true;
+  },
+  shift: indentLess,
+}];
 
 function enhance(textarea) {
   const form = textarea.form;
   const language = new Compartment();
   const upload = form ? form.querySelector("input[data-upload]") : null;
   const uploads = uploadController(upload);
+  // Hidden selects carry the detected encoding and line ending into the form;
+  // the tags beside them are what the page shows. Neither is a choice.
   const encodingSelect = form ? form.querySelector("[data-encoding-select]") : null;
-  const reopenEncoding = form ? form.querySelector("[data-reopen-encoding]") : null;
+  const encodingLabel = form ? form.querySelector("[data-encoding-label]") : null;
   const eolSelect = form ? form.querySelector("[data-eol-select]") : null;
+  const eolLabel = form ? form.querySelector("[data-eol-label]") : null;
   const revert = form ? form.querySelector("[data-revert]") : null;
+  const unsaved = form ? form.querySelector("[data-unsaved]") : null;
   const lineEnding = new Compartment();
+  const indent = new Compartment();
   const host = document.createElement("div");
   host.className = "cm-host";
   textarea.parentNode.insertBefore(host, textarea.nextSibling);
@@ -324,7 +361,6 @@ function enhance(textarea) {
   let editedBeforeUpload = false;
   let editorDirty = false;
   let documentEdited = false;
-  let sourceBytes = null;
 
   const setUploadStatus = (message) => {
     if (uploads) uploads.setStatus(message);
@@ -335,26 +371,21 @@ function enhance(textarea) {
   // the save did not take.
   const markDirty = () => {
     if (revert) revert.classList.add("show");
-  };
-
-  const updateReopenAvailability = () => {
-    if (reopenEncoding) reopenEncoding.disabled = !sourceBytes && (!textarea.dataset.rawUrl || documentEdited);
+    if (unsaved) unsaved.classList.add("show");
   };
 
   // Selecting a file normally leaves its bytes untouched. Once the user
-  // changes content, encoding, or line endings, however, the editor is the
-  // source of truth and the form must submit its text instead of the file.
-  const markContentForSave = (message, keepSourceBytes = false) => {
+  // changes the content, however, the editor is the source of truth and the
+  // form must submit its text instead of the file.
+  const markContentForSave = (message) => {
     editorDirty = true;
     markDirty();
     operationVersion += 1;
-    if (!keepSourceBytes) sourceBytes = null;
     if (upload && upload.files.length > 0) {
       if (uploads) uploads.useEditor(message);
       else upload.value = "";
       documentBeforeUpload = null;
     }
-    updateReopenAvailability();
     setUploadStatus(message);
   };
 
@@ -366,6 +397,7 @@ function enhance(textarea) {
     encodingSelect.value = canonical;
     encodingSelect.dataset.valid = valid ? "true" : "false";
     textarea.dataset.encoding = canonical;
+    if (encodingLabel) encodingLabel.textContent = option.textContent;
     return true;
   };
 
@@ -381,6 +413,7 @@ function enhance(textarea) {
   const setEOL = (name) => {
     currentEOL = normalizeEOLName(name);
     if (eolSelect) eolSelect.value = currentEOL;
+    if (eolLabel) eolLabel.textContent = currentEOL === "crlf" ? "CRLF" : "LF";
     textarea.dataset.eol = currentEOL;
     if (view) {
       view.dispatch({ effects: lineEnding.reconfigure(EditorState.lineSeparator.of(EOL_SEQUENCES[currentEOL])) });
@@ -400,7 +433,7 @@ function enhance(textarea) {
           drawSelection(),
           dropCursor(),
           indentOnInput(),
-          indentUnit.of("  "),
+          indent.of(indentUnit.of(detectIndent(textarea.value))),
           lineEnding.of(EditorState.lineSeparator.of(EOL_SEQUENCES[currentEOL])),
           bracketMatching(),
           closeBrackets(),
@@ -423,7 +456,7 @@ function enhance(textarea) {
           }),
           language.of(languageFor(tokenFor(textarea.dataset.filename, textarea.dataset.contentType))),
           keymap.of([
-            ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap,
+            ...tabKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap,
             ...historyKeymap,
           ]),
         ],
@@ -440,8 +473,7 @@ function enhance(textarea) {
 
   if (form) {
     // The editor reports its own edits through markContentForSave; this covers
-    // everything else on the form - the name, the filename, the pickers and
-    // the file input.
+    // everything else on the form - the name, the filename and the file input.
     form.addEventListener("input", markDirty);
     form.addEventListener("change", markDirty);
     // sliceDoc() joins with state.lineBreak, which the lineEnding compartment
@@ -472,7 +504,6 @@ function enhance(textarea) {
         // an existing resource as "retain the current object".
         event.formData.delete(textarea.name);
       } else {
-        // Encoding and line-ending changes make the editor authoritative too.
         // Deleting the file here is a second line of defence in case a browser
         // retains it after upload.value was cleared.
         if (upload && upload.name) event.formData.delete(upload.name);
@@ -499,6 +530,7 @@ function enhance(textarea) {
           changes: { from: 0, to: view.state.doc.length, insert: content },
           selection: { anchor: 0 },
           scrollIntoView: true,
+          effects: indent.reconfigure(indentUnit.of(detectIndent(content))),
         });
         textarea.value = content;
         editorDirty = dirty;
@@ -512,65 +544,9 @@ function enhance(textarea) {
       const content = decodeBytes(bytes, encoding);
       setEOL(detectEOL(content));
       replaceDocument(content);
-      sourceBytes = bytes;
       setEncoding(encoding);
       return content;
     };
-
-    const reopenWithEncoding = async (encoding) => {
-      const version = ++operationVersion;
-      let bytes = sourceBytes;
-
-      if (!bytes && textarea.dataset.rawUrl) {
-        setUploadStatus(message("msgEditorReopening", { encoding }));
-        try {
-          const response = await fetch(textarea.dataset.rawUrl, { cache: "no-store" });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          bytes = new Uint8Array(await response.arrayBuffer());
-        } catch (error) {
-          if (version !== operationVersion) return;
-          setEncoding(encoding, false);
-          setUploadStatus(message("msgEditorReadFailed"));
-          console.error("editor: cannot read resource for decoding", error);
-          return;
-        }
-      }
-      if (version !== operationVersion || !bytes) return;
-
-      try {
-        openBytes(bytes, encoding);
-        markContentForSave("", true);
-      } catch (error) {
-        if (version !== operationVersion) return;
-        setEncoding(encoding, false);
-        setUploadStatus(message("msgEditorReopenFailed", { encoding }));
-      }
-    };
-
-    if (eolSelect) {
-      eolSelect.addEventListener("change", () => {
-        setEOL(eolSelect.value);
-        const label = currentEOL === "crlf" ? "CRLF" : "LF";
-        markContentForSave("", true);
-      });
-    }
-
-    if (encodingSelect) {
-      encodingSelect.addEventListener("change", () => {
-        const encoding = normalizeEncoding(encodingSelect.value);
-        if (!encoding) return;
-        setEncoding(encoding);
-        markContentForSave("", true);
-      });
-    }
-
-    if (reopenEncoding) {
-      reopenEncoding.addEventListener("click", () => {
-        const encoding = normalizeEncoding(encodingSelect ? encodingSelect.value : "");
-        if (encoding) void reopenWithEncoding(encoding);
-      });
-      updateReopenAvailability();
-    }
 
     if (uploads) {
       uploads.subscribe(async ({ file, kind, version, oversize }) => {
@@ -579,8 +555,6 @@ function enhance(textarea) {
         if (!file) {
           if (documentBeforeUpload !== null) replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           documentBeforeUpload = null;
-          sourceBytes = null;
-          updateReopenAvailability();
           setUploadStatus("");
           return;
         }
@@ -596,18 +570,14 @@ function enhance(textarea) {
         }
 
         if (oversize) {
-          sourceBytes = null;
           editorDirty = false;
           documentEdited = false;
-          updateReopenAvailability();
           return;
         }
 
         if (kind !== "text" && kind !== "unknown") {
-          sourceBytes = null;
           editorDirty = false;
           documentEdited = false;
-          updateReopenAvailability();
           return;
         }
 
@@ -616,10 +586,8 @@ function enhance(textarea) {
           bytes = await file.arrayBuffer();
         } catch (error) {
           if (!uploads.current(version, file)) return;
-          sourceBytes = null;
           editorDirty = false;
           documentEdited = false;
-          updateReopenAvailability();
           uploads.showFile(file, message("msgEditorFileFailed", { name: file.name }));
           console.error("editor: cannot read uploaded file", error);
           return;
@@ -627,8 +595,6 @@ function enhance(textarea) {
         if (!uploads.current(version, file)) return;
 
         const source = new Uint8Array(bytes);
-        sourceBytes = source;
-        updateReopenAvailability();
         const encoding = detectFileEncoding(source);
         if (!encoding) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);

@@ -353,7 +353,7 @@ func (a *App) writeErrorText(what string, err error) (string, int) {
 // from. nil means there is nothing pending and the stored object is the truth.
 func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user User, resource Resource, pageError string, status int, pendingBody []byte) {
 	now := time.Now().UTC()
-	shares, err := a.db.ListShares(r.Context(), user.ID, resource.ID, now)
+	shares, ended, err := a.listShares(r.Context(), user.ID, resource.ID, now)
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
@@ -403,6 +403,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 
 	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares, now)
+	data.EndedShares = buildShareViews(data.BaseURL, resource, servedType, ended, now)
 
 	// The list is on the page, so the only thing left to open is one share's
 	// terms. A stale id opens nothing rather than an empty dialog.
@@ -421,6 +422,22 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	a.renderTemplate(w, r, status, "resource.html", data)
 }
 
+// Links that stopped working stay on the page for a week, the latest few, so
+// the owner sees a revocation or an expiry land; older ones are in the access
+// history.
+const (
+	endedShareWindow = 7 * 24 * time.Hour
+	endedShareLimit  = 5
+)
+
+func (a *App) listShares(ctx context.Context, userID, resourceID string, now time.Time) (live, ended []Link, err error) {
+	if live, err = a.db.ListShares(ctx, userID, resourceID, now); err != nil {
+		return nil, nil, err
+	}
+	ended, err = a.db.ListEndedShares(ctx, userID, resourceID, now, now.Add(-endedShareWindow), endedShareLimit)
+	return live, ended, err
+}
+
 func buildShareViews(base string, resource Resource, servedType string, shares []Link, now time.Time) []linkView {
 	views := make([]linkView, 0, len(shares))
 	for _, share := range shares {
@@ -429,11 +446,14 @@ func buildShareViews(base string, resource Resource, servedType string, shares [
 		if !share.Unreadable {
 			address = base + shareAddress(share.Token, deliveryFilename(resource, servedType))
 		}
+		ended, endedAt := share.Ending(now)
 		views = append(views, linkView{
 			Link:      share,
 			URL:       address,
 			TTLChoice: ttlChoice,
 			TTLCustom: ttlCustom,
+			Ended:     ended,
+			EndedAt:   endedAt,
 		})
 	}
 	return views
@@ -446,7 +466,9 @@ func shareTTLForm(link Link, now time.Time) (choice, custom string) {
 	if link.ExpiresAt == nil {
 		return "never", ""
 	}
-	ttl := link.ExpiresAt.Sub(link.CreatedAt)
+	// Counted from when the terms began, not from the link's creation: a link
+	// whose terms were changed to 24 hours is a 24-hour link.
+	ttl := link.ExpiresAt.Sub(link.TermsAt)
 	switch ttl {
 	case time.Hour:
 		return "1h", ""
@@ -459,22 +481,31 @@ func shareTTLForm(link Link, now time.Time) (choice, custom string) {
 	}
 }
 
+// shareDurationInput writes what is left as something a person reads and can
+// type back: days, hours, minutes, and seconds only under a minute - "5d12h44m",
+// not "477827s". Rounded up, so re-applying it never shortens the link.
 func shareDurationInput(duration time.Duration) string {
-	if remainder := duration % time.Second; remainder != 0 {
-		duration += time.Second - remainder
+	if duration <= 0 {
+		return ""
 	}
-	switch {
-	case duration > 0 && duration%(24*time.Hour) == 0:
-		return strconv.FormatInt(int64(duration/(24*time.Hour)), 10) + "d"
-	case duration > 0 && duration%time.Hour == 0:
-		return strconv.FormatInt(int64(duration/time.Hour), 10) + "h"
-	case duration > 0 && duration%time.Minute == 0:
-		return strconv.FormatInt(int64(duration/time.Minute), 10) + "m"
-	case duration > 0 && duration%time.Second == 0:
-		return strconv.FormatInt(int64(duration/time.Second), 10) + "s"
-	default:
-		return duration.String()
+	unit := time.Second
+	if duration >= time.Minute {
+		unit = time.Minute
 	}
+	if remainder := duration % unit; remainder != 0 {
+		duration += unit - remainder
+	}
+	var text strings.Builder
+	for _, part := range []struct {
+		size time.Duration
+		mark string
+	}{{24 * time.Hour, "d"}, {time.Hour, "h"}, {time.Minute, "m"}, {time.Second, "s"}} {
+		if count := duration / part.size; count > 0 {
+			text.WriteString(strconv.FormatInt(int64(count), 10) + part.mark)
+			duration -= count * part.size
+		}
+	}
+	return text.String()
 }
 
 // renderShareFragment refreshes the part of a resource page changed by a
@@ -490,7 +521,8 @@ func (a *App) renderShareFragment(w http.ResponseWriter, r *http.Request, user U
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
 	}
-	shares, err := a.db.ListShares(r.Context(), user.ID, resource.ID, time.Now().UTC())
+	now := time.Now().UTC()
+	shares, ended, err := a.listShares(r.Context(), user.ID, resource.ID, now)
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
@@ -505,7 +537,8 @@ func (a *App) renderShareFragment(w http.ResponseWriter, r *http.Request, user U
 			servedType = fetched
 		}
 	}
-	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares, time.Now().UTC())
+	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares, now)
+	data.EndedShares = buildShareViews(data.BaseURL, resource, servedType, ended, now)
 	a.renderTemplate(w, r, http.StatusOK, "share-fragment", data)
 }
 
@@ -663,6 +696,12 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 			return
 		}
 		back("", "")
+	case "delete":
+		if err := a.db.DeleteEndedLink(r.Context(), user.ID, resourceID, r.FormValue("share_id"), time.Now().UTC()); err != nil {
+			back("", err.Error())
+			return
+		}
+		back("", "")
 	case "revoke_all":
 		if err := a.db.RevokeShares(r.Context(), user.ID, resourceID); err != nil {
 			back("", err.Error())
@@ -714,19 +753,29 @@ func shareTTL(r *http.Request) (time.Duration, error) {
 	return parsed, nil
 }
 
-// dayDuration matches a plain number of days. Go's time.ParseDuration stops at
-// hours, but the presets already offer 7 days, so typing "30d" has to work
-// rather than forcing someone to write 720h.
-var dayDuration = regexp.MustCompile(`^([0-9]+(?:\.[0-9]+)?)d$`)
+// dayDuration takes a leading number of days off a duration. Go's
+// time.ParseDuration stops at hours, but the presets already offer 7 days, so
+// "30d" has to work - and so does "5d12h", which is how the box shows what is
+// left of a link.
+var dayDuration = regexp.MustCompile(`^([0-9]+(?:\.[0-9]+)?)d(.*)$`)
 
 func parseShareDuration(value string) (time.Duration, error) {
 	value = strings.ToLower(strings.TrimSpace(value))
-	if match := dayDuration.FindStringSubmatch(value); match != nil {
-		days, err := strconv.ParseFloat(match[1], 64)
+	match := dayDuration.FindStringSubmatch(value)
+	if match == nil {
+		return time.ParseDuration(value)
+	}
+	days, err := strconv.ParseFloat(match[1], 64)
+	if err != nil {
+		return 0, err
+	}
+	total := time.Duration(days * float64(24*time.Hour))
+	if match[2] != "" {
+		rest, err := time.ParseDuration(match[2])
 		if err != nil {
 			return 0, err
 		}
-		return time.Duration(days * float64(24*time.Hour)), nil
+		total += rest
 	}
-	return time.ParseDuration(value)
+	return total, nil
 }

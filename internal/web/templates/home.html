@@ -1,12 +1,13 @@
 {{define "home.html"}}<!doctype html>
-<html lang="{{.Locale}}">
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
   <title>{{tr .Locale "home_title"}} · PlainMote</title>
   <meta name="description" content="{{tr .Locale "home_description"}}">
   {{if .Indexable}}<meta name="keywords" content="{{tr .Locale "home_keywords"}}">
   <meta name="application-name" content="PlainMote">
-  <meta name="theme-color" content="#17479e">
+  <meta name="theme-color" content="#1b6a70" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121d1c" media="(prefers-color-scheme: dark)">
   <meta name="robots" content="index, follow, max-image-preview:large">
   <link rel="canonical" href="{{.BaseURL}}/">
   <meta property="og:type" content="website">
@@ -39,30 +40,38 @@
 
     {{if .PasteURL}}
     {{/* The address is what the visitor came for, so the page becomes it. */}}
-    <div class="panel">
-      <div class="pt"><span class="sec">{{tr .Locale "paste_created"}}</span></div>
-      <div class="pb">
-        <div class="pfx">
-          <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{.PasteURL}}</code>
-          <button type="button" class="btn" data-copy="{{.PasteURL}}">{{tr .Locale "copy"}}</button>
-        </div>
-        <span class="st on">
-          <i></i>
-          <span>{{tr .Locale "valid_until"}} {{formatTime .PasteExpires}} ({{untilText .Locale .PasteExpires}}) · {{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
-        </span>
-        <p class="hint">{{tr .Locale "paste_expiry_note"}}</p>
-        <p class="hint">{{tr .Locale "paste_result_private"}}</p>
+    {{/* The link is a ticket: the address, a perforation, and the stub that
+         copies it. Under it, the time it has left, drawn as grains of sand. */}}
+    <section class="ruled paste-result" style="{{.PasteEnd}}">
+      <div class="pt">
+        <span class="sec">{{tr .Locale "paste_created"}}</span>
+        <span class="sp hint">{{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
       </div>
-    </div>
-    <div class="savebar paste-result-actions">
+      <div class="ticket">
+        <code class="addr ends" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{template "address" .PasteURL}}</code>
+        <span class="stub until"><button type="button" class="pri sm" data-copy="{{.PasteURL}}">{{template "copy-label" .}}</button></span>
+      </div>
+      <div class="left wide">
+        <span class="gauge" style="{{.PasteGauge}}" aria-hidden="true"></span>
+        <span class="swap">
+          <span class="st on until"><i></i><span>{{tr .Locale "valid_until"}} {{formatTime .PasteExpires}} ({{untilText .Locale .PasteExpires}})</span></span>
+          <span class="st off after"><i></i><span>{{tr .Locale "share_ended_expired"}} {{formatTime .PasteExpires}}</span></span>
+        </span>
+      </div>
+      <div class="notes">
+        <p class="hint">{{tr .Locale "paste_result_private"}}</p>
+        <p class="hint">{{tr .Locale "paste_expiry_note"}}</p>
+      </div>
+    </section>
+    <div class="savebar paste-result-actions" style="{{.PasteEnd}}">
       <a class="btn pri" href="/">{{tr .Locale "paste_another"}}</a>
       {{if .PasteClaimable}}
-      <form class="inline" method="post" action="/paste/save">
+      <form class="inline until" method="post" action="/paste/save">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="resource_id" value="{{.PasteResourceID}}">
         <button type="submit">{{tr .Locale "save_to_resources"}}</button>
       </form>
-      <span class="hint live">{{tr .Locale "save_keeps_expiry"}}</span>
+      <span class="hint live until">{{tr .Locale "save_keeps_expiry"}}</span>
       {{else if .SignedIn}}
       <span class="hint live">{{tr .Locale "paste_owner_only"}}</span>
       {{else}}
@@ -77,7 +86,7 @@
            height, and this box is not that box. No data-editor either - the
            home page loads no editor and no bundle, and a textarea is the whole
            interaction. */}}
-      <div class="panel">
+      <div class="panel ruled">
         <div class="pt">
           <span class="sec">{{tr .Locale "content"}}</span>
           <span class="sp hint">{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
@@ -88,20 +97,20 @@
         </div>
       </div>
       <div class="savebar">
-        <button type="submit" class="pri">{{tr .Locale "create_share_link"}}</button>
-        <label class="ttl-picker"><span>{{tr .Locale "lifetime"}}</span>
-          <select name="ttl" aria-label="{{tr .Locale "link_lifetime"}}">
-            {{range .PasteChoices}}<option value="{{.Value}}"{{if eq .Value $.PasteTTL}} selected{{end}}>{{pasteTTLText $.Locale .Value}}</option>{{end}}
-          </select>
-        </label>
+        {{/* Lifetime is a scale, not a list: the stops on one rule. Radios, so
+             it works with scripts off. */}}
+        <span class="ttl-picker" role="radiogroup" aria-label="{{tr .Locale "link_lifetime"}}"><span>{{tr .Locale "lifetime"}}</span>
+          <span class="scale">
+            {{range .PasteChoices}}<label title="{{pasteTTLText $.Locale .Value}}"><input type="radio" name="ttl" value="{{.Value}}" aria-label="{{pasteTTLText $.Locale .Value}}"{{if eq .Value $.PasteTTL}} checked{{end}}><i></i><span>{{.Value}}</span></label>{{end}}
+          </span>
+          <span class="unit">{{tr .Locale "minutes_unit"}}</span>
+        </span>
         <label class="ttl-picker"><span>{{tr .Locale "filename_optional"}}</span>
           <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="notes.txt"
-                 aria-label="{{tr .Locale "filename_optional"}}" style="width:150px">
+                 aria-label="{{tr .Locale "filename_optional"}}" class="mpath" style="width:150px">
         </label>
-        <span class="st off live">
-          <i></i>
-          <span>{{if .SignedIn}}{{tr .Locale "signed_paste_note"}}<a href="/resources/">{{tr .Locale "nav_resources"}}</a>{{else}}{{tr .Locale "anonymous_paste_note"}}{{end}}</span>
-        </span>
+        {{/* The action ends the row: choose the terms, then send. */}}
+        <button type="submit" class="pri end">{{tr .Locale "create_share_link"}}</button>
       </div>
     </form>
     {{end}}
@@ -116,22 +125,40 @@
         <h2>{{tr .Locale "example_config_title"}}</h2>
         <p>{{tr .Locale "example_config_body"}}</p>
       </section>
+      {{if .Anonymous}}
+      {{/* The same box, from a shell: what llms.txt describes at length. */}}
+      <section>
+        <h2>{{tr .Locale "example_cli_title"}}</h2>
+        <code class="cli"><b>$</b> tail -n 200 app.log | curl -F <span>'content=&lt;-'</span> <span>{{.BaseURL}}/paste</span></code>
+      </section>
+      {{else}}
       <section>
         <h2>{{tr .Locale "example_people_title"}}</h2>
         <p>{{tr .Locale "example_people_body"}}</p>
         <p class="hint">{{if .SignedIn}}<a href="/resources/">{{tr .Locale "go_to_resources"}} →</a>{{else}}<a href="{{.SignInURL}}">{{tr .Locale "login_github"}} →</a>{{end}}</p>
       </section>
+      {{end}}
     </div>
 
   </main>
   {{template "footer" .}}
+  {{template "copy-status" .}}
   <script>
     document.addEventListener('click', function (event) {
       var button = event.target.closest('[data-copy]');
       if (!button) return;
       var value = button.getAttribute('data-copy');
-      if (navigator.clipboard) navigator.clipboard.writeText(value);
-      else window.prompt('{{tr .Locale "copy_link"}}', value);
+      if (!navigator.clipboard) { window.prompt('{{tr .Locale "copy_link"}}', value); return; }
+      navigator.clipboard.writeText(value).then(function () {
+        var status = document.querySelector('[data-copy-status]');
+        clearTimeout(button.copiedTimer);
+        button.classList.add('copied');
+        if (status) { status.textContent = ''; status.textContent = status.getAttribute('data-message'); }
+        button.copiedTimer = setTimeout(function () {
+          button.classList.remove('copied');
+          if (status) status.textContent = '';
+        }, 1400);
+      });
     });
   </script>
 </body>

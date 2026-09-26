@@ -232,7 +232,7 @@ function enhanceUpload(input) {
     } else if (kind === "file" || listeners.size === 0) {
       showFile(file);
     } else {
-      showText(file, message("msgUploadReading", { name: file.name }));
+      showText(file);
     }
     if (oversize) {
       setStatus(message("msgUploadOversize", { size: sizeText(file.size), limit: sizeText(maxBytes) }));

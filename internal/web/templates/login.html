@@ -1,11 +1,11 @@
 {{define "login.html"}}<!doctype html>
-<html lang="{{.Locale}}">
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
   <title>PlainMote · {{tr .Locale "login"}}</title>
 </head>
 <body>
-  <div class="signin-language">{{template "language-switch" .}}</div>
+  <div class="signin-language">{{template "theme-switch" .}}{{template "language-switch" .}}</div>
   <main class="signin">
     <div class="panel signin-card">
       <img class="signin-mark" src="/static/logo.png" alt="" width="64" height="64" decoding="async">

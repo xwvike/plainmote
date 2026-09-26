@@ -90,8 +90,12 @@ CREATE TABLE IF NOT EXISTS links (
   expires_at TIMESTAMPTZ,
   revoked_at TIMESTAMPTZ,
   last_used_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  -- When the current terms began: set when they are changed, NULL until then,
+  -- when they began with the link. Expiry is counted from here.
+  terms_at TIMESTAMPTZ
 );
+ALTER TABLE links ADD COLUMN IF NOT EXISTS terms_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS links_resource_idx ON links(resource_id);
 
 -- A signed-in creator may explicitly keep a quick share. The resource remains

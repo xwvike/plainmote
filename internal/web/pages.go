@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -70,6 +71,15 @@ func (a *App) templateSet() *template.Template {
 		"formatMinute": func(value time.Time) template.HTML {
 			return localTimeMarkup(value, true)
 		},
+		// Month and day only, for a list where the year is this one.
+		"formatDay": func(value time.Time) template.HTML {
+			if value.IsZero() {
+				return "-"
+			}
+			value = value.UTC()
+			return template.HTML(fmt.Sprintf(`<time datetime="%s" data-local-time="day">%s</time>`,
+				value.Format(time.RFC3339), value.Format("01-02")))
+		},
 		"bytesText": bytesText,
 		"hasPrefix": strings.HasPrefix,
 		"originHost": func(value string) string {
@@ -96,15 +106,80 @@ func (a *App) templateSet() *template.Template {
 		"outcomeText":        accessOutcomeText,
 		"outcomeDescription": accessOutcomeDescription,
 		"remainText":         remainText,
+		"leftPercent":        leftPercent,
+		"gaugeStyle":         gaugeStyle,
+		"endStyle":           endStyle,
+		"addressParts":       addressParts,
 		"untilText":          untilText,
 		"pasteTTLText":       pasteTTLText,
 		"pageSummary":        pageSummary,
 		"countText":          countText,
-		"shareStatus":        shareStatus,
 		"deleteWarning":      deleteWarning,
 		"legalDuration":      legalDuration,
 		"legalBytes":         legalBytes,
 	}).ParseFS(webAssets, "templates/*.html"))
+}
+
+// leftPercent is how much of a link's current terms is still to run, 0 to
+// 100: what the sand gauge draws. A link that never expires is full.
+func leftPercent(start time.Time, end *time.Time) int {
+	if end == nil {
+		return 100
+	}
+	total := end.Sub(start)
+	left := time.Until(*end)
+	switch {
+	case left <= 0 || total <= 0:
+		return 0
+	case left >= total:
+		return 100
+	}
+	return int(math.Ceil(float64(left) / float64(total) * 100))
+}
+
+// gaugeStyle is what the sand gauge needs to draw itself and keep draining
+// with no script: the share of the terms left when the page was rendered, and
+// the seconds until none is. Both are numbers this function formats, which is
+// what makes handing them to the template as CSS safe.
+func gaugeStyle(start time.Time, end *time.Time) template.CSS {
+	if end == nil {
+		return "--left: 1"
+	}
+	total, left := end.Sub(start), time.Until(*end)
+	if left <= 0 || total <= 0 {
+		return "--left: 0"
+	}
+	share := math.Min(float64(left)/float64(total), 1)
+	return template.CSS(fmt.Sprintf("--left: %.4f; --secs: %ds", share, int(math.Ceil(left.Seconds()))))
+}
+
+// endStyle gives a live row the seconds until its link expires, for the
+// stylesheet to turn it into an ended one at that moment. Nothing for a link
+// that never expires.
+func endStyle(end *time.Time) template.CSS {
+	if end == nil {
+		return ""
+	}
+	left := time.Until(*end)
+	if left < 0 {
+		left = 0
+	}
+	return template.CSS(fmt.Sprintf("--end: %ds", int(math.Ceil(left.Seconds()))))
+}
+
+// addressParts splits a share address around its token - the path segment
+// after /d/ - so the page can set the credential apart from what every
+// address shares. Anything else comes back whole, in the first part.
+func addressParts(address string) [3]string {
+	at := strings.Index(address, "/d/")
+	if at < 0 {
+		return [3]string{address}
+	}
+	head, rest := address[:at+3], address[at+3:]
+	if slash := strings.IndexByte(rest, '/'); slash >= 0 {
+		return [3]string{head, rest[:slash], rest[slash:]}
+	}
+	return [3]string{head, rest, ""}
 }
 
 // remainText renders how long a share has left in the terms a person thinks
@@ -242,25 +317,6 @@ func localTimeMarkup(value time.Time, minute bool) template.HTML {
 	return template.HTML(markup)
 }
 
-func shareStatus(locale string, count int, remote bool, origin string, updated time.Time) template.HTML {
-	if remote {
-		parsed, err := url.Parse(origin)
-		if err == nil && parsed.Host != "" {
-			origin = parsed.Host
-		}
-		origin = template.HTMLEscapeString(origin)
-		if count == 1 {
-			return template.HTML(fmt.Sprintf(translate(locale, "share_status_remote_one"), origin))
-		}
-		return template.HTML(fmt.Sprintf(translate(locale, "share_status_remote"), count, origin))
-	}
-	updatedMarkup := localTimeMarkup(updated, false)
-	if count == 1 {
-		return template.HTML(fmt.Sprintf(translate(locale, "share_status_local_one"), updatedMarkup))
-	}
-	return template.HTML(fmt.Sprintf(translate(locale, "share_status_local"), count, updatedMarkup))
-}
-
 func deleteWarning(locale string, shares int) string {
 	if shares == 0 {
 		return translate(locale, "delete_warning")
@@ -300,6 +356,7 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	data.Anonymous = a.cfg.AnonymousEnabled
 	data.LegalLinks = a.cfg.ContactEmail != ""
 	data.Language = requestLanguage(r)
+	data.Theme = requestTheme(r)
 	data.Locale = data.Language.Locale
 	data.Error = localizePageError(data.Locale, data.Error)
 	data.UpstreamError = localizePageError(data.Locale, data.UpstreamError)

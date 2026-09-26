@@ -1,47 +1,94 @@
-{{define "share-status"}}<span class="st live {{if .Shares}}on{{else}}off{{end}}" data-share-status>
-  <i></i>
-  <span>{{if .Shares}}{{shareStatus .Locale (len .Shares) .Resource.Remote .Resource.OriginURL .Resource.UpdatedAt}}{{else}}{{tr .Locale "no_live_shares"}}{{end}}</span>
-</span>{{end}}
-
-{{define "share-panel"}}<div class="panel" data-share-panel>
+{{define "share-panel"}}<div class="panel ruled" data-share-panel>
   <div class="pt">
-    <span class="sec">{{tr .Locale "sharing"}}</span>
+    <span class="sec">{{tr .Locale "share_links"}}</span>
     <span class="sp">
+      {{if or .Shares .EndedShares}}<span class="counts"><b>{{len .Shares}}</b> {{tr .Locale "count_live"}}{{if .EndedShares}} · <b>{{len .EndedShares}}</b> {{tr .Locale "count_ended"}}{{end}}</span>{{end}}
       {{if .Shares}}
       <form method="post" action="/resources/{{.Resource.ID}}/share" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="revoke_all">
-        <button type="submit" class="sm">{{tr .Locale "revoke_all"}}</button>
+        <button type="submit" class="txt danger">{{tr .Locale "revoke_all"}}</button>
       </form>
       {{end}}
       <form method="post" action="/resources/{{.Resource.ID}}/share" class="inline" data-share-create>
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="create">
-        <button type="submit" class="sm pri">{{tr .Locale "new_share"}}</button>
+        <button type="submit" class="sm">{{tr .Locale "new_share"}}</button>
       </form>
     </span>
   </div>
-  <div class="pb">
-    {{if .Shares}}
+  <div class="pb{{if or .Shares .EndedShares}} shl-sheet{{end}}">
+    {{if or .Shares .EndedShares}}
+    {{/* One row per link, in columns shared down the list: what it is called,
+         the address, how much of its time is left, how often it has been
+         used, and what can be done to it. */}}
     <ul class="shl">
       {{range .Shares}}
-      <li>
+      {{/* A link with an expiry carries the seconds until it: at that moment
+           the row turns into an ended one by itself - struck through, the
+           word "expired" in place of the time left, the history in place of
+           the actions. Both states are on the page from the start; the
+           stylesheet swaps them when the time comes. */}}
+      <li style="{{endStyle .Link.ExpiresAt}}">
+        <span class="lbl ends{{if not .Link.Name}} mut{{end}}">{{or .Link.Name (tr $.Locale "untitled_share")}}</span>
         {{if .Link.Unreadable}}
         {{/* Still live for whoever holds the address - delivery never decrypts -
              so it stays in the list and stays revocable. */}}
         <span class="unreadable">{{tr $.Locale "share_link_unreadable"}}</span>
         {{else}}
-        <code class="addr sm" tabindex="0" aria-label="{{tr $.Locale "share_link"}}">{{.URL}}</code>
-        <button type="button" class="sm" data-copy="{{.URL}}">{{tr $.Locale "copy"}}</button>
+        <code class="addr sm ends" tabindex="0" aria-label="{{tr $.Locale "share_link"}}">{{template "address" .URL}}</code>
         {{end}}
-        <span class="ttl">{{if .Link.Name}}{{.Link.Name}} · {{end}}{{remainText $.Locale .Link.ExpiresAt}}{{if .Link.MaxUses}} · {{tr $.Locale "limited_to"}} {{.Link.MaxUses}}{{end}} · {{tr $.Locale "used_count"}} {{.Link.UsedCount}}</span>
-        {{if not .Link.Unreadable}}<a class="btn sm" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}">{{tr $.Locale "settings"}}</a>{{end}}
-        <form method="post" action="/resources/{{$.Resource.ID}}/share" class="inline">
-          <input type="hidden" name="csrf" value="{{$.CSRF}}">
-          <input type="hidden" name="action" value="revoke">
-          <input type="hidden" name="share_id" value="{{.Link.ID}}">
-          <button type="submit" class="sm">{{tr $.Locale "revoke"}}</button>
-        </form>
+        {{$left := leftPercent .Link.TermsAt .Link.ExpiresAt}}
+        <span class="left">
+          {{if .Link.ExpiresAt}}<span class="gauge" style="{{gaugeStyle .Link.TermsAt .Link.ExpiresAt}}" aria-hidden="true"></span>{{else}}<span></span>{{end}}
+          <span class="swap">
+            <span class="st until {{if and .Link.ExpiresAt (le $left 10)}}soon{{else}}on{{end}}"><i></i><span>{{remainText $.Locale .Link.ExpiresAt}}</span></span>
+            {{if .Link.ExpiresAt}}<span class="st off after"><i></i><span>{{tr $.Locale "share_ended_expired"}} {{formatDay .Link.ExpiresAt}}</span></span>{{end}}
+          </span>
+        </span>
+        <span class="uses">{{tr $.Locale "used_count"}} {{.Link.UsedCount}}{{if .Link.MaxUses}} / {{.Link.MaxUses}}{{end}}</span>
+        <span class="swap">
+        <span class="acts until">
+          {{if not .Link.Unreadable}}
+          <button type="button" class="sm" data-copy="{{.URL}}">{{template "copy-label" $}}</button>
+          <a class="txt" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}">{{tr $.Locale "settings"}}</a>
+          {{end}}
+          <form method="post" action="/resources/{{$.Resource.ID}}/share" class="inline">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="action" value="revoke">
+            <input type="hidden" name="share_id" value="{{.Link.ID}}">
+            <button type="submit" class="txt danger">{{tr $.Locale "revoke"}}</button>
+          </form>
+        </span>
+        {{if .Link.ExpiresAt}}<span class="acts after"><a class="txt" href="/logs?resource={{$.Resource.ID}}">{{tr $.Locale "access_logs"}}</a></span>{{end}}
+        </span>
+      </li>
+      {{end}}
+      {{/* What stopped working lately, in the same columns, struck through:
+           nothing left to do with it but read its history. */}}
+      {{range .EndedShares}}
+      <li class="ended">
+        <span class="lbl{{if not .Link.Name}} mut{{end}}">{{or .Link.Name (tr $.Locale "untitled_share")}}</span>
+        {{if .Link.Unreadable}}
+        <span class="unreadable">{{tr $.Locale "share_link_unreadable"}}</span>
+        {{else}}
+        <code class="addr sm">{{template "address" .URL}}</code>
+        {{end}}
+        <span class="left">
+          <span class="gauge" aria-hidden="true"></span>
+          <span class="st off"><i></i><span>{{tr $.Locale (printf "share_ended_%s" .Ended)}} {{formatDay .EndedAt}}</span></span>
+        </span>
+        <span class="uses">{{tr $.Locale "used_count"}} {{.Link.UsedCount}}{{if .Link.MaxUses}} / {{.Link.MaxUses}}{{end}}</span>
+        <span class="acts">
+          <a class="txt" href="/logs?resource={{$.Resource.ID}}">{{tr $.Locale "access_logs"}}</a>
+          {{/* Gone for good; its access history stays. */}}
+          <form method="post" action="/resources/{{$.Resource.ID}}/share" class="inline">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="share_id" value="{{.Link.ID}}">
+            <button type="submit" class="txt danger">{{tr $.Locale "delete"}}</button>
+          </form>
+        </span>
       </li>
       {{end}}
     </ul>
@@ -51,4 +98,4 @@
   </div>
 </div>{{end}}
 
-{{define "share-fragment"}}{{template "share-status" .}}{{template "share-panel" .}}{{end}}
+{{define "share-fragment"}}{{template "share-panel" .}}{{end}}

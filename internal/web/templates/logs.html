@@ -1,5 +1,5 @@
 {{define "logs.html"}}<!doctype html>
-<html lang="{{.Locale}}">
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
   <title>{{tr .Locale "access_logs"}} · PlainMote</title>
@@ -9,9 +9,9 @@
   <main class="page">
     <div class="ph">
       <h1>{{tr .Locale "access_logs"}}</h1>
-      <span class="cnt sp">{{countText .Locale .Pager.Total "entries"}}</span>
+      <span class="cnt">{{countText .Locale .Pager.Total "entries"}}</span>
     </div>
-    <form class="panel log-filter" method="get" action="/logs">
+    <form class="filters log-filter" method="get" action="/logs">
       <label class="pick log-filter-resource"><span>{{tr .Locale "resource"}}</span>
         <select name="resource">
           <option value="">{{tr .Locale "all_resources"}}</option>
@@ -26,7 +26,7 @@
       </label>
       <input type="hidden" name="size" value="{{.Pager.Size}}">
       <button type="submit">{{tr .Locale "filter"}}</button>
-      {{if or .LogResource .LogOutcome}}<a class="btn" href="/logs">{{tr .Locale "clear"}}</a>{{end}}
+      {{if or .LogResource .LogOutcome}}<a class="txt" href="/logs">{{tr .Locale "clear"}}</a>{{end}}
     </form>
     <div class="panel lg">
       <div class="lgh"><span>{{tr .Locale "time"}}</span><span>{{tr .Locale "result"}}</span><span>{{tr .Locale "resource"}}</span><span>{{tr .Locale "share_used"}}</span><span>{{tr .Locale "source_ip"}}</span><span>{{tr .Locale "count"}}</span><span></span></div>

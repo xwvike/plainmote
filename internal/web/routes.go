@@ -68,6 +68,7 @@ type pageData struct {
 	SignInURL        string
 	Locale           string
 	Language         languageView
+	Theme            themeView
 	RegistrationMode auth.RegistrationMode
 	Resources        []Resource
 	Quota            store.UserQuota
@@ -105,6 +106,8 @@ type pageData struct {
 	PasteResourceID string
 	PasteClaimable  bool
 	PasteExpires    time.Time
+	PasteGauge      template.CSS
+	PasteEnd        template.CSS
 	PasteSize       int64
 	MaxPaste        int64
 
@@ -122,6 +125,7 @@ type pageData struct {
 	MediaSource         string
 	MediaAutoSave       bool
 	Shares              []linkView
+	EndedShares         []linkView
 	ShareOpen           bool
 	DeleteOpen          bool
 	FocusShare          linkView
@@ -169,6 +173,10 @@ type linkView struct {
 	URL       string
 	TTLChoice string
 	TTLCustom string
+	// For a link that has stopped working: why ("revoked", "expired",
+	// "exhausted") and when.
+	Ended   string
+	EndedAt time.Time
 }
 
 func (a *App) routes() http.Handler {
@@ -180,6 +188,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/auth/github/callback", a.handleGitHubCallback)
 	mux.HandleFunc("/logout", a.handleLogout)
 	mux.HandleFunc("/language", a.handleLanguage)
+	mux.HandleFunc("/theme", a.handleTheme)
 	mux.HandleFunc("/resources/", a.handleResources)
 	mux.HandleFunc("/logs", a.handleLogs)
 	mux.HandleFunc(accountPath, a.handleAccount)

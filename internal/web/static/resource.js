@@ -1,5 +1,5 @@
-// Creating a share changes only the share list and its status line. Keep the
-// editor, selection and scroll position intact instead of rebuilding the page.
+// Creating a share changes only the share list. Keep the editor, selection and
+// scroll position intact instead of rebuilding the page.
 export function formActionURL(form, baseURL) {
   // The form also has an input named "action". Named form controls can
   // shadow form.action in browsers, so read the URL from the attribute.
@@ -32,13 +32,8 @@ async function createShare(event) {
 
     const parsed = new DOMParser().parseFromString(await response.text(), "text/html");
     const nextPanel = parsed.querySelector("[data-share-panel]");
-    const nextStatus = parsed.querySelector("[data-share-status]");
     const currentPanel = document.querySelector("[data-share-panel]");
-    const currentStatus = document.querySelector("[data-share-status]");
-    if (!nextPanel || !nextStatus || !currentPanel || !currentStatus) {
-      throw new Error("share fragment is incomplete");
-    }
-    currentStatus.replaceWith(nextStatus);
+    if (!nextPanel || !currentPanel) throw new Error("share fragment is incomplete");
     currentPanel.replaceWith(nextPanel);
   } catch (error) {
     // The POST may already have succeeded, so never repeat it automatically.

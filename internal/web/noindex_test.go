@@ -226,8 +226,7 @@ func TestNoScriptStylesheetIsLinkedAndServed(t *testing.T) {
 	}
 	for _, rule := range []string{
 		"[data-copy] { display: none !important; }",
-		"[data-text-controls] { display: none !important; }",
-		"[data-upload], [data-upload-status] { display: none !important; }",
+		"[data-upload-key], [data-upload-status] { display: none !important; }",
 	} {
 		if !strings.Contains(css.Body.String(), rule) {
 			t.Errorf("noscript.css is missing %q", rule)

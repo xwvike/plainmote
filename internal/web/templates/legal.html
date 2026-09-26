@@ -1,5 +1,5 @@
 {{define "legal.html"}}<!doctype html>
-<html lang="{{if .Legal.Chinese}}zh-CN{{else}}en{{end}}">
+<html lang="{{if .Legal.Chinese}}zh-CN{{else}}en{{end}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
   <title>{{template "legal-title" .}} · PlainMote</title>
@@ -36,4 +36,5 @@
          people who look for it look for that name. */}}
     <a href="/llms.txt">llms.txt</a>
   </nav>
+  <span class="foot-name">PlainMote</span>
 </footer>{{end}}{{end}}

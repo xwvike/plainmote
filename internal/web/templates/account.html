@@ -1,5 +1,5 @@
 {{define "account.html"}}<!doctype html>
-<html lang="{{.Locale}}">
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
   <title>{{tr .Locale "account"}} · PlainMote</title>
@@ -10,9 +10,9 @@
     <div class="ph"><h1>{{tr .Locale "account"}}</h1></div>
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 
-    <section class="panel">
+    <section class="panel ruled">
       <div class="pt"><span class="sec">{{tr .Locale "account_info"}}</span></div>
-      <dl class="account-facts">
+      <dl class="pb account-facts">
         <div><dt>{{tr .Locale "account_login"}}</dt><dd>{{.Account.User.Login}}</dd></div>
         <div><dt>{{tr .Locale "account_name"}}</dt><dd>{{if .Account.User.Name}}{{.Account.User.Name}}{{else}}<span class="mut">—</span>{{end}}</dd></div>
         <div><dt>{{tr .Locale "account_created"}}</dt><dd>{{formatTime .Account.CreatedAt}}</dd></div>
@@ -21,7 +21,7 @@
     </section>
 
     <div class="account-grid">
-    <section class="panel">
+    <section class="panel ruled">
       <div class="pt"><span class="sec">{{tr .Locale "export_title"}}</span></div>
       <div class="pb account-action">
         <p class="hint">{{tr .Locale "export_body"}}</p>
@@ -34,7 +34,7 @@
       </div>
     </section>
 
-    <section class="panel account-danger">
+    <section class="panel ruled account-danger">
       <div class="pt"><span class="sec">{{tr .Locale "delete_account_title"}}</span></div>
       <div class="pb account-action">
         <p class="hint">{{tr .Locale "delete_account_body"}}</p>

@@ -25,6 +25,9 @@ type Link struct {
 	RevokedAt  *time.Time
 	LastUsedAt *time.Time
 	CreatedAt  time.Time
+	// TermsAt is when the current expiry and use limit were set: the link's
+	// creation, or the last change to its terms. ExpiresAt counts from here.
+	TermsAt time.Time
 	// Unreadable marks a link whose stored token no longer decrypts with the
 	// configured key. Delivery looks links up by hash and never decrypts, so
 	// the link still works for whoever holds the address; only its owner can
@@ -50,6 +53,23 @@ func (l Link) Live(now time.Time) bool {
 
 func (l Link) Never() bool { return l.ExpiresAt == nil }
 
+// Ending says why a link stopped working and when: "revoked", "expired" or
+// "exhausted", whichever came first. A live link has no ending and returns "".
+func (l Link) Ending(now time.Time) (string, time.Time) {
+	reason, at := "", time.Time{}
+	consider := func(r string, t *time.Time) {
+		if t != nil && !t.After(now) && (reason == "" || t.Before(at)) {
+			reason, at = r, *t
+		}
+	}
+	consider("revoked", l.RevokedAt)
+	consider("expired", l.ExpiresAt)
+	if l.MaxUses > 0 && l.UsedCount >= l.MaxUses {
+		consider("exhausted", l.LastUsedAt)
+	}
+	return reason, at
+}
+
 func (d *Store) insertLink(ctx context.Context, q storeQuerier, link *Link, now time.Time) error {
 	token, err := generateToken()
 	if err != nil {
@@ -62,6 +82,7 @@ func (d *Store) insertLink(ctx context.Context, q storeQuerier, link *Link, now 
 	link.ID = uuid.NewString()
 	link.Token = token
 	link.CreatedAt = now
+	link.TermsAt = now
 	_, err = q.Exec(ctx, `
 INSERT INTO links(
   id, resource_id, name, token_ciphertext, token_hash, max_uses, used_count,
@@ -75,7 +96,7 @@ VALUES($1, $2, $3, $4, $5, $6, 0, $7, NULL, NULL, $8)
 	return nil
 }
 
-const linkColumns = `id, resource_id, name, token_ciphertext, max_uses, used_count, expires_at, revoked_at, last_used_at, created_at`
+const linkColumns = `id, resource_id, name, token_ciphertext, max_uses, used_count, expires_at, revoked_at, last_used_at, created_at, COALESCE(terms_at, created_at)`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -93,7 +114,7 @@ func (d *Store) scanLink(row rowScanner) (Link, error) {
 	var expires, revoked, lastUsed pgtype.Timestamptz
 	if err := row.Scan(
 		&link.ID, &link.ResourceID, &link.Name, &ciphertext, &link.MaxUses,
-		&link.UsedCount, &expires, &revoked, &lastUsed, &link.CreatedAt,
+		&link.UsedCount, &expires, &revoked, &lastUsed, &link.CreatedAt, &link.TermsAt,
 	); err != nil {
 		return Link{}, err
 	}
@@ -168,9 +189,9 @@ func (d *Store) UpdateShare(ctx context.Context, ownerID, resourceID, linkID, na
 	now := time.Now().UTC()
 	tag, err := d.db.Exec(ctx, `
 UPDATE links
-SET name = $1, max_uses = $2, expires_at = $3, used_count = 0
-WHERE id = $4 AND resource_id = $5 AND revoked_at IS NULL
-`, name, maxUses, shareExpiry(now, ttl), linkID, resourceID)
+SET name = $1, max_uses = $2, expires_at = $3, used_count = 0, terms_at = $4
+WHERE id = $5 AND resource_id = $6 AND revoked_at IS NULL
+`, name, maxUses, shareExpiry(now, ttl), now, linkID, resourceID)
 	if err != nil {
 		return fmt.Errorf("update share: %w", err)
 	}
@@ -193,6 +214,33 @@ WHERE id = $2 AND resource_id = $3 AND revoked_at IS NULL
 `, time.Now().UTC(), linkID, resourceID)
 	if err != nil {
 		return fmt.Errorf("revoke link: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteEndedLink removes a link that no longer works - revoked, expired or
+// used up - from the resource. A live link has to be revoked first, so this
+// can never cut off someone who is still meant to have access. Its access
+// history stays: the log keeps the link's name and loses only the reference.
+func (d *Store) DeleteEndedLink(ctx context.Context, ownerID, resourceID, linkID string, now time.Time) error {
+	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {
+		return err
+	}
+	if !validUUIDs(linkID) {
+		return ErrNotFound
+	}
+	tag, err := d.db.Exec(ctx, `
+DELETE FROM links
+WHERE id = $1 AND resource_id = $2
+  AND (revoked_at IS NOT NULL
+    OR (expires_at IS NOT NULL AND expires_at <= $3)
+    OR (max_uses > 0 AND used_count >= max_uses))
+`, linkID, resourceID, now)
+	if err != nil {
+		return fmt.Errorf("delete link: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
@@ -224,6 +272,37 @@ ORDER BY created_at DESC, id DESC`, resourceID, now)
 	if err != nil {
 		return nil, err
 	}
+	return d.collectLinks(rows, func(link Link) bool { return link.Live(now) })
+}
+
+// ListEndedShares returns the links of a resource that stopped working since
+// the given time - revoked, expired or used up - most recently ended first,
+// at most limit of them. The owner sees what just went dead next to what is
+// still live; older ones stay in the access history.
+func (d *Store) ListEndedShares(ctx context.Context, ownerID, resourceID string, now, since time.Time, limit int) ([]Link, error) {
+	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {
+		return nil, err
+	}
+	rows, err := d.db.Query(ctx, `
+WITH ended AS (
+  SELECT *, LEAST(
+    revoked_at,
+    CASE WHEN expires_at <= $2 THEN expires_at END,
+    CASE WHEN max_uses > 0 AND used_count >= max_uses THEN last_used_at END
+  ) AS ended_at
+  FROM links WHERE resource_id = $1
+)
+SELECT `+linkColumns+` FROM ended
+WHERE ended_at IS NOT NULL AND ended_at <= $2 AND ended_at >= $3
+ORDER BY ended_at DESC, id DESC
+LIMIT $4`, resourceID, now, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	return d.collectLinks(rows, func(link Link) bool { return !link.Live(now) })
+}
+
+func (d *Store) collectLinks(rows pgx.Rows, keep func(Link) bool) ([]Link, error) {
 	defer rows.Close()
 	links := make([]Link, 0)
 	for rows.Next() {
@@ -238,7 +317,7 @@ ORDER BY created_at DESC, id DESC`, resourceID, now)
 		if err != nil {
 			return nil, err
 		}
-		if link.Live(now) {
+		if keep(link) {
 			links = append(links, link)
 		}
 	}

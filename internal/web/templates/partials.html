@@ -4,17 +4,32 @@
        covers the delivery path; this survives a proxy that strips unknown headers. -->
   <meta name="robots" content="noindex, nofollow, noarchive">{{end}}
   <!-- Webfont is optional: delete the two lines below to run without any external request;
-       the stacks in style.css fall back to Helvetica / system-ui and SFMono / Menlo. -->
+       the stacks in style.css fall back to the system sans and SFMono / Menlo. -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@87.5,400..600&amp;family=Schibsted+Grotesk:wght@400..700&amp;display=swap">
   <link rel="stylesheet" href="/static/style.css">
   <script defer src="/static/time.js"></script>
   <noscript><link rel="stylesheet" href="/static/noscript.css"></noscript>
   <link rel="icon" href="/static/logo.png" type="image/png" sizes="256x256">
   <link rel="apple-touch-icon" href="/static/logo.png">{{end}}
 
+{{/* A share address with its token set apart: the token is the credential,
+     the rest is the same on every link. Selecting it still takes the whole. */}}
+{{define "address"}}{{with addressParts .}}{{index . 0}}<span class="tk">{{index . 1}}</span>{{index . 2}}{{end}}{{end}}
+{{/* A copy button's face: the word, and under it the tick that rolls up in its
+     place once the address is on the clipboard. The button is as wide as the
+     word alone, in every language, before and after. What happened is said
+     out loud by the page's copy-status region, not by the button. */}}
+{{define "copy-label"}}<span class="flip"><span>{{tr .Locale "copy"}}</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"></path></svg></span>{{end}}
+{{define "copy-status"}}<p class="sr" role="status" data-copy-status data-message="{{tr .Locale "copied"}}"></p>{{end}}
 {{define "mark"}}<img class="mk" src="/static/logo.png" alt="" width="18" height="18" decoding="async">{{end}}
 
+{{/* Sun and moon: the one shown is the way out of what is on screen. Links,
+     so the switch works with scripts off; nofollow, as they only set a cookie. */}}
+{{define "theme-switch"}}<span class="theme-switch">
+  <a class="theme-to-dark" href="{{.Theme.DarkURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_dark"}}" title="{{tr .Locale "theme_to_dark"}}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1Z"></path></svg></a>
+  <a class="theme-to-light" href="{{.Theme.LightURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_light"}}" title="{{tr .Locale "theme_to_light"}}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"></path></svg></a>
+</span>{{end}}
 {{define "language-switch"}}{{if .Language.ShowSwitch}}<nav class="lang-switch" aria-label="{{tr .Locale "language_switch"}}">
   <a class="lang-cell{{if ne .Locale "en"}} on{{end}}" href="{{.Language.NativeURL}}" lang="{{.Language.NativeLocale}}"{{if ne .Locale "en"}} aria-current="true"{{end}}>{{.Language.NativeLabel}}</a>
   <a class="lang-cell{{if eq .Locale "en"}} on{{end}}" href="{{.Language.EnglishURL}}" lang="en"{{if eq .Locale "en"}} aria-current="true"{{end}}>EN</a>
@@ -30,12 +45,13 @@
       {{end}}
     </nav>
     <div class="rt">
+      {{template "theme-switch" .}}
       {{template "language-switch" .}}
       {{if .SignedIn}}
       <a class="who" href="/account"{{if eq .Active "account"}} aria-current="page"{{end}}>{{.User.Login}}</a>
       <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="sm">{{tr .Locale "logout"}}</button></form>
       {{else}}
-      <a class="btn sm" href="{{if .SignInURL}}{{.SignInURL}}{{else}}/login{{end}}">{{tr .Locale "login"}}</a>
+      <a class="btn sm" href="{{if .SignInURL}}{{.SignInURL}}{{else}}/login{{end}}">{{tr .Locale "login_github"}}</a>
       {{end}}
     </div>
   </div></div>{{end}}
