@@ -2,7 +2,8 @@
 <html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
-  <title>{{tr .Locale "home_title"}} · PlainMote</title>
+  {{/* The name first: this is the page a search for the name should find. */}}
+  <title>PlainMote · {{tr .Locale "home_title"}}</title>
   <meta name="description" content="{{tr .Locale "home_description"}}">
   {{if .Indexable}}<meta name="keywords" content="{{tr .Locale "home_keywords"}}">
   <meta name="application-name" content="PlainMote">
@@ -13,7 +14,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="PlainMote">
   <meta property="og:locale" content="{{openGraphLocale .Locale}}">
-  <meta property="og:title" content="{{tr .Locale "home_title"}} · PlainMote">
+  <meta property="og:title" content="PlainMote · {{tr .Locale "home_title"}}">
   <meta property="og:description" content="{{tr .Locale "home_description"}}">
   <meta property="og:url" content="{{.BaseURL}}/">
   <meta property="og:image" content="{{.BaseURL}}/static/logo.png">
@@ -22,7 +23,7 @@
   <meta property="og:image:height" content="256">
   <meta property="og:image:alt" content="PlainMote">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="{{tr .Locale "home_title"}} · PlainMote">
+  <meta name="twitter:title" content="PlainMote · {{tr .Locale "home_title"}}">
   <meta name="twitter:description" content="{{tr .Locale "home_description"}}">
   <meta name="twitter:image" content="{{.BaseURL}}/static/logo.png">
   {{/* Data, not a script: it names the site so a search result can show

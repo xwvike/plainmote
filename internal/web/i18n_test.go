@@ -249,7 +249,7 @@ func TestIndexableHomeHasLocalizedDiscoveryMetadata(t *testing.T) {
 	})
 	body := response.Body.String()
 	for _, expected := range []string{
-		`<title>把想要分享的文本生成链接 · PlainMote</title>`,
+		`<title>PlainMote · 把想要分享的文本生成链接</title>`,
 		`<meta name="description" content="无需登录，粘贴文本即可获得限时失效的分享链接`,
 		`<meta name="keywords" content="限时链接, 可撤销分享链接`,
 		`<h2>分享调试日志</h2>`,
