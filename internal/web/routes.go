@@ -45,6 +45,7 @@ type Config struct {
 	LogRetention     time.Duration
 	Operator         string
 	ContactEmail     string
+	SourceURL        string
 	BlobEndpoint     string
 }
 
@@ -69,6 +70,7 @@ type pageData struct {
 	Locale     string
 	Language   languageView
 	Theme      themeView
+	SourceURL  string
 	// E2EE is whether this account's quick shares are encrypted in the browser.
 	E2EE             bool
 	RegistrationMode auth.RegistrationMode

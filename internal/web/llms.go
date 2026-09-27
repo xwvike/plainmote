@@ -65,6 +65,10 @@ curl --data-binary @app.log '%[1]s/paste?ttl=30&filename=app.log'
 - An account can turn on end-to-end encryption for its quick shares. Such a link carries its key after `+"`#`"+` (or needs a passphrase); a GET returns only the ciphertext, as `+"`"+store.EncryptedContentType+"`"+`, and only a browser opening the full link can decrypt it.
 `, base, legalBytes(a.cfg.MaxContent))
 
+	if a.cfg.SourceURL != "" {
+		fmt.Fprintf(&text, "- Source code (AGPL-3.0): %s\n", a.cfg.SourceURL)
+	}
+
 	if a.cfg.ContactEmail != "" {
 		text.WriteString("\n## Pages\n\n")
 		for _, page := range []struct{ path, title, note string }{

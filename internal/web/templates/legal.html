@@ -26,8 +26,9 @@
 
 {{define "legal-email"}}<a href="mailto:{{.Legal.Email}}">{{.Legal.Email}}</a>{{end}}
 
-{{define "footer"}}{{if .LegalLinks}}<footer class="foot">
+{{define "footer"}}{{if or .LegalLinks .SourceURL}}<footer class="foot">
   <nav aria-label="PlainMote">
+    {{if .LegalLinks}}
     <a href="/about"{{if eq .Active "about"}} aria-current="page"{{end}}>{{tr .Locale "legal_about"}}</a>
     <a href="/privacy"{{if eq .Active "privacy"}} aria-current="page"{{end}}>{{tr .Locale "legal_privacy"}}</a>
     <a href="/terms"{{if eq .Active "terms"}} aria-current="page"{{end}}>{{tr .Locale "legal_terms"}}</a>
@@ -35,6 +36,10 @@
     {{/* Named as the file is, in every language: it is for tools, and the
          people who look for it look for that name. */}}
     <a href="/llms.txt">llms.txt</a>
+    {{end}}
+    {{/* On every page, whatever else is configured: the AGPL has a deployment
+         offer its users the source it runs. */}}
+    {{if .SourceURL}}<a href="{{.SourceURL}}" rel="noopener">{{tr .Locale "source_code"}}</a>{{end}}
   </nav>
   <span class="foot-name">PlainMote</span>
 </footer>{{end}}{{end}}

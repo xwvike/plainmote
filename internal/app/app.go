@@ -57,6 +57,7 @@ func Run() error {
 		LogRetention:     cfg.LogRetention,
 		Operator:         cfg.Operator,
 		ContactEmail:     cfg.ContactEmail,
+		SourceURL:        cfg.SourceURL,
 		BlobEndpoint:     cfg.BlobEndpoint,
 	}, db, upstream.New(cfg.MaxContent), auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
 

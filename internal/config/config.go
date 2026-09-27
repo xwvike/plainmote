@@ -37,7 +37,13 @@ type Config struct {
 	TokenKey         []byte
 	Operator         string
 	ContactEmail     string
+	// SourceURL is where this deployment's source code is published. Under
+	// the AGPL, a deployment of modified code must point at its own.
+	SourceURL string
 }
+
+// DefaultSourceURL is the upstream repository.
+const DefaultSourceURL = "https://github.com/xwvike/plainmote"
 
 // Load reads deployment settings from the process environment. The service
 // has no configuration file and no writable local state.
@@ -128,7 +134,21 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	cfg.SourceURL, err = parseSourceURL(env("PLAINMOTE_SOURCE_URL", DefaultSourceURL))
+	if err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// parseSourceURL takes an absolute http(s) address: it is a link every page
+// carries, so anything else would be a broken or unsafe link on all of them.
+func parseSourceURL(value string) (string, error) {
+	parsed, err := url.Parse(value)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+		return "", fmt.Errorf("PLAINMOTE_SOURCE_URL must be an http(s) address such as %s", DefaultSourceURL)
+	}
+	return value, nil
 }
 
 func env(name, fallback string) string {

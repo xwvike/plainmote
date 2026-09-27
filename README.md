@@ -90,6 +90,7 @@ docker compose up -d
 | `PLAINMOTE_ANONYMOUS` | `false` | 是否开放首页的免登录快速分享 |
 | `PLAINMOTE_OPERATOR` | 空 | 运营者名称，显示在关于、隐私政策和服务条款中 |
 | `PLAINMOTE_CONTACT_EMAIL` | 空 | 联系邮箱；设置后才提供关于、隐私政策、服务条款和联系页面 |
+| `PLAINMOTE_SOURCE_URL` | 本仓库地址 | 页面底部“源代码”链接指向的地址；部署修改过的版本时，依 AGPL 须指向修改后的源代码 |
 
 ### 关于法律文本
 

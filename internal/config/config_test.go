@@ -141,3 +141,23 @@ func TestLoadContactEmail(t *testing.T) {
 		}
 	}
 }
+
+// Every deployment links to the source it runs: the upstream repository by
+// default, or a fork's own address, which has to be a real http(s) link.
+func TestLoadSourceURL(t *testing.T) {
+	setRequiredEnvironment(t)
+	cfg, err := Load()
+	if err != nil || cfg.SourceURL != DefaultSourceURL {
+		t.Fatalf("default: %q %v", cfg.SourceURL, err)
+	}
+	t.Setenv("PLAINMOTE_SOURCE_URL", "https://git.example.com/me/plainmote")
+	if cfg, err := Load(); err != nil || cfg.SourceURL != "https://git.example.com/me/plainmote" {
+		t.Fatalf("fork: %q %v", cfg.SourceURL, err)
+	}
+	for _, bad := range []string{"javascript:alert(1)", "git.example.com/me", "ftp://example.com/src"} {
+		t.Setenv("PLAINMOTE_SOURCE_URL", bad)
+		if _, err := Load(); err == nil {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+}

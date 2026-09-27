@@ -38,6 +38,7 @@ type legalView struct {
 	MaxContent    int64
 	ExportLimit   int
 	ExportWindow  time.Duration
+	SourceURL     string
 }
 
 func (a *App) handleLegal(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +64,7 @@ func (a *App) handleLegal(w http.ResponseWriter, r *http.Request) {
 		Site:          site,
 		Operator:      a.cfg.Operator,
 		Email:         a.cfg.ContactEmail,
+		SourceURL:     a.cfg.SourceURL,
 		Updated:       legalUpdated,
 		R2:            cloudflareR2(a.cfg.BlobEndpoint),
 		SessionTTL:    a.cfg.SessionTTL,

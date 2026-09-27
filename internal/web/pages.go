@@ -355,6 +355,7 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	// would leave the navigation disagreeing with itself.
 	data.Anonymous = a.cfg.AnonymousEnabled
 	data.LegalLinks = a.cfg.ContactEmail != ""
+	data.SourceURL = a.cfg.SourceURL
 	data.Language = requestLanguage(r)
 	data.Theme = requestTheme(r)
 	data.Locale = data.Language.Locale

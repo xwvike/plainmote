@@ -14,6 +14,7 @@
 
 <h2>隐私与安全</h2>
 <p>本服务不展示广告，不使用分析脚本或第三方跟踪工具。分享链接即为访问凭证，为防止链接经搜索引擎收录而泄露，分享链接及账号相关页面均禁止搜索引擎收录。本服务处理的信息详见<a href="/privacy">《隐私政策》</a>。</p>
+{{if .Legal.SourceURL}}<p>本服务的源代码以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）公开，见 <a href="{{.Legal.SourceURL}}" rel="noopener">{{.Legal.SourceURL}}</a>。</p>{{end}}
 
 <h2>运营者</h2>
 <p>{{if .Legal.Operator}}PlainMote 由 {{.Legal.Operator}} 运营。{{end}}如有疑问、建议或需要举报，请通过<a href="/contact">联系我们</a>页面所列方式与我们联系。</p>
@@ -35,6 +36,7 @@
 
 <h2>Privacy and security</h2>
 <p>The Service displays no advertising and uses no analytics scripts or third-party tracking tools. Because a share link serves as the access credential, share links and account pages are excluded from search engine indexing to prevent links from being exposed. Details of the information the Service processes are set out in the <a href="/privacy">Privacy Policy</a>.</p>
+{{if .Legal.SourceURL}}<p>The source code of the Service is published under the GNU Affero General Public License, version 3 (AGPL-3.0), at <a href="{{.Legal.SourceURL}}" rel="noopener">{{.Legal.SourceURL}}</a>.</p>{{end}}
 
 <h2>Operator</h2>
 <p>{{if .Legal.Operator}}PlainMote is operated by {{.Legal.Operator}}. {{end}}For questions, suggestions or reports, please use the methods listed on the <a href="/contact">Contact</a> page.</p>
