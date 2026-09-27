@@ -10,8 +10,11 @@
   <link rel="stylesheet" href="/static/style.css">
   <script defer src="/static/time.js"></script>
   <noscript><link rel="stylesheet" href="/static/noscript.css"></noscript>
-  <link rel="icon" href="/static/logo.png" type="image/png" sizes="256x256">
-  <link rel="apple-touch-icon" href="/static/logo.png">{{end}}
+  {{/* Sizes in multiples of 48, which is what a search result will take as
+       the site's icon; /favicon.ico is also where one looks without asking. */}}
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/static/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">{{end}}
 
 {{/* A share address with its token set apart: the token is the credential,
      the rest is the same on every link. Selecting it still takes the whole. */}}

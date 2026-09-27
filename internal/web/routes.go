@@ -187,6 +187,7 @@ type linkView struct {
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/static/", a.handleStatic)
+	mux.HandleFunc(faviconPath, a.handleFavicon)
 	mux.HandleFunc("/healthz", a.handleHealth)
 	mux.HandleFunc("/login", a.handleLogin)
 	mux.HandleFunc("/auth/github", a.handleGitHubLogin)
@@ -278,6 +279,7 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 		body.WriteString("Allow: /sitemap.xml$\n")
 		body.WriteString("Allow: /llms.txt$\n")
 		body.WriteString("Allow: " + staticPrefix + "\n")
+		body.WriteString("Allow: " + faviconPath + "$\n")
 	}
 	body.WriteString("Disallow: /\n")
 	if len(pages) > 0 {
@@ -326,7 +328,7 @@ func (a *App) noIndex(next http.Handler) http.Handler {
 		// Indexable pages go without it, and so do static assets: a stylesheet
 		// or a logo is not a page to keep out of an index, and the logo is what
 		// a search result shows as the site's icon.
-		if !a.indexable(r.URL.Path) && !strings.HasPrefix(r.URL.Path, staticPrefix) {
+		if !a.indexable(r.URL.Path) && !strings.HasPrefix(r.URL.Path, staticPrefix) && r.URL.Path != faviconPath {
 			w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
 		}
 		next.ServeHTTP(w, r)

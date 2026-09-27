@@ -146,11 +146,38 @@ func TestLoginPageShowsLogo(t *testing.T) {
 	page := recorder.Body.String()
 	for _, want := range []string{
 		`class="signin-mark" src="/static/logo.png"`,
-		`rel="icon" href="/static/logo.png"`,
+		`rel="icon" href="/favicon.ico" sizes="48x48"`,
+		`rel="icon" href="/static/icon-192.png" type="image/png" sizes="192x192"`,
 		`<h1 class="signin-name">PlainMote</h1>`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("login page is missing %q", want)
 		}
+	}
+}
+
+// The site's icon is where search engines and browsers look for it without
+// being told, in a size a search result accepts, and robots.txt lets them in.
+func TestFaviconIsServedAndCrawlable(t *testing.T) {
+	app := &App{cfg: Config{PublicURL: "https://cfg.test", AnonymousEnabled: true, ContactEmail: "ops@example.com"}}
+	app.templates = app.templateSet()
+	app.handler = app.routes()
+	get := func(path string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://cfg.test"+path, nil))
+		return response
+	}
+	icon := get("/favicon.ico")
+	if icon.Code != http.StatusOK || icon.Header().Get("Content-Type") != "image/x-icon" || icon.Header().Get("X-Robots-Tag") != "" {
+		t.Fatalf("favicon: %d %q %q", icon.Code, icon.Header().Get("Content-Type"), icon.Header().Get("X-Robots-Tag"))
+	}
+	if body := icon.Body.Bytes(); len(body) < 6 || body[2] != 1 || body[4] != 3 {
+		t.Fatal("favicon.ico is not an icon with three sizes")
+	}
+	if robots := get("/robots.txt").Body.String(); !strings.Contains(robots, "Allow: /favicon.ico$") {
+		t.Fatal("robots.txt keeps crawlers from the icon")
+	}
+	if got := get("/static/icon-192.png"); got.Code != http.StatusOK || got.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("192px icon: %d", got.Code)
 	}
 }

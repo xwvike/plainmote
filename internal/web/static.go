@@ -14,7 +14,7 @@ import (
 // webAssets contains the templates and browser assets shipped with the Web
 // service. The explicit staticTypes list below remains the public boundary.
 //
-//go:embed templates/*.html static/style.css static/noscript.css static/media.css static/media.js static/logo.png static/editor.js static/upload.js static/resource.js static/time.js static/e2ee.js static/e2ee-share.js static/e2ee-open.js static/vendor/codemirror.js
+//go:embed templates/*.html static/style.css static/noscript.css static/media.css static/media.js static/logo.png static/favicon.ico static/icon-192.png static/apple-touch-icon.png static/editor.js static/upload.js static/resource.js static/time.js static/e2ee.js static/e2ee-share.js static/e2ee-open.js static/vendor/codemirror.js
 var webAssets embed.FS
 
 var staticTypes = map[string]string{
@@ -23,6 +23,9 @@ var staticTypes = map[string]string{
 	"media.css":            "text/css; charset=utf-8",
 	"media.js":             "text/javascript; charset=utf-8",
 	"logo.png":             "image/png",
+	"favicon.ico":          "image/x-icon",
+	"icon-192.png":         "image/png",
+	"apple-touch-icon.png": "image/png",
 	"editor.js":            "text/javascript; charset=utf-8",
 	"upload.js":            "text/javascript; charset=utf-8",
 	"resource.js":          "text/javascript; charset=utf-8",
@@ -120,6 +123,16 @@ func etagMatches(header, etag string) bool {
 		}
 	}
 	return false
+}
+
+// faviconPath is where browsers and search engines look for a site's icon
+// whether or not a page names one. It is the same file as any static asset.
+const faviconPath = "/favicon.ico"
+
+func (a *App) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	icon := r.Clone(r.Context())
+	icon.URL.Path = staticPrefix + "favicon.ico"
+	a.handleStatic(w, icon)
 }
 
 func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
