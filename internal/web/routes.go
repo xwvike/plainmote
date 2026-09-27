@@ -58,17 +58,19 @@ func New(cfg Config, db *store.Store, source upstreamFetcher, github *auth.GitHu
 func (a *App) Handler() http.Handler { return a.handler }
 
 type pageData struct {
-	User             User
-	CSRF             string
-	Active           string
-	BaseURL          string
-	MaxContent       int64
-	Error            string
-	LoginURL         string
-	SignInURL        string
-	Locale           string
-	Language         languageView
-	Theme            themeView
+	User       User
+	CSRF       string
+	Active     string
+	BaseURL    string
+	MaxContent int64
+	Error      string
+	LoginURL   string
+	SignInURL  string
+	Locale     string
+	Language   languageView
+	Theme      themeView
+	// E2EE is whether this account's quick shares are encrypted in the browser.
+	E2EE             bool
 	RegistrationMode auth.RegistrationMode
 	Resources        []Resource
 	Quota            store.UserQuota
@@ -106,6 +108,7 @@ type pageData struct {
 	PasteResourceID string
 	PasteClaimable  bool
 	PasteExpires    time.Time
+	PasteEncrypted  bool
 	PasteGauge      template.CSS
 	PasteEnd        template.CSS
 	PasteSize       int64
@@ -204,6 +207,8 @@ func (a *App) routes() http.Handler {
 		mux.HandleFunc(pastePath, a.handlePaste)
 		mux.HandleFunc(pasteResultPrefix, a.handlePasteResult)
 		mux.HandleFunc(pasteSavePath, a.handleSavePaste)
+		mux.HandleFunc(pasteEncryptedPath, a.handleEncryptedPaste)
+		mux.HandleFunc(accountE2EEPath, a.handleAccountE2EE)
 	}
 	if a.cfg.ContactEmail != "" {
 		for _, page := range legalPages {

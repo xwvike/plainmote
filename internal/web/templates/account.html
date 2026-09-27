@@ -20,6 +20,39 @@
       </dl>
     </section>
 
+    {{if .Anonymous}}
+    {{/* Opt-in, with what it costs said before the switch, not after. */}}
+    <section class="panel ruled">
+      <div class="pt">
+        <span class="sec">{{tr .Locale "e2ee_title"}}</span>
+        <span class="sp"><span class="st {{if .E2EE}}on{{else}}off{{end}}"><i></i><span>{{if .E2EE}}{{tr .Locale "e2ee_status_on"}}{{else}}{{tr .Locale "e2ee_status_off"}}{{end}}</span></span></span>
+      </div>
+      <div class="pb e2ee-set">
+        {{/* The one thing to know before the switch, in a sentence; the rest
+             is a click away - a native disclosure, so it opens without script. */}}
+        <p class="hint">{{tr .Locale "e2ee_summary"}}</p>
+        <details class="more">
+          <summary>{{tr .Locale "e2ee_details"}}</summary>
+          <div class="more-body">
+            <p class="hint">{{tr .Locale "e2ee_account_body"}}</p>
+            <ul class="hint">
+              <li>{{tr .Locale "e2ee_cost_js"}}</li>
+              <li>{{tr .Locale "e2ee_cost_lost"}}</li>
+              <li>{{tr .Locale "e2ee_cost_resource"}}</li>
+              <li>{{tr .Locale "e2ee_cost_code"}}</li>
+              <li>{{tr .Locale "e2ee_cost_meta"}}</li>
+            </ul>
+          </div>
+        </details>
+        <form method="post" action="/account/e2ee" class="inline">
+          <input type="hidden" name="csrf" value="{{.CSRF}}">
+          <input type="hidden" name="e2ee" value="{{if .E2EE}}off{{else}}on{{end}}">
+          <button type="submit"{{if not .E2EE}} class="pri"{{end}}>{{if .E2EE}}{{tr .Locale "e2ee_disable"}}{{else}}{{tr .Locale "e2ee_enable"}}{{end}}</button>
+        </form>
+      </div>
+    </section>
+    {{end}}
+
     <div class="account-grid">
     <section class="panel ruled">
       <div class="pt"><span class="sec">{{tr .Locale "export_title"}}</span></div>

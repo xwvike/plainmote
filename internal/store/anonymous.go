@@ -90,10 +90,38 @@ func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename
 	// The bytes are stored as given. What a textarea does to line endings is
 	// the web layer's to undo; a paste piped in from a terminal is exactly
 	// what was sent, CRLF included.
+	return d.insertPaste(ctx, creatorID, filename, content, anonymousContentType, anonymousEncoding, now, ttl)
+}
 
+// CreateEncryptedPaste stores a quick share its signed-in creator encrypted in
+// the browser. The service holds the ciphertext and nothing else: no name, no
+// filename - both are inside it - and a type that says only that it is
+// encrypted. The envelope's shape is checked so this cannot be used to store
+// arbitrary files; what is inside it cannot be checked, by design.
+func (d *Store) CreateEncryptedPaste(ctx context.Context, creatorID string, envelope []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	if !validUUIDs(creatorID) || creatorID == AnonymousUserID {
+		return Resource{}, Link{}, ErrNotFound
+	}
+	if ttl <= 0 {
+		ttl = AnonymousDefaultTTL
+	}
+	if ttl < AnonymousMinTTL || ttl > AnonymousMaxTTL {
+		return Resource{}, Link{}, errAnonymousTTL
+	}
+	if len(envelope) > EncryptedMaxBytes {
+		return Resource{}, Link{}, fmt.Errorf("内容最大 %s", BytesText(AnonymousMaxBytes))
+	}
+	if !ValidEnvelope(envelope) {
+		return Resource{}, Link{}, errors.New("加密内容格式无法识别")
+	}
+	return d.insertPaste(ctx, creatorID, "", envelope, EncryptedContentType, "", now, ttl)
+}
+
+// insertPaste writes a checked paste body and its one link.
+func (d *Store) insertPaste(ctx context.Context, creatorID, filename string, content []byte, contentType, encoding string, now time.Time, ttl time.Duration) (Resource, Link, error) {
 	resource := Resource{
 		ID: uuid.NewString(), OwnerID: AnonymousUserID, Name: filename, Filename: filename,
-		ContentType: anonymousContentType, ContentEncoding: anonymousEncoding,
+		ContentType: contentType, ContentEncoding: encoding,
 		ContentSize: int64(len(content)), CreatedAt: now, UpdatedAt: now,
 	}
 	resource.ContentKey = contentKey(resource.ID)
@@ -197,6 +225,7 @@ SELECT r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size,
 FROM paste_claims pc
 JOIN resources r ON r.id = pc.resource_id
 WHERE pc.resource_id = $1 AND pc.user_id IN ($2, $3) AND r.owner_id = $3
+  AND r.content_type <> '` + EncryptedContentType + `'
   AND EXISTS (
     SELECT 1 FROM links l
     WHERE l.resource_id = r.id AND l.revoked_at IS NULL

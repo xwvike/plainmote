@@ -42,10 +42,10 @@
     {{/* The address is what the visitor came for, so the page becomes it. */}}
     {{/* The link is a ticket: the address, a perforation, and the stub that
          copies it. Under it, the time it has left, drawn as grains of sand. */}}
-    <section class="ruled paste-result" style="{{.PasteEnd}}">
+    <section class="ruled paste-result" style="{{.PasteEnd}}"{{if .PasteEncrypted}} data-e2ee-result{{end}}>
       <div class="pt">
         <span class="sec">{{tr .Locale "paste_created"}}</span>
-        <span class="sp hint">{{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span>
+        <span class="sp">{{if .PasteEncrypted}}<span class="tag">{{tr .Locale "e2ee_tag"}}</span>{{end}}<span class="hint">{{if .PasteFilename}}{{.PasteFilename}} · {{end}}{{bytesText .PasteSize}}</span></span>
       </div>
       <div class="ticket">
         <code class="addr ends" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{template "address" .PasteURL}}</code>
@@ -59,6 +59,12 @@
         </span>
       </div>
       <div class="notes">
+        {{if .PasteEncrypted}}
+        {{/* Which one applies is known only to the script: it depends on the
+             part of this page's address that never reaches the server. */}}
+        <p class="hint" data-e2ee-passphrase hidden>{{tr .Locale "e2ee_result_passphrase"}}</p>
+        <p class="err" data-e2ee-lost hidden>{{tr .Locale "e2ee_result_lost"}}</p>
+        {{end}}
         <p class="hint">{{tr .Locale "paste_result_private"}}</p>
         <p class="hint">{{tr .Locale "paste_expiry_note"}}</p>
       </div>
@@ -72,6 +78,8 @@
         <button type="submit">{{tr .Locale "save_to_resources"}}</button>
       </form>
       <span class="hint live until">{{tr .Locale "save_keeps_expiry"}}</span>
+      {{else if .PasteEncrypted}}
+      <span class="hint live">{{tr .Locale "e2ee_no_save"}}</span>
       {{else if .SignedIn}}
       <span class="hint live">{{tr .Locale "paste_owner_only"}}</span>
       {{else}}
@@ -81,7 +89,12 @@
 
     {{else}}
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
-    <form method="post" action="/paste">
+    {{/* With encryption on, the script takes the submission: it encrypts the
+         text and posts only the ciphertext. The button starts disabled so that
+         without the script nothing is sent in the clear. */}}
+    <form method="post" action="/paste"{{if .E2EE}} data-e2ee data-csrf="{{.CSRF}}" data-endpoint="/paste/encrypted"
+          data-msg-empty="{{tr .Locale "e2ee_empty"}}" data-msg-too-large="{{tr .Locale "e2ee_too_large"}}"
+          data-msg-encrypting="{{tr .Locale "e2ee_encrypting"}}" data-msg-failed="{{tr .Locale "e2ee_failed"}}"{{end}}>
       {{/* A plain .panel, not .panel-ed: that one carries the resource editor's
            height, and this box is not that box. No data-editor either - the
            home page loads no editor and no bundle, and a textarea is the whole
@@ -89,7 +102,7 @@
       <div class="panel ruled">
         <div class="pt">
           <span class="sec">{{tr .Locale "content"}}</span>
-          <span class="sp hint">{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
+          <span class="sp">{{if .E2EE}}<span class="tag">{{tr .Locale "e2ee_tag"}}</span>{{end}}<span class="hint">{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span></span>
         </div>
         <div class="pb paste-body">
           <textarea name="content" spellcheck="false" autofocus
@@ -109,9 +122,23 @@
           <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="notes.txt"
                  aria-label="{{tr .Locale "filename_optional"}}" class="mpath" style="width:150px">
         </label>
+        {{if .E2EE}}
+        {{/* No name: a passphrase is never a form field, so no path can post it.
+             Shown, not masked, and kept from password managers: it is meant
+             to be told to the recipient, and a typo nobody can see - or a
+             suggested password filled in unnoticed - would lock the content
+             away for good. */}}
+        <label class="ttl-picker"><span>{{tr .Locale "e2ee_passphrase"}}</span>
+          <input type="text" data-passphrase autocomplete="off" spellcheck="false" autocapitalize="off" data-1p-ignore data-lpignore="true" data-bwignore class="mpath" style="width:150px">
+        </label>
+        {{end}}
         {{/* The action ends the row: choose the terms, then send. */}}
-        <button type="submit" class="pri end">{{tr .Locale "create_share_link"}}</button>
+        <button type="submit" class="pri end"{{if .E2EE}} disabled{{end}}>{{tr .Locale "create_share_link"}}</button>
       </div>
+      {{if .E2EE}}
+      <p class="err" data-e2ee-error role="alert" hidden></p>
+      <noscript><p class="err">{{tr .Locale "e2ee_needs_js"}}</p></noscript>
+      {{end}}
     </form>
     {{end}}
 
@@ -142,6 +169,7 @@
 
   </main>
   {{template "footer" .}}
+  {{if or .E2EE .PasteEncrypted}}<script type="module" src="/static/e2ee-share.js"></script>{{end}}
   {{template "copy-status" .}}
   <script>
     document.addEventListener('click', function (event) {

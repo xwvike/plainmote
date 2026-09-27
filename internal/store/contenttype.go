@@ -239,13 +239,16 @@ func sniffContentType(content []byte) string {
 // owner did not name it. Only the types DetectContentType can produce appear
 // here, so every resource has an answer.
 var fallbackNames = map[string]string{
-	typeJSON:   "file.json",
-	typeYAML:   "file.yaml",
-	typeTOML:   "file.toml",
-	typeXML:    "file.xml",
-	typeCSV:    "file.csv",
-	typeBinary: "file.bin",
-	typeText:   "file.txt",
+	// Neutral on purpose: the name at the end of an encrypted share's address
+	// says nothing about it, not even that it is encrypted.
+	EncryptedContentType: "file",
+	typeJSON:             "file.json",
+	typeYAML:             "file.yaml",
+	typeTOML:             "file.toml",
+	typeXML:              "file.xml",
+	typeCSV:              "file.csv",
+	typeBinary:           "file.bin",
+	typeText:             "file.txt",
 }
 
 // subtypeRule is the shape a media subtype must have before it is used as a

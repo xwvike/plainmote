@@ -99,13 +99,17 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	// HTML negotiation affects presentation only. Every request for bytes below
 	// consumes one use, regardless of Cookie, Range or other client headers.
 	if wantsMediaPlayer(r) {
-		media, err := a.db.IsMediaShare(r.Context(), token)
+		shell, err := a.db.ShareShell(r.Context(), token)
 		if err != nil {
-			a.serverError(w, "identify media share", err)
+			a.serverError(w, "identify share presentation", err)
 			return
 		}
-		if media {
+		switch shell {
+		case store.ShellMedia:
 			a.renderMediaPlayer(w, r)
+			return
+		case store.ShellEncrypted:
+			a.renderDecryptPage(w, r)
 			return
 		}
 	}

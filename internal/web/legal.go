@@ -17,7 +17,7 @@ var legalPages = []string{"about", "privacy", "terms", "contact"}
 
 // legalUpdated is the date printed at the top of the privacy policy and the
 // terms. Change it in the same commit as the text.
-const legalUpdated = "2026-09-26"
+const legalUpdated = "2026-09-27"
 
 // legalView is what the texts need to be true of this deployment rather than
 // of some deployment: every retention period and limit they state is read from

@@ -410,15 +410,28 @@ FROM resources WHERE id = $1
 	return resource, err
 }
 
-// IsMediaShare only selects the browser presentation. It grants no access to
-// content: the subsequent full-body GET must still pass ConsumeToken.
-func (d *Store) IsMediaShare(ctx context.Context, token string) (bool, error) {
-	var media bool
+// Presentations a browser can be given in place of the bytes.
+const (
+	ShellNone      = ""
+	ShellMedia     = "media"
+	ShellEncrypted = "encrypted"
+)
+
+// ShareShell only selects the browser presentation: the media player for audio
+// and video, the decryption page for an encrypted share, or none. It grants no
+// access to content - the page's full-body GET must still pass ConsumeToken -
+// and says nothing about whether the link is still valid.
+func (d *Store) ShareShell(ctx context.Context, token string) (string, error) {
+	var shell string
 	err := d.db.QueryRow(ctx, `
-SELECT EXISTS (
- SELECT 1 FROM links l JOIN resources r ON r.id = l.resource_id
- WHERE l.token_hash = $1 AND r.origin_url = ''
-   AND (r.content_type LIKE 'audio/%' OR r.content_type LIKE 'video/%')
-)`, hashToken(token)).Scan(&media)
-	return media, err
+SELECT CASE
+  WHEN r.content_type = $2 THEN 'encrypted'
+  WHEN r.content_type LIKE 'audio/%' OR r.content_type LIKE 'video/%' THEN 'media'
+  ELSE '' END
+FROM links l JOIN resources r ON r.id = l.resource_id
+WHERE l.token_hash = $1 AND r.origin_url = ''`, hashToken(token), EncryptedContentType).Scan(&shell)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ShellNone, nil
+	}
+	return shell, err
 }

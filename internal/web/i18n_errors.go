@@ -7,7 +7,8 @@ import (
 )
 
 var localizedErrorCodes = map[string]string{
-	"服务暂时无法完成该操作，请稍后重试。": "error_service_unavailable",
+	"服务暂时无法完成该操作，请稍后重试。":                                    "error_service_unavailable",
+	"加密内容格式无法识别":                                            "e2ee_bad_envelope",
 	"内容不能为空":                                                "error_content_empty",
 	"内容必须是有效的 UTF-8 文本":                                     "error_content_utf8",
 	"resource content must not be empty":                    "error_resource_empty",

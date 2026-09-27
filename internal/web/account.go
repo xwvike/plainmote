@@ -65,6 +65,7 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, p
 	data.ExportWindow = int(store.ExportWindow / time.Hour)
 	data.Error = pageError
 	data.DeleteOpen = deleteOpen
+	data.E2EE = a.e2eeEnabled(r, user.ID)
 	a.renderTemplate(w, r, status, "account.html", data)
 }
 

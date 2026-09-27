@@ -82,6 +82,7 @@ func (a *App) homePage(r *http.Request) pageData {
 	}
 	if user, _, ok := a.currentUser(r); ok {
 		data.User, data.SignedIn, data.CSRF = user, true, csrfValue(r)
+		data.E2EE = a.e2eeEnabled(r, user.ID)
 	}
 	return data
 }
@@ -145,6 +146,13 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	creatorID := ""
 	if user, _, ok := a.currentUser(r); ok {
 		creatorID = user.ID
+		// An account that turned encryption on never has its box's text
+		// stored in the clear because a script did not run. A terminal
+		// carries no session and is not what this refuses.
+		if wantsHTML(r) && a.e2eeEnabled(r, user.ID) {
+			a.refusePasteWith(w, r, content, filename, ttlValue, translate(requestLanguage(r).Locale, "e2ee_plaintext_refused"), http.StatusBadRequest)
+			return
+		}
 	}
 	resource, link, err := a.db.CreateAnonymousPasteFor(r.Context(), creatorID, filename, []byte(content), ttl, time.Now().UTC())
 	if err != nil {
@@ -293,6 +301,7 @@ func (a *App) pasteResultPage(r *http.Request, resource Resource, link Link) pag
 	data.PasteURL = a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))
 	data.PasteResourceID = resource.ID
 	data.PasteExpires = *link.ExpiresAt
+	data.PasteEncrypted = resource.ContentType == store.EncryptedContentType
 	data.PasteGauge = gaugeStyle(link.TermsAt, link.ExpiresAt)
 	data.PasteEnd = endStyle(link.ExpiresAt)
 	data.PasteFilename = resource.Filename

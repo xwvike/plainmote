@@ -5,8 +5,12 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT NOT NULL DEFAULT '',
   avatar_url TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL
+  updated_at TIMESTAMPTZ NOT NULL,
+  -- Quick shares made by this account are encrypted in the browser. Off
+  -- unless the account turns it on in its settings.
+  e2ee BOOLEAN NOT NULL DEFAULT FALSE
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS e2ee BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS plans (
   id UUID PRIMARY KEY,

@@ -315,7 +315,7 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
    a hairline and shaded along its top inner edge - the key's heavier bottom
    edge, turned over - and typing in it draws the frame in teal, twice as
    thick, with no glow. */
-input[type="text"], input[type="url"], input[type="search"], textarea, select {
+input[type="text"], input[type="url"], input[type="search"], input[type="password"], textarea, select {
   width: 100%; border: 1px solid var(--line2); border-radius: var(--r);
   background: var(--field); box-shadow: inset 0 1px 1px var(--key);
   color: var(--ink); font: 400 12.5px/1.45 var(--sans);
@@ -325,10 +325,10 @@ input[type="search"] { -webkit-appearance: none; appearance: none; }
 input::placeholder, textarea::placeholder { color: var(--ink3); opacity: 1; }
 /* Single-line controls are pinned to the button scale rather than growing out
    of font-size plus padding, so a control and a button on one row line up. */
-input[type="text"], input[type="url"], input[type="search"], select { height: 28px; padding: 0 9px; }
+input[type="text"], input[type="url"], input[type="search"], input[type="password"], select { height: 28px; padding: 0 9px; }
 input.sm, select.sm { height: 24px; padding: 0 7px; font-size: 12px; }
-input[type="text"]:hover, input[type="url"]:hover, input[type="search"]:hover, textarea:hover, select:hover { border-color: color-mix(in oklab, var(--line2) 50%, var(--ink3)); }
-input[type="text"]:focus, input[type="url"]:focus, input[type="search"]:focus,
+input[type="text"]:hover, input[type="url"]:hover, input[type="search"]:hover, input[type="password"]:hover, textarea:hover, select:hover { border-color: color-mix(in oklab, var(--line2) 50%, var(--ink3)); }
+input[type="text"]:focus, input[type="url"]:focus, input[type="search"]:focus, input[type="password"]:focus,
 textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 /* The browser's own arrow is replaced by a small drawn chevron in the text
    colour, so a select looks like the fields beside it in either theme. */
@@ -570,6 +570,21 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .flip > svg { width: 13px; height: 13px; transform: translateY(16px); }
 .copied .flip > span { transform: translateY(-16px); }
 .copied .flip > svg { transform: none; }
+/* The page that opens an encrypted share: the passphrase on one line, then
+   the text as it was sent, in the address face. */
+.unlock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.unlock input { width: 260px; max-width: 100%; }
+.plain-out { display: grid; gap: 10px; }
+.plain { max-height: 60vh; margin: 0; padding: 12px 14px; border-radius: var(--r); background: var(--sunk); font: 400 12px/1.7 var(--mono); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; }
+.e2ee-set { display: grid; gap: 10px; justify-items: start; }
+.e2ee-set ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+/* A disclosure that reads as a line of text with a chevron, not a box. */
+.more > summary { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--accent); cursor: pointer; list-style: none; }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::before { content: ""; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .12s; }
+.more[open] > summary::before { transform: rotate(45deg); }
+.more > summary:hover { color: var(--accent-d); text-decoration: underline; text-underline-offset: 3px; }
+.more-body { display: grid; gap: 8px; margin-top: 8px; padding-left: 11px; border-left: 1px solid var(--line2); }
 .copied, .copied:hover { background: var(--ok); border-color: var(--ok); color: var(--on-accent); }
 /* Heard, not seen. */
 .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }

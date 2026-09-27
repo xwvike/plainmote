@@ -1,0 +1,50 @@
+{{define "decrypt.html"}}<!doctype html>
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  {{/* Its own head, not the shared one: this page holds the key and the
+       plaintext, so it loads nothing from another host - not the web font -
+       and no script but its own. */}}
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="/static/logo.png" type="image/png" sizes="256x256">
+  <title>{{tr .Locale "e2ee_open_title"}} · PlainMote</title>
+  <script type="module" src="/static/e2ee-open.js"></script>
+</head>
+<body>
+  {{/* No navigation: whoever opens this may have no account, and every link
+       here would carry this address to another request. */}}
+  <div class="top"><div class="topin"><span class="brand">{{template "mark"}}<b>PlainMote</b></span></div></div>
+  <main class="page decrypt" data-decrypt data-source="{{.MediaSource}}"
+        data-msg-loading="{{tr .Locale "e2ee_open_loading"}}"
+        data-msg-passphrase="{{tr .Locale "e2ee_open_passphrase"}}"
+        data-msg-wrong="{{tr .Locale "e2ee_open_wrong"}}"
+        data-msg-no-key="{{tr .Locale "e2ee_open_nokey"}}"
+        data-msg-expired="{{tr .Locale "e2ee_open_expired"}}"
+        data-msg-failed="{{tr .Locale "e2ee_open_failed"}}">
+    <section class="ruled">
+      <div class="pt">
+        <span class="sec">{{tr .Locale "e2ee_open_title"}}</span>
+        <span class="sp"><span class="tag">{{tr .Locale "e2ee_tag"}}</span><span class="hint" data-meta></span></span>
+      </div>
+      <div class="pb">
+        <p class="hint" data-status role="status" aria-live="polite">{{tr .Locale "e2ee_open_needs_js"}}</p>
+        <form class="unlock" data-unlock hidden>
+          <label class="ttl-picker" for="passphrase"><span>{{tr .Locale "e2ee_open_passphrase_label"}}</span></label>
+          <input type="password" id="passphrase" autocomplete="off" spellcheck="false">
+          <button type="submit" class="pri">{{tr .Locale "e2ee_open_unlock"}}</button>
+        </form>
+        <div class="plain-out" data-output hidden>
+          <pre class="plain" data-plain tabindex="0"></pre>
+          <div class="acts">
+            <button type="button" class="sm" data-copy-plain>{{template "copy-label" .}}</button>
+            <a class="txt" data-download href="#">{{tr .Locale "e2ee_download"}}</a>
+          </div>
+        </div>
+      </div>
+    </section>
+    <p class="hint">{{tr .Locale "e2ee_open_note"}}</p>
+  </main>
+</body>
+</html>{{end}}

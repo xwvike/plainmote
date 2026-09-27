@@ -16,7 +16,8 @@
 <h2>四、分享链接</h2>
 <p>分享链接即为访问凭证：任何持有链接的人均可在其有效期及次数限制内获取相应内容，无需登录。撤销、过期或删除仅能阻止此后的访问，无法收回已被获取的内容。即时通讯软件生成链接预览时发起的请求同样计入使用次数。</p>
 <p>每个账号的资源数量与存储空间受所属套餐限制，单份内容不得超过 {{legalBytes .Legal.MaxContent}}；当前用量与上限显示于资源列表页面。</p>
-{{if .Legal.Anonymous}}<p>首页临时分享面向所有访问者开放：链接最长在 {{legalDuration true .Legal.AnonymousTTL}}后失效，正文不得超过 {{legalBytes .Legal.AnonymousSize}}，且一律以纯文本形式交付。</p>{{end}}
+{{if .Legal.Anonymous}}<p>首页临时分享（界面中称“快速分享”）面向所有访问者开放：链接最长在 {{legalDuration true .Legal.AnonymousTTL}}后失效，正文不得超过 {{legalBytes .Legal.AnonymousSize}}，并以纯文本形式交付；开启端到端加密的，依下款处理。</p>
+<p>已登录用户在账号设置中开启端到端加密后，其在首页创建的临时分享以密文形式存储和交付，由接收者的浏览器解密。本服务无法查看此类内容，但其同样须遵守本条款第五条的使用规范；收到举报或发现违规时，本服务可删除相应分享或限制相关账号。链接或口令遗失的，内容无法恢复。</p>{{end}}
 
 <h2>五、使用规范</h2>
 <p>您在使用本服务时不得从事下列行为：</p>
@@ -70,7 +71,8 @@
 <h2>4. Share links</h2>
 <p>A share link serves as the access credential: anyone who holds it can retrieve the corresponding content within its validity period and use limit without signing in. Revocation, expiry or deletion prevents only subsequent access and cannot recall content that has already been retrieved. Requests made by messaging applications to generate link previews also count towards the use limit.</p>
 <p>The number of resources and the storage available to each account are limited by its plan, and a single item may not exceed {{legalBytes .Legal.MaxContent}}. Current usage and limits are shown on the resource list page.</p>
-{{if .Legal.Anonymous}}<p>Quick shares on the home page are available to all visitors. Links expire after at most {{legalDuration false .Legal.AnonymousTTL}}, the text may not exceed {{legalBytes .Legal.AnonymousSize}}, and content is always delivered as plain text.</p>{{end}}
+{{if .Legal.Anonymous}}<p>Quick shares on the home page are available to all visitors. Links expire after at most {{legalDuration false .Legal.AnonymousTTL}}, the text may not exceed {{legalBytes .Legal.AnonymousSize}}, and content is delivered as plain text, except as provided in the next paragraph for end-to-end encryption.</p>
+<p>When a signed-in user turns on end-to-end encryption in the account settings, the quick shares they create on the home page are stored and delivered as ciphertext and decrypted in the recipient’s browser. The Service cannot view such content, but it remains subject to the acceptable use rules in section 5; upon a report or a violation, the Service may delete the share or restrict the account concerned. If the link or passphrase is lost, the content cannot be recovered.</p>{{end}}
 
 <h2>5. Acceptable use</h2>
 <p>When using the Service, you must not:</p>
