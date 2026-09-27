@@ -124,7 +124,11 @@ func TestPublicPagesAreIndexable(t *testing.T) {
 	for _, u := range parsed.URLs {
 		locs = append(locs, u.Loc)
 	}
-	want := []string{"https://plainmote.link/", "https://plainmote.link/about", "https://plainmote.link/privacy", "https://plainmote.link/terms", "https://plainmote.link/contact"}
+	want := []string{
+		"https://plainmote.link/", "https://plainmote.link/about", "https://plainmote.link/privacy", "https://plainmote.link/terms", "https://plainmote.link/contact",
+		"https://plainmote.link/zh-cn/", "https://plainmote.link/zh-tw/", "https://plainmote.link/ja/", "https://plainmote.link/fr/", "https://plainmote.link/de/",
+		"https://plainmote.link/zh-cn/about", "https://plainmote.link/zh-cn/privacy", "https://plainmote.link/zh-cn/terms", "https://plainmote.link/zh-cn/contact",
+	}
 	if strings.Join(locs, " ") != strings.Join(want, " ") {
 		t.Fatalf("sitemap lists %v, want %v", locs, want)
 	}

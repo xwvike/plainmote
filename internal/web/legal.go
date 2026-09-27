@@ -42,15 +42,23 @@ type legalView struct {
 }
 
 func (a *App) handleLegal(w http.ResponseWriter, r *http.Request) {
+	a.serveLegal(w, r, strings.TrimPrefix(r.URL.Path, "/"))
+}
+
+// serveLegal is a legal page at /<page> and, in Chinese, at /zh-cn/<page>.
+func (a *App) serveLegal(w http.ResponseWriter, r *http.Request, page string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	page := strings.TrimPrefix(r.URL.Path, "/")
 	// These pages say what the service is, so unlike the rest of it they are
 	// meant to be found.
-	data := pageData{Active: page, SignInURL: "/login", Indexable: true, BaseURL: a.baseURL(r)}
+	data := pageData{Active: page, SignInURL: "/login", Indexable: true, BaseURL: a.baseURL(r), Canonical: "/" + page}
+	if route, ok := routeLocale(r); ok {
+		data.Canonical = route.prefix + "/" + page
+	}
+	data.Alternates = legalAlternates(data.BaseURL, page)
 	if user, _, ok := a.currentUser(r); ok {
 		data.User, data.SignedIn, data.CSRF = user, true, csrfValue(r)
 	}

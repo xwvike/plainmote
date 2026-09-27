@@ -47,6 +47,11 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusNotFound, "not found")
 		return
 	}
+	a.serveHome(w, r)
+}
+
+// serveHome is the home page at / and at each language's own address.
+func (a *App) serveHome(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -64,7 +69,13 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
 		return
 	}
-	a.renderHome(w, r, a.homePage(r), http.StatusOK)
+	data := a.homePage(r)
+	data.Canonical = "/"
+	if route, ok := routeLocale(r); ok {
+		data.Canonical = route.prefix + "/"
+	}
+	data.Alternates = homeAlternates(data.BaseURL)
+	a.renderHome(w, r, data, http.StatusOK)
 }
 
 // homePage is the page as it stands with nothing submitted. Signing in does

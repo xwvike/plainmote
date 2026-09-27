@@ -245,11 +245,12 @@ func TestIndexableHomeHasLocalizedDiscoveryMetadata(t *testing.T) {
 	request.Header.Set("Accept-Language", "zh-CN")
 	response := httptest.NewRecorder()
 	app.renderTemplate(response, request, http.StatusOK, "home.html", pageData{
-		BaseURL: "https://plainmote.example", Indexable: true, MaxPaste: 1024,
+		BaseURL: "https://plainmote.example", Indexable: true, MaxPaste: 1024, Canonical: "/",
 	})
 	body := response.Body.String()
 	for _, expected := range []string{
-		`<title>PlainMote · 把想要分享的文本生成链接</title>`,
+		`<title>在线分享文本，生成限时链接 · PlainMote</title>`,
+		`<h1>把想要分享的文本生成链接</h1>`,
 		`<meta name="description" content="无需登录，粘贴文本即可获得限时失效的分享链接`,
 		`<meta name="keywords" content="限时链接, 可撤销分享链接`,
 		`<h2>分享调试日志</h2>`,

@@ -358,6 +358,12 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	data.SourceURL = a.cfg.SourceURL
 	data.Language = requestLanguage(r)
 	data.Theme = requestTheme(r)
+	if route, ok := routeLocale(r); ok {
+		data.LocalePrefix = route.prefix
+		if strings.HasPrefix(route.locale, "zh") {
+			data.LegalPrefix = legalChinesePrefix
+		}
+	}
 	data.Locale = data.Language.Locale
 	data.Error = localizePageError(data.Locale, data.Error)
 	data.UpstreamError = localizePageError(data.Locale, data.UpstreamError)

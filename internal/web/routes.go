@@ -71,6 +71,14 @@ type pageData struct {
 	Language   languageView
 	Theme      themeView
 	SourceURL  string
+	// Canonical is the page's own address, as a path; Alternates are the same
+	// page in its other languages. LocalePrefix is the language segment of a
+	// language's own address ("" elsewhere), which the home links keep, and
+	// LegalPrefix is where the footer finds the legal pages in this language.
+	Canonical    string
+	Alternates   []alternate
+	LocalePrefix string
+	LegalPrefix  string
 	// E2EE is whether this account's quick shares are encrypted in the browser.
 	E2EE             bool
 	RegistrationMode auth.RegistrationMode
@@ -218,6 +226,9 @@ func (a *App) routes() http.Handler {
 			mux.HandleFunc("/"+page, a.handleLegal)
 		}
 	}
+	for _, public := range publicLocales {
+		mux.HandleFunc(public.prefix+"/", a.handleLocalized)
+	}
 	mux.HandleFunc("/", a.handleHome)
 	return a.noIndex(mux)
 }
@@ -238,7 +249,7 @@ func (a *App) indexablePages() []string {
 			pages = append(pages, "/"+page)
 		}
 	}
-	return pages
+	return append(pages, a.localizedPaths()...)
 }
 
 func (a *App) indexable(path string) bool {
@@ -308,11 +319,19 @@ func (a *App) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	base := strings.TrimRight(a.cfg.PublicURL, "/")
 	var body strings.Builder
 	body.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-	body.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
+	body.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">` + "\n")
+	// Every address with its language versions beside it, as the pages
+	// themselves declare them.
 	for _, page := range pages {
 		body.WriteString("  <url><loc>")
 		_ = xml.EscapeText(&body, []byte(base+page))
-		body.WriteString("</loc></url>\n")
+		body.WriteString("</loc>")
+		for _, link := range a.pageAlternates(base, page) {
+			body.WriteString(`<xhtml:link rel="alternate" hreflang="` + link.Hreflang + `" href="`)
+			_ = xml.EscapeText(&body, []byte(link.URL))
+			body.WriteString(`"/>`)
+		}
+		body.WriteString("</url>\n")
 	}
 	body.WriteString("</urlset>\n")
 	_, _ = io.WriteString(w, body.String())

@@ -21,6 +21,20 @@ type languageView struct {
 }
 
 func requestLanguage(r *http.Request) languageView {
+	// A page with its language in the address shows that language to everyone,
+	// the crawler included; its switch leads to the English address, which
+	// goes back to following the browser.
+	if forced, ok := r.Context().Value(localeKey{}).(localeRoute); ok {
+		view := languageView{Locale: forced.locale}
+		if forced.locale != "en" {
+			view.NativeLocale = forced.locale
+			view.NativeLabel = languageLabels[forced.locale]
+			view.ShowSwitch = true
+			view.NativeURL = r.URL.Path
+			view.EnglishURL = languagePath("en", forced.english)
+		}
+		return view
+	}
 	native := browserLanguage(r.Header.Get("Accept-Language"))
 	view := languageView{Locale: "en"}
 	if native == "" || native == "en" {
