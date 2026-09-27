@@ -76,8 +76,8 @@ func TestLegalPagesRenderInChineseOrEnglish(t *testing.T) {
 	}
 	// The site is named by the configured public origin, never by the host a
 	// request happened to arrive on.
-	live := legalApp(Config{ContactEmail: "ops@example.com", Operator: "xwvike", PublicURL: "https://plainmote.link"})
-	if body := getLegal(live, "/privacy", "zh-CN").Body.String(); !strings.Contains(body, "PlainMote（plainmote.link，以下简称“本服务”）由 xwvike（以下简称“我们”）运营。") {
+	live := legalApp(Config{ContactEmail: "ops@example.com", Operator: "example", PublicURL: "https://plainmote.link"})
+	if body := getLegal(live, "/privacy", "zh-CN").Body.String(); !strings.Contains(body, "PlainMote（plainmote.link，以下简称“本服务”）由 example（以下简称“我们”）运营。") {
 		t.Error("the privacy policy does not introduce the service by its public domain and operator")
 	}
 	if login := getLegal(app, "/login", "").Body.String(); !strings.Contains(login, `href="/privacy"`) || !strings.Contains(login, `<a href="/llms.txt">llms.txt</a>`) {

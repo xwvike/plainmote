@@ -35,11 +35,11 @@ docker buildx build \
 发布到 GHCR，并同时生成 amd64 与 arm64 镜像：
 
 ```bash
-export IMAGE=ghcr.io/xwvike/plainmote
+export IMAGE=ghcr.io/OWNER/plainmote    # OWNER: your GitHub user or organisation
 export VERSION="$(git rev-parse --short=12 HEAD)"
 
 test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
-printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u xwvike --password-stdin
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u OWNER --password-stdin
 docker buildx build \
   --push \
   --platform linux/amd64,linux/arm64 \
@@ -67,7 +67,7 @@ docker buildx imagetools inspect "$IMAGE:$VERSION"
 需要完全固定构建产物时，在服务器 `.env` 中使用输出的 manifest list 摘要：
 
 ```dotenv
-PLAINMOTE_IMAGE=ghcr.io/xwvike/plainmote@sha256:DIGEST
+PLAINMOTE_IMAGE=ghcr.io/OWNER/plainmote@sha256:DIGEST
 ```
 
 GHCR Token 至少需要 `write:packages`；私有镜像的部署机器需要 `read:packages`。镜像使用
@@ -138,7 +138,7 @@ R2 使用 `PLAINMOTE_BLOB_REGION=auto`。Bucket 不需要公开访问，所有�
 复制 [`.env.example`](../.env.example) 为 `.env`，填写全部必填项，并把镜像固定到刚刚发布的版本或摘要：
 
 ```dotenv
-PLAINMOTE_IMAGE=ghcr.io/xwvike/plainmote:COMMIT_TAG
+PLAINMOTE_IMAGE=ghcr.io/OWNER/plainmote:COMMIT_TAG
 ```
 
 生成 Token 加密密钥：
@@ -163,7 +163,7 @@ chmod 600 .env
 如果镜像为私有包，先在部署机器登录 GHCR：
 
 ```bash
-printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u xwvike --password-stdin
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u OWNER --password-stdin
 ```
 
 ## 4. 启动与核验
@@ -203,7 +203,7 @@ Docker 或 Tunnel 场景下，应用看到的直连地址可能是网桥网关�
 
 使用 Cloudflare 时还需要：
 
-1. 对 `/paste` 设置写入限流；开放匿名分享时这是必须项。
+1. 对以 `/paste` 开头的路径（包括 `/paste/encrypted`）设置写入限流；开放匿名分享时这是必须项。
 2. 根据需要对 `/d/*` 设置访问限流，但绝不能启用 `Cache Everything`。
 3. 保留应用发出的 `Cache-Control: no-store`，确保撤销和次数限制不会被边缘缓存绕过。
 4. 不要把容器端口同时发布到公网，否则会形成绕过 Tunnel 和限流规则的入口。

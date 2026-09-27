@@ -22,7 +22,7 @@ ARG REVISION=unknown
 LABEL org.opencontainers.image.title="PlainMote" \
       org.opencontainers.image.description="Stateless resource sharing service" \
       org.opencontainers.image.source="https://github.com/xwvike/plainmote" \
-      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"
 

@@ -13,7 +13,6 @@ tools
 Dockerfile.dev
 compose*.yaml
 README.md
-REVIEW.md
 **/node_modules
 **/*_test.go
 *.log
