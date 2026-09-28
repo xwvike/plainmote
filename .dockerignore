@@ -12,7 +12,7 @@ tools
 .air.toml
 Dockerfile.dev
 compose*.yaml
-README.md
+README*.md
 **/node_modules
 **/*_test.go
 *.log

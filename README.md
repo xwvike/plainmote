@@ -4,112 +4,124 @@
 
 # PlainMote
 
-把想要分享的文本和文件生成链接：内容逐字节保留，每条链接可以单独设置有效期和使用次数，随时撤销，每次访问都有记录。
+English | [简体中文](README.zh-CN.md)
 
-参考部署：[plainmote.link](https://plainmote.link)
+Turn text and files into share links. The content is kept byte for byte; every link has its own expiry and use limit, can be revoked on its own, and every access through it is recorded.
 
-## 功能
+Try it at [plainmote.link](https://plainmote.link).
 
-- **快速分享**：无需登录，在首页粘贴文本即可得到一条最长 30 分钟后失效的链接；也可以直接在终端里用 curl 分享。
-- **资源与分享链接**：登录后保存文本和文件，为每位接收者创建独立的链接，分别设置有效期和使用次数，撤销其中一条不影响其他链接。
-- **访问记录**：每次通过链接的访问都记录时间、结果、来源 IP 和客户端信息，仅资源所有者可见。
-- **远程资源**：可以只保存一个公网地址，每次访问时实时从源站获取内容。
-- **在线编辑**：基于 CodeMirror 6，支持常见配置格式的语法高亮，自动识别 UTF-8、UTF-16、GB18030、Big5、Shift_JIS 等编码，保存时按原编码和行尾写回。
-- **端到端加密（可选）**：登录用户可在账号设置中开启，开启后快速分享在浏览器中加密，服务端只保存密文。
-- **音视频与图片预览**：分享地址在浏览器中直接展示图片、播放音视频，其他客户端获取原始字节。
-- **不依赖 JavaScript**：核心功能在关闭脚本时仍可使用；脚本只做增强。端到端加密是例外，加解密必须在浏览器中执行。
-- **界面**：英语、简体中文、繁体中文、日语、法语和德语，按浏览器语言显示；首页和法律页面另有各语言的独立地址（如 `/zh-cn/`、`/ja/`），供搜索引擎分别收录。浅色与深色主题。
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/share-links-dark.png">
+  <img src="docs/screenshots/share-links-light.png" alt="A resource and its share links: one link per recipient, each with its own time left and use count, with revoked and used-up links listed apart">
+</picture>
 
-## 终端分享
+## Features
+
+- **Quick share**: no account needed. Paste text on the home page and get a link that expires within 30 minutes, or share straight from a terminal with curl.
+- **Resources and share links**: sign in to keep text and files, then give each recipient a separate link with its own expiry and use limit. Revoking one leaves the others working.
+- **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner of the resource.
+- **Remote resources**: keep just a public URL; the content is fetched from the origin on every access.
+- **Online editor**: built on CodeMirror 6, with syntax highlighting for common config formats. It detects UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings, and saves back in the original encoding and line endings.
+- **End-to-end encryption (optional)**: signed-in users can turn it on in their account settings. Quick shares are then encrypted in the browser, and the server stores only ciphertext.
+- **Media preview**: in a browser, share links show images and play audio and video; other clients get the raw bytes.
+- **Works without JavaScript**: the core features work with scripts turned off; scripts only enhance. End-to-end encryption is the exception, as encryption has to run in the browser.
+- **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, chosen from the browser's language; the home page and legal pages also have an address per language (such as `/zh-cn/` or `/ja/`) for search engines. Light and dark themes.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/access-history-dark.png">
+  <img src="docs/screenshots/access-history-light.png" alt="Access history: the time, result, share link and source IP of every access">
+</picture>
+
+## Sharing from a terminal
 
 ```bash
 tail -n 200 app.log | curl -F 'content=<-' https://plainmote.link/paste
 curl -F content=@app.log https://plainmote.link/paste
 curl --data-binary @app.log 'https://plainmote.link/paste?ttl=30&filename=app.log'
-curl https://plainmote.link/paste    # 打印用法
+curl https://plainmote.link/paste    # prints usage
 ```
 
-响应只有一行分享地址，便于管道传递或 `$(...)` 捕获。`/llms.txt` 以 llmstxt.org 的格式向语言模型说明同样的用法。
+The response is the share link on a single line, ready for a pipe or `$(...)`. `/llms.txt` describes the same usage to language models in the llmstxt.org format.
 
-## 安全与隐私
+## Security and privacy
 
-- **分享链接即凭证**：Token 为 256 位随机数，数据库只保存 SHA-256 索引和经 AES-GCM 加密的原值。
-- **防止外链滥用**：其他网站无法把分享地址当作图片、视频或脚本嵌入，这类请求在读取 Token 之前即被拒绝。
-- **禁止收录**：分享地址、资源和账号页面一律禁止搜索引擎收录；只有介绍服务的页面可被索引。
-- **不做网页托管**：可能被浏览器执行的类型（HTML、脚本、SVG 等）一律不会按原类型交付；免登录分享只以纯文本（或加密后的密文）交付。
-- **端到端加密**：只使用浏览器自带的 WebCrypto（AES-256-GCM；口令模式为 PBKDF2-SHA-256 推导密钥）。
-  密钥位于链接 `#` 之后，浏览器不会将其发送给服务器。
-  其局限同样明确：解密需要 JavaScript；链接或口令遗失后无法恢复；内容大小与访问记录不加密；
-  加解密代码由服务端下发，其可信度取决于所部署代码的完整性，这也是本项目开源的原因之一。
+- **A share link is a credential**: tokens are 256 random bits; the database keeps only a SHA-256 index and the original, encrypted with AES-GCM.
+- **No hotlinking**: other sites cannot embed a share link as an image, video or script; such requests are refused before the token is read.
+- **Not indexed**: share links, resources and account pages are all kept out of search engines; only the pages that describe the service can be indexed.
+- **Not a web host**: types a browser might execute (HTML, scripts, SVG and so on) are never delivered as themselves; anonymous shares are delivered only as plain text (or, when encrypted, as ciphertext).
+- **End-to-end encryption**: uses only the browser's built-in WebCrypto (AES-256-GCM; with a passphrase, the key is derived with PBKDF2-SHA-256).
+  The key sits after the `#` in the link, which browsers never send to the server.
+  Its limits are just as plain: decrypting needs JavaScript; a lost link or passphrase cannot be recovered; content size and access history are not encrypted;
+  the encryption code is served by the server, so it is only as trustworthy as the deployed code, which is one reason this project is open source.
 
-## 自部署
+## Self-hosting
 
-PlainMote 是单个无状态的 Go 服务，依赖：
+PlainMote is a single stateless Go service. It needs:
 
 - PostgreSQL
-- S3 兼容对象存储（例如 Cloudflare R2、MinIO）
-- 一个 GitHub OAuth App，用于登录
+- S3-compatible object storage (such as Cloudflare R2 or MinIO)
+- A GitHub OAuth App, for sign-in
 
 ```bash
-cp .env.example .env    # 填写数据库、对象存储、OAuth 和密钥
+cp .env.example .env    # fill in the database, object storage, OAuth and keys
 docker compose up -d
 ```
 
-镜像构建、外部服务准备、公网入口、升级与回滚见 [`docs/deployment.md`](docs/deployment.md)。
+Building the image, preparing the external services, exposing it publicly, upgrades and rollbacks are covered in [`docs/deployment.md`](docs/deployment.md) (in Chinese).
 
-### 配置
+### Configuration
 
-全部参数来自环境变量，启动时完成校验，缺失或非法时立即退出。
+Everything comes from environment variables, validated at startup; the service exits at once if one is missing or invalid.
 
-必须提供：
+Required:
 
-| 变量 | 作用 |
+| Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL 连接地址 |
-| `PLAINMOTE_PUBLIC_URL` | 对外的 HTTP(S) origin，用于生成分享地址和 OAuth 回调地址 |
-| `PLAINMOTE_BLOB_ENDPOINT` | S3 兼容服务端点 |
-| `PLAINMOTE_BLOB_BUCKET` | Bucket 名称 |
+| `DATABASE_URL` | PostgreSQL connection URL |
+| `PLAINMOTE_PUBLIC_URL` | Public HTTP(S) origin, used for share links and the OAuth callback |
+| `PLAINMOTE_BLOB_ENDPOINT` | S3-compatible endpoint |
+| `PLAINMOTE_BLOB_BUCKET` | Bucket name |
 | `PLAINMOTE_BLOB_ACCESS_KEY` | Access Key ID |
 | `PLAINMOTE_BLOB_SECRET_KEY` | Secret Access Key |
-| `PLAINMOTE_TOKEN_KEY` | 32 字节的 Token 加密密钥（64 位十六进制或 Base64）；更换后已有分享地址无法解密 |
+| `PLAINMOTE_TOKEN_KEY` | 32-byte token encryption key (64 hex digits or Base64); changing it makes existing share links undecryptable |
 | `GITHUB_CLIENT_ID` | GitHub OAuth Client ID |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth Client Secret |
 
-可选：
+Optional:
 
-| 变量 | 默认值 | 作用 |
+| Variable | Default | Purpose |
 | --- | --- | --- |
-| `PLAINMOTE_LISTEN` | `:8964` | HTTP 监听地址 |
-| `PLAINMOTE_BLOB_REGION` | `auto` | S3 区域 |
-| `PLAINMOTE_TRUSTED_PROXIES` | 空 | 可信代理的 IP 或 CIDR，逗号分隔 |
-| `PLAINMOTE_SESSION_TTL` | `720h` | 登录会话有效期 |
-| `PLAINMOTE_MAX_CONTENT_MIB` | `4` | 单份内容大小上限 |
-| `PLAINMOTE_LOG_RETENTION` | `720h` | 访问记录保留时长，`0` 表示永久保留 |
-| `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | 新用户注册策略：`open`、`allowlist` 或 `closed` |
-| `GITHUB_ALLOWED_IDS` | 空 | `allowlist` 模式下允许注册的 GitHub 数字用户 ID，逗号分隔 |
-| `PLAINMOTE_ANONYMOUS` | `false` | 是否开放首页的免登录快速分享 |
-| `PLAINMOTE_OPERATOR` | 空 | 运营者名称，显示在关于、隐私政策和服务条款中 |
-| `PLAINMOTE_CONTACT_EMAIL` | 空 | 联系邮箱；设置后才提供关于、隐私政策、服务条款和联系页面 |
-| `PLAINMOTE_SOURCE_URL` | 本仓库地址 | 页面底部“源代码”链接指向的地址；部署修改过的版本时，依 AGPL 须指向修改后的源代码 |
+| `PLAINMOTE_LISTEN` | `:8964` | HTTP listen address |
+| `PLAINMOTE_BLOB_REGION` | `auto` | S3 region |
+| `PLAINMOTE_TRUSTED_PROXIES` | empty | Trusted proxy IPs or CIDRs, comma-separated |
+| `PLAINMOTE_SESSION_TTL` | `720h` | Sign-in session lifetime |
+| `PLAINMOTE_MAX_CONTENT_MIB` | `4` | Size limit for one piece of content |
+| `PLAINMOTE_LOG_RETENTION` | `720h` | How long access history is kept; `0` keeps it forever |
+| `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | New account policy: `open`, `allowlist` or `closed` |
+| `GITHUB_ALLOWED_IDS` | empty | Numeric GitHub user IDs allowed to register in `allowlist` mode, comma-separated |
+| `PLAINMOTE_ANONYMOUS` | `false` | Whether the home page offers quick share without signing in |
+| `PLAINMOTE_OPERATOR` | empty | Operator name, shown in the about page, privacy policy and terms |
+| `PLAINMOTE_CONTACT_EMAIL` | empty | Contact email; the about, privacy, terms and contact pages are served only when it is set |
+| `PLAINMOTE_SOURCE_URL` | this repository | Where the "Source code" link at the foot of every page points; a modified deployment must point it at its modified source, as the AGPL requires |
 
-### 关于法律文本
+### About the legal pages
 
-设置 `PLAINMOTE_CONTACT_EMAIL` 后，服务会提供关于、隐私政策、服务条款和联系页面（简体中文与英文）。
-这些文本按参考部署的实际行为编写，其中的时长、大小等数值取自当前配置。
-**自行部署时，请由部署者审阅并按所在地区的法律和自身运营情况调整**
-（位于 `internal/web/templates/legal_*.html`），部署者对其站点作出的承诺负责。
+With `PLAINMOTE_CONTACT_EMAIL` set, the service serves an about page, privacy policy, terms of service and contact page (in Simplified Chinese and English).
+They are written for how the reference deployment actually behaves, with durations, sizes and other values taken from the running configuration.
+**If you deploy your own instance, review and adapt them to the law where you operate and to how you run the service**
+(they live in `internal/web/templates/legal_*.html`); you are responsible for what your site promises.
 
-## 开发
+## Development
 
-开发环境会启动 PostgreSQL、MinIO 和支持热更新的应用：
+The development environment starts PostgreSQL, MinIO and the app with live reload:
 
 ```bash
 docker compose -f compose.dev.yaml up --build
 ```
 
-应用地址为 `http://localhost:8964`，MinIO 控制台为 `http://localhost:9001`。登录需要在 `.env` 中配置 GitHub OAuth 参数。
+The app is at `http://localhost:8964` and the MinIO console at `http://localhost:9001`. Signing in needs the GitHub OAuth settings in `.env`.
 
-测试：
+Tests:
 
 ```bash
 docker compose -f compose.dev.yaml up -d postgres
@@ -119,26 +131,26 @@ node tools/e2ee/e2ee_test.mjs
 npm --prefix tools/codemirror test
 ```
 
-编辑器及编码识别的依赖以 bundle 形式随仓库发布，运行时不从第三方 CDN 加载；
-重建方式为 `tools/codemirror/build.sh`，日常构建无需 Node.js。
+The editor and encoding detection dependencies ship with the repository as a bundle and are never loaded from a third-party CDN at runtime.
+Rebuild them with `tools/codemirror/build.sh`; everyday builds do not need Node.js.
 
 ```text
-cmd/plainmote/       服务入口
-internal/app/        服务组装与 HTTP 生命周期
+cmd/plainmote/       service entry point
+internal/app/        service assembly and HTTP lifecycle
 internal/auth/       GitHub OAuth
-internal/blob/       S3 兼容对象存储
-internal/config/     环境变量解析与校验
-internal/store/      PostgreSQL schema 与业务约束
-internal/upstream/   远程地址校验与读取
-internal/web/        路由、页面、静态资源与公开分发
-tools/               编辑器 bundle 与加密测试
-docs/                部署文档与图片
+internal/blob/       S3-compatible object storage
+internal/config/     environment parsing and validation
+internal/store/      PostgreSQL schema and business rules
+internal/upstream/   remote URL validation and fetching
+internal/web/        routes, pages, static assets and public delivery
+tools/               editor bundle and encryption tests
+docs/                deployment guide and images
 ```
 
-## 许可证
+## License
 
 Copyright (C) 2026 xwvike
 
-本项目以 [GNU Affero General Public License v3.0](LICENSE) 发布。依据该许可证，若您修改本项目并通过网络向他人提供服务，须向这些用户提供修改后的源代码。
+Released under the [GNU Affero General Public License v3.0](LICENSE). Under that license, if you modify this project and offer it to others over a network, you must make the modified source available to those users.
 
-第三方组件（CodeMirror 等，MIT；jschardet，LGPL-2.1）的许可证见 [`tools/codemirror/NOTICE.md`](tools/codemirror/NOTICE.md)。
+Licenses of third-party components (CodeMirror and others, MIT; jschardet, LGPL-2.1) are listed in [`tools/codemirror/NOTICE.md`](tools/codemirror/NOTICE.md).
