@@ -99,9 +99,10 @@
           data-msg-empty="{{tr .Locale "e2ee_empty"}}" data-msg-too-large="{{tr .Locale "e2ee_too_large"}}"
           data-msg-encrypting="{{tr .Locale "e2ee_encrypting"}}" data-msg-failed="{{tr .Locale "e2ee_failed"}}" data-max-bytes="{{.MaxPaste}}"{{end}}>
       {{/* A plain .panel, not .panel-ed: that one carries the resource editor's
-           height, and this box is not that box. No data-editor either - the
-           home page loads no editor and no bundle, and a textarea is the whole
-           interaction. */}}
+           height, and this box is not that box. data-box, not data-editor: the
+           editor mounts over it with highlighting and line numbers, but none
+           of a resource's encoding and upload handling. Without the script the
+           textarea is the whole interaction. */}}
       <div class="panel ruled">
         <div class="pt">
           <span class="sec">{{tr .Locale "content"}}</span>
@@ -116,7 +117,7 @@
           </span>
         </div>
         <div class="pb paste-body">
-          <textarea name="content" spellcheck="false" autofocus
+          <textarea name="content" spellcheck="false" autofocus data-box
                     aria-label="{{tr .Locale "paste_content_label"}}" placeholder="{{tr .Locale "paste_content_placeholder"}}">{{.PasteContent}}</textarea>
           {{if not .E2EE}}
           {{/* The chosen file stands where the box was, until it is removed. */}}
@@ -188,6 +189,7 @@
 
   </main>
   {{template "footer" .}}
+  {{if not .PasteURL}}<script type="module" src="/static/editor.js"></script>{{end}}
   {{if or .E2EE .PasteEncrypted}}<script type="module" src="/static/e2ee-share.js"></script>{{end}}
   {{template "copy-status" .}}
   <script>
@@ -197,6 +199,7 @@
       var input = document.querySelector('[data-paste-file]');
       if (!input) return;
       var box = document.querySelector('textarea[name=content]');
+      var body = box.parentNode;
       var card = document.querySelector('[data-paste-picked]');
       var status = document.querySelector('[data-paste-status]');
       var filename = document.querySelector('input[name=filename]');
@@ -209,7 +212,8 @@
       function clear() {
         input.value = '';
         card.hidden = true;
-        box.hidden = box.disabled = false;
+        body.removeAttribute('data-picked');
+        box.disabled = false;
         if (named && filename.value === named) filename.value = '';
         named = '';
       }
@@ -225,11 +229,16 @@
         }
         if (!filename.value || filename.value === named) filename.value = named = file.name;
         card.querySelector('[data-picked-name]').textContent = file.name + ' · ' + size(file.size);
-        box.hidden = box.disabled = true;
+        body.setAttribute('data-picked', '');
+        box.disabled = true;
         card.hidden = false;
       }
       input.addEventListener('change', pick);
-      card.querySelector('[data-picked-clear]').addEventListener('click', function () { clear(); box.focus(); });
+      card.querySelector('[data-picked-clear]').addEventListener('click', function () {
+        clear();
+        var editor = body.querySelector('.cm-content');
+        (editor || box).focus();
+      });
       // Back to this page, the browser may still hold the file it had.
       window.addEventListener('pageshow', function () { if (input.files && input.files.length) pick(); });
     })();

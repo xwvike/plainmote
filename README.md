@@ -21,7 +21,7 @@ Try it at [plainmote.link](https://plainmote.link).
 - **Resources and share links**: sign in to keep text and files, then give each recipient a separate link with its own expiry and use limit. Revoking one leaves the others working.
 - **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner of the resource.
 - **Remote resources**: keep just a public URL; the content is fetched from the origin on every access.
-- **Online editor**: built on CodeMirror 6, with syntax highlighting for common config formats. It detects UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings, and saves back in the original encoding and line endings.
+- **Online editor**: built on CodeMirror 6, with syntax highlighting for YAML, JSON, TOML, XML, INI and `.env`, shell, nginx, Dockerfile, SQL, diffs and logs; the quick share box uses the same editor. It detects UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings, and saves back in the original encoding and line endings.
 - **End-to-end encryption (optional)**: signed-in users can turn it on in their account settings. Quick shares are then encrypted in the browser, and the server stores only ciphertext.
 - **Media preview**: in a browser, share links show images and play audio and video; other clients get the raw bytes.
 - **Works without JavaScript**: the core features work with scripts turned off; scripts only enhance. End-to-end encryption is the exception, as encryption has to run in the browser.

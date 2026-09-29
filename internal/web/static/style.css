@@ -258,6 +258,17 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .ruled:has(> .paste-body > textarea:focus) > .pb,
 .ruled:has(> .paste-body > textarea:focus) + .savebar { border-color: var(--accent); }
 .ruled:has(> .paste-body > textarea:focus) + .savebar { border-top-color: var(--line2); }
+/* The box's editor: as tall as the box, lit the same way on focus. The
+   textarea it mounts over is given the editor's padding first, gutter
+   included, so the mount does not shift the text. */
+.ruled > .paste-body > [data-box] { padding: 8px 14px 8px 49px; line-height: 1.75; }
+.paste-body > .cm-host { height: clamp(200px, calc(100vh - 440px), 460px); }
+.ruled:has(> .paste-body .cm-focused) > .pb,
+.ruled:has(> .paste-body .cm-focused) + .savebar { border-color: var(--accent); }
+.ruled:has(> .paste-body .cm-focused) + .savebar { border-top-color: var(--line2); }
+/* A chosen file stands where the box was. */
+.paste-body[data-picked] > textarea,
+.paste-body[data-picked] > .cm-host { display: none; }
 .ttl-picker { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .ttl-picker > span { font-size: 12px; font-weight: 500; color: var(--ink2); }
 .ttl-picker select { width: auto; }

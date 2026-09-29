@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 // prevents editor enhancement from running in this smoke test.
 globalThis.document = { documentElement: { style: {} }, querySelectorAll: () => [] };
 
-const { decodeBytes, detectFileEncoding, submissionSource, SUPPORTED_ENCODINGS } = await import("../../internal/web/static/editor.js");
+const { decodeBytes, detectFileEncoding, sniffToken, submissionSource, SUPPORTED_ENCODINGS, tokenFor } = await import("../../internal/web/static/editor.js");
 const { classifyUpload, primeVideo } = await import("../../internal/web/static/upload.js");
 const { formActionURL } = await import("../../internal/web/static/resource.js");
 
@@ -88,3 +88,18 @@ assert.equal(
   "https://cfg.test/resources/example/share",
   "a named action field must not replace the form submission URL",
 );
+
+// Highlighting: the filename decides, including files known by their whole
+// name; the box falls back on what the text plainly is, and on nothing.
+for (const [name, token] of [
+  ["deploy.yml", "yaml"], ["Dockerfile", "dockerfile"], ["Containerfile", "dockerfile"],
+  [".env", "ini"], [".env.production", "ini"], ["nginx.conf", "nginx"], ["site.conf", "ini"],
+  ["schema.sql", "sql"], ["fix.patch", "diff"], ["app.log", "log"], ["notes.txt", ""],
+]) assert.equal(tokenFor(name, ""), token, `${name} highlights as ${token || "plain text"}`);
+assert.equal(sniffToken('{"a": [1, 2]}'), "json", "text that parses as JSON is JSON");
+assert.equal(sniffToken("{ not json"), "", "a brace alone proves nothing");
+assert.equal(sniffToken('<?xml version="1.0"?><a/>'), "xml", "declared XML is XML");
+assert.equal(
+  sniffToken("2026-09-29 10:00:01 INFO started\n2026-09-29 10:00:02 ERROR failed: timeout\n"),
+  "log", "lines that start with a time are a log");
+assert.equal(sniffToken("hello\nworld\n"), "", "prose stays plain");

@@ -7,12 +7,12 @@
 // textarea in a form - which is the behaviour every no-JS path depends on.
 import {
   analyseEncoding, bracketMatching, closeBrackets, closeBracketsKeymap, Compartment,
-  crosshairCursor, defaultKeymap, drawSelection, dropCursor, EditorState,
+  crosshairCursor, defaultKeymap, diff, dockerFile, drawSelection, dropCursor, EditorState,
   EditorView, highlightActiveLine, highlightActiveLineGutter,
   highlightSelectionMatches, highlightSpecialChars, HighlightStyle, history,
   historyKeymap, indentLess, indentMore, indentOnInput, indentUnit, json, keymap,
-  lineNumbers, properties, rectangularSelection, search, searchKeymap, shell,
-  StreamLanguage, syntaxHighlighting, tags, toml, xml, yaml,
+  lineNumbers, nginx, placeholder, properties, rectangularSelection, search, searchKeymap, shell,
+  standardSQL, StreamLanguage, syntaxHighlighting, tags, toml, xml, yaml,
 } from "./vendor/codemirror.js";
 import { uploadController } from "./upload.js";
 
@@ -22,6 +22,43 @@ function message(name, values = {}) {
   return text;
 }
 
+// A log has no grammar, but it has landmarks: when, how bad, and the
+// key=value pairs and quoted values in between. Only those are marked; the
+// message itself stays plain. A level is a whole word wherever it stands, so
+// "error" in a message is marked too - which is what someone scanning a log
+// is looking for.
+const logMode = {
+  name: "log",
+  token(stream) {
+    if (stream.eatSpace()) return null;
+    if (stream.peek() === "\"") {
+      stream.next();
+      while (!stream.eol()) {
+        const next = stream.next();
+        if (next === "\\") stream.next();
+        else if (next === "\"") break;
+      }
+      return "string";
+    }
+    if (/\w/.test(stream.string.charAt(stream.pos - 1))) {
+      stream.match(/^\w*/);
+      if (stream.pos === stream.start) stream.next();
+      return null;
+    }
+    if (stream.match(/^\d{4}[-/]\d{2}[-/]\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?)?(?:Z|[+-]\d{2}:?\d{2})?/)
+      || stream.match(/^\d{2}:\d{2}:\d{2}(?:[.,]\d+)?/)) return "meta";
+    if (stream.match(/^(?:fatal|panic|crit(?:ical)?|emerg(?:ency)?|alert|severe|err(?:or)?|exception|traceback)\b/i)) return "error";
+    if (stream.match(/^warn(?:ing)?\b/i)) return "warning";
+    if (stream.match(/^(?:info|notice)\b/i)) return "keyword";
+    if (stream.match(/^(?:debug|trace|verbose)\b/i)) return "comment";
+    if (stream.match(/^[\w.-]+(?==)/)) return "propertyName";
+    if (stream.match(/^\d[\d.:]*[a-z%]*\b/i)) return "number";
+    if (!stream.match(/^\w+/)) stream.next();
+    return null;
+  },
+  tokenTable: { error: tags.invalid, warning: tags.annotation },
+};
+
 const LANGUAGES = {
   yaml: () => yaml(),
   json: () => json(),
@@ -29,6 +66,11 @@ const LANGUAGES = {
   toml: () => StreamLanguage.define(toml),
   sh: () => StreamLanguage.define(shell),
   ini: () => StreamLanguage.define(properties),
+  nginx: () => StreamLanguage.define(nginx),
+  dockerfile: () => StreamLanguage.define(dockerFile),
+  sql: () => StreamLanguage.define(standardSQL),
+  diff: () => StreamLanguage.define(diff),
+  log: () => StreamLanguage.define(logMode),
 };
 
 function languageFor(token) {
@@ -38,8 +80,13 @@ function languageFor(token) {
 
 const EXTENSIONS = {
   yaml: "yaml", yml: "yaml", json: "json", toml: "toml", xml: "xml", sh: "sh",
+  bash: "sh", zsh: "sh",
   ini: "ini", cfg: "ini", conf: "ini", env: "ini", properties: "ini",
+  sql: "sql", diff: "diff", patch: "diff", log: "log", dockerfile: "dockerfile",
 };
+
+// Files known by their whole name rather than an extension.
+const NAMES = { dockerfile: "dockerfile", containerfile: "dockerfile" };
 
 const CONTENT_TYPES = {
   "application/yaml": "yaml",
@@ -51,11 +98,40 @@ const CONTENT_TYPES = {
 // Syntax highlighting belongs entirely to the browser layer. A recognised
 // filename extension wins; without one, the stored content type is a fallback.
 function tokenFor(filename, contentType) {
-  const name = String(filename || "");
+  const name = String(filename || "").trim().toLowerCase();
+  if (NAMES[name]) return NAMES[name];
+  if (name.startsWith("dockerfile.")) return "dockerfile";
+  // .env.local, .env.production: the same format as .env.
+  if (name.startsWith(".env.")) return "ini";
+  // nginx.conf, nginx-site.conf: a .conf that says whose it is.
+  if (name.includes("nginx") && name.endsWith(".conf")) return "nginx";
   const dot = name.lastIndexOf(".");
-  if (dot >= 0) return EXTENSIONS[name.slice(dot + 1).toLowerCase()] || "";
+  if (dot >= 0) return EXTENSIONS[name.slice(dot + 1)] || "";
   const base = String(contentType || "").split(";", 1)[0].trim().toLowerCase();
   return CONTENT_TYPES[base] || "";
+}
+
+// What pasted text most likely is, for a box with no filename to go by. Only
+// formats that can be told apart with confidence: JSON that parses, XML that
+// declares itself, and a log whose lines mostly start with a time or name a
+// level. Anything else stays plain, which is never wrong.
+const LOG_LINE = /^\[?(?:\d{4}[-/]\d{2}[-/]\d{2}|\d{2}:\d{2}:\d{2})|\b(?:ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE|FATAL)\b/;
+
+function sniffToken(text) {
+  const sample = String(text || "").slice(0, 64 * 1024);
+  const trimmed = sample.trim();
+  if (!trimmed) return "";
+  if (/^[[{]/.test(trimmed) && sample.length === String(text).length) {
+    try {
+      JSON.parse(trimmed);
+      return "json";
+    } catch (_) { /* not JSON after all */ }
+  }
+  if (trimmed.startsWith("<?xml")) return "xml";
+  const lines = sample.split("\n", 200).filter((line) => line.trim());
+  const logLines = lines.filter((line) => LOG_LINE.test(line)).length;
+  if (lines.length >= 2 && logLines * 2 >= lines.length) return "log";
+  return "";
 }
 
 // Line endings are file metadata, not text. CodeMirror always stores an LF
@@ -248,7 +324,7 @@ function detectFileEncoding(bytes) {
 // Exported for the repository's browser-side encoding smoke test. The page
 // itself uses the same functions below, so the test does not maintain a second
 // implementation of the detection rules.
-export { decodeBytes, detectFileEncoding, submissionSource, SUPPORTED_ENCODINGS };
+export { decodeBytes, detectFileEncoding, sniffToken, submissionSource, SUPPORTED_ENCODINGS, tokenFor };
 
 // Colours come from the stylesheet's tokens, so the editor stays inside the
 // same palette as the rest of the page instead of shipping its own.
@@ -260,7 +336,11 @@ const highlight = HighlightStyle.define([
   { tag: [tags.comment, tags.lineComment, tags.blockComment], color: "var(--ink3)", fontStyle: "italic" },
   { tag: [tags.tagName, tags.angleBracket], color: "var(--accent)" },
   { tag: tags.attributeName, color: "var(--ink2)" },
-  { tag: tags.invalid, color: "var(--bad)" },
+  { tag: tags.invalid, color: "var(--bad)", fontWeight: "600" },
+  { tag: tags.annotation, color: "var(--warn)", fontWeight: "600" },
+  { tag: tags.meta, color: "var(--ink3)" },
+  { tag: tags.inserted, color: "var(--ok)" },
+  { tag: tags.deleted, color: "var(--bad)" },
 ]);
 
 // Give short and empty documents a useful editing area without inserting fake
@@ -671,6 +751,96 @@ function preview(textarea) {
   });
 
   textarea.classList.add("cm-source");
+}
+
+// The quick share box: the editor without the resource machinery - no
+// encoding, no upload and no line endings to keep, since the box is text
+// typed or pasted here and the server takes it as LF. The format follows the
+// filename field as it is typed, and without one, what the text looks like.
+// The textarea stays the field the form posts. It is filled when the form is
+// sent, in the capture phase so before any other submit handler reads it:
+// the encrypting form reads it there.
+function box(textarea) {
+  const form = textarea.form;
+  const filename = form ? form.elements.filename : null;
+  const language = new Compartment();
+  const host = document.createElement("div");
+  host.className = "cm-host";
+  textarea.parentNode.insertBefore(host, textarea.nextSibling);
+
+  let token = null;
+  const configure = (view) => {
+    const next = tokenFor(filename ? filename.value : "", "") || sniffToken(view.state.doc.toString());
+    if (next === token) return;
+    token = next;
+    view.dispatch({ effects: language.reconfigure(languageFor(next)) });
+  };
+  let pending = 0;
+
+  let view;
+  try {
+    view = new EditorView({
+      parent: host,
+      state: EditorState.create({
+        doc: textarea.value,
+        extensions: [
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          highlightSpecialChars(),
+          history(),
+          drawSelection(),
+          dropCursor(),
+          indentOnInput(),
+          indentUnit.of(detectIndent(textarea.value)),
+          bracketMatching(),
+          closeBrackets(),
+          rectangularSelection(),
+          crosshairCursor(),
+          highlightActiveLine(),
+          highlightSelectionMatches(),
+          search({ top: true }),
+          syntaxHighlighting(highlight),
+          theme,
+          placeholder(textarea.getAttribute("placeholder") || ""),
+          EditorView.contentAttributes.of({
+            "aria-label": textarea.getAttribute("aria-label") || "Content",
+            "aria-multiline": "true",
+            spellcheck: "false",
+          }),
+          // Looked at again once typing pauses, not on every key.
+          EditorView.updateListener.of((update) => {
+            if (!update.docChanged) return;
+            clearTimeout(pending);
+            pending = setTimeout(() => configure(update.view), 300);
+          }),
+          language.of([]),
+          keymap.of([
+            ...tabKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap,
+            ...historyKeymap,
+          ]),
+        ],
+      }),
+    });
+  } catch (error) {
+    host.remove();
+    throw error;
+  }
+  textarea.classList.add("cm-source");
+  configure(view);
+  if (textarea.autofocus) view.focus();
+
+  if (form) {
+    form.addEventListener("submit", () => { textarea.value = view.state.doc.toString(); }, true);
+  }
+  if (filename) filename.addEventListener("input", () => configure(view));
+}
+
+for (const textarea of document.querySelectorAll("textarea[data-box]")) {
+  try {
+    box(textarea);
+  } catch (error) {
+    console.error("editor: falling back to the plain box", error);
+  }
 }
 
 for (const textarea of document.querySelectorAll("textarea[data-editor]")) {

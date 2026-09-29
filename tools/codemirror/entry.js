@@ -8,7 +8,7 @@ export { EditorState, Compartment } from "@codemirror/state";
 export {
   EditorView, keymap, lineNumbers, highlightActiveLine,
   highlightActiveLineGutter, drawSelection, rectangularSelection,
-  crosshairCursor, highlightSpecialChars, dropCursor,
+  crosshairCursor, highlightSpecialChars, dropCursor, placeholder,
 } from "@codemirror/view";
 export {
   defaultKeymap, history, historyKeymap, indentMore, indentLess,
@@ -29,6 +29,10 @@ export { xml } from "@codemirror/lang-xml";
 export { toml } from "@codemirror/legacy-modes/mode/toml";
 export { properties } from "@codemirror/legacy-modes/mode/properties";
 export { shell } from "@codemirror/legacy-modes/mode/shell";
+export { nginx } from "@codemirror/legacy-modes/mode/nginx";
+export { dockerFile } from "@codemirror/legacy-modes/mode/dockerfile";
+export { standardSQL } from "@codemirror/legacy-modes/mode/sql";
+export { diff } from "@codemirror/legacy-modes/mode/diff";
 
 // Encoding detection runs on the original Uint8Array before any browser text
 // decoder can replace bytes. The UI filters these ranked candidates through
