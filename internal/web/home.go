@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -39,8 +38,8 @@ var pasteDefaultTTL = strconv.Itoa(int(store.AnonymousDefaultTTL / time.Minute))
 
 // pasteFormMaxBytes is what the handler will read at all. The store enforces
 // the real limit on the body; this one is about not reading a request that
-// cannot possibly be within it.
-const pasteFormMaxBytes = store.AnonymousMaxBytes + 8<<10
+// cannot possibly be within it. The slack is the rest of a multipart form.
+const pasteFormMaxBytes = store.AnonymousMaxBytes + 64<<10
 
 func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
@@ -142,16 +141,23 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, pasteFormMaxBytes)
-	content, filename, ttlChoice, err := readPasteForm(r)
+	form, err := readPasteForm(r)
 	if err != nil {
 		a.refusePaste(w, r, "", "", tooLarge)
 		return
 	}
-	ttl, ttlValue := parsePasteTTL(ttlChoice)
-	if wantsHTML(r) {
+	content, filename := string(form.content), form.filename
+	ttl, ttlValue := parsePasteTTL(form.ttl)
+	if wantsHTML(r) && !form.uploaded {
 		// The page's textarea submits CRLF whatever was typed. What a terminal
-		// sends is exactly the file, and is kept as it is.
+		// sends, and a file the page uploads, is exactly the file, and is kept
+		// as it is.
 		content = store.ApplyEOL(content, "lf")
+	}
+	// A refusal puts the box back as it was; a file cannot go back into it.
+	boxContent := content
+	if form.uploaded {
+		boxContent = ""
 	}
 
 	creatorID := ""
@@ -161,7 +167,7 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		// stored in the clear because a script did not run. A terminal
 		// carries no session and is not what this refuses.
 		if wantsHTML(r) && a.e2eeEnabled(r, user.ID) {
-			a.refusePasteWith(w, r, content, filename, ttlValue, translate(requestLanguage(r).Locale, "e2ee_plaintext_refused"), http.StatusBadRequest)
+			a.refusePasteWith(w, r, boxContent, filename, ttlValue, translate(requestLanguage(r).Locale, "e2ee_plaintext_refused"), http.StatusBadRequest)
 			return
 		}
 	}
@@ -169,10 +175,10 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, store.ErrInternal) {
 			fmt.Fprintf(os.Stderr, "create paste: %v\n", err)
-			a.refusePasteWith(w, r, content, filename, ttlValue, "服务暂时无法完成该操作，请稍后重试。", http.StatusInternalServerError)
+			a.refusePasteWith(w, r, boxContent, filename, ttlValue, "服务暂时无法完成该操作，请稍后重试。", http.StatusInternalServerError)
 			return
 		}
-		a.refusePasteWith(w, r, content, filename, ttlValue, err.Error(), http.StatusBadRequest)
+		a.refusePasteWith(w, r, boxContent, filename, ttlValue, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -188,60 +194,86 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, pasteResultPrefix+resource.ID, http.StatusSeeOther)
 }
 
+// pasteForm is one submission to the open endpoint.
+type pasteForm struct {
+	content  []byte
+	filename string
+	ttl      string
+	// uploaded is content that arrived as a file part. A file's bytes are
+	// kept exactly; only what came from the box has its line endings undone.
+	uploaded bool
+}
+
 // readPasteForm reads the box's own form and what curl sends:
 //
-//   - a multipart body, from `curl -F 'content=<-'` (so a log can be piped
-//     straight in) or `curl -F content=@app.log`, whose part name becomes the
+//   - a multipart body: the page's, whose chosen file (the file field) wins
+//     over the box, or curl's `-F 'content=<-'` (so a log can be piped
+//     straight in) and `-F content=@app.log`. A file part's name becomes the
 //     filename unless one is given;
-//   - a urlencoded form with a content field, from the page or
+//   - a urlencoded form with a content field, from
 //     `curl --data-urlencode content@app.log`;
 //   - anything else as the content itself, byte for byte. This is what
 //     `curl --data-binary @app.log` sends - curl labels it a form, but it has
 //     no content field - and what a text/plain body is. Its lifetime and
 //     filename come from the query string, since the body has no room for them.
-func readPasteForm(r *http.Request) (content, filename, ttl string, err error) {
+func readPasteForm(r *http.Request) (pasteForm, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return "", "", "", err
+		return pasteForm{}, err
 	}
 	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	switch mediaType {
 	case "multipart/form-data":
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		if err := r.ParseMultipartForm(pasteFormMaxBytes); err != nil {
-			return "", "", "", err
+			return pasteForm{}, err
 		}
 		defer r.MultipartForm.RemoveAll()
-		content, filename, ttl = r.FormValue("content"), strings.TrimSpace(r.FormValue("filename")), r.FormValue("ttl")
-		if files := r.MultipartForm.File["content"]; content == "" && len(files) > 0 {
+		form := pasteForm{content: []byte(r.FormValue("content")), filename: strings.TrimSpace(r.FormValue("filename")), ttl: r.FormValue("ttl")}
+		// A page with no file chosen still sends the field, empty.
+		for _, field := range []string{"file", "content"} {
+			files := r.MultipartForm.File[field]
+			if len(files) == 0 || files[0].Size == 0 {
+				continue
+			}
 			part, err := files[0].Open()
 			if err != nil {
-				return "", "", "", err
+				return pasteForm{}, err
 			}
-			defer part.Close()
 			data, err := io.ReadAll(part)
+			part.Close()
 			if err != nil {
-				return "", "", "", err
+				return pasteForm{}, err
 			}
-			content = string(data)
-			if filename == "" {
-				filename = path.Base(files[0].Filename)
+			form.content, form.uploaded = data, true
+			if form.filename == "" {
+				form.filename = uploadName(files[0].Filename)
 			}
+			break
 		}
-		return content, filename, ttl, nil
+		return form, nil
 	case "application/x-www-form-urlencoded":
 		if form, err := url.ParseQuery(string(body)); err == nil && form.Has("content") {
-			return form.Get("content"), strings.TrimSpace(form.Get("filename")), form.Get("ttl"), nil
+			return pasteForm{content: []byte(form.Get("content")), filename: strings.TrimSpace(form.Get("filename")), ttl: form.Get("ttl")}, nil
 		}
 	}
 	query := r.URL.Query()
-	return string(body), strings.TrimSpace(query.Get("filename")), query.Get("ttl"), nil
+	return pasteForm{content: body, filename: strings.TrimSpace(query.Get("filename")), ttl: query.Get("ttl")}, nil
+}
+
+// uploadName is the last segment of what a client called its file. Some
+// send a whole path, with either separator.
+func uploadName(name string) string {
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	return strings.TrimSpace(name)
 }
 
 // pasteUsage is what `curl .../paste` prints: every way in, and the limits.
 func (a *App) pasteUsage(r *http.Request) string {
 	endpoint := a.baseURL(r) + pastePath
-	return fmt.Sprintf(`PlainMote quick share: send text, get a link back.
+	return fmt.Sprintf(`PlainMote quick share: send text or a file, get a link back.
 
   cmd | curl -F 'content=<-' %[1]s
   curl -F 'content=<app.log' %[1]s
@@ -252,8 +284,8 @@ ttl       minutes until the link expires: 1, 5, 10 or 30 (default %[2]s)
 filename  name at the end of the link (a form field, or a query parameter
           with --data-binary)
 
-The response is the link, on one line. The text must be UTF-8, at most %[3]s;
-it is kept byte for byte and served as plain text.
+The response is the link, on one line. At most %[3]s, kept byte for byte:
+UTF-8 text is served as plain text, anything else as a download.
 `, endpoint, pasteDefaultTTL, legalBytes(store.AnonymousMaxBytes))
 }
 

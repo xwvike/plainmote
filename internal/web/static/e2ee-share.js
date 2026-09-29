@@ -4,10 +4,10 @@
 // the result page puts it on the end of the share link.
 import { seal } from "./e2ee.js";
 
-const MAX_BYTES = 128 * 1024;
-
 function sizeText(bytes) {
-  return bytes >= 1024 ? `${Math.round(bytes / 1024)} KiB` : `${bytes} B`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KiB`;
+  return `${bytes} B`;
 }
 
 function setupForm(form) {
@@ -21,6 +21,7 @@ function setupForm(form) {
   // be sent in the clear by pressing it or Enter.
   button.disabled = false;
   const label = button.textContent;
+  const maxBytes = Number(form.dataset.maxBytes);
 
   const fail = (message) => {
     error.textContent = message;
@@ -34,7 +35,7 @@ function setupForm(form) {
     const text = textarea.value.replace(/\r\n?/g, "\n");
     const content = new TextEncoder().encode(text);
     if (content.length === 0) return fail(form.dataset.msgEmpty);
-    if (content.length > MAX_BYTES) return fail(form.dataset.msgTooLarge.replace("%s", sizeText(MAX_BYTES)));
+    if (content.length > maxBytes) return fail(form.dataset.msgTooLarge.replace("%s", sizeText(maxBytes)));
     const checked = form.querySelector("input[name='ttl']:checked");
 
     button.disabled = true;

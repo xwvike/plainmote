@@ -64,7 +64,6 @@ func TestAnonymousTermsCannotBeStretched(t *testing.T) {
 		{"under the floor", time.Second, []byte("x")},
 		{"too large", time.Minute, bytes.Repeat([]byte("a"), AnonymousMaxBytes+1)},
 		{"empty", time.Minute, nil},
-		{"invalid utf-8", time.Minute, []byte{0xff, 0xfe, 0x00}},
 	} {
 		if _, _, err := db.CreateAnonymousPaste(ctx, "x.txt", tc.body, tc.ttl, now); err == nil {
 			t.Errorf("%s: should have been refused", tc.label)
@@ -120,6 +119,25 @@ func TestAnonymousPasteIsAlwaysServedAsText(t *testing.T) {
 	}
 	if got := ContentTypeWithEncoding(chinese.ContentType, chinese.ContentEncoding); !strings.Contains(got, "charset=utf-8") {
 		t.Fatalf("delivery must name the charset, got %q", got)
+	}
+}
+
+// TestAnonymousFileIsAlwaysADownload: bytes that are not text are kept, but
+// only ever as an opaque download - an image, a player or a page is exactly
+// what the open endpoint must not put on this domain.
+func TestAnonymousFileIsAlwaysADownload(t *testing.T) {
+	db, _, _ := testDatabase(t)
+	ctx := context.Background()
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0xff, 0x00}, 64)...)
+	resource, _, err := db.CreateAnonymousPaste(ctx, "photo.png", png, time.Minute, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resource.ContentType != "application/octet-stream" || resource.ContentEncoding != "" {
+		t.Fatalf("an anonymous file must be opaque, got %q %q", resource.ContentType, resource.ContentEncoding)
+	}
+	if resource.Filename != "photo.png" || resource.ContentSize != int64(len(png)) {
+		t.Fatalf("the file must keep its name and bytes, got %q %d", resource.Filename, resource.ContentSize)
 	}
 }
 

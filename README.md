@@ -17,7 +17,7 @@ Try it at [plainmote.link](https://plainmote.link).
 
 ## Features
 
-- **Quick share**: no account needed. Paste text on the home page and get a link that expires within 30 minutes, or share straight from a terminal with curl.
+- **Quick share**: no account needed. Paste text or upload a file (up to 4 MiB) on the home page and get a link that expires within 30 minutes, or share straight from a terminal with curl.
 - **Resources and share links**: sign in to keep text and files, then give each recipient a separate link with its own expiry and use limit. Revoking one leaves the others working.
 - **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner of the resource.
 - **Remote resources**: keep just a public URL; the content is fetched from the origin on every access.
@@ -48,7 +48,7 @@ The response is the share link on a single line, ready for a pipe or `$(...)`. `
 - **A share link is a credential**: tokens are 256 random bits; the database keeps only a SHA-256 index and the original, encrypted with AES-GCM.
 - **No hotlinking**: other sites cannot embed a share link as an image, video or script; such requests are refused before the token is read.
 - **Not indexed**: share links, resources and account pages are all kept out of search engines; only the pages that describe the service can be indexed.
-- **Not a web host**: types a browser might execute (HTML, scripts, SVG and so on) are never delivered as themselves; anonymous shares are delivered only as plain text (or, when encrypted, as ciphertext).
+- **Not a web host**: types a browser might execute (HTML, scripts, SVG and so on) are never delivered as themselves; anonymous shares are delivered as plain text, any other file only as a download (and, when encrypted, as ciphertext).
 - **End-to-end encryption**: uses only the browser's built-in WebCrypto (AES-256-GCM; with a passphrase, the key is derived with PBKDF2-SHA-256).
   The key sits after the `#` in the link, which browsers never send to the server.
   Its limits are just as plain: decrypting needs JavaScript; a lost link or passphrase cannot be recovered; content size and access history are not encrypted;

@@ -41,7 +41,7 @@ func (a *App) llmsText() string {
 	if a.cfg.AnonymousEnabled {
 		fmt.Fprintf(&text, `## Quick share (no account)
 
-Send text and get a link back, on one line:
+Send text or a file and get a link back, on one line:
 
 `+"```"+`
 cmd | curl -F 'content=<-' %[1]s/paste
@@ -51,7 +51,7 @@ curl --data-binary @app.log '%[1]s/paste?ttl=30&filename=app.log'
 
 - `+"`ttl`"+`: minutes until the link expires: 1, 5, 10 or 30. Default %[2]s.
 - `+"`filename`"+`: the name at the end of the link. A form field, or a query parameter with `+"`--data-binary`"+`.
-- The text must be UTF-8, at most %[3]s. It is stored byte for byte and served as `+"`text/plain; charset=utf-8`"+`.
+- At most %[3]s, stored byte for byte. UTF-8 text is served as `+"`text/plain; charset=utf-8`"+`; anything else as `+"`application/octet-stream`"+`, for download.
 - Success is `+"`201`"+` with the link; a refusal is `+"`400`"+` with a one-line reason.
 - `+"`curl %[1]s/paste`"+` prints this usage.
 

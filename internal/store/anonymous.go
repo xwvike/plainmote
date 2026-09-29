@@ -32,20 +32,23 @@ const (
 	AnonymousDefaultTTL = 10 * time.Minute
 	AnonymousMaxTTL     = 30 * time.Minute
 
-	// AnonymousMaxBytes is far below the signed-in limit: enough for a config
-	// or a snippet, not enough to be a file host.
-	AnonymousMaxBytes = 128 << 10
+	// AnonymousMaxBytes is enough for a log, a config or a small bundle of
+	// them. With links that end within half an hour it is no use as a file
+	// host.
+	AnonymousMaxBytes = 4 << 20
 
-	// anonymousContentType is what an anonymous paste is always served as. The
-	// body comes from a textarea, so it is text by construction, and refusing
-	// to serve it as anything else - html most of all - takes "host a page on
-	// someone else's domain" off the table entirely. The filename still decides
-	// what a download is called.
+	// anonymousContentType is what an anonymous paste that is text is always
+	// served as, and anonymousFileType what anything else is. Refusing to
+	// serve either as what it claims to be - html most of all, but also an
+	// image or a player - takes "host a page on someone else's domain" off the
+	// table entirely: text reads as text, and every other file is a download.
+	// The filename still decides what a download is called.
 	//
 	// The charset is part of the type and not an afterthought: without it a
 	// browser guesses, and a paste in Chinese comes back as mojibake.
 	anonymousContentType = "text/plain; charset=utf-8"
 	anonymousEncoding    = "utf-8"
+	anonymousFileType    = "application/octet-stream"
 )
 
 // Minutes, not a Go duration: %s renders AnonymousMaxTTL as "30m0s".
@@ -84,12 +87,12 @@ func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename
 	if len(content) > AnonymousMaxBytes {
 		return Resource{}, Link{}, fmt.Errorf("内容最大 %s", BytesText(AnonymousMaxBytes))
 	}
-	if !utf8.Valid(content) {
-		return Resource{}, Link{}, errors.New("内容必须是有效的 UTF-8 文本")
-	}
 	// The bytes are stored as given. What a textarea does to line endings is
 	// the web layer's to undo; a paste piped in from a terminal is exactly
 	// what was sent, CRLF included.
+	if !utf8.Valid(content) {
+		return d.insertPaste(ctx, creatorID, filename, content, anonymousFileType, "", now, ttl)
+	}
 	return d.insertPaste(ctx, creatorID, filename, content, anonymousContentType, anonymousEncoding, now, ttl)
 }
 

@@ -95,9 +95,9 @@
     {{/* With encryption on, the script takes the submission: it encrypts the
          text and posts only the ciphertext. The button starts disabled so that
          without the script nothing is sent in the clear. */}}
-    <form method="post" action="/paste"{{if .E2EE}} data-e2ee data-csrf="{{.CSRF}}" data-endpoint="/paste/encrypted"
+    <form method="post" action="/paste" enctype="multipart/form-data"{{if .E2EE}} data-e2ee data-csrf="{{.CSRF}}" data-endpoint="/paste/encrypted"
           data-msg-empty="{{tr .Locale "e2ee_empty"}}" data-msg-too-large="{{tr .Locale "e2ee_too_large"}}"
-          data-msg-encrypting="{{tr .Locale "e2ee_encrypting"}}" data-msg-failed="{{tr .Locale "e2ee_failed"}}"{{end}}>
+          data-msg-encrypting="{{tr .Locale "e2ee_encrypting"}}" data-msg-failed="{{tr .Locale "e2ee_failed"}}" data-max-bytes="{{.MaxPaste}}"{{end}}>
       {{/* A plain .panel, not .panel-ed: that one carries the resource editor's
            height, and this box is not that box. No data-editor either - the
            home page loads no editor and no bundle, and a textarea is the whole
@@ -105,11 +105,27 @@
       <div class="panel ruled">
         <div class="pt">
           <span class="sec">{{tr .Locale "content"}}</span>
-          <span class="sp">{{if .E2EE}}<span class="tag">{{tr .Locale "e2ee_tag"}}</span>{{end}}<span class="hint">{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span></span>
+          {{if not .E2EE}}<span class="hint upload-status" data-paste-status role="status" aria-live="polite"></span>{{end}}
+          <span class="sp">{{if .E2EE}}<span class="tag">{{tr .Locale "e2ee_tag"}}</span>{{end}}<span class="hint">{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
+            {{/* A file instead of the box. Not with encryption on: that
+                 encrypts the box's text, and nothing else. */}}
+            {{if not .E2EE}}<label class="btn sm upload-key paste-pick">
+              <input type="file" name="file" class="sr" data-paste-file data-max-bytes="{{.MaxPaste}}" data-msg-oversize="{{tr .Locale "upload_oversize"}}">
+              <span>{{tr .Locale "upload_file"}}</span>
+            </label>{{end}}
+          </span>
         </div>
         <div class="pb paste-body">
           <textarea name="content" spellcheck="false" autofocus
                     aria-label="{{tr .Locale "paste_content_label"}}" placeholder="{{tr .Locale "paste_content_placeholder"}}">{{.PasteContent}}</textarea>
+          {{if not .E2EE}}
+          {{/* The chosen file stands where the box was, until it is removed. */}}
+          <div class="picked" data-paste-picked hidden>
+            <span class="picked-name" data-picked-name></span>
+            <button type="button" class="txt" data-picked-clear>{{tr .Locale "remove_file"}}</button>
+            <p class="hint">{{tr .Locale "paste_file_hint"}}</p>
+          </div>
+          {{end}}
         </div>
       </div>
       <div class="savebar">
@@ -175,6 +191,48 @@
   {{if or .E2EE .PasteEncrypted}}<script type="module" src="/static/e2ee-share.js"></script>{{end}}
   {{template "copy-status" .}}
   <script>
+    {{/* A chosen file takes the box's place: the box is set aside, not
+         submitted, and the file's name fills an empty filename. */}}
+    (function () {
+      var input = document.querySelector('[data-paste-file]');
+      if (!input) return;
+      var box = document.querySelector('textarea[name=content]');
+      var card = document.querySelector('[data-paste-picked]');
+      var status = document.querySelector('[data-paste-status]');
+      var filename = document.querySelector('input[name=filename]');
+      var named = '';
+      function size(bytes) {
+        if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MiB';
+        if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KiB';
+        return bytes + ' B';
+      }
+      function clear() {
+        input.value = '';
+        card.hidden = true;
+        box.hidden = box.disabled = false;
+        if (named && filename.value === named) filename.value = '';
+        named = '';
+      }
+      function pick() {
+        var file = input.files && input.files[0];
+        status.textContent = '';
+        if (!file) return clear();
+        var max = Number(input.getAttribute('data-max-bytes'));
+        if (file.size > max) {
+          clear();
+          status.textContent = input.getAttribute('data-msg-oversize').replace('{size}', size(file.size)).replace('{limit}', size(max));
+          return;
+        }
+        if (!filename.value || filename.value === named) filename.value = named = file.name;
+        card.querySelector('[data-picked-name]').textContent = file.name + ' · ' + size(file.size);
+        box.hidden = box.disabled = true;
+        card.hidden = false;
+      }
+      input.addEventListener('change', pick);
+      card.querySelector('[data-picked-clear]').addEventListener('click', function () { clear(); box.focus(); });
+      // Back to this page, the browser may still hold the file it had.
+      window.addEventListener('pageshow', function () { if (input.files && input.files.length) pick(); });
+    })();
     document.addEventListener('click', function (event) {
       var button = event.target.closest('[data-copy]');
       if (!button) return;

@@ -196,7 +196,6 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 /* The upload status can run long. Let the header wrap rather than squeeze the
    pickers, so nothing it says has to be cut. */
 .panel-ed > .pt { flex-wrap: wrap; }
-.panel-ed > .pt .upload-status { min-width: 0; }
 .panel-ed > .pt .sp { min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
 .sec { font-size: 12px; font-weight: 600; color: var(--ink2); white-space: nowrap; }
 .pb { padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
@@ -247,6 +246,12 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
    under it is on screen when the page opens. */
 .paste-body > textarea { height: clamp(200px, calc(100vh - 440px), 460px); resize: vertical; }
 .ruled > .paste-body { padding: 0; }
+/* The chosen file, standing where the box was, as tall as the box so the
+   page does not jump. */
+.paste-body > .picked { display: flex; flex-wrap: wrap; align-content: center; align-items: baseline; gap: 6px 14px; height: clamp(200px, calc(100vh - 440px), 460px); padding: 12px 14px; }
+.picked-name { font: 500 13px/1.5 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+.picked > .hint { flex-basis: 100%; margin: 0; }
+.ruled > .pt .upload-status { min-width: 0; }
 .ruled > .paste-body > textarea { padding: 12px 14px; border: 0; border-radius: var(--r) var(--r) 0 0; background: transparent; box-shadow: none; }
 /* Focus lights the whole box - the sheet and the bar that closes it - and
    leaves the perforation between them as it was. */
