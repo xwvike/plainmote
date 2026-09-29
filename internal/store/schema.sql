@@ -26,8 +26,12 @@ CREATE TABLE IF NOT EXISTS plans (
 CREATE UNIQUE INDEX IF NOT EXISTS plans_default_idx ON plans ((1)) WHERE is_default;
 
 INSERT INTO plans (id, name, max_resources, max_storage, is_default, created_at)
-VALUES (gen_random_uuid(), 'default', 20, 10485760, TRUE, now())
+VALUES (gen_random_uuid(), 'default', 100, 104857600, TRUE, now())
 ON CONFLICT (name) DO NOTHING;
+-- The default plan used to be 20 resources and 10 MiB. Raised only where it
+-- still reads exactly that, so a plan an operator has changed is left alone.
+UPDATE plans SET max_resources = 100, max_storage = 104857600, updated_at = now()
+WHERE name = 'default' AND max_resources = 20 AND max_storage = 10485760;
 
 CREATE TABLE IF NOT EXISTS user_plans (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

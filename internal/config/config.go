@@ -118,7 +118,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	maxContentMiB, err := parsePositiveInt("PLAINMOTE_MAX_CONTENT_MIB", 4)
+	maxContentMiB, err := parsePositiveInt("PLAINMOTE_MAX_CONTENT_MIB", 20)
 	if err != nil {
 		return Config{}, err
 	}

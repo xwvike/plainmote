@@ -123,3 +123,37 @@ func TestUpdateIsMeasuredAgainstWhatItReplaces(t *testing.T) {
 		t.Fatalf("one byte over must be refused, got %v", err)
 	}
 }
+
+// TestDefaultPlanRaisedOnlyFromTheOldDefault covers the raise from 20
+// resources / 10 MiB: a plan still at those numbers moves up when the schema
+// is applied again, and one an operator has set to anything else stays put.
+func TestDefaultPlanRaisedOnlyFromTheOldDefault(t *testing.T) {
+	db, _, _ := testDatabase(t)
+	ctx := context.Background()
+	limits := func() (resources, storage int64) {
+		t.Helper()
+		if err := db.db.QueryRow(ctx, `SELECT max_resources, max_storage FROM plans WHERE name = 'default'`).Scan(&resources, &storage); err != nil {
+			t.Fatal(err)
+		}
+		return resources, storage
+	}
+	if resources, storage := limits(); resources != 100 || storage != 100<<20 {
+		t.Fatalf("a new deployment starts at 100 / 100 MiB, got %d / %d", resources, storage)
+	}
+
+	setPlanLimits(t, db, 20, 10<<20)
+	if err := db.initializeSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if resources, storage := limits(); resources != 100 || storage != 100<<20 {
+		t.Fatalf("the old default must be raised, got %d / %d", resources, storage)
+	}
+
+	setPlanLimits(t, db, 20, 50<<20)
+	if err := db.initializeSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if resources, storage := limits(); resources != 20 || storage != 50<<20 {
+		t.Fatalf("a plan the operator changed must be left alone, got %d / %d", resources, storage)
+	}
+}

@@ -95,7 +95,7 @@ Optional:
 | `PLAINMOTE_BLOB_REGION` | `auto` | S3 region |
 | `PLAINMOTE_TRUSTED_PROXIES` | empty | Trusted proxy IPs or CIDRs, comma-separated |
 | `PLAINMOTE_SESSION_TTL` | `720h` | Sign-in session lifetime |
-| `PLAINMOTE_MAX_CONTENT_MIB` | `4` | Size limit for one piece of content |
+| `PLAINMOTE_MAX_CONTENT_MIB` | `20` | Size limit for one piece of content |
 | `PLAINMOTE_LOG_RETENTION` | `720h` | How long access history is kept; `0` keeps it forever |
 | `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | New account policy: `open`, `allowlist` or `closed` |
 | `GITHUB_ALLOWED_IDS` | empty | Numeric GitHub user IDs allowed to register in `allowlist` mode, comma-separated |

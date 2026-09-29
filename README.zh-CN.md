@@ -95,7 +95,7 @@ docker compose up -d
 | `PLAINMOTE_BLOB_REGION` | `auto` | S3 区域 |
 | `PLAINMOTE_TRUSTED_PROXIES` | 空 | 可信代理的 IP 或 CIDR，逗号分隔 |
 | `PLAINMOTE_SESSION_TTL` | `720h` | 登录会话有效期 |
-| `PLAINMOTE_MAX_CONTENT_MIB` | `4` | 单份内容大小上限 |
+| `PLAINMOTE_MAX_CONTENT_MIB` | `20` | 单份内容大小上限 |
 | `PLAINMOTE_LOG_RETENTION` | `720h` | 访问记录保留时长，`0` 表示永久保留 |
 | `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | 新用户注册策略：`open`、`allowlist` 或 `closed` |
 | `GITHUB_ALLOWED_IDS` | 空 | `allowlist` 模式下允许注册的 GitHub 数字用户 ID，逗号分隔 |
