@@ -69,7 +69,7 @@
         {{if .PasteEncrypted}}
         {{/* Which one applies is known only to the script: it depends on the
              part of this page's address that never reaches the server. */}}
-        <p class="hint" data-e2ee-passphrase hidden>{{tr .Locale "e2ee_result_passphrase"}}</p>
+        <p class="hint" data-e2ee-pin data-message="{{tr .Locale "e2ee_result_pin"}}" hidden></p>
         <p class="err" data-e2ee-lost hidden>{{tr .Locale "e2ee_result_lost"}}</p>
         {{end}}
         <p class="hint">{{tr .Locale "paste_result_private"}}</p>
@@ -142,14 +142,18 @@
                  aria-label="{{tr .Locale "filename_optional"}}" class="mpath" style="width:150px">
         </label>
         {{if .E2EE}}
-        {{/* No name: a passphrase is never a form field, so no path can post it.
-             Shown, not masked, and kept from password managers: it is meant
-             to be told to the recipient, and a typo nobody can see - or a
-             suggested password filled in unnoticed - would lock the content
-             away for good. */}}
-        <label class="ttl-picker"><span>{{tr .Locale "e2ee_passphrase"}}</span>
-          <input type="text" data-passphrase autocomplete="off" spellcheck="false" autocapitalize="off" data-1p-ignore data-lpignore="true" data-bwignore class="mpath" style="width:150px">
-        </label>
+        {{/* A four-character code, made here and never a form field, so no
+             path can post it. Made rather than typed, from letters and digits
+             that cannot be mistaken for one another, and shown, to be told to
+             the recipient. */}}
+        <span class="ttl-picker pin-pick" data-pin-pick><span>{{tr .Locale "e2ee_pin"}}</span>
+          <button type="button" class="txt" data-pin-add>{{tr .Locale "e2ee_pin_add"}}</button>
+          <span class="pin-on" data-pin-on hidden>
+            <code class="pin-code" data-pin-code></code>
+            <button type="button" class="txt" data-pin-renew>{{tr .Locale "e2ee_pin_renew"}}</button>
+            <button type="button" class="txt" data-pin-drop>{{tr .Locale "e2ee_pin_drop"}}</button>
+          </span>
+        </span>
         {{end}}
         {{/* The action ends the row: choose the terms, then send. */}}
         <button type="submit" class="pri end"{{if .E2EE}} disabled{{end}}>{{tr .Locale "create_share_link"}}</button>

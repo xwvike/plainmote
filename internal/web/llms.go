@@ -62,7 +62,7 @@ curl --data-binary @app.log '%[1]s/paste?ttl=30&filename=app.log'
 
 - A link looks like `+"`%s/d/<token>/<filename>`"+`. The token is the credential: anyone holding the link can fetch the content while the link is valid, with no sign-in. A plain GET returns the raw bytes.
 - Signed-in accounts (GitHub sign-in) keep resources up to %s each, give each recipient a separate link with its own expiry and use limit, revoke links one by one and read access records. Accounts have no API yet.
-- An account can turn on end-to-end encryption for its quick shares. Such a link carries its key after `+"`#`"+` (or needs a passphrase); a GET returns only the ciphertext, as `+"`"+store.EncryptedContentType+"`"+`, and only a browser opening the full link can decrypt it.
+- An account can turn on end-to-end encryption for its quick shares. Such a link carries its key after `+"`#`"+` (or needs a four-character code); a GET returns only the ciphertext, as `+"`"+store.EncryptedContentType+"`"+`, and only a browser opening the full link can decrypt it.
 `, base, legalBytes(a.cfg.MaxContent))
 
 	if a.cfg.SourceURL != "" {

@@ -6,14 +6,54 @@
 import { inspect, open } from "./e2ee.js";
 
 const page = document.querySelector("[data-decrypt]");
-const status = page.querySelector("[data-status]");
-const form = page.querySelector("[data-unlock]");
 const msg = (name) => page.dataset[name] || "";
 
+// Nothing of ours is on screen once this runs: the page is emptied to a bare
+// one in the reader's light or dark, a line of status in the middle until
+// there is something to show - the four code cells, or the content itself.
+// Its few rules are a constructed sheet, which the page's policy allows where
+// it would refuse a <style> element.
+const BARE_CSS = `
+body.bare { margin: 0; min-height: 100vh; display: grid; place-items: center; font: 14px/1.5 system-ui, sans-serif; }
+.bare-box { display: grid; justify-items: center; gap: 16px; padding: 24px; text-align: center; }
+.bare-note { margin: 0; opacity: .7; }
+.bare-note.bad { opacity: 1; color: #c0392b; }
+.pin-cells { display: flex; gap: 10px; }
+.pin-cells input { width: 46px; height: 56px; padding: 0; box-sizing: border-box; text-align: center;
+  font: 600 24px ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, CanvasText 28%, transparent); border-radius: 6px;
+  background: Canvas; color: CanvasText; caret-color: transparent; outline: none; }
+.pin-cells input:focus { border-color: CanvasText; box-shadow: 0 0 0 1px CanvasText; }
+.bare-box.busy .pin-cells { opacity: .45; }
+.bare-box.wrong .pin-cells { animation: pin-shake .32s; }
+@keyframes pin-shake { 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
+`;
+
+function bareSheet() {
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(BARE_CSS);
+  return sheet;
+}
+
+let box = null;
+let note = null;
+
+function bareShell() {
+  bare("");
+  document.adoptedStyleSheets = [bareSheet()];
+  document.body.className = "bare";
+  box = document.createElement("div");
+  box.className = "bare-box";
+  note = document.createElement("p");
+  note.className = "bare-note";
+  note.setAttribute("role", "status");
+  box.append(note);
+  document.body.replaceChildren(box);
+}
+
 const say = (message, bad = false) => {
-  status.textContent = message;
-  status.classList.toggle("err", bad);
-  status.hidden = !message;
+  note.textContent = message;
+  note.classList.toggle("bad", bad);
 };
 
 function sizeText(bytes) {
@@ -52,6 +92,8 @@ function mediaKind(bytes) {
 // reload fetches and decrypts again, as a reload of any link fetches again.
 function bare(name) {
   for (const sheet of document.querySelectorAll('link[rel="stylesheet"]')) sheet.remove();
+  document.adoptedStyleSheets = [];
+  document.body.className = "";
   const root = document.documentElement;
   root.removeAttribute("data-theme");
   root.style.colorScheme = "light dark";
@@ -95,9 +137,9 @@ function offerFile(name, content) {
   link.href = URL.createObjectURL(new Blob([content], { type: "application/octet-stream" }));
   link.download = name || "file";
   link.textContent = `${link.download} · ${sizeText(content.length)}`;
-  form.hidden = true;
+  bareShell();
   say(msg("msgDownload"));
-  status.append(" ", link);
+  note.append(" ", link);
   link.click();
 }
 
@@ -125,7 +167,69 @@ async function show({ name, content }) {
   offerFile(name, content);
 }
 
+// Four cells for the code, one character each. Typing moves on, Backspace
+// moves back, a pasted code fills them all; letters are taken in either case,
+// and the fourth character submits.
+function pinCells(onComplete) {
+  const row = document.createElement("div");
+  row.className = "pin-cells";
+  const cells = [];
+  const value = () => cells.map((cell) => cell.value).join("");
+  const fill = (text, from) => {
+    let at = from;
+    for (const char of String(text).toUpperCase().replace(/[^A-Z0-9]/g, "")) {
+      if (at >= cells.length) break;
+      cells[at].value = char;
+      at += 1;
+    }
+    cells[Math.min(at, cells.length - 1)].focus();
+    if (value().length === cells.length) onComplete(value());
+  };
+  for (let index = 0; index < 4; index += 1) {
+    const cell = document.createElement("input");
+    cell.autocomplete = "off";
+    cell.spellcheck = false;
+    cell.setAttribute("autocapitalize", "characters");
+    cell.setAttribute("aria-label", `${index + 1} / 4`);
+    cell.addEventListener("focus", () => cell.select());
+    cell.addEventListener("input", () => {
+      const typed = cell.value;
+      cell.value = "";
+      fill(typed, index);
+    });
+    cell.addEventListener("paste", (event) => {
+      event.preventDefault();
+      fill(event.clipboardData.getData("text"), index);
+    });
+    cell.addEventListener("keydown", (event) => {
+      if (event.key === "Backspace" && !cell.value && index > 0) {
+        event.preventDefault();
+        cells[index - 1].value = "";
+        cells[index - 1].focus();
+      } else if (event.key === "ArrowLeft" && index > 0) {
+        cells[index - 1].focus();
+      } else if (event.key === "ArrowRight" && index < 3) {
+        cells[index + 1].focus();
+      }
+    });
+    cells.push(cell);
+  }
+  row.append(...cells);
+  return {
+    row,
+    reset() {
+      for (const cell of cells) cell.value = "";
+      cells[0].focus();
+    },
+    disable(disabled) {
+      for (const cell of cells) cell.disabled = disabled;
+    },
+    focus() { cells[0].focus(); },
+  };
+}
+
 async function start() {
+  bareShell();
   say(msg("msgLoading"));
   let envelope;
   try {
@@ -139,23 +243,26 @@ async function start() {
   }
 
   if (inspect(envelope).passphrase) {
-    say(msg("msgPassphrase"));
-    form.hidden = false;
-    const input = form.querySelector("input");
-    input.focus();
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const button = form.querySelector("button");
-      button.disabled = true;
+    // A wrong code is tried again against the bytes already fetched, never
+    // by fetching again: only opening the link counts as a use.
+    say(msg("msgPin"));
+    const pin = pinCells(async (code) => {
+      box.classList.remove("wrong");
+      box.classList.add("busy");
+      pin.disable(true);
       try {
-        await show(await open(envelope, { passphrase: input.value }));
+        await show(await open(envelope, { passphrase: code }));
       } catch (_) {
-        say(msg("msgWrong"), true);
-        input.select();
-      } finally {
-        button.disabled = false;
+        box.classList.remove("busy");
+        pin.disable(false);
+        void box.offsetWidth;
+        box.classList.add("wrong");
+        say(msg("msgPinWrong"), true);
+        pin.reset();
       }
     });
+    box.prepend(pin.row);
+    pin.focus();
     return;
   }
 

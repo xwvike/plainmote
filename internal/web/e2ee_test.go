@@ -65,13 +65,13 @@ func TestE2EESettingChangesTheHomePage(t *testing.T) {
 		t.Fatalf("toggle: %d", got.Code)
 	}
 	page := client.do(http.MethodGet, "/", nil).Body.String()
-	for _, want := range []string{"data-e2ee", `data-endpoint="/paste/encrypted"`, `data-passphrase`, `class="pri end" disabled`, "/static/e2ee-share.js"} {
+	for _, want := range []string{"data-e2ee", `data-endpoint="/paste/encrypted"`, `data-pin-add`, `class="pri end" disabled`, "/static/e2ee-share.js"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the encrypting home page is missing %q", want)
 		}
 	}
-	if strings.Contains(page, `name="passphrase"`) {
-		t.Error("the passphrase must never be a form field")
+	if strings.Contains(page, `name="passphrase"`) || strings.Contains(page, `name="pin"`) {
+		t.Error("the code must never be a form field")
 	}
 }
 

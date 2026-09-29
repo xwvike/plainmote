@@ -248,6 +248,10 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .paste-panel { --edh: clamp(200px, calc(100vh - 440px), 460px); }
 .ruled > .pt .upload-status { min-width: 0; }
 .ttl-picker { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+/* The four-character code of an encrypted quick share, as it is to be read
+   out: spaced, in the monospace, on a slip of its own. */
+.pin-on { display: inline-flex; align-items: center; gap: 10px; }
+.pin-code { padding: 2px 7px; border: 1px dashed var(--line2); border-radius: var(--r); background: var(--field); color: var(--ink); font: 600 13px/1.4 var(--mono); letter-spacing: .2em; }
 .ttl-picker > span { font-size: 12px; font-weight: 500; color: var(--ink2); }
 .ttl-picker select { width: auto; }
 /* Lifetime as a scale: the stops sit on one rule, and the chosen one is a
@@ -566,8 +570,6 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .copied .flip > svg { transform: none; }
 /* The page that opens an encrypted share: the passphrase on one line, then
    the text as it was sent, in the address face. */
-.unlock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
-.unlock input { width: 260px; max-width: 100%; }
 .e2ee-set { display: grid; gap: 10px; justify-items: start; }
 .e2ee-set ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 /* A disclosure that reads as a line of text with a chevron, not a box. */

@@ -10,11 +10,48 @@ function sizeText(bytes) {
   return `${bytes} B`;
 }
 
+// The code a recipient types: four characters from letters and digits that
+// cannot be mistaken for one another - no 0 or O, no 1, I or L - read in
+// either case. Drawn without bias from the browser's own randomness.
+const PIN_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+function newPin() {
+  let pin = "";
+  while (pin.length < 4) {
+    const [value] = crypto.getRandomValues(new Uint8Array(1));
+    if (value < 248) pin += PIN_ALPHABET[value % PIN_ALPHABET.length];
+  }
+  return pin;
+}
+
+// Adding a code makes one; the code can be swapped for another or dropped.
+function setupPin(form) {
+  const pick = form.querySelector("[data-pin-pick]");
+  if (!pick) return () => "";
+  const add = pick.querySelector("[data-pin-add]");
+  const on = pick.querySelector("[data-pin-on]");
+  const shown = pick.querySelector("[data-pin-code]");
+  let pin = "";
+  const set = (next) => {
+    pin = next;
+    shown.textContent = pin;
+    on.hidden = !pin;
+    add.hidden = Boolean(pin);
+  };
+  add.addEventListener("click", () => set(newPin()));
+  pick.querySelector("[data-pin-renew]").addEventListener("click", () => set(newPin()));
+  pick.querySelector("[data-pin-drop]").addEventListener("click", () => {
+    set("");
+    add.focus();
+  });
+  return () => pin;
+}
+
 function setupForm(form) {
   const button = form.querySelector("button[type='submit']");
   const textarea = form.querySelector("textarea[name='content']");
   const filename = form.querySelector("input[name='filename']");
-  const passphrase = form.querySelector("[data-passphrase]");
+  const currentPin = setupPin(form);
   const upload = form.querySelector("input[data-upload]");
   const error = form.querySelector("[data-e2ee-error]");
   if (!button || !textarea || !error) return;
@@ -46,7 +83,8 @@ function setupForm(form) {
     button.textContent = form.dataset.msgEncrypting;
     try {
       const name = (filename ? filename.value.trim() : "") || (file ? file.name : "");
-      const { envelope, key } = await seal(content, name, passphrase ? passphrase.value : "");
+      const pin = currentPin();
+      const { envelope, key } = await seal(content, name, pin);
       const body = new FormData();
       body.set("csrf", form.dataset.csrf);
       body.set("ttl", checked ? checked.value : "");
@@ -56,9 +94,10 @@ function setupForm(form) {
       });
       if (!response.ok) throw new Error((await response.text()).trim() || form.dataset.msgFailed);
       const { result } = await response.json();
-      // #k= carries the key; #p says the key is the passphrase, told to
-      // nobody. Either way the fragment stays in this browser.
-      window.location.assign(result + (key ? `#k=${key}` : "#p"));
+      // #k= carries the key; #p= carries the code, for this page to show its
+      // creator - it goes into no link. Either way the fragment stays in this
+      // browser.
+      window.location.assign(result + (key ? `#k=${key}` : `#p=${pin}`));
     } catch (failure) {
       fail(failure instanceof Error && failure.message ? failure.message : form.dataset.msgFailed);
       button.disabled = false;
@@ -80,7 +119,15 @@ function setupResult(result) {
     shown.textContent = `#k=${key}`;
     address.append(shown);
   }
-  const note = result.querySelector(key ? "[data-e2ee-key]" : hash === "#p" ? "[data-e2ee-passphrase]" : "[data-e2ee-lost]");
+  const pin = hash.startsWith("#p=") ? hash.slice(3).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) : "";
+  const note = result.querySelector(key ? "[data-e2ee-key]" : pin ? "[data-e2ee-pin]" : "[data-e2ee-lost]");
+  if (note && pin) {
+    const [before, after = ""] = note.dataset.message.split("{pin}");
+    const code = document.createElement("code");
+    code.className = "pin-code";
+    code.textContent = pin;
+    note.replaceChildren(before, code, after);
+  }
   if (note) note.hidden = false;
   // The theme and language switches go through a redirect back here. A
   // fragment on the link they follow survives that redirect, so the key does
