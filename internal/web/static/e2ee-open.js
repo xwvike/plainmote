@@ -1,18 +1,14 @@
 // Opening an encrypted share. The page itself holds nothing; this fetches the
 // ciphertext once - that request is the one that counts as a use - and
 // decrypts it here with the key after # in the address, or with the
-// passphrase the recipient types. A wrong passphrase is tried again against
-// the bytes already fetched, never by fetching again.
+// passphrase the recipient types, then hands the text to the browser. A
+// wrong passphrase is tried again against the bytes already fetched, never by
+// fetching again.
 import { inspect, open } from "./e2ee.js";
 
 const page = document.querySelector("[data-decrypt]");
 const status = page.querySelector("[data-status]");
 const form = page.querySelector("[data-unlock]");
-const output = page.querySelector("[data-output]");
-const text = page.querySelector("[data-plain]");
-const meta = page.querySelector("[data-meta]");
-const copy = page.querySelector("[data-copy-plain]");
-const download = page.querySelector("[data-download]");
 const msg = (name) => page.dataset[name] || "";
 
 const say = (message, bad = false) => {
@@ -21,30 +17,12 @@ const say = (message, bad = false) => {
   status.hidden = !message;
 };
 
-function sizeText(bytes) {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KiB`;
-  return `${bytes} B`;
-}
-
-function show({ name, content }) {
-  const filename = name || "share.txt";
-  text.textContent = new TextDecoder("utf-8").decode(content);
-  meta.textContent = `${name ? `${name} · ` : ""}${sizeText(content.length)}`;
-  document.title = `${filename} · PlainMote`;
-  const url = URL.createObjectURL(new Blob([content], { type: "application/octet-stream" }));
-  download.href = url;
-  download.download = filename;
-  copy.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(text.textContent);
-      copy.classList.add("copied");
-      setTimeout(() => copy.classList.remove("copied"), 1400);
-    } catch (_) { /* the text stays selectable */ }
-  });
-  form.hidden = true;
-  say("");
-  output.hidden = false;
+// The plaintext opens the way every other text link does: as the browser's
+// own view of plain text. The address bar then shows the blob's address, not
+// the one with the key; the blob lives only as long as this tab keeps it, so
+// a reload finds nothing, and opening the link again is how to see it again.
+function show({ content }) {
+  window.location.replace(URL.createObjectURL(new Blob([content], { type: "text/plain; charset=utf-8" })));
 }
 
 async function start() {

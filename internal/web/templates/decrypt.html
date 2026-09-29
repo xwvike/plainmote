@@ -36,13 +36,6 @@
           <input type="password" id="passphrase" autocomplete="off" spellcheck="false">
           <button type="submit" class="pri">{{tr .Locale "e2ee_open_unlock"}}</button>
         </form>
-        <div class="plain-out" data-output hidden>
-          <pre class="plain" data-plain tabindex="0"></pre>
-          <div class="acts">
-            <button type="button" class="sm" data-copy-plain>{{template "copy-label" .}}</button>
-            <a class="txt" data-download href="#">{{tr .Locale "e2ee_download"}}</a>
-          </div>
-        </div>
       </div>
     </section>
     <p class="hint">{{tr .Locale "e2ee_open_note"}}</p>

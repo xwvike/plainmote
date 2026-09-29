@@ -574,8 +574,6 @@ details.pan[open] .chev { transform: rotate(90deg); }
    the text as it was sent, in the address face. */
 .unlock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .unlock input { width: 260px; max-width: 100%; }
-.plain-out { display: grid; gap: 10px; }
-.plain { max-height: 60vh; margin: 0; padding: 12px 14px; border-radius: var(--r); background: var(--sunk); font: 400 12px/1.7 var(--mono); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; }
 .e2ee-set { display: grid; gap: 10px; justify-items: start; }
 .e2ee-set ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
 /* A disclosure that reads as a line of text with a chevron, not a box. */
