@@ -15,9 +15,6 @@
   resize: vertical;
 }
 
-/* The quick share box keeps its own padding: no gutter is coming. */
-.ruled > .paste-body > [data-box] { padding: 12px 14px; line-height: 1.7; }
-
 /* A file can be chosen but not shown before saving, so without a script the
    content is the text box alone, as on the quick share page. */
 [data-upload-key], [data-upload-status] { display: none !important; }

@@ -442,6 +442,21 @@ function enhance(textarea) {
   let editorDirty = false;
   let documentEdited = false;
 
+  // The filename decides the format; failing that, the stored type; failing
+  // both, what the text plainly is - a quick share rarely has a name. Looked
+  // at again once typing pauses, not on every key, and only the head of a
+  // long document is read for it.
+  const filenameInput = form ? form.elements.filename : null;
+  let languageToken = null;
+  let sniffTimer = 0;
+  const configureLanguage = () => {
+    const name = filenameInput ? filenameInput.value : textarea.dataset.filename;
+    const next = tokenFor(name, textarea.dataset.contentType) || sniffToken(view.state.sliceDoc(0, 64 * 1024 + 1));
+    if (next === languageToken) return;
+    languageToken = next;
+    view.dispatch({ effects: language.reconfigure(languageFor(next)) });
+  };
+
   const setUploadStatus = (message) => {
     if (uploads) uploads.setStatus(message);
   };
@@ -524,17 +539,21 @@ function enhance(textarea) {
           search({ top: true }),
           syntaxHighlighting(highlight),
           theme,
+          placeholder(textarea.getAttribute("placeholder") || ""),
           EditorView.contentAttributes.of({
             "aria-label": textarea.getAttribute("aria-label") || "Resource content",
             "aria-multiline": "true",
             spellcheck: "false",
           }),
           EditorView.updateListener.of((update) => {
-            if (!update.docChanged || applyingSource) return;
+            if (!update.docChanged) return;
+            clearTimeout(sniffTimer);
+            sniffTimer = setTimeout(configureLanguage, 300);
+            if (applyingSource) return;
             documentEdited = true;
             markContentForSave("");
           }),
-          language.of(languageFor(tokenFor(textarea.dataset.filename, textarea.dataset.contentType))),
+          language.of([]),
           keymap.of([
             ...tabKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap,
             ...historyKeymap,
@@ -550,6 +569,8 @@ function enhance(textarea) {
   // Only now is the textarea taken out of view. Doing it here rather than in
   // the stylesheet means a thrown constructor leaves a working textarea behind.
   textarea.classList.add("cm-source");
+  configureLanguage();
+  if (textarea.autofocus) view.focus();
 
   if (form) {
     // The editor reports its own edits through markContentForSave; this covers
@@ -562,7 +583,9 @@ function enhance(textarea) {
     const sync = () => {
       textarea.value = view.state.sliceDoc();
     };
-    form.addEventListener("submit", sync);
+    // In the capture phase, so the textarea holds the editor's text before
+    // any other submit handler reads it - the encrypting form reads it there.
+    form.addEventListener("submit", sync, true);
     form.addEventListener("formdata", (event) => {
       sync();
       if (!textarea.name) return;
@@ -590,18 +613,9 @@ function enhance(textarea) {
         event.formData.set(textarea.name, textarea.value);
       }
     });
-    const filename = form.elements.filename;
-    const configureLanguage = () => {
-      view.dispatch({ effects: language.reconfigure(languageFor(tokenFor(filename ? filename.value : "", textarea.dataset.contentType))) });
-    };
-
     // The filename decides the type, and on a new resource it is typed after
     // the content just as often as before it.
-    if (filename) {
-      filename.addEventListener("input", () => {
-        configureLanguage();
-      });
-    }
+    if (filenameInput) filenameInput.addEventListener("input", configureLanguage);
 
     const replaceDocument = (content, dirty = false, edited = false) => {
       applyingSource = true;
@@ -751,107 +765,6 @@ function preview(textarea) {
   });
 
   textarea.classList.add("cm-source");
-}
-
-// The quick share box: the editor without the resource machinery - no
-// encoding, no upload and no line endings to keep, since the box is text
-// typed or pasted here and the server takes it as LF. The format follows the
-// filename field as it is typed, and without one, what the text looks like.
-// The textarea stays the field the form posts. It is filled when the form is
-// sent, in the capture phase so before any other submit handler reads it:
-// the encrypting form reads it there. The page's own script talks to it
-// through the textarea: paste:load when it has put a file's text there, and
-// paste:edit back from here when a person changes the text.
-function box(textarea) {
-  const form = textarea.form;
-  const filename = form ? form.elements.filename : null;
-  const language = new Compartment();
-  const host = document.createElement("div");
-  host.className = "cm-host";
-  textarea.parentNode.insertBefore(host, textarea.nextSibling);
-
-  let token = null;
-  const configure = (view) => {
-    const next = tokenFor(filename ? filename.value : "", "") || sniffToken(view.state.doc.toString());
-    if (next === token) return;
-    token = next;
-    view.dispatch({ effects: language.reconfigure(languageFor(next)) });
-  };
-  let pending = 0;
-  let loading = false;
-
-  let view;
-  try {
-    view = new EditorView({
-      parent: host,
-      state: EditorState.create({
-        doc: textarea.value,
-        extensions: [
-          lineNumbers(),
-          highlightActiveLineGutter(),
-          highlightSpecialChars(),
-          history(),
-          drawSelection(),
-          dropCursor(),
-          indentOnInput(),
-          indentUnit.of(detectIndent(textarea.value)),
-          bracketMatching(),
-          closeBrackets(),
-          rectangularSelection(),
-          crosshairCursor(),
-          highlightActiveLine(),
-          highlightSelectionMatches(),
-          search({ top: true }),
-          syntaxHighlighting(highlight),
-          theme,
-          placeholder(textarea.getAttribute("placeholder") || ""),
-          EditorView.contentAttributes.of({
-            "aria-label": textarea.getAttribute("aria-label") || "Content",
-            "aria-multiline": "true",
-            spellcheck: "false",
-          }),
-          // Looked at again once typing pauses, not on every key.
-          EditorView.updateListener.of((update) => {
-            if (!update.docChanged) return;
-            if (!loading) textarea.dispatchEvent(new Event("paste:edit"));
-            clearTimeout(pending);
-            pending = setTimeout(() => configure(update.view), 300);
-          }),
-          language.of([]),
-          keymap.of([
-            ...tabKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap,
-            ...historyKeymap,
-          ]),
-        ],
-      }),
-    });
-  } catch (error) {
-    host.remove();
-    throw error;
-  }
-  textarea.classList.add("cm-source");
-  configure(view);
-  if (textarea.autofocus) view.focus();
-
-  if (form) {
-    form.addEventListener("submit", () => { textarea.value = view.state.doc.toString(); }, true);
-  }
-  if (filename) filename.addEventListener("input", () => configure(view));
-  textarea.addEventListener("paste:load", () => {
-    loading = true;
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: textarea.value } });
-    loading = false;
-    configure(view);
-    view.focus();
-  });
-}
-
-for (const textarea of document.querySelectorAll("textarea[data-box]")) {
-  try {
-    box(textarea);
-  } catch (error) {
-    console.error("editor: falling back to the plain box", error);
-  }
 }
 
 for (const textarea of document.querySelectorAll("textarea[data-editor]")) {

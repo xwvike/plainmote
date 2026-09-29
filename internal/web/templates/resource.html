@@ -7,7 +7,8 @@
 <body data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
       data-msg-editor-detect-failed="{{tr .Locale "editor_detect_failed"}}"
       data-msg-editor-file-reopen-failed="{{tr .Locale "editor_file_reopen_failed"}}"
-      data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}">
+      data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}"
+      data-msg-remove-file="{{tr .Locale "remove_file"}}">
   {{template "topbar" .}}
   <main class="page{{if not .IsNew}} resource-detail{{end}}">
     <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}{{else}}{{or .Resource.Name (tr .Locale "untitled_resource")}}{{end}}</span></div>

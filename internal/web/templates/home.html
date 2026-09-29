@@ -32,7 +32,11 @@
        "PlainMote" rather than the bare domain. */}}
   <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "PlainMote", "url": {{printf "%s/" .BaseURL}}}</script>{{end}}
 </head>
-<body>
+<body data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
+      data-msg-editor-detect-failed="{{tr .Locale "editor_detect_failed"}}"
+      data-msg-editor-file-reopen-failed="{{tr .Locale "editor_file_reopen_failed"}}"
+      data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}"
+      data-msg-remove-file="{{tr .Locale "remove_file"}}">
   {{template "topbar" .}}
   <main class="page">
 
@@ -98,33 +102,30 @@
     <form method="post" action="/paste" enctype="multipart/form-data"{{if .E2EE}} data-e2ee data-csrf="{{.CSRF}}" data-endpoint="/paste/encrypted"
           data-msg-empty="{{tr .Locale "e2ee_empty"}}" data-msg-too-large="{{tr .Locale "e2ee_too_large"}}"
           data-msg-encrypting="{{tr .Locale "e2ee_encrypting"}}" data-msg-failed="{{tr .Locale "e2ee_failed"}}" data-max-bytes="{{.MaxPaste}}"{{end}}>
-      {{/* A plain .panel, not .panel-ed: that one carries the resource editor's
-           height, and this box is not that box. data-box, not data-editor: the
-           editor mounts over it with highlighting and line numbers, but none
-           of a resource's encoding and upload handling. Without the script the
-           textarea is the whole interaction. */}}
-      <div class="panel ruled">
+      {{/* The resource editor's panel, with this page's own height: the same
+           editor, the same way of reading a chosen file and showing it. There
+           is no stored content and no encoding to keep - a quick share is
+           sent as it is. Without the script the textarea is the whole
+           interaction. */}}
+      <div class="panel ruled panel-ed paste-panel">
         <div class="pt">
           <span class="sec">{{tr .Locale "content"}}</span>
-          <span class="hint upload-status" data-paste-status role="status" aria-live="polite"></span>
-          <span class="sp">{{if .E2EE}}<span class="tag">{{tr .Locale "e2ee_tag"}}</span>{{end}}<span class="hint">{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
-            {{/* A file instead of the box. With encryption on, the script
-                 seals it in the browser and it is never posted as it is. */}}
+          <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
+          <span class="sp">{{if .E2EE}}<span class="tag">{{tr .Locale "e2ee_tag"}}</span>{{end}}<span class="hint" data-content-meta>{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
+            {{/* A file instead of the box, handled as on a resource: text is
+                 read into the editor, media is shown, anything else is named.
+                 With encryption on, the script seals it in the browser and it
+                 is never posted as it is. */}}
             <label class="btn sm upload-key paste-pick">
-              <input type="file" name="file" class="sr" data-paste-file data-max-bytes="{{.MaxPaste}}" data-msg-oversize="{{tr .Locale "upload_oversize"}}">
+              <input type="file" name="file" class="sr" data-upload data-max-bytes="{{.MaxPaste}}">
               <span>{{tr .Locale "upload_file"}}</span>
             </label>
           </span>
         </div>
-        <div class="pb paste-body">
-          <textarea name="content" spellcheck="false" autofocus data-box
+        <div class="pb paste-body" data-content-body>
+          <div class="media-stage upload-preview" data-upload-preview hidden></div>
+          <textarea name="content" spellcheck="false" autofocus data-editor data-current-content data-eol="lf"
                     aria-label="{{tr .Locale "paste_content_label"}}" placeholder="{{tr .Locale "paste_content_placeholder"}}">{{.PasteContent}}</textarea>
-          {{/* The chosen file stands where the box was, until it is removed. */}}
-          <div class="picked" data-paste-picked hidden>
-            <div class="picked-media" data-picked-media></div>
-            <span class="picked-name" data-picked-name></span>
-            <button type="button" class="txt" data-picked-clear>{{tr .Locale "remove_file"}}</button>
-          </div>
         </div>
       </div>
       <div class="savebar">
@@ -191,119 +192,6 @@
   {{if or .E2EE .PasteEncrypted}}<script type="module" src="/static/e2ee-share.js"></script>{{end}}
   {{template "copy-status" .}}
   <script>
-    {{/* A chosen file goes where it can be seen. Text goes into the box,
-         for the editor to show; an image, a clip or a track stands in the
-         box's place, shown as it will be seen; anything else stands there as
-         its name. The file's name fills an empty filename. */}}
-    (function () {
-      var input = document.querySelector('[data-paste-file]');
-      if (!input) return;
-      var form = input.form;
-      var box = document.querySelector('textarea[name=content]');
-      var body = box.parentNode;
-      var card = document.querySelector('[data-paste-picked]');
-      var status = document.querySelector('[data-paste-status]');
-      var filename = document.querySelector('input[name=filename]');
-      var media = card.querySelector('[data-picked-media]');
-      var named = '';
-      var shown = '';
-      function size(bytes) {
-        if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MiB';
-        if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KiB';
-        return bytes + ' B';
-      }
-      function unshow() {
-        if (shown) URL.revokeObjectURL(shown);
-        shown = '';
-        media.replaceChildren();
-        card.hidden = true;
-        body.removeAttribute('data-picked');
-        box.disabled = false;
-      }
-      {{/* The file in the box's place: shown if it can be, named either way. */}}
-      function stand(file, kind) {
-        unshow();
-        if (kind) {
-          var element = document.createElement(kind === 'image' ? 'img' : kind);
-          element.src = shown = URL.createObjectURL(file);
-          if (kind === 'image') element.alt = '';
-          else element.controls = true;
-          media.appendChild(element);
-        }
-        card.querySelector('[data-picked-name]').textContent = file.name + ' · ' + size(file.size);
-        body.setAttribute('data-picked', '');
-        box.disabled = true;
-        card.hidden = false;
-      }
-      {{/* Text into the box. The file stays chosen, so what is sent is the
-           file exactly - line endings and all - until the text is edited,
-           and from then on the box. */}}
-      function load(text) {
-        unshow();
-        box.value = text;
-        box.dispatchEvent(new Event('paste:load'));
-      }
-      function clear() {
-        input.value = '';
-        unshow();
-        if (named && filename.value === named) filename.value = '';
-        named = '';
-      }
-      function pick() {
-        var file = input.files && input.files[0];
-        status.textContent = '';
-        if (!file) return clear();
-        var max = Number(input.getAttribute('data-max-bytes'));
-        if (file.size > max) {
-          clear();
-          status.textContent = input.getAttribute('data-msg-oversize').replace('{size}', size(file.size)).replace('{limit}', size(max));
-          return;
-        }
-        if (!filename.value || filename.value === named) {
-          filename.value = named = file.name;
-          filename.dispatchEvent(new Event('input'));
-        }
-        var kind = /^(image|video|audio)\//.exec(file.type);
-        if (kind && !/svg/.test(file.type)) return stand(file, kind[1]);
-        {{/* Text in any encoding the editor can read - a UTF-16 export
-             from Windows, a GBK log - goes into the box. Should the editor
-             not have loaded, UTF-8 still does. */}}
-        file.arrayBuffer().then(function (buffer) {
-          var bytes = new Uint8Array(buffer);
-          return import('/static/editor.js').then(function (editor) {
-            var encoding = editor.detectFileEncoding(bytes);
-            return encoding ? editor.decodeBytes(bytes, encoding) : null;
-          }, function () {
-            try {
-              var text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-              return text.indexOf('\u0000') >= 0 ? null : text;
-            } catch (_) { return null; }
-          });
-        }).then(function (text) {
-          if (input.files[0] !== file) return;
-          if (text === null) stand(file, '');
-          else load(text);
-        }, function () { if (input.files[0] === file) stand(file, ''); });
-      }
-      function edited() {
-        if (!box.disabled && input.files.length) input.value = '';
-      }
-      input.addEventListener('change', pick);
-      box.addEventListener('input', edited);
-      box.addEventListener('paste:edit', edited);
-      {{/* The file and the text it was loaded into are the same content:
-           only one of them goes. */}}
-      form.addEventListener('formdata', function (event) {
-        if (input.files.length) event.formData.delete(box.name);
-      });
-      card.querySelector('[data-picked-clear]').addEventListener('click', function () {
-        clear();
-        var editor = body.querySelector('.cm-content');
-        (editor || box).focus();
-      });
-      // Back to this page, the browser may still hold the file it had.
-      window.addEventListener('pageshow', function () { if (input.files && input.files.length) pick(); });
-    })();
     document.addEventListener('click', function (event) {
       var button = event.target.closest('[data-copy]');
       if (!button) return;

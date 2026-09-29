@@ -143,6 +143,20 @@ function enhanceUpload(input) {
     if (textControls) textControls.hidden = initialControlsHidden;
     if (contentMeta) contentMeta.textContent = initialMeta;
   };
+  // Taking the file back puts the content as it was before it was chosen.
+  const removeKey = () => {
+    const label = message("msgRemoveFile");
+    if (!label) return [];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "txt";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      input.value = "";
+      select();
+    });
+    return [button];
+  };
   const fileCard = (file) => {
     const card = document.createElement("div");
     card.className = "file-card";
@@ -150,7 +164,7 @@ function enhanceUpload(input) {
     name.textContent = file.name;
     const detail = document.createElement("span");
     detail.textContent = `${file.type || "application/octet-stream"} · ${sizeText(file.size)}`;
-    card.append(name, detail);
+    card.append(name, detail, ...removeKey());
     return card;
   };
   const showFile = (file, message = "") => {
@@ -188,7 +202,7 @@ function enhanceUpload(input) {
     }
     media.className = `resource-media resource-${kind}`;
     media.src = objectURL;
-    preview.append(media);
+    preview.append(media, ...removeKey());
     preview.hidden = false;
     if (kind === "video") primeVideo(media);
     updateMeta(file);
@@ -212,6 +226,11 @@ function enhanceUpload(input) {
     const currentVersion = ++version;
     const file = input.files && input.files[0];
     if (!file) {
+      if (filename && suggestedFilename && filename.value === suggestedFilename) {
+        filename.value = "";
+        filename.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      suggestedFilename = "";
       showOriginal();
       setStatus("");
       notify({ file: null, kind: "original", version: currentVersion, oversize: false });

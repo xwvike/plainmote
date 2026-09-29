@@ -15,7 +15,7 @@ function setupForm(form) {
   const textarea = form.querySelector("textarea[name='content']");
   const filename = form.querySelector("input[name='filename']");
   const passphrase = form.querySelector("[data-passphrase]");
-  const upload = form.querySelector("[data-paste-file]");
+  const upload = form.querySelector("input[data-upload]");
   const error = form.querySelector("[data-e2ee-error]");
   if (!button || !textarea || !error) return;
   // The button is disabled in the markup, so without this script nothing can
