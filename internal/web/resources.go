@@ -460,25 +460,18 @@ func buildShareViews(base string, resource Resource, servedType string, shares [
 }
 
 // shareTTLForm maps the stored deadline back to the choices in the settings
-// dialog. Quick shares use minute-sized lifetimes, so after one is adopted it
-// belongs in the custom choice instead of pretending to be a 24-hour share.
+// dialog: a stop on the lifetime scale when the terms were one, the custom
+// box with what is left otherwise.
 func shareTTLForm(link Link, now time.Time) (choice, custom string) {
 	if link.ExpiresAt == nil {
 		return "never", ""
 	}
 	// Counted from when the terms began, not from the link's creation: a link
 	// whose terms were changed to 24 hours is a 24-hour link.
-	ttl := link.ExpiresAt.Sub(link.TermsAt)
-	switch ttl {
-	case time.Hour:
-		return "1h", ""
-	case 24 * time.Hour:
-		return "24h", ""
-	case 7 * 24 * time.Hour:
-		return "168h", ""
-	default:
-		return "custom", shareDurationInput(link.ExpiresAt.Sub(now))
+	if value, ok := lifetimeValue(link.ExpiresAt.Sub(link.TermsAt)); ok {
+		return value, ""
 	}
+	return "custom", shareDurationInput(link.ExpiresAt.Sub(now))
 }
 
 // shareDurationInput writes what is left as something a person reads and can
@@ -739,6 +732,10 @@ func shareTTL(r *http.Request) (time.Duration, error) {
 	if choice == "never" {
 		return 0, nil
 	}
+	if stop, ok := lifetimeChoice(choice); ok {
+		return stop.Duration, nil
+	}
+	// A Go duration, as the stops used to be posted.
 	if choice != "custom" {
 		parsed, err := time.ParseDuration(choice)
 		if err != nil || parsed <= 0 {

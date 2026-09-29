@@ -137,15 +137,15 @@ func TestDefaultPlanRaisedOnlyFromTheOldDefault(t *testing.T) {
 		}
 		return resources, storage
 	}
-	if resources, storage := limits(); resources != 100 || storage != 100<<20 {
-		t.Fatalf("a new deployment starts at 100 / 100 MiB, got %d / %d", resources, storage)
+	if resources, storage := limits(); resources != 1000 || storage != 100<<20 {
+		t.Fatalf("a new deployment starts at 1000 / 100 MiB, got %d / %d", resources, storage)
 	}
 
 	setPlanLimits(t, db, 20, 10<<20)
 	if err := db.initializeSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if resources, storage := limits(); resources != 100 || storage != 100<<20 {
+	if resources, storage := limits(); resources != 1000 || storage != 100<<20 {
 		t.Fatalf("the old default must be raised, got %d / %d", resources, storage)
 	}
 

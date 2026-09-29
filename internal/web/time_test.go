@@ -30,3 +30,25 @@ func TestLocalTimeMarkupMinuteAndZeroFallback(t *testing.T) {
 		t.Fatalf("zero time rendered as %q", got)
 	}
 }
+
+// TestUntilTextSaysLongLifetimesInDaysAndHours: a link that lasts a month is
+// "in about 30 days", not "in about 43200 minutes".
+func TestUntilTextSaysLongLifetimesInDaysAndHours(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		left time.Duration
+		want string
+	}{
+		{30 * time.Second, "in less than a minute"},
+		{10 * time.Minute, "in about 10 minutes"},
+		{time.Hour - time.Second, "in about 1 hour"},
+		{5*time.Hour + 10*time.Minute, "in about 5 hours"},
+		{24*time.Hour - time.Second, "in about 1 day"},
+		{7 * 24 * time.Hour, "in about 7 days"},
+		{30*24*time.Hour - time.Second, "in about 30 days"},
+	} {
+		if got := untilText("en", now.Add(tc.left)); got != tc.want {
+			t.Errorf("%s left: got %q, want %q", tc.left, got, tc.want)
+		}
+	}
+}

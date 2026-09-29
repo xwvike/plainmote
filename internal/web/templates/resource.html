@@ -183,9 +183,8 @@
                off. The custom stop reads the box beside the scale. */}}
           <dd class="scale-field">
             <span class="scale" role="radiogroup" aria-label="{{tr .Locale "lifetime"}}">
-              <label><input type="radio" name="ttl" value="1h"{{if eq .FocusShare.TTLChoice "1h"}} checked{{end}}><i></i><span>{{tr .Locale "one_hour"}}</span></label>
-              <label><input type="radio" name="ttl" value="24h"{{if eq .FocusShare.TTLChoice "24h"}} checked{{end}}><i></i><span>{{tr .Locale "twenty_four_hours"}}</span></label>
-              <label><input type="radio" name="ttl" value="168h"{{if eq .FocusShare.TTLChoice "168h"}} checked{{end}}><i></i><span>{{tr .Locale "seven_days"}}</span></label>
+              {{range lifetimes}}<label><input type="radio" name="ttl" value="{{.Value}}"{{if eq $.FocusShare.TTLChoice .Value}} checked{{end}}><i></i><span>{{lifetimeText $.Locale .Value}}</span></label>
+              {{end}}
               <label><input type="radio" name="ttl" value="never"{{if eq .FocusShare.TTLChoice "never"}} checked{{end}}><i></i><span>{{tr .Locale "never_expires"}}</span></label>
               <label><input type="radio" name="ttl" value="custom"{{if eq .FocusShare.TTLChoice "custom"}} checked{{end}}><i></i><span>{{tr .Locale "custom"}}</span></label>
             </span>

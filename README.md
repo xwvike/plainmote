@@ -17,7 +17,7 @@ Try it at [plainmote.link](https://plainmote.link).
 
 ## Features
 
-- **Quick share**: no account needed. Paste text or upload a file (up to 4 MiB) on the home page and get a link that lasts from a minute to 30 days, or share straight from a terminal with curl.
+- **Quick share**: no account needed. Paste text or upload a file (up to 10 MiB) on the home page and get a link that lasts from 10 minutes to 30 days, or share straight from a terminal with curl.
 - **Resources and share links**: sign in to keep text and files, then give each recipient a separate link with its own expiry and use limit. Revoking one leaves the others working.
 - **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner of the resource.
 - **Remote resources**: keep just a public URL; the content is fetched from the origin on every access.
@@ -96,7 +96,7 @@ Optional:
 | `PLAINMOTE_BLOB_REGION` | `auto` | S3 region |
 | `PLAINMOTE_TRUSTED_PROXIES` | empty | Trusted proxy IPs or CIDRs, comma-separated |
 | `PLAINMOTE_SESSION_TTL` | `720h` | Sign-in session lifetime |
-| `PLAINMOTE_MAX_CONTENT_MIB` | `20` | Size limit for one piece of content |
+| `PLAINMOTE_MAX_CONTENT_MIB` | `10` | Size limit for one piece of content |
 | `PLAINMOTE_LOG_RETENTION` | `720h` | How long access history is kept; `0` keeps it forever |
 | `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | New account policy: `open`, `allowlist` or `closed` |
 | `GITHUB_ALLOWED_IDS` | empty | Numeric GitHub user IDs allowed to register in `allowlist` mode, comma-separated |

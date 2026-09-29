@@ -111,8 +111,9 @@ func (a *App) templateSet() *template.Template {
 		"endStyle":           endStyle,
 		"addressParts":       addressParts,
 		"untilText":          untilText,
-		"pasteTTLText":       pasteTTLText,
-		"pasteTTLShort":      pasteTTLShort,
+		"lifetimeText":       lifetimeText,
+		"lifetimeShort":      lifetimeShort,
+		"lifetimes":          func() []ttlChoice { return lifetimeChoices },
 		"pageSummary":        pageSummary,
 		"countText":          countText,
 		"deleteWarning":      deleteWarning,
@@ -249,7 +250,20 @@ func remainingText(locale string, left time.Duration) string {
 }
 
 func untilText(locale string, at time.Time) string {
-	left := time.Until(at).Round(time.Minute)
+	left := time.Until(at)
+	// In the largest unit that still says something: minutes within the hour,
+	// hours within the day, days beyond. Rounded, since it says "about".
+	switch {
+	case left >= 36*time.Hour:
+		return fmt.Sprintf(translate(locale, "until_days"), int(left.Round(24*time.Hour)/(24*time.Hour)))
+	case left >= 23*time.Hour+30*time.Minute:
+		return translate(locale, "until_one_day")
+	case left >= 90*time.Minute:
+		return fmt.Sprintf(translate(locale, "until_hours"), int(left.Round(time.Hour)/time.Hour))
+	case left >= 59*time.Minute+30*time.Second:
+		return translate(locale, "until_one_hour")
+	}
+	left = left.Round(time.Minute)
 	if left < time.Minute {
 		return translate(locale, "until_less_minute")
 	}
@@ -259,10 +273,10 @@ func untilText(locale string, at time.Time) string {
 	return fmt.Sprintf(translate(locale, "until_minutes"), int(left/time.Minute))
 }
 
-// pasteTTLText says a quick share lifetime in words, for the picker's
-// titles and for whoever reads it aloud; pasteTTLShort is the label under its
-// stop on the scale.
-func pasteTTLText(locale, value string) string {
+// lifetimeText says a lifetime in words, for a scale's titles, the share
+// settings, and whoever reads them aloud; lifetimeShort is the label under a
+// stop on the quick share scale.
+func lifetimeText(locale, value string) string {
 	d, _ := parsePasteTTL(value)
 	switch {
 	case d >= 24*time.Hour && d%(24*time.Hour) == 0:
@@ -282,7 +296,7 @@ func pasteTTLText(locale, value string) string {
 	return translate(locale, "one_minute")
 }
 
-func pasteTTLShort(locale, value string) string {
+func lifetimeShort(locale, value string) string {
 	d, _ := parsePasteTTL(value)
 	switch {
 	case d >= 24*time.Hour && d%(24*time.Hour) == 0:

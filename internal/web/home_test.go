@@ -134,7 +134,7 @@ func TestPasteLifetimeCannotBeChosenFreely(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("paste result: %d %s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), "in about 10 minutes") {
+	if !strings.Contains(response.Body.String(), "in about 1 hour") {
 		t.Fatalf("an unknown lifetime must become the default, got %s", response.Body.String())
 	}
 
@@ -389,18 +389,18 @@ func TestAnonymousCanBeTurnedOff(t *testing.T) {
 // The page preselects the store's default, and that default is one of the
 // choices it offers.
 func TestHomePreselectsTheDefaultLifetime(t *testing.T) {
-	if pasteDefaultTTL != "10m" {
-		t.Fatalf("the default lifetime is %s, want 10m", pasteDefaultTTL)
+	if pasteDefaultTTL != "1h" {
+		t.Fatalf("the default lifetime is %s, want 1h", pasteDefaultTTL)
 	}
 	app := &App{cfg: Config{PublicURL: "https://cfg.test", AnonymousEnabled: true}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()
 	response := httptest.NewRecorder()
 	app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://cfg.test/", nil))
-	if !strings.Contains(response.Body.String(), `value="10m" aria-label="10 minutes" checked>`) {
-		t.Fatal("the home page does not preselect 10 minutes")
+	if !strings.Contains(response.Body.String(), `value="1h" aria-label="1 hour" checked>`) {
+		t.Fatal("the home page does not preselect 1 hour")
 	}
-	if ttl, value := parsePasteTTL(""); ttl != 10*time.Minute || value != "10m" {
+	if ttl, value := parsePasteTTL(""); ttl != time.Hour || value != "1h" {
 		t.Fatalf("a missing lifetime falls back to %s (%s)", ttl, value)
 	}
 }

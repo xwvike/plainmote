@@ -28,12 +28,14 @@ const (
 	// the very most, and the default is a handoff of minutes. The end is what
 	// bounds the open endpoint's footprint.
 	AnonymousMinTTL     = time.Minute
-	AnonymousDefaultTTL = 10 * time.Minute
+	AnonymousDefaultTTL = time.Hour
 	AnonymousMaxTTL     = 30 * 24 * time.Hour
 
-	// AnonymousMaxBytes is enough for a log, a config or a small bundle of
-	// them, and small enough that the open endpoint is a poor file host.
-	AnonymousMaxBytes = 4 << 20
+	// AnonymousMaxBytes is the same ceiling a signed-in resource has by
+	// default: signing in changes what can be managed, not how much can be
+	// shared at once. Ample for a log or a config, small enough that the open
+	// endpoint is a poor file host.
+	AnonymousMaxBytes = 10 << 20
 
 	// anonymousContentType is what an anonymous paste that is text is always
 	// served as. A file whose own bytes say it is an image, audio or video is

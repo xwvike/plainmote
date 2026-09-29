@@ -106,7 +106,7 @@ func TestPrivacyPolicyStatesTheConfiguredFacts(t *testing.T) {
 	}
 
 	terms := getLegal(legalApp(Config{ContactEmail: "ops@example.com", AnonymousEnabled: true}), "/terms", "").Body.String()
-	for _, want := range []string{"a single item may not exceed 4 MiB", "the content may not exceed 4 MiB, text is delivered as plain text, images, audio and video can be viewed or played in the browser"} {
+	for _, want := range []string{"a single item may not exceed 4 MiB", "the content may not exceed 10 MiB, text is delivered as plain text, images, audio and video can be viewed or played in the browser"} {
 		if !strings.Contains(terms, want) {
 			t.Errorf("terms are missing %q", want)
 		}

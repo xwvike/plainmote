@@ -25,12 +25,14 @@ CREATE TABLE IF NOT EXISTS plans (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS plans_default_idx ON plans ((1)) WHERE is_default;
 
+-- An account is limited by storage. The resource count is a fuse against a
+-- flood of tiny files, set far above what the storage allows in practice.
 INSERT INTO plans (id, name, max_resources, max_storage, is_default, created_at)
-VALUES (gen_random_uuid(), 'default', 100, 104857600, TRUE, now())
+VALUES (gen_random_uuid(), 'default', 1000, 104857600, TRUE, now())
 ON CONFLICT (name) DO NOTHING;
 -- The default plan used to be 20 resources and 10 MiB. Raised only where it
 -- still reads exactly that, so a plan an operator has changed is left alone.
-UPDATE plans SET max_resources = 100, max_storage = 104857600, updated_at = now()
+UPDATE plans SET max_resources = 1000, max_storage = 104857600, updated_at = now()
 WHERE name = 'default' AND max_resources = 20 AND max_storage = 10485760;
 
 CREATE TABLE IF NOT EXISTS user_plans (
@@ -55,8 +57,12 @@ ON CONFLICT (github_id) DO NOTHING;
 -- and by rate limiting; this only stops the process if both of those have
 -- already failed, and it is deliberately far above normal use.
 INSERT INTO plans (id, name, max_resources, max_storage, is_default, created_at)
-VALUES ('00000000-0000-0000-0000-000000000002', 'anonymous', 100000, 10737418240, FALSE, now())
+VALUES ('00000000-0000-0000-0000-000000000002', 'anonymous', 100000, 21474836480, FALSE, now())
 ON CONFLICT (name) DO NOTHING;
+-- Raised from 10 GiB when quick shares could last a month instead of half an
+-- hour. Only from the old value, so an operator's own setting stays.
+UPDATE plans SET max_storage = 21474836480, updated_at = now()
+WHERE name = 'anonymous' AND max_storage = 10737418240;
 
 INSERT INTO user_plans (user_id, plan_id, granted_at)
 SELECT '00000000-0000-0000-0000-000000000001', id, now() FROM plans WHERE name = 'anonymous'

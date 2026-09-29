@@ -256,7 +256,7 @@ func TestLLMsTextFollowsTheDeployment(t *testing.T) {
 	}
 	for _, want := range []string{
 		"cmd | curl -F 'content=<-' https://plainmote.link/paste",
-		"Default `10m`.", "At most 4 MiB, stored byte for byte", "up to 4 MiB each",
+		"Default `1h`.", "At most 10 MiB, stored byte for byte", "up to 4 MiB each",
 		"`https://plainmote.link/d/<token>/<filename>`",
 		"- [Privacy Policy](https://plainmote.link/privacy)",
 	} {

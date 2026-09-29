@@ -17,7 +17,7 @@
 
 ## 功能
 
-- **快速分享**：无需登录，在首页粘贴文本或上传文件（最大 4 MiB）即可得到一条有效期 1 分钟至 30 天的链接；也可以直接在终端里用 curl 分享。
+- **快速分享**：无需登录，在首页粘贴文本或上传文件（最大 10 MiB）即可得到一条有效期 10 分钟至 30 天的链接；也可以直接在终端里用 curl 分享。
 - **资源与分享链接**：登录后保存文本和文件，为每位接收者创建独立的链接，分别设置有效期和使用次数，撤销其中一条不影响其他链接。
 - **访问记录**：每次通过链接的访问都记录时间、结果、来源 IP 和客户端信息，仅资源所有者可见。
 - **远程资源**：可以只保存一个公网地址，每次访问时实时从源站获取内容。
@@ -96,7 +96,7 @@ docker compose up -d
 | `PLAINMOTE_BLOB_REGION` | `auto` | S3 区域 |
 | `PLAINMOTE_TRUSTED_PROXIES` | 空 | 可信代理的 IP 或 CIDR，逗号分隔 |
 | `PLAINMOTE_SESSION_TTL` | `720h` | 登录会话有效期 |
-| `PLAINMOTE_MAX_CONTENT_MIB` | `20` | 单份内容大小上限 |
+| `PLAINMOTE_MAX_CONTENT_MIB` | `10` | 单份内容大小上限 |
 | `PLAINMOTE_LOG_RETENTION` | `720h` | 访问记录保留时长，`0` 表示永久保留 |
 | `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | 新用户注册策略：`open`、`allowlist` 或 `closed` |
 | `GITHUB_ALLOWED_IDS` | 空 | `allowlist` 模式下允许注册的 GitHub 数字用户 ID，逗号分隔 |

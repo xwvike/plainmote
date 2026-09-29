@@ -23,23 +23,42 @@ const pastePath = "/paste"
 const pasteResultPrefix = "/paste/"
 const pasteSavePath = "/paste/save"
 
-// pasteTTLChoices are the lifetimes the page offers, from a handoff of a
-// minute to a month. The values are what a terminal sends as ?ttl= too.
-var pasteTTLChoices = []ttlChoice{
-	{Value: "1m", Duration: time.Minute},
+// lifetimeChoices is the one scale of lifetimes the service offers: on the
+// quick share box, and in a share link's settings, where "never" and a custom
+// lifetime follow it. The values are what a terminal sends as ?ttl= too.
+var lifetimeChoices = []ttlChoice{
 	{Value: "10m", Duration: 10 * time.Minute},
 	{Value: "1h", Duration: time.Hour},
 	{Value: "1d", Duration: 24 * time.Hour},
+	{Value: "7d", Duration: 7 * 24 * time.Hour},
 	{Value: "30d", Duration: 30 * 24 * time.Hour},
+}
+
+// lifetimeChoice finds the stop on the scale a value names.
+func lifetimeChoice(value string) (ttlChoice, bool) {
+	for _, choice := range lifetimeChoices {
+		if choice.Value == value {
+			return choice, true
+		}
+	}
+	return ttlChoice{}, false
+}
+
+// lifetimeValue is the stop on the scale a duration is, if it is one.
+func lifetimeValue(d time.Duration) (string, bool) {
+	for _, choice := range lifetimeChoices {
+		if choice.Duration == d {
+			return choice.Value, true
+		}
+	}
+	return "", false
 }
 
 // pasteDefaultTTL is the preselected choice, the one standing for the store's
 // default, so the page and a request that names no lifetime cannot disagree.
 var pasteDefaultTTL = func() string {
-	for _, choice := range pasteTTLChoices {
-		if choice.Duration == store.AnonymousDefaultTTL {
-			return choice.Value
-		}
+	if value, ok := lifetimeValue(store.AnonymousDefaultTTL); ok {
+		return value
 	}
 	panic("the default quick share lifetime is not one of the choices")
 }()
@@ -95,7 +114,7 @@ func (a *App) homePage(r *http.Request) pageData {
 		BaseURL:      a.baseURL(r),
 		SignInURL:    "/login",
 		PasteTTL:     pasteDefaultTTL,
-		PasteChoices: pasteTTLChoices,
+		PasteChoices: lifetimeChoices,
 		MaxPaste:     store.AnonymousMaxBytes,
 	}
 	if user, _, ok := a.currentUser(r); ok {
@@ -288,7 +307,7 @@ func (a *App) pasteUsage(r *http.Request) string {
   curl -F content=@app.log %[1]s
   curl --data-binary @app.log '%[1]s?ttl=1d&filename=app.log'
 
-ttl       how long the link works: 1m, 10m, 1h, 1d or 30d (default %[2]s)
+ttl       how long the link works: 10m, 1h, 1d, 7d or 30d (default %[2]s)
 filename  name at the end of the link (a form field, or a query parameter
           with --data-binary)
 
@@ -431,10 +450,8 @@ func (a *App) refusePasteWith(w http.ResponseWriter, r *http.Request, content, f
 // they never chose.
 func parsePasteTTL(value string) (time.Duration, string) {
 	value = strings.TrimSpace(value)
-	for _, choice := range pasteTTLChoices {
-		if choice.Value == value {
-			return choice.Duration, choice.Value
-		}
+	if choice, ok := lifetimeChoice(value); ok {
+		return choice.Duration, choice.Value
 	}
 	if minutes, err := strconv.Atoi(value); err == nil && minutes > 0 {
 		return time.Duration(minutes) * time.Minute, value

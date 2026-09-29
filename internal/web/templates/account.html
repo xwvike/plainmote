@@ -16,7 +16,7 @@
         <div><dt>{{tr .Locale "account_login"}}</dt><dd>{{.Account.User.Login}}</dd></div>
         <div><dt>{{tr .Locale "account_name"}}</dt><dd>{{if .Account.User.Name}}{{.Account.User.Name}}{{else}}<span class="mut">—</span>{{end}}</dd></div>
         <div><dt>{{tr .Locale "account_created"}}</dt><dd>{{formatTime .Account.CreatedAt}}</dd></div>
-        <div><dt>{{tr .Locale "account_usage"}}</dt><dd>{{.Quota.Usage.Resources}}/{{.Quota.Limit.Resources}} · {{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</dd></div>
+        <div><dt>{{tr .Locale "account_usage"}}</dt><dd>{{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</dd></div>
       </dl>
     </section>
 
