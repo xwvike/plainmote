@@ -1,5 +1,5 @@
-// The home page for an account with end-to-end encryption on. The box's text
-// is encrypted here and only the ciphertext is posted; the key goes into the
+// The home page for an account with end-to-end encryption on. The box's text,
+// or the file chosen in its place, is encrypted here and only the ciphertext is posted; the key goes into the
 // address of the result page after #, which is never sent to the server, and
 // the result page puts it on the end of the share link.
 import { seal } from "./e2ee.js";
@@ -15,6 +15,7 @@ function setupForm(form) {
   const textarea = form.querySelector("textarea[name='content']");
   const filename = form.querySelector("input[name='filename']");
   const passphrase = form.querySelector("[data-passphrase]");
+  const upload = form.querySelector("[data-paste-file]");
   const error = form.querySelector("[data-e2ee-error]");
   if (!button || !textarea || !error) return;
   // The button is disabled in the markup, so without this script nothing can
@@ -31,9 +32,12 @@ function setupForm(form) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     fail("");
-    // What the plain form does on the server: a textarea submits CRLF.
-    const text = textarea.value.replace(/\r\n?/g, "\n");
-    const content = new TextEncoder().encode(text);
+    // A chosen file is sealed as it is, under its name; the box's text as the
+    // plain form would have it on the server, where a textarea submits CRLF.
+    const file = upload && upload.files.length > 0 ? upload.files[0] : null;
+    const content = file
+      ? new Uint8Array(await file.arrayBuffer())
+      : new TextEncoder().encode(textarea.value.replace(/\r\n?/g, "\n"));
     if (content.length === 0) return fail(form.dataset.msgEmpty);
     if (content.length > maxBytes) return fail(form.dataset.msgTooLarge.replace("%s", sizeText(maxBytes)));
     const checked = form.querySelector("input[name='ttl']:checked");
@@ -41,7 +45,8 @@ function setupForm(form) {
     button.disabled = true;
     button.textContent = form.dataset.msgEncrypting;
     try {
-      const { envelope, key } = await seal(content, filename ? filename.value.trim() : "", passphrase ? passphrase.value : "");
+      const name = (filename ? filename.value.trim() : "") || (file ? file.name : "");
+      const { envelope, key } = await seal(content, name, passphrase ? passphrase.value : "");
       const body = new FormData();
       body.set("csrf", form.dataset.csrf);
       body.set("ttl", checked ? checked.value : "");

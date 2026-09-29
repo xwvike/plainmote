@@ -106,27 +106,25 @@
       <div class="panel ruled">
         <div class="pt">
           <span class="sec">{{tr .Locale "content"}}</span>
-          {{if not .E2EE}}<span class="hint upload-status" data-paste-status role="status" aria-live="polite"></span>{{end}}
+          <span class="hint upload-status" data-paste-status role="status" aria-live="polite"></span>
           <span class="sp">{{if .E2EE}}<span class="tag">{{tr .Locale "e2ee_tag"}}</span>{{end}}<span class="hint">{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
-            {{/* A file instead of the box. Not with encryption on: that
-                 encrypts the box's text, and nothing else. */}}
-            {{if not .E2EE}}<label class="btn sm upload-key paste-pick">
+            {{/* A file instead of the box. With encryption on, the script
+                 seals it in the browser and it is never posted as it is. */}}
+            <label class="btn sm upload-key paste-pick">
               <input type="file" name="file" class="sr" data-paste-file data-max-bytes="{{.MaxPaste}}" data-msg-oversize="{{tr .Locale "upload_oversize"}}">
               <span>{{tr .Locale "upload_file"}}</span>
-            </label>{{end}}
+            </label>
           </span>
         </div>
         <div class="pb paste-body">
           <textarea name="content" spellcheck="false" autofocus data-box
                     aria-label="{{tr .Locale "paste_content_label"}}" placeholder="{{tr .Locale "paste_content_placeholder"}}">{{.PasteContent}}</textarea>
-          {{if not .E2EE}}
           {{/* The chosen file stands where the box was, until it is removed. */}}
           <div class="picked" data-paste-picked hidden>
             <span class="picked-name" data-picked-name></span>
             <button type="button" class="txt" data-picked-clear>{{tr .Locale "remove_file"}}</button>
             <p class="hint">{{tr .Locale "paste_file_hint"}}</p>
           </div>
-          {{end}}
         </div>
       </div>
       <div class="savebar">

@@ -1,9 +1,8 @@
 // Opening an encrypted share. The page itself holds nothing; this fetches the
 // ciphertext once - that request is the one that counts as a use - and
 // decrypts it here with the key after # in the address, or with the
-// passphrase the recipient types, then hands the text to the browser. A
-// wrong passphrase is tried again against the bytes already fetched, never by
-// fetching again.
+// passphrase the recipient types. A wrong passphrase is tried again against
+// the bytes already fetched, never by fetching again.
 import { inspect, open } from "./e2ee.js";
 
 const page = document.querySelector("[data-decrypt]");
@@ -17,12 +16,50 @@ const say = (message, bad = false) => {
   status.hidden = !message;
 };
 
-// The plaintext opens the way every other text link does: as the browser's
-// own view of plain text. The address bar then shows the blob's address, not
-// the one with the key; the blob lives only as long as this tab keeps it, so
-// a reload finds nothing, and opening the link again is how to see it again.
-function show({ content }) {
-  window.location.replace(URL.createObjectURL(new Blob([content], { type: "text/plain; charset=utf-8" })));
+function sizeText(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KiB`;
+  return `${bytes} B`;
+}
+
+// Text becomes the page, and the page becomes what a browser shows for any
+// other text link: our styles gone, the text in its own <pre>, wrapped, in
+// the reader's light or dark. The address - key and all - stays, so a reload
+// fetches and decrypts again, as a reload of any link fetches again.
+function showText(name, text) {
+  for (const sheet of document.querySelectorAll('link[rel="stylesheet"]')) sheet.remove();
+  const root = document.documentElement;
+  root.removeAttribute("data-theme");
+  root.style.colorScheme = "light dark";
+  const pre = document.createElement("pre");
+  pre.style.whiteSpace = "pre-wrap";
+  pre.style.overflowWrap = "break-word";
+  pre.textContent = text;
+  document.body.replaceChildren(pre);
+  document.title = name || decodeURIComponent(window.location.pathname.split("/").pop() || "");
+}
+
+// Anything that is not text is handed over the way an unencrypted file is:
+// as a download, under its own name. The link stays for a second try.
+function offerFile(name, content) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([content], { type: "application/octet-stream" }));
+  link.download = name || "file";
+  link.textContent = `${link.download} · ${sizeText(content.length)}`;
+  form.hidden = true;
+  say(msg("msgDownload"));
+  status.append(" ", link);
+  link.click();
+}
+
+function show({ name, content }) {
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+  } catch (_) {
+    return offerFile(name, content);
+  }
+  showText(name, text);
 }
 
 async function start() {
