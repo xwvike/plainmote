@@ -251,6 +251,8 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 /* The four-character code of an encrypted quick share, as it is to be read
    out: spaced, in the monospace, on a slip of its own. */
 .pin-on { display: inline-flex; align-items: center; gap: 10px; }
+/* In the row of fields and keys, as tall as they are. */
+.pin-on > .pin-code { display: inline-flex; align-items: center; height: 28px; box-sizing: border-box; padding: 0 8px; }
 .pin-code { padding: 2px 7px; border: 1px dashed var(--line2); border-radius: var(--r); background: var(--field); color: var(--ink); font: 600 13px/1.4 var(--mono); letter-spacing: .2em; }
 .ttl-picker > span { font-size: 12px; font-weight: 500; color: var(--ink2); }
 .ttl-picker select { width: auto; }

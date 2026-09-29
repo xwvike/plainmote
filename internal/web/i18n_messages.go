@@ -36,7 +36,7 @@ var messageTable = map[string][6]string{
 	"e2ee_pin":                  {"Code", "口令", "口令", "コード", "Code", "Code"},
 	"e2ee_pin_add":              {"Use a code", "启用口令", "啟用口令", "コードを使う", "Utiliser un code", "Code verwenden"},
 	"e2ee_pin_renew":            {"New code", "换一个", "換一個", "別のコード", "Autre code", "Neuer Code"},
-	"e2ee_pin_drop":             {"No code", "不用口令", "不用口令", "コードなし", "Sans code", "Kein Code"},
+	"e2ee_pin_drop":             {"Turn off code", "关闭口令", "關閉口令", "コードをやめる", "Désactiver le code", "Code deaktivieren"},
 	"e2ee_result_pin":           {"Recipients enter the code {pin} to open it. Tell them through a different channel.", "接收者需要输入口令 {pin} 才能查看，请通过其他渠道告诉对方。", "接收者需要輸入口令 {pin} 才能查看，請透過其他管道告訴對方。", "受信者が開くにはコード {pin} の入力が必要です。別の手段で伝えてください。", "Les destinataires saisissent le code {pin} pour l’ouvrir. Communiquez-le par un autre moyen.", "Empfänger geben zum Öffnen den Code {pin} ein. Teilen Sie ihn auf anderem Weg mit."},
 	"e2ee_open_pin":             {"Enter the 4-character code", "输入 4 位口令", "輸入 4 位口令", "4 文字のコードを入力", "Saisissez le code à 4 caractères", "4-stelligen Code eingeben"},
 	"e2ee_open_pin_wrong":       {"Wrong code. Try again.", "口令不对，请重新输入。", "口令不對，請重新輸入。", "コードが違います。もう一度入力してください。", "Code incorrect. Réessayez.", "Falscher Code. Bitte erneut eingeben."},
