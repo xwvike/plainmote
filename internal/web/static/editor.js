@@ -759,7 +759,9 @@ function preview(textarea) {
 // filename field as it is typed, and without one, what the text looks like.
 // The textarea stays the field the form posts. It is filled when the form is
 // sent, in the capture phase so before any other submit handler reads it:
-// the encrypting form reads it there.
+// the encrypting form reads it there. The page's own script talks to it
+// through the textarea: paste:load when it has put a file's text there, and
+// paste:edit back from here when a person changes the text.
 function box(textarea) {
   const form = textarea.form;
   const filename = form ? form.elements.filename : null;
@@ -776,6 +778,7 @@ function box(textarea) {
     view.dispatch({ effects: language.reconfigure(languageFor(next)) });
   };
   let pending = 0;
+  let loading = false;
 
   let view;
   try {
@@ -810,6 +813,7 @@ function box(textarea) {
           // Looked at again once typing pauses, not on every key.
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return;
+            if (!loading) textarea.dispatchEvent(new Event("paste:edit"));
             clearTimeout(pending);
             pending = setTimeout(() => configure(update.view), 300);
           }),
@@ -833,6 +837,13 @@ function box(textarea) {
     form.addEventListener("submit", () => { textarea.value = view.state.doc.toString(); }, true);
   }
   if (filename) filename.addEventListener("input", () => configure(view));
+  textarea.addEventListener("paste:load", () => {
+    loading = true;
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: textarea.value } });
+    loading = false;
+    configure(view);
+    view.focus();
+  });
 }
 
 for (const textarea of document.querySelectorAll("textarea[data-box]")) {

@@ -124,7 +124,6 @@
             <div class="picked-media" data-picked-media></div>
             <span class="picked-name" data-picked-name></span>
             <button type="button" class="txt" data-picked-clear>{{tr .Locale "remove_file"}}</button>
-            <p class="hint">{{tr .Locale "paste_file_hint"}}</p>
           </div>
         </div>
       </div>
@@ -192,11 +191,14 @@
   {{if or .E2EE .PasteEncrypted}}<script type="module" src="/static/e2ee-share.js"></script>{{end}}
   {{template "copy-status" .}}
   <script>
-    {{/* A chosen file takes the box's place: the box is set aside, not
-         submitted, and the file's name fills an empty filename. */}}
+    {{/* A chosen file goes where it can be seen. Text goes into the box,
+         for the editor to show; an image, a clip or a track stands in the
+         box's place, shown as it will be seen; anything else stands there as
+         its name. The file's name fills an empty filename. */}}
     (function () {
       var input = document.querySelector('[data-paste-file]');
       if (!input) return;
+      var form = input.form;
       var box = document.querySelector('textarea[name=content]');
       var body = box.parentNode;
       var card = document.querySelector('[data-paste-picked]');
@@ -205,30 +207,45 @@
       var media = card.querySelector('[data-picked-media]');
       var named = '';
       var shown = '';
-      {{/* An image, a clip or a track is shown as it will be seen. */}}
-      function preview(file) {
-        if (shown) URL.revokeObjectURL(shown);
-        shown = '';
-        media.replaceChildren();
-        var kind = /^(image|video|audio)\//.exec(file ? file.type : '');
-        if (!kind || /svg/.test(file.type)) return;
-        var element = document.createElement(kind[1] === 'image' ? 'img' : kind[1]);
-        element.src = shown = URL.createObjectURL(file);
-        if (kind[1] === 'image') element.alt = '';
-        else element.controls = true;
-        media.appendChild(element);
-      }
       function size(bytes) {
         if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MiB';
         if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KiB';
         return bytes + ' B';
       }
-      function clear() {
-        input.value = '';
+      function unshow() {
+        if (shown) URL.revokeObjectURL(shown);
+        shown = '';
+        media.replaceChildren();
         card.hidden = true;
-        preview(null);
         body.removeAttribute('data-picked');
         box.disabled = false;
+      }
+      {{/* The file in the box's place: shown if it can be, named either way. */}}
+      function stand(file, kind) {
+        unshow();
+        if (kind) {
+          var element = document.createElement(kind === 'image' ? 'img' : kind);
+          element.src = shown = URL.createObjectURL(file);
+          if (kind === 'image') element.alt = '';
+          else element.controls = true;
+          media.appendChild(element);
+        }
+        card.querySelector('[data-picked-name]').textContent = file.name + ' · ' + size(file.size);
+        body.setAttribute('data-picked', '');
+        box.disabled = true;
+        card.hidden = false;
+      }
+      {{/* Text into the box. The file stays chosen, so what is sent is the
+           file exactly - line endings and all - until the text is edited,
+           and from then on the box. */}}
+      function load(text) {
+        unshow();
+        box.value = text;
+        box.dispatchEvent(new Event('paste:load'));
+      }
+      function clear() {
+        input.value = '';
+        unshow();
         if (named && filename.value === named) filename.value = '';
         named = '';
       }
@@ -242,14 +259,31 @@
           status.textContent = input.getAttribute('data-msg-oversize').replace('{size}', size(file.size)).replace('{limit}', size(max));
           return;
         }
-        if (!filename.value || filename.value === named) filename.value = named = file.name;
-        card.querySelector('[data-picked-name]').textContent = file.name + ' · ' + size(file.size);
-        preview(file);
-        body.setAttribute('data-picked', '');
-        box.disabled = true;
-        card.hidden = false;
+        if (!filename.value || filename.value === named) {
+          filename.value = named = file.name;
+          filename.dispatchEvent(new Event('input'));
+        }
+        var kind = /^(image|video|audio)\//.exec(file.type);
+        if (kind && !/svg/.test(file.type)) return stand(file, kind[1]);
+        file.arrayBuffer().then(function (bytes) {
+          if (input.files[0] !== file) return;
+          var text = null;
+          try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (_) {}
+          if (text === null || text.indexOf('\u0000') >= 0) stand(file, '');
+          else load(text);
+        });
+      }
+      function edited() {
+        if (!box.disabled && input.files.length) input.value = '';
       }
       input.addEventListener('change', pick);
+      box.addEventListener('input', edited);
+      box.addEventListener('paste:edit', edited);
+      {{/* The file and the text it was loaded into are the same content:
+           only one of them goes. */}}
+      form.addEventListener('formdata', function (event) {
+        if (input.files.length) event.formData.delete(box.name);
+      });
       card.querySelector('[data-picked-clear]').addEventListener('click', function () {
         clear();
         var editor = body.querySelector('.cm-content');
