@@ -188,7 +188,11 @@
               <label><input type="radio" name="ttl" value="never"{{if eq .FocusShare.TTLChoice "never"}} checked{{end}}><i></i><span>{{tr .Locale "never_expires"}}</span></label>
               <label><input type="radio" name="ttl" value="custom"{{if eq .FocusShare.TTLChoice "custom"}} checked{{end}}><i></i><span>{{tr .Locale "custom"}}</span></label>
             </span>
-            <input type="text" name="ttl_custom" value="{{.FocusShare.TTLCustom}}" placeholder="2h" title="s, m, h, d" aria-label="{{tr .Locale "custom"}}" class="mpath">
+            {{/* Only for the custom stop. The stylesheet sets it aside while
+                 another stop is chosen, which needs no script; the script
+                 also disables it, which takes it out of the keyboard's way.
+                 Not disabled here: without a script nothing could undo it. */}}
+            <input type="text" name="ttl_custom" value="{{.FocusShare.TTLCustom}}" placeholder="2h" title="s, m, h, d" aria-label="{{tr .Locale "custom"}}" class="mpath" data-ttl-custom>
           </dd>
           <dt>{{tr .Locale "use_limit"}}</dt>
           <dd class="scale-field">
