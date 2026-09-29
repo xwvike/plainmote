@@ -11,14 +11,14 @@ Share configs, logs and other files as links. The content is kept byte for byte;
 Try it at [plainmote.link](https://plainmote.link).
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/share-links-dark.png">
-  <img src="docs/screenshots/share-links-light.png" alt="A resource and its share links: one link per recipient, each with its own time left and use count, with revoked and used-up links listed apart">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/quick-share-dark.png">
+  <img src="docs/screenshots/quick-share-light.png" alt="The quick share box with a pasted log, its times, levels and key=value pairs highlighted, and the lifetime scale from 10 minutes to 30 days">
 </picture>
 
 ## Features
 
 - **Quick share**: no account needed. Paste text or upload a file (up to 10 MiB) on the home page and get a link that lasts from 10 minutes to 30 days, or share straight from a terminal with curl.
-- **Resources and share links**: sign in to keep text and files, then give each recipient a separate link with its own expiry and use limit. Revoking one leaves the others working.
+- **Resources and share links**: sign in to keep configs, logs and other files (100 MiB per account), then give each person or machine its own link with its own expiry and use limit. Revoking one leaves the others working, and an edit reaches every link at once.
 - **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner of the resource.
 - **Remote resources**: keep just a public URL; the content is fetched from the origin on every access.
 - **For programs that poll**: share links answer `HEAD` and conditional requests - `If-None-Match` or `If-Modified-Since` gets `304` with no body while the content is unchanged. Each answer still counts as a use and is recorded.
@@ -29,8 +29,13 @@ Try it at [plainmote.link](https://plainmote.link).
 - **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, chosen from the browser's language; the home page and legal pages also have an address per language (such as `/zh-cn/` or `/ja/`) for search engines. Light and dark themes.
 
 <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/share-links-dark.png">
+  <img src="docs/screenshots/share-links-light.png" alt="A config and its share links: one for each machine and each person, each with its own time left and use count, with revoked and used-up links listed apart">
+</picture>
+
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/access-history-dark.png">
-  <img src="docs/screenshots/access-history-light.png" alt="Access history: the time, result, share link and source IP of every access">
+  <img src="docs/screenshots/access-history-light.png" alt="Access history: the time, result, share link and source IP of every access, machines polling alongside people opening the link">
 </picture>
 
 ## Sharing from a terminal

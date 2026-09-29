@@ -11,14 +11,14 @@
 参考部署：[plainmote.link](https://plainmote.link)
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/share-links-dark.png">
-  <img src="docs/screenshots/share-links-light.png" alt="一份资源及其分享链接：每位接收者一条链接，各自的剩余时间与使用次数，已撤销和已用完的链接单独列出">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/quick-share-dark.png">
+  <img src="docs/screenshots/quick-share-light.png" alt="快速分享输入框：粘贴的日志中时间、级别和 key=value 均已高亮，下方为 10 分钟至 30 天的有效期刻度">
 </picture>
 
 ## 功能
 
 - **快速分享**：无需登录，在首页粘贴文本或上传文件（最大 10 MiB）即可得到一条有效期 10 分钟至 30 天的链接；也可以直接在终端里用 curl 分享。
-- **资源与分享链接**：登录后保存文本和文件，为每位接收者创建独立的链接，分别设置有效期和使用次数，撤销其中一条不影响其他链接。
+- **资源与分享链接**：登录后保存配置、日志和其他文件（每个账号 100 MiB），为每个人、每台机器创建独立的链接，分别设置有效期和使用次数；撤销其中一条不影响其他链接，修改内容后所有链接立即生效。
 - **访问记录**：每次通过链接的访问都记录时间、结果、来源 IP 和客户端信息，仅资源所有者可见。
 - **远程资源**：可以只保存一个公网地址，每次访问时实时从源站获取内容。
 - **便于程序轮询**：分享地址支持 `HEAD` 和条件请求，携带 `If-None-Match` 或 `If-Modified-Since` 时，内容未变化则返回不带内容的 `304`；每次应答仍计一次使用并记录。
@@ -29,8 +29,13 @@
 - **界面**：英语、简体中文、繁体中文、日语、法语和德语，按浏览器语言显示；首页和法律页面另有各语言的独立地址（如 `/zh-cn/`、`/ja/`），供搜索引擎分别收录。浅色与深色主题。
 
 <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/share-links-dark.png">
+  <img src="docs/screenshots/share-links-light.png" alt="一份配置及其分享链接：每台机器、每个人各一条，各自的剩余时间与使用次数，已撤销和已用完的链接单独列出">
+</picture>
+
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/access-history-dark.png">
-  <img src="docs/screenshots/access-history-light.png" alt="访问记录：每次访问的时间、结果、分享链接和来源 IP">
+  <img src="docs/screenshots/access-history-light.png" alt="访问记录：每次访问的时间、结果、分享链接和来源 IP，机器的轮询与人的打开并列可见">
 </picture>
 
 ## 终端分享
