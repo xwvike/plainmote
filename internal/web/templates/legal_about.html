@@ -1,6 +1,6 @@
 {{define "about-zh"}}
 <h1>关于</h1>
-<p class="doc-lede">PlainMote 可将文本和文件生成分享链接：可为不同接收者分别创建链接，每条链接可独立设置有效期与使用次数，可单独撤销，每次访问均有记录。</p>
+<p class="doc-lede">PlainMote 用于在线分享配置、日志和其他文件：可为每个人或每台机器分别创建链接，每条链接可独立设置有效期与使用次数、单独撤销，每次访问均有记录。</p>
 
 <h2>主要功能</h2>
 <ul>
@@ -9,7 +9,7 @@
   <li><strong>访问记录：</strong>每次通过链接的访问均记录时间、来源 IP 和客户端信息，仅资源所有者可见。</li>
   <li><strong>远程资源：</strong>可仅保存公网地址，每次访问时由服务器实时从源站获取内容。</li>
   {{if .Legal.Anonymous}}<li><strong>临时分享：</strong>无需登录，在首页粘贴文本或上传文件即可生成有效期最长 {{legalDuration true .Legal.AnonymousTTL}}的链接。</li>
-  <li><strong>端到端加密（可选）：</strong>登录用户可在账号设置中开启，开启后临时分享在浏览器中加密，本服务仅保存密文，无法读取其内容。</li>{{end}}
+  <li><strong>端到端加密（可选）：</strong>登录用户可在账号设置中开启，开启后临时分享在浏览器中加密，本服务仅保存密文；密钥随链接传递的，本服务无法读取其内容，以 4 位口令代替密钥的，保护程度较低。</li>{{end}}
 </ul>
 
 <h2>隐私与安全</h2>
@@ -22,7 +22,7 @@
 
 {{define "about-en"}}
 <h1>About</h1>
-<p class="doc-lede">PlainMote turns text and files into share links: a separate link for each recipient, each with its own expiry and use limit, revocable on its own, with every access recorded.</p>
+<p class="doc-lede">PlainMote shares configs, logs and other files online: a separate link for each person or machine, each with its own expiry and use limit, revocable on its own, with every access recorded.</p>
 
 <h2>Features</h2>
 <ul>
@@ -31,7 +31,7 @@
   <li><strong>Access records:</strong> each access through a link records the time, source IP address and client information, visible only to the resource owner.</li>
   <li><strong>Remote resources:</strong> a resource can consist of a public URL only, with the content fetched live from the origin server by the Service on each access.</li>
   {{if .Legal.Anonymous}}<li><strong>Quick shares:</strong> paste text or upload a file on the home page, without signing in, to generate a link valid for up to {{legalDuration false .Legal.AnonymousTTL}}.</li>
-  <li><strong>End-to-end encryption (optional):</strong> signed-in users can turn it on in their account settings; quick shares are then encrypted in the browser, and the Service stores only the ciphertext and cannot read the content.</li>{{end}}
+  <li><strong>End-to-end encryption (optional):</strong> signed-in users can turn it on in their account settings; quick shares are then encrypted in the browser and the Service stores only the ciphertext; where the key travels in the link, the Service cannot read the content, and a four-character code used in place of the key offers weaker protection.</li>{{end}}
 </ul>
 
 <h2>Privacy and security</h2>

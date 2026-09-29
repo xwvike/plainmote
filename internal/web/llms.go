@@ -36,7 +36,7 @@ func (a *App) llmsText() string {
 	base := strings.TrimRight(a.cfg.PublicURL, "/")
 	var text strings.Builder
 	text.WriteString("# PlainMote\n\n")
-	text.WriteString("> PlainMote turns text and files into share links. Content is kept byte for byte as given; links can expire, be limited to a number of uses and be revoked, and every access is recorded.\n\n")
+	text.WriteString("> PlainMote shares configs, logs and other files as links. Content is kept byte for byte as given; links can expire, be limited to a number of uses and be revoked, and every access is recorded.\n\n")
 
 	if a.cfg.AnonymousEnabled {
 		fmt.Fprintf(&text, `## Quick share (no account)

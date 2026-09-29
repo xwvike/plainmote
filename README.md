@@ -6,7 +6,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Turn text and files into share links. The content is kept byte for byte; every link has its own expiry and use limit, can be revoked on its own, and every access through it is recorded.
+Share configs, logs and other files as links. The content is kept byte for byte; each person or machine gets its own link with its own expiry and use limit, revocable on its own, and every access is recorded.
 
 Try it at [plainmote.link](https://plainmote.link).
 
