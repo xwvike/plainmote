@@ -137,6 +137,19 @@ func TestAnonymousFileIsServedByItsBytes(t *testing.T) {
 	if image.ContentType != "image/png" || image.Filename != "photo.png" || image.ContentSize != int64(len(png)) {
 		t.Fatalf("a PNG must be served as one, got %q %q %d", image.ContentType, image.Filename, image.ContentSize)
 	}
+	// A UTF-16 export, as Windows writes XML, is text all the same, and is
+	// served with its charset.
+	utf16 := []byte{0xff, 0xfe}
+	for _, r := range "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n<Task>启动</Task>\r\n" {
+		utf16 = append(utf16, byte(r), byte(r>>8))
+	}
+	xml, _, err := db.CreateAnonymousPaste(ctx, "启动xray.xml", utf16, time.Minute, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ContentTypeWithEncoding(xml.ContentType, xml.ContentEncoding); got != "text/plain; charset=utf-16le" {
+		t.Fatalf("UTF-16 text must be served as text in its charset, got %q", got)
+	}
 	named, _, err := db.CreateAnonymousPaste(ctx, "photo.png", bytes.Repeat([]byte{0xff, 0x00, 0x13}, 64), time.Minute, now)
 	if err != nil {
 		t.Fatal(err)

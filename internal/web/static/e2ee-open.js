@@ -101,14 +101,27 @@ function offerFile(name, content) {
   link.click();
 }
 
-function show({ name, content }) {
+// UTF-8 text first, then what the bytes prove to be media, then text in
+// another encoding - a UTF-16 export from Windows, a GBK log - read with the
+// editor's detection, fetched only when it is needed. Only what is none of
+// these is a download.
+async function show({ name, content }) {
   let text = null;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(content);
-  } catch (_) { /* not text */ }
+  } catch (_) { /* not UTF-8 */ }
   if (text !== null) return showText(name, text);
-  const kind = mediaKind(content);
+  // A UTF-16 or UTF-32 byte order mark says text before anything else does:
+  // FF FE also reads as the start of an MP3 frame.
+  const [b0, b1, b2, b3] = content;
+  const unicode = (b0 === 0xff && b1 === 0xfe) || (b0 === 0xfe && b1 === 0xff) || (b0 === 0 && b1 === 0 && b2 === 0xfe && b3 === 0xff);
+  const kind = unicode ? null : mediaKind(content);
   if (kind) return showMedia(name, content, kind);
+  try {
+    const editor = await import("./editor.js");
+    const encoding = editor.detectFileEncoding(content);
+    if (encoding) return showText(name, editor.decodeBytes(content, encoding));
+  } catch (_) { /* not text in any encoding the editor reads */ }
   offerFile(name, content);
 }
 
@@ -135,7 +148,7 @@ async function start() {
       const button = form.querySelector("button");
       button.disabled = true;
       try {
-        show(await open(envelope, { passphrase: input.value }));
+        await show(await open(envelope, { passphrase: input.value }));
       } catch (_) {
         say(msg("msgWrong"), true);
         input.select();
@@ -149,7 +162,7 @@ async function start() {
   const hash = window.location.hash;
   if (!hash.startsWith("#k=") || hash.length <= 3) return say(msg("msgNoKey"), true);
   try {
-    show(await open(envelope, { key: hash.slice(3) }));
+    await show(await open(envelope, { key: hash.slice(3) }));
   } catch (_) {
     say(msg("msgWrong"), true);
   }

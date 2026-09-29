@@ -265,13 +265,25 @@
         }
         var kind = /^(image|video|audio)\//.exec(file.type);
         if (kind && !/svg/.test(file.type)) return stand(file, kind[1]);
-        file.arrayBuffer().then(function (bytes) {
+        {{/* Text in any encoding the editor can read - a UTF-16 export
+             from Windows, a GBK log - goes into the box. Should the editor
+             not have loaded, UTF-8 still does. */}}
+        file.arrayBuffer().then(function (buffer) {
+          var bytes = new Uint8Array(buffer);
+          return import('/static/editor.js').then(function (editor) {
+            var encoding = editor.detectFileEncoding(bytes);
+            return encoding ? editor.decodeBytes(bytes, encoding) : null;
+          }, function () {
+            try {
+              var text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+              return text.indexOf('\u0000') >= 0 ? null : text;
+            } catch (_) { return null; }
+          });
+        }).then(function (text) {
           if (input.files[0] !== file) return;
-          var text = null;
-          try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (_) {}
-          if (text === null || text.indexOf('\u0000') >= 0) stand(file, '');
+          if (text === null) stand(file, '');
           else load(text);
-        });
+        }, function () { if (input.files[0] === file) stand(file, ''); });
       }
       function edited() {
         if (!box.disabled && input.files.length) input.value = '';

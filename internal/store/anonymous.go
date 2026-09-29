@@ -91,24 +91,32 @@ func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename
 	// The bytes are stored as given. What a textarea does to line endings is
 	// the web layer's to undo; a paste piped in from a terminal is exactly
 	// what was sent, CRLF included.
-	if !utf8.Valid(content) {
-		return d.insertPaste(ctx, creatorID, filename, content, anonymousMediaType(content), "", now, ttl)
-	}
-	return d.insertPaste(ctx, creatorID, filename, content, anonymousContentType, anonymousEncoding, now, ttl)
+	contentType, encoding := anonymousType(content)
+	return d.insertPaste(ctx, creatorID, filename, content, contentType, encoding, now, ttl)
 }
 
-// anonymousMediaType is the type an anonymous file is served as: what its
-// magic bytes prove it to be when that is an image, audio or video, and an
-// opaque download otherwise. The name is not asked: anyone can call anything
-// photo.png.
-func anonymousMediaType(content []byte) string {
+// anonymousType is what an anonymous paste is served as, decided by its bytes
+// alone - the name is not asked, since anyone can call anything photo.png.
+// Text is plain text in whatever encoding it is in: a UTF-16 export from
+// Windows or a GBK log reads as text too, served with its charset. An image,
+// audio or video its magic bytes prove is served as that. Anything else is an
+// opaque download.
+func anonymousType(content []byte) (string, string) {
+	if utf8.Valid(content) {
+		return anonymousContentType, anonymousEncoding
+	}
 	magic := sniffMagic(content)
 	for _, family := range []string{"image/", "audio/", "video/"} {
 		if strings.HasPrefix(magic, family) {
-			return magic
+			return magic, ""
 		}
 	}
-	return anonymousFileType
+	if magic == "" {
+		if _, encoding, err := detectAndDecodeText(content, ""); err == nil {
+			return anonymousContentType, encoding
+		}
+	}
+	return anonymousFileType, ""
 }
 
 // CreateEncryptedPaste stores a quick share its signed-in creator encrypted in
