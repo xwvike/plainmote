@@ -104,7 +104,7 @@ func TestPasteRefusalKeepsWhatWasTyped(t *testing.T) {
 	response := postPaste(t, app, url.Values{
 		"content":  {typed},
 		"filename": {"bad/name.txt"},
-		"ttl":      {"5"},
+		"ttl":      {"1h"},
 	}, nil)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("this filename must be refused, got %d", response.Code)
@@ -116,7 +116,7 @@ func TestPasteRefusalKeepsWhatWasTyped(t *testing.T) {
 	if !strings.Contains(page, "bad/name.txt") {
 		t.Fatal("a refused paste must come back with the filename too")
 	}
-	if !strings.Contains(page, `value="5" aria-label="5 minutes" checked`) {
+	if !strings.Contains(page, `value="1h" aria-label="1 hour" checked`) {
 		t.Fatal("a refused paste must keep the chosen lifetime")
 	}
 }
@@ -129,13 +129,19 @@ func TestPasteLifetimeCannotBeChosenFreely(t *testing.T) {
 
 	// A value that is not on the menu falls back to the default rather than
 	// being taken at face value or costing the visitor their paste.
-	posted := postPaste(t, app, url.Values{"content": {"x"}, "ttl": {"1440"}}, nil)
+	posted := postPaste(t, app, url.Values{"content": {"x"}, "ttl": {"forever"}}, nil)
 	response := getPasteResult(t, app, posted)
 	if response.Code != http.StatusOK {
 		t.Fatalf("paste result: %d %s", response.Code, response.Body.String())
 	}
 	if !strings.Contains(response.Body.String(), "in about 10 minutes") {
 		t.Fatalf("an unknown lifetime must become the default, got %s", response.Body.String())
+	}
+
+	// A bare number is minutes, as it once was for every lifetime; past the
+	// ceiling it is refused, not quietly shortened.
+	if over := postPaste(t, app, url.Values{"content": {"x"}, "ttl": {"99999"}}, nil); over.Code != http.StatusBadRequest {
+		t.Fatalf("a lifetime past 30 days must be refused, got %d", over.Code)
 	}
 }
 
@@ -383,18 +389,18 @@ func TestAnonymousCanBeTurnedOff(t *testing.T) {
 // The page preselects the store's default, and that default is one of the
 // choices it offers.
 func TestHomePreselectsTheDefaultLifetime(t *testing.T) {
-	if pasteDefaultTTL != "10" {
-		t.Fatalf("the default lifetime is %s minutes, want 10", pasteDefaultTTL)
+	if pasteDefaultTTL != "10m" {
+		t.Fatalf("the default lifetime is %s, want 10m", pasteDefaultTTL)
 	}
 	app := &App{cfg: Config{PublicURL: "https://cfg.test", AnonymousEnabled: true}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()
 	response := httptest.NewRecorder()
 	app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://cfg.test/", nil))
-	if !strings.Contains(response.Body.String(), `value="10" aria-label="10 minutes" checked>`) {
+	if !strings.Contains(response.Body.String(), `value="10m" aria-label="10 minutes" checked>`) {
 		t.Fatal("the home page does not preselect 10 minutes")
 	}
-	if ttl, value := parsePasteTTL(""); ttl != 10*time.Minute || value != "10" {
+	if ttl, value := parsePasteTTL(""); ttl != 10*time.Minute || value != "10m" {
 		t.Fatalf("a missing lifetime falls back to %s (%s)", ttl, value)
 	}
 }

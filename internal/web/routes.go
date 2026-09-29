@@ -178,6 +178,9 @@ type encodingOption struct {
 // minutes, which is the only unit an anonymous paste is ever measured in.
 type ttlChoice struct {
 	Value string
+	// Duration is what Value stands for. Only the quick share picker sets it;
+	// the share settings dialog reads its values as Go durations.
+	Duration time.Duration
 }
 
 // linkView pairs a link with the address a viewer copies.

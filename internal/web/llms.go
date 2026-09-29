@@ -46,10 +46,10 @@ Send text or a file and get a link back, on one line:
 `+"```"+`
 cmd | curl -F 'content=<-' %[1]s/paste
 curl -F content=@app.log %[1]s/paste
-curl --data-binary @app.log '%[1]s/paste?ttl=30&filename=app.log'
+curl --data-binary @app.log '%[1]s/paste?ttl=1d&filename=app.log'
 `+"```"+`
 
-- `+"`ttl`"+`: minutes until the link expires: 1, 5, 10 or 30. Default %[2]s.
+- `+"`ttl`"+`: how long the link works: `+"`1m`"+`, `+"`10m`"+`, `+"`1h`"+`, `+"`1d`"+` or `+"`30d`"+`. Default `+"`%[2]s`"+`.
 - `+"`filename`"+`: the name at the end of the link. A form field, or a query parameter with `+"`--data-binary`"+`.
 - At most %[3]s, stored byte for byte. UTF-8 text is served as `+"`text/plain; charset=utf-8`"+`; an image, audio or video (recognised by its bytes) as its own type; anything else as `+"`application/octet-stream`"+`, for download.
 - Success is `+"`201`"+` with the link; a refusal is `+"`400`"+` with a one-line reason.

@@ -24,17 +24,15 @@ const AnonymousUserID = "00000000-0000-0000-0000-000000000001"
 const (
 	// AnonymousMinTTL and AnonymousMaxTTL bound what a crafted request can ask
 	// for, and AnonymousDefaultTTL is what the page preselects and what a
-	// request that names no lifetime gets. All are minutes rather than days on
-	// purpose: this is a handoff, not storage. Nothing posted through the open
-	// endpoint can be reached for long, which is most of what keeps it from
-	// being worth abusing and all of what bounds its footprint.
+	// request that names no lifetime gets. Every quick share ends: a month at
+	// the very most, and the default is a handoff of minutes. The end is what
+	// bounds the open endpoint's footprint.
 	AnonymousMinTTL     = time.Minute
 	AnonymousDefaultTTL = 10 * time.Minute
-	AnonymousMaxTTL     = 30 * time.Minute
+	AnonymousMaxTTL     = 30 * 24 * time.Hour
 
 	// AnonymousMaxBytes is enough for a log, a config or a small bundle of
-	// them. With links that end within half an hour it is no use as a file
-	// host.
+	// them, and small enough that the open endpoint is a poor file host.
 	AnonymousMaxBytes = 4 << 20
 
 	// anonymousContentType is what an anonymous paste that is text is always
@@ -52,9 +50,9 @@ const (
 	anonymousFileType    = "application/octet-stream"
 )
 
-// Minutes, not a Go duration: %s renders AnonymousMaxTTL as "30m0s".
-var errAnonymousTTL = fmt.Errorf("有效期最短 %d 分钟，最长 %d 分钟",
-	int(AnonymousMinTTL/time.Minute), int(AnonymousMaxTTL/time.Minute))
+// Minutes and days, not Go durations: %s renders AnonymousMaxTTL as "720h0m0s".
+var errAnonymousTTL = fmt.Errorf("有效期最短 %d 分钟，最长 %d 天",
+	int(AnonymousMinTTL/time.Minute), int(AnonymousMaxTTL/(24*time.Hour)))
 
 // CreateAnonymousPaste writes the body and the one time-limited link that
 // reaches it in a single transaction. A paste with no link is unreachable

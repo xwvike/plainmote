@@ -23,18 +23,26 @@ const pastePath = "/paste"
 const pasteResultPrefix = "/paste/"
 const pasteSavePath = "/paste/save"
 
-// pasteTTLChoices are the lifetimes the page offers. Minutes only: this is a
-// handoff, and store.AnonymousMaxTTL refuses anything longer whatever arrives.
+// pasteTTLChoices are the lifetimes the page offers, from a handoff of a
+// minute to a month. The values are what a terminal sends as ?ttl= too.
 var pasteTTLChoices = []ttlChoice{
-	{Value: "1"},
-	{Value: "5"},
-	{Value: "10"},
-	{Value: "30"},
+	{Value: "1m", Duration: time.Minute},
+	{Value: "10m", Duration: 10 * time.Minute},
+	{Value: "1h", Duration: time.Hour},
+	{Value: "1d", Duration: 24 * time.Hour},
+	{Value: "30d", Duration: 30 * 24 * time.Hour},
 }
 
-// pasteDefaultTTL is the preselected choice, taken from the store's default so
-// the page and a request that names no lifetime cannot disagree.
-var pasteDefaultTTL = strconv.Itoa(int(store.AnonymousDefaultTTL / time.Minute))
+// pasteDefaultTTL is the preselected choice, the one standing for the store's
+// default, so the page and a request that names no lifetime cannot disagree.
+var pasteDefaultTTL = func() string {
+	for _, choice := range pasteTTLChoices {
+		if choice.Duration == store.AnonymousDefaultTTL {
+			return choice.Value
+		}
+	}
+	panic("the default quick share lifetime is not one of the choices")
+}()
 
 // pasteFormMaxBytes is what the handler will read at all. The store enforces
 // the real limit on the body; this one is about not reading a request that
@@ -278,9 +286,9 @@ func (a *App) pasteUsage(r *http.Request) string {
   cmd | curl -F 'content=<-' %[1]s
   curl -F 'content=<app.log' %[1]s
   curl -F content=@app.log %[1]s
-  curl --data-binary @app.log '%[1]s?ttl=30&filename=app.log'
+  curl --data-binary @app.log '%[1]s?ttl=1d&filename=app.log'
 
-ttl       minutes until the link expires: 1, 5, 10 or 30 (default %[2]s)
+ttl       how long the link works: 1m, 10m, 1h, 1d or 30d (default %[2]s)
 filename  name at the end of the link (a form field, or a query parameter
           with --data-binary)
 
@@ -416,15 +424,20 @@ func (a *App) refusePasteWith(w http.ResponseWriter, r *http.Request, content, f
 	a.renderHome(w, r, data, status)
 }
 
-// parsePasteTTL reads the picker. Anything unrecognised becomes the default
-// rather than an error: the store is what enforces the range, and a visitor
-// should not lose a paste to a value they never chose.
+// parsePasteTTL reads the picker, or ?ttl= from a terminal. A bare number is
+// minutes, as every lifetime was once, so scripts written then keep working;
+// the store refuses one out of range. Anything else unrecognised becomes the
+// default rather than an error: a visitor should not lose a paste to a value
+// they never chose.
 func parsePasteTTL(value string) (time.Duration, string) {
+	value = strings.TrimSpace(value)
 	for _, choice := range pasteTTLChoices {
 		if choice.Value == value {
-			minutes, _ := strconv.Atoi(choice.Value)
-			return time.Duration(minutes) * time.Minute, choice.Value
+			return choice.Duration, choice.Value
 		}
+	}
+	if minutes, err := strconv.Atoi(value); err == nil && minutes > 0 {
+		return time.Duration(minutes) * time.Minute, value
 	}
 	return store.AnonymousDefaultTTL, pasteDefaultTTL
 }

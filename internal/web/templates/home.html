@@ -133,9 +133,8 @@
              it works with scripts off. */}}
         <span class="ttl-picker" role="radiogroup" aria-label="{{tr .Locale "link_lifetime"}}"><span>{{tr .Locale "lifetime"}}</span>
           <span class="scale">
-            {{range .PasteChoices}}<label title="{{pasteTTLText $.Locale .Value}}"><input type="radio" name="ttl" value="{{.Value}}" aria-label="{{pasteTTLText $.Locale .Value}}"{{if eq .Value $.PasteTTL}} checked{{end}}><i></i><span>{{.Value}}</span></label>{{end}}
+            {{range .PasteChoices}}<label title="{{pasteTTLText $.Locale .Value}}"><input type="radio" name="ttl" value="{{.Value}}" aria-label="{{pasteTTLText $.Locale .Value}}"{{if eq .Value $.PasteTTL}} checked{{end}}><i></i><span>{{pasteTTLShort $.Locale .Value}}</span></label>{{end}}
           </span>
-          <span class="unit">{{tr .Locale "minutes_unit"}}</span>
         </span>
         <label class="ttl-picker"><span>{{tr .Locale "filename_optional"}}</span>
           <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="notes.txt"

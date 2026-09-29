@@ -17,7 +17,7 @@
 
 ## 功能
 
-- **快速分享**：无需登录，在首页粘贴文本或上传文件（最大 4 MiB）即可得到一条最长 30 分钟后失效的链接；也可以直接在终端里用 curl 分享。
+- **快速分享**：无需登录，在首页粘贴文本或上传文件（最大 4 MiB）即可得到一条有效期 1 分钟至 30 天的链接；也可以直接在终端里用 curl 分享。
 - **资源与分享链接**：登录后保存文本和文件，为每位接收者创建独立的链接，分别设置有效期和使用次数，撤销其中一条不影响其他链接。
 - **访问记录**：每次通过链接的访问都记录时间、结果、来源 IP 和客户端信息，仅资源所有者可见。
 - **远程资源**：可以只保存一个公网地址，每次访问时实时从源站获取内容。
@@ -38,7 +38,7 @@
 ```bash
 tail -n 200 app.log | curl -F 'content=<-' https://plainmote.link/paste
 curl -F content=@app.log https://plainmote.link/paste
-curl --data-binary @app.log 'https://plainmote.link/paste?ttl=30&filename=app.log'
+curl --data-binary @app.log 'https://plainmote.link/paste?ttl=1d&filename=app.log'
 curl https://plainmote.link/paste    # 打印用法
 ```
 

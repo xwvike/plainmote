@@ -150,7 +150,7 @@ func TestPasteRawBodyFromATerminal(t *testing.T) {
 	// the home page.
 	usage := send(http.MethodGet, "/paste", "", "*/*", "")
 	if usage.Code != http.StatusOK || !strings.Contains(usage.Body.String(), "curl -F 'content=<-' https://cfg.test/paste") ||
-		!strings.Contains(usage.Body.String(), "(default 10)") || !strings.Contains(usage.Body.String(), "At most 4 MiB") {
+		!strings.Contains(usage.Body.String(), "(default 10m)") || !strings.Contains(usage.Body.String(), "At most 4 MiB") {
 		t.Fatalf("usage: %d %q", usage.Code, usage.Body.String())
 	}
 	browser := send(http.MethodGet, "/paste", "", "text/html,*/*;q=0.8", "")

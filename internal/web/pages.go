@@ -112,6 +112,7 @@ func (a *App) templateSet() *template.Template {
 		"addressParts":       addressParts,
 		"untilText":          untilText,
 		"pasteTTLText":       pasteTTLText,
+		"pasteTTLShort":      pasteTTLShort,
 		"pageSummary":        pageSummary,
 		"countText":          countText,
 		"deleteWarning":      deleteWarning,
@@ -258,16 +259,42 @@ func untilText(locale string, at time.Time) string {
 	return fmt.Sprintf(translate(locale, "until_minutes"), int(left/time.Minute))
 }
 
+// pasteTTLText says a quick share lifetime in words, for the picker's
+// titles and for whoever reads it aloud; pasteTTLShort is the label under its
+// stop on the scale.
 func pasteTTLText(locale, value string) string {
-	minutes, err := time.ParseDuration(value + "m")
-	if err != nil {
-		return value
+	d, _ := parsePasteTTL(value)
+	switch {
+	case d >= 24*time.Hour && d%(24*time.Hour) == 0:
+		if days := int(d / (24 * time.Hour)); days != 1 {
+			return fmt.Sprintf(translate(locale, "days"), days)
+		}
+		return translate(locale, "one_day")
+	case d >= time.Hour && d%time.Hour == 0:
+		if hours := int(d / time.Hour); hours != 1 {
+			return fmt.Sprintf(translate(locale, "hours"), hours)
+		}
+		return translate(locale, "one_hour")
 	}
-	count := int(minutes / time.Minute)
-	if count == 1 {
-		return translate(locale, "one_minute")
+	if minutes := int(d / time.Minute); minutes != 1 {
+		return fmt.Sprintf(translate(locale, "minutes"), minutes)
 	}
-	return fmt.Sprintf(translate(locale, "minutes"), count)
+	return translate(locale, "one_minute")
+}
+
+func pasteTTLShort(locale, value string) string {
+	d, _ := parsePasteTTL(value)
+	switch {
+	case d >= 24*time.Hour && d%(24*time.Hour) == 0:
+		days := int(d / (24 * time.Hour))
+		if days == 1 {
+			return fmt.Sprintf(translate(locale, "ttl_day"), days)
+		}
+		return fmt.Sprintf(translate(locale, "ttl_days"), days)
+	case d >= time.Hour && d%time.Hour == 0:
+		return fmt.Sprintf(translate(locale, "ttl_hour"), int(d/time.Hour))
+	}
+	return fmt.Sprintf(translate(locale, "ttl_min"), int(d/time.Minute))
 }
 
 func pageSummary(locale string, from, to, total int, unitKey string) string {

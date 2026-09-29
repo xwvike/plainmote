@@ -17,7 +17,7 @@ Try it at [plainmote.link](https://plainmote.link).
 
 ## Features
 
-- **Quick share**: no account needed. Paste text or upload a file (up to 4 MiB) on the home page and get a link that expires within 30 minutes, or share straight from a terminal with curl.
+- **Quick share**: no account needed. Paste text or upload a file (up to 4 MiB) on the home page and get a link that lasts from a minute to 30 days, or share straight from a terminal with curl.
 - **Resources and share links**: sign in to keep text and files, then give each recipient a separate link with its own expiry and use limit. Revoking one leaves the others working.
 - **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner of the resource.
 - **Remote resources**: keep just a public URL; the content is fetched from the origin on every access.
@@ -38,7 +38,7 @@ Try it at [plainmote.link](https://plainmote.link).
 ```bash
 tail -n 200 app.log | curl -F 'content=<-' https://plainmote.link/paste
 curl -F content=@app.log https://plainmote.link/paste
-curl --data-binary @app.log 'https://plainmote.link/paste?ttl=30&filename=app.log'
+curl --data-binary @app.log 'https://plainmote.link/paste?ttl=1d&filename=app.log'
 curl https://plainmote.link/paste    # prints usage
 ```
 

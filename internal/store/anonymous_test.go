@@ -59,7 +59,7 @@ func TestAnonymousTermsCannotBeStretched(t *testing.T) {
 		ttl   time.Duration
 		body  []byte
 	}{
-		{"a day", 24 * time.Hour, []byte("x")},
+		{"a year", 365 * 24 * time.Hour, []byte("x")},
 		{"just over the ceiling", AnonymousMaxTTL + time.Second, []byte("x")},
 		{"under the floor", time.Second, []byte("x")},
 		{"too large", time.Minute, bytes.Repeat([]byte("a"), AnonymousMaxBytes+1)},

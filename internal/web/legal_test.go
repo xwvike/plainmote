@@ -99,7 +99,7 @@ func TestPrivacyPolicyStatesTheConfiguredFacts(t *testing.T) {
 	}
 
 	forever := getLegal(legalApp(Config{ContactEmail: "ops@example.com", AnonymousEnabled: true, PublicURL: "http://cfg.test"}), "/privacy", "zh-CN").Body.String()
-	for _, want := range []string{"访问记录：不自动删除", "临时分享", "链接最长在 30 分钟后失效", "每个账号每 24 小时最多可导出 2 次", "（六）数据导出记录", "（七）Cookie"} {
+	for _, want := range []string{"访问记录：不自动删除", "临时分享", "链接最长在 30 天后失效", "每个账号每 24 小时最多可导出 2 次", "（六）数据导出记录", "（七）Cookie"} {
 		if !strings.Contains(forever, want) {
 			t.Errorf("privacy policy is missing %q", want)
 		}
