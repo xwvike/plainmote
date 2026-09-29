@@ -21,6 +21,7 @@ Try it at [plainmote.link](https://plainmote.link).
 - **Resources and share links**: sign in to keep text and files, then give each recipient a separate link with its own expiry and use limit. Revoking one leaves the others working.
 - **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner of the resource.
 - **Remote resources**: keep just a public URL; the content is fetched from the origin on every access.
+- **For programs that poll**: share links answer `HEAD` and conditional requests - `If-None-Match` or `If-Modified-Since` gets `304` with no body while the content is unchanged. Each answer still counts as a use and is recorded.
 - **Online editor**: built on CodeMirror 6, with syntax highlighting for YAML, JSON, TOML, XML, INI and `.env`, shell, nginx, Dockerfile, SQL, diffs and logs; the quick share box uses the same editor. It detects UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings, and saves back in the original encoding and line endings.
 - **End-to-end encryption (optional)**: signed-in users can turn it on in their account settings. Quick shares are then encrypted in the browser, and the server stores only ciphertext.
 - **Media preview**: in a browser, share links show images and play audio and video; other clients get the raw bytes.
@@ -50,7 +51,7 @@ The response is the share link on a single line, ready for a pipe or `$(...)`. `
 - **Not indexed**: share links, resources and account pages are all kept out of search engines; only the pages that describe the service can be indexed.
 - **Not a web host**: types a browser might execute (HTML, scripts, SVG and so on) are never delivered as themselves; anonymous shares are delivered as plain text, or as an image, audio or video when their bytes prove it, and anything else only as a download (and, when encrypted, as ciphertext).
 - **End-to-end encryption**: uses only the browser's built-in WebCrypto (AES-256-GCM; with a four-character code instead of a key in the link, the key is derived from the code with PBKDF2-SHA-256).
-  The key sits after the `#` in the link, which browsers never send to the server.
+  Without a code, the key sits after the `#` in the link, which browsers never send to the server; with one, it is derived from the code in the recipient's browser.
   Its limits are just as plain: decrypting needs JavaScript; a lost link or code cannot be recovered; a code is only four characters, so it keeps out someone who glimpses the link, not someone who has it and tries every code; content size and access history are not encrypted;
   the encryption code is served by the server, so it is only as trustworthy as the deployed code, which is one reason this project is open source.
 

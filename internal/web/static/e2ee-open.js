@@ -1,9 +1,9 @@
 // Opening an encrypted share. The page itself holds nothing; this fetches the
 // ciphertext once - that request is the one that counts as a use - and
 // decrypts it here with the key after # in the address, or with the
-// passphrase the recipient types. A wrong passphrase is tried again against
-// the bytes already fetched, never by fetching again.
+// four-character code the recipient types.
 import { inspect, open } from "./e2ee.js";
+import { sizeText } from "./upload.js";
 
 const page = document.querySelector("[data-decrypt]");
 const msg = (name) => page.dataset[name] || "";
@@ -29,10 +29,16 @@ body.bare { margin: 0; min-height: 100vh; display: grid; place-items: center; fo
 @keyframes pin-shake { 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
 `;
 
-function bareSheet() {
-  const sheet = new CSSStyleSheet();
-  sheet.replaceSync(BARE_CSS);
-  return sheet;
+// A browser without constructed sheets still gets a working page, only
+// unstyled.
+function bareSheets() {
+  try {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(BARE_CSS);
+    return [sheet];
+  } catch (_) {
+    return [];
+  }
 }
 
 let box = null;
@@ -40,7 +46,7 @@ let note = null;
 
 function bareShell() {
   bare("");
-  document.adoptedStyleSheets = [bareSheet()];
+  document.adoptedStyleSheets = bareSheets();
   document.body.className = "bare";
   box = document.createElement("div");
   box.className = "bare-box";
@@ -56,12 +62,6 @@ const say = (message, bad = false) => {
   note.classList.toggle("bad", bad);
 };
 
-function sizeText(bytes) {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KiB`;
-  return `${bytes} B`;
-}
-
 // What decrypted bytes are, by their own signature: the image, audio and
 // video families an unencrypted file is shown as. Anything else is not
 // named, and is handed over as a download.
@@ -71,7 +71,8 @@ function mediaKind(bytes) {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return ["img", "image/jpeg"];
   if (ascii(0, "GIF8")) return ["img", "image/gif"];
   if (ascii(0, "RIFF") && ascii(8, "WEBP")) return ["img", "image/webp"];
-  if (ascii(0, "BM")) return ["img", "image/bmp"];
+  // "BM" alone is two letters; a bitmap also names a known header size.
+  if (ascii(0, "BM") && [12, 40, 56, 108, 124].includes(bytes[14]) && !bytes[15] && !bytes[16] && !bytes[17]) return ["img", "image/bmp"];
   if (ascii(4, "ftyp")) {
     const brand = String.fromCharCode(...bytes.subarray(8, 12));
     if (brand === "avif" || brand === "avis") return ["img", "image/avif"];
@@ -82,7 +83,9 @@ function mediaKind(bytes) {
   if (ascii(0, "OggS")) return ["audio", "audio/ogg"];
   if (ascii(0, "fLaC")) return ["audio", "audio/flac"];
   if (ascii(0, "RIFF") && ascii(8, "WAVE")) return ["audio", "audio/wav"];
-  if (ascii(0, "ID3") || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) return ["audio", "audio/mpeg"];
+  // An MPEG frame: the sync bits, then a layer and a bitrate that exist.
+  const frame = bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0 && (bytes[1] & 0x06) !== 0 && (bytes[2] & 0xf0) !== 0xf0;
+  if (ascii(0, "ID3") || frame) return ["audio", "audio/mpeg"];
   return null;
 }
 
@@ -97,7 +100,11 @@ function bare(name) {
   const root = document.documentElement;
   root.removeAttribute("data-theme");
   root.style.colorScheme = "light dark";
-  document.title = name || decodeURIComponent(window.location.pathname.split("/").pop() || "");
+  let tail = window.location.pathname.split("/").pop() || "";
+  try {
+    tail = decodeURIComponent(tail);
+  } catch (_) { /* shown as it is */ }
+  document.title = name || tail;
 }
 
 // Text in its own wrapped <pre>, as a browser shows a text file.

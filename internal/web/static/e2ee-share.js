@@ -1,14 +1,10 @@
-// The home page for an account with end-to-end encryption on. The box's text,
-// or the file chosen in its place, is encrypted here and only the ciphertext is posted; the key goes into the
-// address of the result page after #, which is never sent to the server, and
-// the result page puts it on the end of the share link.
+// The home page for an account with end-to-end encryption on. The box's
+// text, or the file chosen in its place, is encrypted here and only the
+// ciphertext is posted; the key goes into the address of the result page
+// after #, which is never sent to the server, and the result page puts it on
+// the end of the share link.
 import { seal } from "./e2ee.js";
-
-function sizeText(bytes) {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KiB`;
-  return `${bytes} B`;
-}
+import { sizeText } from "./upload.js";
 
 // The code a recipient types: four characters from letters and digits that
 // cannot be mistaken for one another - no 0 or O, no 1, I or L - read in
@@ -126,7 +122,9 @@ function setupResult(result) {
     address.append(shown);
   }
   const pin = hash.startsWith("#p=") ? hash.slice(3).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4) : "";
-  const note = result.querySelector(key ? "[data-e2ee-key]" : pin ? "[data-e2ee-pin]" : "[data-e2ee-lost]");
+  // With the key the link says everything; otherwise the page says either the
+  // code or that the key is gone.
+  const note = key ? null : result.querySelector(pin ? "[data-e2ee-pin]" : "[data-e2ee-lost]");
   if (note && pin) {
     const [before, after = ""] = note.dataset.message.split("{pin}");
     const code = document.createElement("code");

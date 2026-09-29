@@ -122,7 +122,7 @@
             </label>
           </span>
         </div>
-        <div class="pb paste-body" data-content-body>
+        <div class="pb" data-content-body>
           <div class="media-stage upload-preview" data-upload-preview hidden></div>
           <textarea name="content" spellcheck="false" autofocus data-editor data-current-content data-eol="lf"
                     aria-label="{{tr .Locale "paste_content_label"}}" placeholder="{{tr .Locale "paste_content_placeholder"}}">{{.PasteContent}}</textarea>
@@ -146,7 +146,7 @@
              path can post it. Made rather than typed, from letters and digits
              that cannot be mistaken for one another, and shown, to be told to
              the recipient. */}}
-        <span class="ttl-picker pin-pick" data-pin-pick>
+        <span class="ttl-picker" data-pin-pick>
           <button type="button" data-pin-add>{{tr .Locale "e2ee_pin_add"}}</button>
           <span class="pin-on" data-pin-on hidden>
             <span>{{tr .Locale "e2ee_pin"}}</span>
