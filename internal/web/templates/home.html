@@ -146,9 +146,10 @@
              path can post it. Made rather than typed, from letters and digits
              that cannot be mistaken for one another, and shown, to be told to
              the recipient. */}}
-        <span class="ttl-picker pin-pick" data-pin-pick><span>{{tr .Locale "e2ee_pin"}}</span>
-          <button type="button" class="txt" data-pin-add>{{tr .Locale "e2ee_pin_add"}}</button>
+        <span class="ttl-picker pin-pick" data-pin-pick>
+          <button type="button" class="sm" data-pin-add>{{tr .Locale "e2ee_pin_add"}}</button>
           <span class="pin-on" data-pin-on hidden>
+            <span>{{tr .Locale "e2ee_pin"}}</span>
             <code class="pin-code" data-pin-code></code>
             <button type="button" class="txt" data-pin-renew>{{tr .Locale "e2ee_pin_renew"}}</button>
             <button type="button" class="txt" data-pin-drop>{{tr .Locale "e2ee_pin_drop"}}</button>

@@ -38,8 +38,14 @@ function setupPin(form) {
     on.hidden = !pin;
     add.hidden = Boolean(pin);
   };
-  add.addEventListener("click", () => set(newPin()));
-  pick.querySelector("[data-pin-renew]").addEventListener("click", () => set(newPin()));
+  const renew = pick.querySelector("[data-pin-renew]");
+  // The key pressed goes away with the press; focus goes on to the code's
+  // own controls rather than being dropped.
+  add.addEventListener("click", () => {
+    set(newPin());
+    renew.focus();
+  });
+  renew.addEventListener("click", () => set(newPin()));
   pick.querySelector("[data-pin-drop]").addEventListener("click", () => {
     set("");
     add.focus();
