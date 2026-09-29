@@ -78,8 +78,8 @@ func embeddedCrossSite(r *http.Request) bool {
 
 func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Vary", "Accept")
-	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", http.MethodGet)
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
@@ -96,9 +96,10 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusNotFound, "not found")
 		return
 	}
-	// HTML negotiation affects presentation only. Every request for bytes below
-	// consumes one use, regardless of Cookie, Range or other client headers.
-	if wantsMediaPlayer(r) {
+	// HTML negotiation affects presentation only. Every request answered below
+	// consumes one use, regardless of Cookie, Range or other client headers - a
+	// HEAD, and a conditional request answered 304, included.
+	if r.Method == http.MethodGet && wantsMediaPlayer(r) {
 		shell, err := a.db.ShareShell(r.Context(), token)
 		if err != nil {
 			a.serverError(w, "identify share presentation", err)
@@ -129,8 +130,10 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	resource := result.Resource
 	contentType := resource.ContentType
 	filenameType := contentType
-	var body io.ReadCloser
+	body := io.NopCloser(bytes.NewReader(nil))
 	var size int64
+	var etag string
+	var modified time.Time
 	if resource.Remote() {
 		fetched, upstreamType, err := a.upstream.Fetch(r.Context(), resource.OriginURL)
 		if err != nil {
@@ -140,13 +143,31 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		}
 		contentType, size = store.SafeContentType(upstreamType), int64(len(fetched))
 		filenameType = contentType
+		etag = bodyETag(contentType, fetched)
 		body = io.NopCloser(bytes.NewReader(fetched))
 	} else {
 		contentType = store.ContentTypeWithEncoding(contentType, resource.ContentEncoding)
-		body, size, err = a.db.OpenContent(r.Context(), resource)
-		if err != nil {
-			a.serverError(w, "open content", err)
-			return
+		etag, modified = storedETag(resource, contentType), resource.UpdatedAt
+	}
+	w.Header().Set("ETag", etag)
+	if !modified.IsZero() {
+		w.Header().Set("Last-Modified", modified.UTC().Format(http.TimeFormat))
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	if notModified(r, etag, modified) {
+		a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusNotModified, "not modified")
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	if !resource.Remote() {
+		if r.Method == http.MethodHead {
+			size = resource.ContentSize
+		} else {
+			body, size, err = a.db.OpenContent(r.Context(), resource)
+			if err != nil {
+				a.serverError(w, "open content", err)
+				return
+			}
 		}
 	}
 	defer body.Close()
@@ -157,7 +178,6 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		disposition = strings.Replace(disposition, "inline;", "attachment;", 1)
 	}
 	w.Header().Set("Content-Disposition", disposition)
-	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Security-Policy", deliveredContentSecurityPolicy)
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
@@ -169,7 +189,9 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, body)
+	if r.Method != http.MethodHead {
+		_, _ = io.Copy(w, body)
+	}
 }
 
 // recordAccess writes one delivery event. The record matters, but it is not
