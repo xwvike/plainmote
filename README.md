@@ -6,9 +6,9 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Share configs, logs and other files as links. The content is kept byte for byte; each person or machine gets its own link with its own expiry and use limit, revocable on its own, and every access is recorded.
+PlainMote is a web service for sharing configuration files, logs and other files. Content is stored and delivered byte for byte. A single piece of content can be issued a separate link for each recipient or machine; each link has its own expiry and use limit, can be revoked independently, and every access through it is recorded.
 
-Try it at [plainmote.link](https://plainmote.link).
+Reference deployment: [plainmote.link](https://plainmote.link)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/quick-share-dark.png">
@@ -17,16 +17,16 @@ Try it at [plainmote.link](https://plainmote.link).
 
 ## Features
 
-- **Quick share**: no account needed. Paste text or upload a file (up to 10 MiB) on the home page and get a link that lasts from 10 minutes to 30 days, or share straight from a terminal with curl.
-- **Resources and share links**: sign in to keep configs, logs and other files (100 MiB per account), then give each person or machine its own link with its own expiry and use limit. Revoking one leaves the others working, and an edit reaches every link at once.
-- **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner of the resource.
-- **Remote resources**: keep just a public URL; the content is fetched from the origin on every access.
-- **For programs that poll**: share links answer `HEAD` and conditional requests - `If-None-Match` or `If-Modified-Since` gets `304` with no body while the content is unchanged. Each answer still counts as a use and is recorded.
-- **Online editor**: built on CodeMirror 6, with syntax highlighting for YAML, JSON, TOML, XML, INI and `.env`, shell, nginx, Dockerfile, SQL, diffs and logs; the quick share box uses the same editor. It detects UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings, and saves back in the original encoding and line endings.
-- **End-to-end encryption (optional)**: signed-in users can turn it on in their account settings. Quick shares are then encrypted in the browser, and the server stores only ciphertext.
-- **Media preview**: in a browser, share links show images and play audio and video; other clients get the raw bytes.
-- **Works without JavaScript**: the core features work with scripts turned off; scripts only enhance. End-to-end encryption is the exception, as encryption has to run in the browser.
-- **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, chosen from the browser's language; the home page and legal pages also have an address per language (such as `/zh-cn/` or `/ja/`) for search engines. Light and dark themes.
+- **Quick share**: no account required. Text pasted or a file uploaded on the home page (up to 10 MiB) becomes a share link valid for 10 minutes, 1 hour, 1 day, 7 days or 30 days; the default is 1 hour. Content can also be submitted from the command line with curl.
+- **Resources and share links**: signed-in users store files (100 MiB per account by default) and issue any number of links to each resource. Each link has its own expiry and use limit; revoking one leaves the others in effect. When a resource is updated, every link serves the new content at the same address.
+- **Access history**: every access through a link is recorded with its time, result, source IP address and client details, visible only to the owner of the resource. Records are kept for 30 days by default.
+- **Remote resources**: a resource may consist of a public URL only, in which case the service fetches the content from the origin on each access.
+- **Conditional requests**: share links answer `HEAD`, and responses carry an `ETag` (and, for stored content, `Last-Modified`). A request with `If-None-Match` or `If-Modified-Since` receives `304` with no body while the content is unchanged. Every response counts as one use and is recorded.
+- **Editor**: built on CodeMirror 6, with syntax highlighting for YAML, JSON, TOML, XML, INI and `.env`, shell, nginx, Dockerfile, SQL, diffs and logs; the quick share box uses the same editor. UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings are detected, and files are saved in their original encoding and line endings.
+- **End-to-end encryption (optional)**: signed-in users can enable it in their account settings. Quick shares made on the home page, text or file, are then encrypted in the browser before upload, and the service stores only ciphertext.
+- **Media preview**: opened in a browser, images are displayed and audio and video are played; other clients receive the raw bytes.
+- **No JavaScript required**: core functions work with scripts disabled; scripts only enhance the interface. End-to-end encryption is the exception, as encryption and decryption run in the browser.
+- **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, selected from the browser's language. The home page and legal pages also have a separate address per language (such as `/zh-cn/` or `/ja/`) for search engines. Light and dark themes are available.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/share-links-dark.png">
@@ -38,7 +38,7 @@ Try it at [plainmote.link](https://plainmote.link).
   <img src="docs/screenshots/access-history-light.png" alt="Access history: the time, result, share link and source IP of every access, machines polling alongside people opening the link">
 </picture>
 
-## Sharing from a terminal
+## Command line
 
 ```bash
 tail -n 200 app.log | curl -F 'content=<-' https://plainmote.link/paste
@@ -47,37 +47,35 @@ curl --data-binary @app.log 'https://plainmote.link/paste?ttl=1d&filename=app.lo
 curl https://plainmote.link/paste    # prints usage
 ```
 
-The response is the share link on a single line, ready for a pipe or `$(...)`. `/llms.txt` describes the same usage to language models in the llmstxt.org format.
+`ttl` accepts `10m`, `1h`, `1d`, `7d` or `30d`; a bare number is read as minutes. On success the response body is the share link on a single line, suitable for a pipe or `$(...)`. `/llms.txt` provides the same information to language models in the llmstxt.org format.
 
 ## Security and privacy
 
-- **A share link is a credential**: tokens are 256 random bits; the database keeps only a SHA-256 index and the original, encrypted with AES-GCM.
-- **No hotlinking**: other sites cannot embed a share link as an image, video or script; such requests are refused before the token is read.
-- **Not indexed**: share links, resources and account pages are all kept out of search engines; only the pages that describe the service can be indexed.
-- **Not a web host**: types a browser might execute (HTML, scripts, SVG and so on) are never delivered as themselves; anonymous shares are delivered as plain text, or as an image, audio or video when their bytes prove it, and anything else only as a download (and, when encrypted, as ciphertext).
-- **End-to-end encryption**: uses only the browser's built-in WebCrypto (AES-256-GCM; with a four-character code instead of a key in the link, the key is derived from the code with PBKDF2-SHA-256).
-  Without a code, the key sits after the `#` in the link, which browsers never send to the server; with one, it is derived from the code in the recipient's browser.
-  Its limits are just as plain: decrypting needs JavaScript; a lost link or code cannot be recovered; a code is only four characters, so it keeps out someone who glimpses the link, not someone who has it and tries every code; content size and access history are not encrypted;
-  the encryption code is served by the server, so it is only as trustworthy as the deployed code, which is one reason this project is open source.
+- **Links are credentials**: tokens are 256-bit random values. The database stores only their SHA-256 digest, used for lookup, and the original encrypted with AES-GCM.
+- **No cross-site embedding**: requests from other sites that embed a share link as an image, video or script are refused before the token is read.
+- **Not indexed**: share links, resources and account pages are excluded from search engines; only the pages describing the service can be indexed.
+- **No web hosting**: types a browser may execute (HTML, scripts, SVG and similar) are never delivered as themselves. For quick shares made without an account, text is delivered as plain text, images, audio and video confirmed by their file signatures are delivered as their own types, and all other files are delivered only as downloads; encrypted shares are always delivered as ciphertext.
+- **End-to-end encryption**: uses only the browser's built-in WebCrypto, with AES-256-GCM. By default the key is carried in the part of the link after `#`, which browsers do not send to the server. The creator may use a four-character code instead, in which case the recipient's browser derives the key from the code with PBKDF2-SHA-256 (600,000 iterations).
+- **Limits of encryption**: decryption requires JavaScript; a lost link or code cannot be recovered; content size and access history are not encrypted. A code is drawn from 31 characters, about 920,000 combinations: it prevents viewing by someone who merely sees the link, but not by an attacker who obtains the link and tries every code, so sensitive content should be shared with the full link and its key. The encryption code is delivered by the service, so its trustworthiness depends on the integrity of the deployed code, which is one reason this project is open source.
 
 ## Self-hosting
 
-PlainMote is a single stateless Go service. It needs:
+PlainMote is a single stateless Go service with the following dependencies:
 
 - PostgreSQL
 - S3-compatible object storage (such as Cloudflare R2 or MinIO)
-- A GitHub OAuth App, for sign-in
+- A GitHub OAuth App (for sign-in)
 
 ```bash
 cp .env.example .env    # fill in the database, object storage, OAuth and keys
 docker compose up -d
 ```
 
-Building the image, preparing the external services, exposing it publicly, upgrades and rollbacks are covered in [`docs/deployment.md`](docs/deployment.md) (in Chinese).
+Building the image, preparing the external services, public exposure, upgrades and rollbacks are described in [`docs/deployment.md`](docs/deployment.md) (in Chinese).
 
 ### Configuration
 
-Everything comes from environment variables, validated at startup; the service exits at once if one is missing or invalid.
+All settings are read from environment variables and validated at startup; the service exits immediately if a required value is missing or any value is invalid.
 
 Required:
 
@@ -112,22 +110,22 @@ Optional:
 
 ### About the legal pages
 
-With `PLAINMOTE_CONTACT_EMAIL` set, the service serves an about page, privacy policy, terms of service and contact page (in Simplified Chinese and English).
-They are written for how the reference deployment actually behaves, with durations, sizes and other values taken from the running configuration.
-**If you deploy your own instance, review and adapt them to the law where you operate and to how you run the service**
-(they live in `internal/web/templates/legal_*.html`); you are responsible for what your site promises.
+When `PLAINMOTE_CONTACT_EMAIL` is set, the service provides an about page, a privacy policy, terms of service and a contact page (in Simplified Chinese and English).
+These texts describe the actual behaviour of the reference deployment; durations, sizes and other values are taken from the running configuration.
+**Operators of other deployments should review these texts and adapt them to the applicable law and their own operation**
+(the files are in `internal/web/templates/legal_*.html`). Each operator is responsible for the commitments made on its site.
 
 ## Development
 
-The development environment starts PostgreSQL, MinIO and the app with live reload:
+The development environment comprises PostgreSQL, MinIO and the application with live reload:
 
 ```bash
 docker compose -f compose.dev.yaml up --build
 ```
 
-The app is at `http://localhost:8964` and the MinIO console at `http://localhost:9001`. Signing in needs the GitHub OAuth settings in `.env`.
+The application is served at `http://localhost:8964` and the MinIO console at `http://localhost:9001`. Sign-in requires the GitHub OAuth settings in `.env`.
 
-Tests:
+Running the tests:
 
 ```bash
 docker compose -f compose.dev.yaml up -d postgres
@@ -137,8 +135,8 @@ node tools/e2ee/e2ee_test.mjs
 npm --prefix tools/codemirror test
 ```
 
-The editor and encoding detection dependencies ship with the repository as a bundle and are never loaded from a third-party CDN at runtime.
-Rebuild them with `tools/codemirror/build.sh`; everyday builds do not need Node.js.
+The dependencies of the editor and of encoding detection are committed as a bundle and are not loaded from a third-party CDN at runtime.
+The bundle is rebuilt with `tools/codemirror/build.sh`; regular builds do not require Node.js.
 
 ```text
 cmd/plainmote/       service entry point
@@ -157,6 +155,6 @@ docs/                deployment guide and images
 
 Copyright (C) 2026 xwvike
 
-Released under the [GNU Affero General Public License v3.0](LICENSE). Under that license, if you modify this project and offer it to others over a network, you must make the modified source available to those users.
+Released under the [GNU Affero General Public License v3.0](LICENSE). Under this license, anyone who modifies the project and offers it to others over a network must make the modified source code available to those users.
 
 Licenses of third-party components (CodeMirror and others, MIT; jschardet, LGPL-2.1) are listed in [`tools/codemirror/NOTICE.md`](tools/codemirror/NOTICE.md).
