@@ -22,25 +22,74 @@ function sizeText(bytes) {
   return `${bytes} B`;
 }
 
-// Text becomes the page, and the page becomes what a browser shows for any
-// other text link: our styles gone, the text in its own <pre>, wrapped, in
-// the reader's light or dark. The address - key and all - stays, so a reload
-// fetches and decrypts again, as a reload of any link fetches again.
-function showText(name, text) {
+// What decrypted bytes are, by their own signature: the image, audio and
+// video families an unencrypted file is shown as. Anything else is not
+// named, and is handed over as a download.
+function mediaKind(bytes) {
+  const ascii = (at, text) => [...text].every((char, i) => bytes[at + i] === char.charCodeAt(0));
+  if (bytes[0] === 0x89 && ascii(1, "PNG")) return ["img", "image/png"];
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return ["img", "image/jpeg"];
+  if (ascii(0, "GIF8")) return ["img", "image/gif"];
+  if (ascii(0, "RIFF") && ascii(8, "WEBP")) return ["img", "image/webp"];
+  if (ascii(0, "BM")) return ["img", "image/bmp"];
+  if (ascii(4, "ftyp")) {
+    const brand = String.fromCharCode(...bytes.subarray(8, 12));
+    if (brand === "avif" || brand === "avis") return ["img", "image/avif"];
+    if (brand.startsWith("M4A")) return ["audio", "audio/mp4"];
+    return ["video", "video/mp4"];
+  }
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return ["video", "video/webm"];
+  if (ascii(0, "OggS")) return ["audio", "audio/ogg"];
+  if (ascii(0, "fLaC")) return ["audio", "audio/flac"];
+  if (ascii(0, "RIFF") && ascii(8, "WAVE")) return ["audio", "audio/wav"];
+  if (ascii(0, "ID3") || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) return ["audio", "audio/mpeg"];
+  return null;
+}
+
+// The content becomes the page, and the page becomes what a browser shows
+// for any other link to the same thing: our styles gone, nothing of ours on
+// it, in the reader's light or dark. The address - key and all - stays, so a
+// reload fetches and decrypts again, as a reload of any link fetches again.
+function bare(name) {
   for (const sheet of document.querySelectorAll('link[rel="stylesheet"]')) sheet.remove();
   const root = document.documentElement;
   root.removeAttribute("data-theme");
   root.style.colorScheme = "light dark";
+  document.title = name || decodeURIComponent(window.location.pathname.split("/").pop() || "");
+}
+
+// Text in its own wrapped <pre>, as a browser shows a text file.
+function showText(name, text) {
+  bare(name);
   const pre = document.createElement("pre");
   pre.style.whiteSpace = "pre-wrap";
   pre.style.overflowWrap = "break-word";
   pre.textContent = text;
   document.body.replaceChildren(pre);
-  document.title = name || decodeURIComponent(window.location.pathname.split("/").pop() || "");
 }
 
-// Anything that is not text is handed over the way an unencrypted file is:
-// as a download, under its own name. The link stays for a second try.
+// An image, or a player, alone and centred on a dark page, as a browser shows
+// one opened by itself.
+function showMedia(name, content, [tag, type]) {
+  bare(name);
+  const root = document.documentElement;
+  root.style.height = "100%";
+  const body = document.body;
+  body.style.margin = "0";
+  body.style.height = "100%";
+  body.style.background = "#0e0e0e";
+  const media = document.createElement(tag);
+  media.src = URL.createObjectURL(new Blob([content], { type }));
+  if (tag === "img") media.alt = name || "";
+  else media.controls = true;
+  Object.assign(media.style, {
+    position: "absolute", inset: "0", margin: "auto", maxWidth: "100%", maxHeight: "100%", display: "block",
+  });
+  body.replaceChildren(media);
+}
+
+// Anything else is handed over the way an unencrypted file is: as a
+// download, under its own name. The link stays for a second try.
 function offerFile(name, content) {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([content], { type: "application/octet-stream" }));
@@ -53,13 +102,14 @@ function offerFile(name, content) {
 }
 
 function show({ name, content }) {
-  let text;
+  let text = null;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(content);
-  } catch (_) {
-    return offerFile(name, content);
-  }
-  showText(name, text);
+  } catch (_) { /* not text */ }
+  if (text !== null) return showText(name, text);
+  const kind = mediaKind(content);
+  if (kind) return showMedia(name, content, kind);
+  offerFile(name, content);
 }
 
 async function start() {

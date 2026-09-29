@@ -251,6 +251,11 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .paste-body > .picked { display: flex; flex-wrap: wrap; align-content: center; align-items: baseline; gap: 6px 14px; height: clamp(200px, calc(100vh - 440px), 460px); padding: 12px 14px; }
 .picked-name { font: 500 13px/1.5 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
 .picked > .hint { flex-basis: 100%; margin: 0; }
+/* What the file will look like, above its name, fitted to the box. */
+.picked-media { display: flex; justify-content: center; flex-basis: 100%; height: calc(100% - 64px); min-height: 0; }
+.picked-media:empty { display: none; }
+.picked-media > img, .picked-media > video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--r); }
+.picked-media > audio { align-self: center; width: min(420px, 100%); }
 .ruled > .pt .upload-status { min-width: 0; }
 .ruled > .paste-body > textarea { padding: 12px 14px; border: 0; border-radius: var(--r) var(--r) 0 0; background: transparent; box-shadow: none; }
 /* Focus lights the whole box - the sheet and the bar that closes it - and

@@ -20,8 +20,9 @@ const (
 // decryptPagePolicy is the strictest policy any page here carries. The page
 // holds the key and the plaintext, so it loads nothing from anywhere else -
 // not even the web font - and can talk only to this origin, from which it
-// fetches the ciphertext once.
-const decryptPagePolicy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+// fetches the ciphertext once. blob: is the decrypted image or media it shows,
+// made here from bytes it already holds.
+const decryptPagePolicy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
 
 // renderDecryptPage answers a browser opening an encrypted share. The page
 // carries no content and costs no use; its script fetches the ciphertext -

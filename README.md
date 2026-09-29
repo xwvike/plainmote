@@ -48,7 +48,7 @@ The response is the share link on a single line, ready for a pipe or `$(...)`. `
 - **A share link is a credential**: tokens are 256 random bits; the database keeps only a SHA-256 index and the original, encrypted with AES-GCM.
 - **No hotlinking**: other sites cannot embed a share link as an image, video or script; such requests are refused before the token is read.
 - **Not indexed**: share links, resources and account pages are all kept out of search engines; only the pages that describe the service can be indexed.
-- **Not a web host**: types a browser might execute (HTML, scripts, SVG and so on) are never delivered as themselves; anonymous shares are delivered as plain text, any other file only as a download (and, when encrypted, as ciphertext).
+- **Not a web host**: types a browser might execute (HTML, scripts, SVG and so on) are never delivered as themselves; anonymous shares are delivered as plain text, or as an image, audio or video when their bytes prove it, and anything else only as a download (and, when encrypted, as ciphertext).
 - **End-to-end encryption**: uses only the browser's built-in WebCrypto (AES-256-GCM; with a passphrase, the key is derived with PBKDF2-SHA-256).
   The key sits after the `#` in the link, which browsers never send to the server.
   Its limits are just as plain: decrypting needs JavaScript; a lost link or passphrase cannot be recovered; content size and access history are not encrypted;

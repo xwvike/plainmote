@@ -38,11 +38,12 @@ const (
 	AnonymousMaxBytes = 4 << 20
 
 	// anonymousContentType is what an anonymous paste that is text is always
-	// served as, and anonymousFileType what anything else is. Refusing to
-	// serve either as what it claims to be - html most of all, but also an
-	// image or a player - takes "host a page on someone else's domain" off the
-	// table entirely: text reads as text, and every other file is a download.
-	// The filename still decides what a download is called.
+	// served as. A file whose own bytes say it is an image, audio or video is
+	// served as that, to be looked at or played; anything else is
+	// anonymousFileType, a download. Nothing is ever served as what its name
+	// claims - html most of all - which takes "host a page on someone else's
+	// domain" off the table entirely. The filename still decides what a
+	// download is called.
 	//
 	// The charset is part of the type and not an afterthought: without it a
 	// browser guesses, and a paste in Chinese comes back as mojibake.
@@ -91,9 +92,23 @@ func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename
 	// the web layer's to undo; a paste piped in from a terminal is exactly
 	// what was sent, CRLF included.
 	if !utf8.Valid(content) {
-		return d.insertPaste(ctx, creatorID, filename, content, anonymousFileType, "", now, ttl)
+		return d.insertPaste(ctx, creatorID, filename, content, anonymousMediaType(content), "", now, ttl)
 	}
 	return d.insertPaste(ctx, creatorID, filename, content, anonymousContentType, anonymousEncoding, now, ttl)
+}
+
+// anonymousMediaType is the type an anonymous file is served as: what its
+// magic bytes prove it to be when that is an image, audio or video, and an
+// opaque download otherwise. The name is not asked: anyone can call anything
+// photo.png.
+func anonymousMediaType(content []byte) string {
+	magic := sniffMagic(content)
+	for _, family := range []string{"image/", "audio/", "video/"} {
+		if strings.HasPrefix(magic, family) {
+			return magic
+		}
+	}
+	return anonymousFileType
 }
 
 // CreateEncryptedPaste stores a quick share its signed-in creator encrypted in

@@ -285,7 +285,8 @@ filename  name at the end of the link (a form field, or a query parameter
           with --data-binary)
 
 The response is the link, on one line. At most %[3]s, kept byte for byte:
-UTF-8 text is served as plain text, anything else as a download.
+UTF-8 text is served as plain text, images, audio and video as themselves,
+anything else as a download.
 `, endpoint, pasteDefaultTTL, legalBytes(store.AnonymousMaxBytes))
 }
 

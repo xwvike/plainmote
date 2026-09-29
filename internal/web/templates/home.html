@@ -121,6 +121,7 @@
                     aria-label="{{tr .Locale "paste_content_label"}}" placeholder="{{tr .Locale "paste_content_placeholder"}}">{{.PasteContent}}</textarea>
           {{/* The chosen file stands where the box was, until it is removed. */}}
           <div class="picked" data-paste-picked hidden>
+            <div class="picked-media" data-picked-media></div>
             <span class="picked-name" data-picked-name></span>
             <button type="button" class="txt" data-picked-clear>{{tr .Locale "remove_file"}}</button>
             <p class="hint">{{tr .Locale "paste_file_hint"}}</p>
@@ -201,7 +202,22 @@
       var card = document.querySelector('[data-paste-picked]');
       var status = document.querySelector('[data-paste-status]');
       var filename = document.querySelector('input[name=filename]');
+      var media = card.querySelector('[data-picked-media]');
       var named = '';
+      var shown = '';
+      {{/* An image, a clip or a track is shown as it will be seen. */}}
+      function preview(file) {
+        if (shown) URL.revokeObjectURL(shown);
+        shown = '';
+        media.replaceChildren();
+        var kind = /^(image|video|audio)\//.exec(file ? file.type : '');
+        if (!kind || /svg/.test(file.type)) return;
+        var element = document.createElement(kind[1] === 'image' ? 'img' : kind[1]);
+        element.src = shown = URL.createObjectURL(file);
+        if (kind[1] === 'image') element.alt = '';
+        else element.controls = true;
+        media.appendChild(element);
+      }
       function size(bytes) {
         if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MiB';
         if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KiB';
@@ -210,6 +226,7 @@
       function clear() {
         input.value = '';
         card.hidden = true;
+        preview(null);
         body.removeAttribute('data-picked');
         box.disabled = false;
         if (named && filename.value === named) filename.value = '';
@@ -227,6 +244,7 @@
         }
         if (!filename.value || filename.value === named) filename.value = named = file.name;
         card.querySelector('[data-picked-name]').textContent = file.name + ' · ' + size(file.size);
+        preview(file);
         body.setAttribute('data-picked', '');
         box.disabled = true;
         card.hidden = false;

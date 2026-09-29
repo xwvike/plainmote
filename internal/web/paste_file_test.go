@@ -11,7 +11,7 @@ import (
 
 // TestPasteAFileFromThePage is the home page's form with a file chosen: the
 // file wins over the box, keeps its bytes and its name, and comes back as a
-// download unless it is text. With no file chosen the browser still sends an
+// download unless it is text, an image, audio or video. With no file chosen the browser still sends an
 // empty file field, and the box is what counts.
 func TestPasteAFileFromThePage(t *testing.T) {
 	db, _, _ := testDatabase(t)
@@ -48,11 +48,19 @@ func TestPasteAFileFromThePage(t *testing.T) {
 
 	image := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0xff, 0x00}, 32)...)
 	got := submit("ignored", image, `C:\Users\me\photo.png`)
-	if !bytes.Equal(got.Body.Bytes(), image) || got.Header().Get("Content-Type") != "application/octet-stream" {
-		t.Fatalf("a file must come back as the same opaque bytes, got %q", got.Header().Get("Content-Type"))
+	if !bytes.Equal(got.Body.Bytes(), image) || got.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("an image must come back as itself, got %q", got.Header().Get("Content-Type"))
 	}
-	if disposition := got.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "attachment;") || !strings.Contains(disposition, `"photo.png"`) {
-		t.Fatalf("a file must be a download under its own name, got %q", disposition)
+	if disposition := got.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "inline;") || !strings.Contains(disposition, `"photo.png"`) {
+		t.Fatalf("an image must open in the browser under its own name, got %q", disposition)
+	}
+
+	archive := bytes.Repeat([]byte{0xff, 0x00, 0x13}, 32)
+	opaque := submit("", archive, "backup.png")
+	if !bytes.Equal(opaque.Body.Bytes(), archive) || opaque.Header().Get("Content-Type") != "application/octet-stream" ||
+		!strings.HasPrefix(opaque.Header().Get("Content-Disposition"), "attachment;") {
+		t.Fatalf("anything else must be a download of the same bytes, got %q %q",
+			opaque.Header().Get("Content-Type"), opaque.Header().Get("Content-Disposition"))
 	}
 
 	// A text file from the page keeps its CRLF: only the box's are undone.

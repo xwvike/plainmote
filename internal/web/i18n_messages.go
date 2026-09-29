@@ -101,7 +101,7 @@ var messageTable = map[string][6]string{
 	"link_lifetime":              {"Link lifetime", "链接有效期", "連結有效期", "リンクの有効期間", "Durée du lien", "Link-Gültigkeit"},
 	"upload_file":                {"Upload file", "上传文件", "上傳檔案", "ファイルをアップロード", "Envoyer un fichier", "Datei hochladen"},
 	"remove_file":                {"Remove", "移除", "移除", "取り消す", "Retirer", "Entfernen"},
-	"paste_file_hint":            {"Text files open as text; other files are downloaded.", "文本文件以文本形式打开，其他文件以附件形式下载。", "文字檔以文字形式開啟，其他檔案以附件形式下載。", "テキストファイルはテキストとして表示され、その他のファイルはダウンロードされます。", "Les fichiers texte s’ouvrent comme du texte ; les autres sont téléchargés.", "Textdateien werden als Text geöffnet, andere Dateien heruntergeladen."},
+	"paste_file_hint":            {"Text, images, audio and video open in the browser; other files are downloaded.", "文本、图片和音视频可在浏览器中直接查看或播放，其他文件以附件形式下载。", "文字、圖片和影音可在瀏覽器中直接檢視或播放，其他檔案以附件形式下載。", "テキスト・画像・音声・動画はブラウザで表示・再生され、その他のファイルはダウンロードされます。", "Le texte, les images, l’audio et la vidéo s’ouvrent dans le navigateur ; les autres fichiers sont téléchargés.", "Text, Bilder, Audio und Video werden im Browser geöffnet, andere Dateien heruntergeladen."},
 	"load_from_file":             {"Load from file", "从文件载入内容", "從檔案載入內容", "ファイルから読み込む", "Charger depuis un fichier", "Aus Datei laden"},
 	"login":                      {"Sign in", "登录", "登入", "ログイン", "Se connecter", "Anmelden"},
 	"login_allowlist":            {"Only approved GitHub accounts can sign in.", "仅允许已获准的 GitHub 账号登录。", "僅允許已核准的 GitHub 帳戶登入。", "承認済みのGitHubアカウントのみログインできます。", "Seuls les comptes GitHub autorisés peuvent se connecter.", "Nur freigegebene GitHub-Konten können sich anmelden."},

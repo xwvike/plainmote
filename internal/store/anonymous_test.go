@@ -122,22 +122,27 @@ func TestAnonymousPasteIsAlwaysServedAsText(t *testing.T) {
 	}
 }
 
-// TestAnonymousFileIsAlwaysADownload: bytes that are not text are kept, but
-// only ever as an opaque download - an image, a player or a page is exactly
-// what the open endpoint must not put on this domain.
-func TestAnonymousFileIsAlwaysADownload(t *testing.T) {
+// TestAnonymousFileIsServedByItsBytes: an image, audio or video whose own
+// bytes say so is served as that, to be looked at; anything else, whatever it
+// is called, is an opaque download.
+func TestAnonymousFileIsServedByItsBytes(t *testing.T) {
 	db, _, _ := testDatabase(t)
 	ctx := context.Background()
+	now := time.Now().UTC()
 	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0xff, 0x00}, 64)...)
-	resource, _, err := db.CreateAnonymousPaste(ctx, "photo.png", png, time.Minute, time.Now().UTC())
+	image, _, err := db.CreateAnonymousPaste(ctx, "photo.png", png, time.Minute, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resource.ContentType != "application/octet-stream" || resource.ContentEncoding != "" {
-		t.Fatalf("an anonymous file must be opaque, got %q %q", resource.ContentType, resource.ContentEncoding)
+	if image.ContentType != "image/png" || image.Filename != "photo.png" || image.ContentSize != int64(len(png)) {
+		t.Fatalf("a PNG must be served as one, got %q %q %d", image.ContentType, image.Filename, image.ContentSize)
 	}
-	if resource.Filename != "photo.png" || resource.ContentSize != int64(len(png)) {
-		t.Fatalf("the file must keep its name and bytes, got %q %d", resource.Filename, resource.ContentSize)
+	named, _, err := db.CreateAnonymousPaste(ctx, "photo.png", bytes.Repeat([]byte{0xff, 0x00, 0x13}, 64), time.Minute, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if named.ContentType != "application/octet-stream" || named.ContentEncoding != "" {
+		t.Fatalf("a name proves nothing: unknown bytes must be opaque, got %q", named.ContentType)
 	}
 }
 
