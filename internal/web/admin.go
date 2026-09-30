@@ -288,6 +288,8 @@ func (q adminRequest) route(parts []string) {
 		q.resources()
 	case is(http.MethodGet, 2) && parts[0] == "resources":
 		q.resource(parts[1])
+	case is(http.MethodGet, 3) && parts[0] == "resources" && parts[2] == "links":
+		q.resourceLinks(parts[1])
 	case is(http.MethodPost, 3) && parts[0] == "resources" && parts[2] == "takedown":
 		q.takedown(parts[1])
 	case is(http.MethodPost, 3) && parts[0] == "resources" && parts[2] == "restore":
@@ -465,6 +467,16 @@ func (q adminRequest) resource(id string) {
 		return
 	}
 	q.json(http.StatusOK, resource)
+}
+
+func (q adminRequest) resourceLinks(id string) {
+	limit, offset := q.page()
+	links, total, err := q.app.db.AdminResourceLinks(q.r.Context(), id, limit, offset, q.now)
+	if err != nil {
+		q.failWith(err)
+		return
+	}
+	q.json(http.StatusOK, map[string]any{"items": links, "total": total})
 }
 
 func (q adminRequest) takedown(id string) {

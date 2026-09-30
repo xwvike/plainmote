@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -34,11 +35,23 @@ var (
 	ErrPlanProtected    = errors.New("plan_protected")
 )
 
-func auditTx(ctx context.Context, tx pgx.Tx, actor AdminActor, action, targetType, targetID, reason string, now time.Time) error {
+// auditEntry is one change as it is recorded. Label is what the target was
+// called at the time; Detail is optional structured facts, stored as JSON.
+type auditEntry struct {
+	Action, TargetType, TargetID, Label, Reason string
+	Detail                                      map[string]any
+}
+
+func auditTx(ctx context.Context, tx pgx.Tx, actor AdminActor, entry auditEntry, now time.Time) error {
+	var detail any
+	if len(entry.Detail) > 0 {
+		detail = entry.Detail
+	}
 	_, err := tx.Exec(ctx, `
-INSERT INTO admin_audit(id, at, key_id, action, target_type, target_id, reason, remote_ip)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8)
-`, uuid.NewString(), now, actor.KeyID, action, targetType, targetID, reason, limitAccessText(actor.RemoteIP, accessIPMaxBytes))
+INSERT INTO admin_audit(id, at, key_id, action, target_type, target_id, target_label, reason, detail, remote_ip)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+`, uuid.NewString(), now, actor.KeyID, entry.Action, entry.TargetType, entry.TargetID,
+		limitAccessText(entry.Label, accessHeaderMaxBytes), entry.Reason, detail, limitAccessText(actor.RemoteIP, accessIPMaxBytes))
 	if err != nil {
 		return fmt.Errorf("write audit record: %w: %w", ErrInternal, err)
 	}
@@ -181,6 +194,7 @@ type AdminUser struct {
 	Status          string     `json:"status"`
 	SuspendedReason string     `json:"suspended_reason"`
 	Resources       int64      `json:"resources"`
+	ResourcesLimit  int64      `json:"resources_limit"`
 	LiveLinks       int64      `json:"live_links"`
 	Storage         struct {
 		CurrentBytes int64 `json:"current_bytes"`
@@ -206,16 +220,23 @@ const adminUserColumns = `
        AND (l.max_uses = 0 OR l.used_count < l.max_uses)),
   (SELECT COALESCE(SUM(r.content_size), 0) FROM resources r WHERE r.owner_id = u.id),
   (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v JOIN resources r ON r.id = v.resource_id WHERE r.owner_id = u.id),
-  (SELECT COALESCE(SUM(p.max_storage), 0) FROM user_plans up JOIN plans p ON p.id = up.plan_id
-     WHERE up.user_id = u.id AND up.granted_at <= $1 AND (up.expires_at IS NULL OR up.expires_at > $1)
-       AND (p.valid_from IS NULL OR p.valid_from <= $1) AND (p.valid_until IS NULL OR p.valid_until > $1))`
+  limits.storage, limits.resources`
+
+// adminUserLimits sums the plans in force at $1, the same way the quota does.
+const adminUserLimits = `
+CROSS JOIN LATERAL (
+  SELECT COALESCE(SUM(p.max_storage), 0) AS storage, COALESCE(SUM(p.max_resources), 0) AS resources
+  FROM user_plans up JOIN plans p ON p.id = up.plan_id
+  WHERE up.user_id = u.id AND up.granted_at <= $1 AND (up.expires_at IS NULL OR up.expires_at > $1)
+    AND (p.valid_from IS NULL OR p.valid_from <= $1) AND (p.valid_until IS NULL OR p.valid_until > $1)
+) limits`
 
 func scanAdminUser(row rowScanner) (AdminUser, error) {
 	var u AdminUser
 	var lastSignedIn pgtype.Timestamptz
 	var suspended bool
 	err := row.Scan(&u.ID, &u.GitHubID, &u.Login, &u.Name, &u.CreatedAt, &lastSignedIn, &suspended, &u.SuspendedReason,
-		&u.Resources, &u.LiveLinks, &u.Storage.CurrentBytes, &u.Storage.HistoryBytes, &u.Storage.LimitBytes)
+		&u.Resources, &u.LiveLinks, &u.Storage.CurrentBytes, &u.Storage.HistoryBytes, &u.Storage.LimitBytes, &u.ResourcesLimit)
 	u.LastSignedInAt = timePointer(lastSignedIn)
 	u.Status = "active"
 	if suspended {
@@ -236,7 +257,7 @@ func (d *Store) AdminListUsers(ctx context.Context, query, status string, limit,
 		now, AnonymousUserID, query, pattern, status).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("admin users: %w: %w", ErrInternal, err)
 	}
-	rows, err := d.db.Query(ctx, `SELECT `+adminUserColumns+` FROM users u WHERE `+where+`
+	rows, err := d.db.Query(ctx, `SELECT `+adminUserColumns+` FROM users u`+adminUserLimits+` WHERE `+where+`
 ORDER BY u.created_at DESC, u.id LIMIT $6 OFFSET $7`, now, AnonymousUserID, query, pattern, status, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("admin users: %w: %w", ErrInternal, err)
@@ -252,7 +273,7 @@ func (d *Store) AdminGetUser(ctx context.Context, id string, now time.Time) (Adm
 	if !validUUIDs(id) || id == AnonymousUserID {
 		return AdminUser{}, ErrNotFound
 	}
-	user, err := scanAdminUser(d.db.QueryRow(ctx, `SELECT `+adminUserColumns+` FROM users u WHERE u.id = $2`, now, id))
+	user, err := scanAdminUser(d.db.QueryRow(ctx, `SELECT `+adminUserColumns+` FROM users u`+adminUserLimits+` WHERE u.id = $2`, now, id))
 	if err != nil {
 		return AdminUser{}, translateNotFound(err)
 	}
@@ -278,7 +299,8 @@ func (d *Store) AdminSuspendUser(ctx context.Context, actor AdminActor, id, reas
 	}
 	return d.withTx(ctx, func(tx pgx.Tx) error {
 		var suspended bool
-		if err := tx.QueryRow(ctx, `SELECT suspended_at IS NOT NULL FROM users WHERE id = $1 FOR UPDATE`, id).Scan(&suspended); err != nil {
+		var login string
+		if err := tx.QueryRow(ctx, `SELECT suspended_at IS NOT NULL, login FROM users WHERE id = $1 FOR UPDATE`, id).Scan(&suspended, &login); err != nil {
 			return translateNotFound(err)
 		}
 		if suspended {
@@ -290,7 +312,7 @@ func (d *Store) AdminSuspendUser(ctx context.Context, actor AdminActor, id, reas
 		if _, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, id); err != nil {
 			return fmt.Errorf("end sessions: %w: %w", ErrInternal, err)
 		}
-		return auditTx(ctx, tx, actor, "user.suspend", "user", id, reason, now)
+		return auditTx(ctx, tx, actor, auditEntry{Action: "user.suspend", TargetType: "user", TargetID: id, Label: login, Reason: reason}, now)
 	})
 }
 
@@ -300,7 +322,8 @@ func (d *Store) AdminUnsuspendUser(ctx context.Context, actor AdminActor, id, re
 	}
 	return d.withTx(ctx, func(tx pgx.Tx) error {
 		var suspended bool
-		if err := tx.QueryRow(ctx, `SELECT suspended_at IS NOT NULL FROM users WHERE id = $1 FOR UPDATE`, id).Scan(&suspended); err != nil {
+		var login string
+		if err := tx.QueryRow(ctx, `SELECT suspended_at IS NOT NULL, login FROM users WHERE id = $1 FOR UPDATE`, id).Scan(&suspended, &login); err != nil {
 			return translateNotFound(err)
 		}
 		if !suspended {
@@ -309,7 +332,7 @@ func (d *Store) AdminUnsuspendUser(ctx context.Context, actor AdminActor, id, re
 		if _, err := tx.Exec(ctx, `UPDATE users SET suspended_at = NULL, suspended_reason = '' WHERE id = $1`, id); err != nil {
 			return fmt.Errorf("unsuspend user: %w: %w", ErrInternal, err)
 		}
-		return auditTx(ctx, tx, actor, "user.unsuspend", "user", id, reason, now)
+		return auditTx(ctx, tx, actor, auditEntry{Action: "user.unsuspend", TargetType: "user", TargetID: id, Label: login, Reason: reason}, now)
 	})
 }
 
@@ -361,7 +384,8 @@ VALUES($1, $2, $3, $4, FALSE, $5, $5) ON CONFLICT (name) DO NOTHING
 		if tag.RowsAffected() == 0 {
 			return errors.New("plan_exists")
 		}
-		return auditTx(ctx, tx, actor, "plan.create", "plan", plan.ID, reason, now)
+		return auditTx(ctx, tx, actor, auditEntry{Action: "plan.create", TargetType: "plan", TargetID: plan.ID, Label: plan.Name, Reason: reason,
+			Detail: map[string]any{"max_resources": maxResources, "max_storage": maxStorage}}, now)
 	})
 	return plan, err
 }
@@ -376,11 +400,11 @@ func (d *Store) AdminGrantPlan(ctx context.Context, actor AdminActor, userID, pl
 		return ErrNotFound
 	}
 	return d.withTx(ctx, func(tx pgx.Tx) error {
-		var found string
-		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1`, userID).Scan(&found); err != nil {
+		var login, planName string
+		if err := tx.QueryRow(ctx, `SELECT login FROM users WHERE id = $1`, userID).Scan(&login); err != nil {
 			return translateNotFound(err)
 		}
-		if err := tx.QueryRow(ctx, `SELECT id FROM plans WHERE id = $1`, planID).Scan(&found); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT name FROM plans WHERE id = $1`, planID).Scan(&planName); err != nil {
 			return translateNotFound(err)
 		}
 		if _, err := tx.Exec(ctx, `
@@ -389,7 +413,8 @@ ON CONFLICT (user_id, plan_id) DO UPDATE SET expires_at = EXCLUDED.expires_at
 `, userID, planID, now, expiresAt); err != nil {
 			return fmt.Errorf("grant plan: %w: %w", ErrInternal, err)
 		}
-		return auditTx(ctx, tx, actor, "user.plan.grant", "user", userID, reason+" ["+planID+"]", now)
+		return auditTx(ctx, tx, actor, auditEntry{Action: "user.plan.grant", TargetType: "user", TargetID: userID, Label: login, Reason: reason,
+			Detail: map[string]any{"plan_id": planID, "plan_name": planName, "expires_at": expiresAt}}, now)
 	})
 }
 
@@ -401,7 +426,11 @@ func (d *Store) AdminRevokePlan(ctx context.Context, actor AdminActor, userID, p
 	}
 	return d.withTx(ctx, func(tx pgx.Tx) error {
 		var isDefault bool
-		if err := tx.QueryRow(ctx, `SELECT is_default FROM plans WHERE id = $1`, planID).Scan(&isDefault); err != nil {
+		var planName, login string
+		if err := tx.QueryRow(ctx, `SELECT is_default, name FROM plans WHERE id = $1`, planID).Scan(&isDefault, &planName); err != nil {
+			return translateNotFound(err)
+		}
+		if err := tx.QueryRow(ctx, `SELECT login FROM users WHERE id = $1`, userID).Scan(&login); err != nil {
 			return translateNotFound(err)
 		}
 		if isDefault {
@@ -414,7 +443,8 @@ func (d *Store) AdminRevokePlan(ctx context.Context, actor AdminActor, userID, p
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		return auditTx(ctx, tx, actor, "user.plan.revoke", "user", userID, reason+" ["+planID+"]", now)
+		return auditTx(ctx, tx, actor, auditEntry{Action: "user.plan.revoke", TargetType: "user", TargetID: userID, Label: login, Reason: reason,
+			Detail: map[string]any{"plan_id": planID, "plan_name": planName}}, now)
 	})
 }
 
@@ -527,6 +557,41 @@ type AdminLink struct {
 	Live      bool       `json:"live"`
 }
 
+const adminLinkColumns = `id, name, created_at, expires_at, max_uses, used_count, revoked_at`
+
+func scanAdminLink(row rowScanner, now time.Time) (AdminLink, error) {
+	var link AdminLink
+	var expires, revoked pgtype.Timestamptz
+	err := row.Scan(&link.ID, &link.Name, &link.CreatedAt, &expires, &link.MaxUses, &link.UsedCount, &revoked)
+	link.ExpiresAt, link.RevokedAt = timePointer(expires), timePointer(revoked)
+	link.Live = Link{ExpiresAt: link.ExpiresAt, RevokedAt: link.RevokedAt, MaxUses: link.MaxUses, UsedCount: link.UsedCount}.Live(now)
+	return link, err
+}
+
+// AdminResourceLinks lists a resource's links, newest first, ended ones
+// included, so each can be revoked by its ID. Tokens are not read.
+func (d *Store) AdminResourceLinks(ctx context.Context, resourceID string, limit, offset int, now time.Time) ([]AdminLink, int, error) {
+	if !validUUIDs(resourceID) {
+		return nil, 0, ErrNotFound
+	}
+	var total int
+	var found string
+	if err := d.db.QueryRow(ctx, `SELECT r.id::text, (SELECT COUNT(*) FROM links WHERE resource_id = r.id) FROM resources r WHERE r.id = $1`,
+		resourceID).Scan(&found, &total); err != nil {
+		return nil, 0, translateNotFound(err)
+	}
+	rows, err := d.db.Query(ctx, `SELECT `+adminLinkColumns+` FROM links WHERE resource_id = $1
+ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3`, resourceID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("admin links: %w: %w", ErrInternal, err)
+	}
+	links, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (AdminLink, error) { return scanAdminLink(row, now) })
+	if err != nil {
+		return nil, 0, fmt.Errorf("admin links: %w: %w", ErrInternal, err)
+	}
+	return links, total, nil
+}
+
 // AdminLookup finds the resource a share token opens, for a report that
 // quotes the address. Nothing is spent and nothing is recorded against the
 // link.
@@ -534,17 +599,14 @@ func (d *Store) AdminLookup(ctx context.Context, token string, now time.Time) (A
 	if !ValidShareToken(token) {
 		return AdminResource{}, AdminLink{}, ErrNotFound
 	}
-	var link AdminLink
 	var resourceID string
-	var expires, revoked pgtype.Timestamptz
-	err := d.db.QueryRow(ctx, `
-SELECT id, resource_id, name, created_at, expires_at, max_uses, used_count, revoked_at FROM links WHERE token_hash = $1
-`, hashToken(token)).Scan(&link.ID, &resourceID, &link.Name, &link.CreatedAt, &expires, &link.MaxUses, &link.UsedCount, &revoked)
+	if err := d.db.QueryRow(ctx, `SELECT resource_id::text FROM links WHERE token_hash = $1`, hashToken(token)).Scan(&resourceID); err != nil {
+		return AdminResource{}, AdminLink{}, translateNotFound(err)
+	}
+	link, err := scanAdminLink(d.db.QueryRow(ctx, `SELECT `+adminLinkColumns+` FROM links WHERE token_hash = $1`, hashToken(token)), now)
 	if err != nil {
 		return AdminResource{}, AdminLink{}, translateNotFound(err)
 	}
-	link.ExpiresAt, link.RevokedAt = timePointer(expires), timePointer(revoked)
-	link.Live = Link{ExpiresAt: link.ExpiresAt, RevokedAt: link.RevokedAt, MaxUses: link.MaxUses, UsedCount: link.UsedCount}.Live(now)
 	resource, err := d.AdminGetResource(ctx, resourceID, now)
 	return resource, link, err
 }
@@ -556,12 +618,13 @@ func (d *Store) AdminTakedown(ctx context.Context, actor AdminActor, id, reason 
 	if !validUUIDs(id) {
 		return false, ErrNotFound
 	}
-	var owner string
-	if err := d.db.QueryRow(ctx, `SELECT owner_id FROM resources WHERE id = $1`, id).Scan(&owner); err != nil {
+	var owner, label string
+	if err := d.db.QueryRow(ctx, `SELECT owner_id, COALESCE(NULLIF(name, ''), filename) FROM resources WHERE id = $1`, id).Scan(&owner, &label); err != nil {
 		return false, translateNotFound(err)
 	}
 	if owner == AnonymousUserID {
-		return true, d.adminDelete(ctx, actor, id, owner, "resource.takedown", reason, now)
+		return true, d.adminDelete(ctx, actor, auditEntry{Action: "resource.takedown", TargetType: "resource", TargetID: id, Label: label, Reason: reason,
+			Detail: map[string]any{"deleted": true}}, owner, now)
 	}
 	return false, d.withTx(ctx, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE resources SET taken_down_at = $2, takedown_reason = $3 WHERE id = $1 AND taken_down_at IS NULL`, id, now, reason)
@@ -571,7 +634,7 @@ func (d *Store) AdminTakedown(ctx context.Context, actor AdminActor, id, reason 
 		if tag.RowsAffected() == 0 {
 			return ErrAlreadyTakenDown
 		}
-		return auditTx(ctx, tx, actor, "resource.takedown", "resource", id, reason, now)
+		return auditTx(ctx, tx, actor, auditEntry{Action: "resource.takedown", TargetType: "resource", TargetID: id, Label: label, Reason: reason}, now)
 	})
 }
 
@@ -581,7 +644,8 @@ func (d *Store) AdminRestoreResource(ctx context.Context, actor AdminActor, id, 
 	}
 	return d.withTx(ctx, func(tx pgx.Tx) error {
 		var takenDown bool
-		if err := tx.QueryRow(ctx, `SELECT taken_down_at IS NOT NULL FROM resources WHERE id = $1 FOR UPDATE`, id).Scan(&takenDown); err != nil {
+		var label string
+		if err := tx.QueryRow(ctx, `SELECT taken_down_at IS NOT NULL, COALESCE(NULLIF(name, ''), filename) FROM resources WHERE id = $1 FOR UPDATE`, id).Scan(&takenDown, &label); err != nil {
 			return translateNotFound(err)
 		}
 		if !takenDown {
@@ -590,7 +654,7 @@ func (d *Store) AdminRestoreResource(ctx context.Context, actor AdminActor, id, 
 		if _, err := tx.Exec(ctx, `UPDATE resources SET taken_down_at = NULL, takedown_reason = '' WHERE id = $1`, id); err != nil {
 			return fmt.Errorf("restore resource: %w: %w", ErrInternal, err)
 		}
-		return auditTx(ctx, tx, actor, "resource.restore", "resource", id, reason, now)
+		return auditTx(ctx, tx, actor, auditEntry{Action: "resource.restore", TargetType: "resource", TargetID: id, Label: label, Reason: reason}, now)
 	})
 }
 
@@ -600,22 +664,22 @@ func (d *Store) AdminDeleteResource(ctx context.Context, actor AdminActor, id, r
 	if !validUUIDs(id) {
 		return ErrNotFound
 	}
-	var owner string
-	if err := d.db.QueryRow(ctx, `SELECT owner_id FROM resources WHERE id = $1`, id).Scan(&owner); err != nil {
+	var owner, label string
+	if err := d.db.QueryRow(ctx, `SELECT owner_id, COALESCE(NULLIF(name, ''), filename) FROM resources WHERE id = $1`, id).Scan(&owner, &label); err != nil {
 		return translateNotFound(err)
 	}
-	return d.adminDelete(ctx, actor, id, owner, "resource.delete", reason, now)
+	return d.adminDelete(ctx, actor, auditEntry{Action: "resource.delete", TargetType: "resource", TargetID: id, Label: label, Reason: reason}, owner, now)
 }
 
 // adminDelete records the deletion before making it: a record of a deletion
 // that then failed is a smaller wrong than a deletion with no record.
-func (d *Store) adminDelete(ctx context.Context, actor AdminActor, id, owner, action, reason string, now time.Time) error {
+func (d *Store) adminDelete(ctx context.Context, actor AdminActor, entry auditEntry, owner string, now time.Time) error {
 	if err := d.withTx(ctx, func(tx pgx.Tx) error {
-		return auditTx(ctx, tx, actor, action, "resource", id, reason, now)
+		return auditTx(ctx, tx, actor, entry, now)
 	}); err != nil {
 		return err
 	}
-	return d.DeleteResource(ctx, owner, id)
+	return d.DeleteResource(ctx, owner, entry.TargetID)
 }
 
 // AdminRevokeLink revokes one link, as its owner could.
@@ -624,32 +688,39 @@ func (d *Store) AdminRevokeLink(ctx context.Context, actor AdminActor, id, reaso
 		return ErrNotFound
 	}
 	return d.withTx(ctx, func(tx pgx.Tx) error {
+		// An unnamed link is called by its resource's name.
+		var label, resourceID string
+		if err := tx.QueryRow(ctx, `
+SELECT COALESCE(NULLIF(l.name, ''), NULLIF(r.name, ''), r.filename), r.id::text
+FROM links l JOIN resources r ON r.id = l.resource_id WHERE l.id = $1
+`, id).Scan(&label, &resourceID); err != nil {
+			return translateNotFound(err)
+		}
 		tag, err := tx.Exec(ctx, `UPDATE links SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL`, id, now)
 		if err != nil {
 			return fmt.Errorf("revoke link: %w: %w", ErrInternal, err)
 		}
 		if tag.RowsAffected() == 0 {
-			var found string
-			if err := tx.QueryRow(ctx, `SELECT id FROM links WHERE id = $1`, id).Scan(&found); err != nil {
-				return translateNotFound(err)
-			}
 			return errors.New("already_revoked")
 		}
-		return auditTx(ctx, tx, actor, "link.revoke", "link", id, reason, now)
+		return auditTx(ctx, tx, actor, auditEntry{Action: "link.revoke", TargetType: "link", TargetID: id, Label: label, Reason: reason,
+			Detail: map[string]any{"resource_id": resourceID}}, now)
 	})
 }
 
 // Audit.
 
 type AdminAuditEntry struct {
-	ID         string    `json:"id"`
-	At         time.Time `json:"at"`
-	Key        string    `json:"key"`
-	Action     string    `json:"action"`
-	TargetType string    `json:"target_type"`
-	TargetID   string    `json:"target_id"`
-	Reason     string    `json:"reason"`
-	RemoteIP   string    `json:"remote_ip"`
+	ID          string          `json:"id"`
+	At          time.Time       `json:"at"`
+	Key         string          `json:"key"`
+	Action      string          `json:"action"`
+	TargetType  string          `json:"target_type"`
+	TargetID    string          `json:"target_id"`
+	TargetLabel string          `json:"target_label"`
+	Reason      string          `json:"reason"`
+	Detail      json.RawMessage `json:"detail"`
+	RemoteIP    string          `json:"remote_ip"`
 }
 
 func (d *Store) AdminAudit(ctx context.Context, target string, limit, offset int) ([]AdminAuditEntry, int, error) {
@@ -658,7 +729,7 @@ func (d *Store) AdminAudit(ctx context.Context, target string, limit, offset int
 		return nil, 0, fmt.Errorf("admin audit: %w: %w", ErrInternal, err)
 	}
 	rows, err := d.db.Query(ctx, `
-SELECT id, at, key_id, action, target_type, target_id, reason, remote_ip FROM admin_audit
+SELECT id, at, key_id, action, target_type, target_id, target_label, reason, COALESCE(detail, 'null'::jsonb)::text, remote_ip FROM admin_audit
 WHERE $1 = '' OR target_id = $1 ORDER BY at DESC, id DESC LIMIT $2 OFFSET $3
 `, target, limit, offset)
 	if err != nil {
@@ -666,7 +737,9 @@ WHERE $1 = '' OR target_id = $1 ORDER BY at DESC, id DESC LIMIT $2 OFFSET $3
 	}
 	entries, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (AdminAuditEntry, error) {
 		var e AdminAuditEntry
-		err := row.Scan(&e.ID, &e.At, &e.Key, &e.Action, &e.TargetType, &e.TargetID, &e.Reason, &e.RemoteIP)
+		var detail string
+		err := row.Scan(&e.ID, &e.At, &e.Key, &e.Action, &e.TargetType, &e.TargetID, &e.TargetLabel, &e.Reason, &detail, &e.RemoteIP)
+		e.Detail = json.RawMessage(detail)
 		return e, err
 	})
 	if err != nil {

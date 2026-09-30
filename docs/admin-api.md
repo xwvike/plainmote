@@ -118,10 +118,12 @@ PLAINMOTE-ADMIN-V1
   "id": "…", "github_id": "123", "login": "mira", "name": "Mira",
   "created_at": "…", "last_signed_in_at": "…",
   "status": "active", "suspended_reason": "",
-  "resources": 4, "live_links": 7,
+  "resources": 4, "resources_limit": 1000, "live_links": 7,
   "storage": { "current_bytes": 0, "history_bytes": 0, "limit_bytes": 104857600 }
 }
 ```
+
+`resources_limit` 与 `storage.limit_bytes` 为当前生效的全部套餐之和，已计入授予时间、到期时间及套餐的有效期。
 
 `GET /_admin/v1/users/{id}`：同上，另含 `plans`（生效中的套餐及到期时间）。
 
@@ -164,6 +166,18 @@ PLAINMOTE-ADMIN-V1
 
 远程资源的 `kind` 为 `remote`，只给出 `origin_host`（主机名），不给出完整地址。快速分享的 `owner.login` 为 `anonymous`。
 
+`GET /_admin/v1/resources/{id}/links?page=&size=`：该资源的全部链接（含已失效的），按创建时间倒序，每项：
+
+```json
+{
+  "id": "…", "name": "web-01", "created_at": "…",
+  "expires_at": "…", "max_uses": 0, "used_count": 12,
+  "revoked_at": null, "live": true
+}
+```
+
+不返回 token。资源不存在时返回 `404`。
+
 `POST /_admin/v1/lookup`，请求体 `{"link": "<举报中的分享地址或 token>"}`：由分享地址找到资源，返回上述资源元数据及该链接自身的状态（名称、有效期、次数、是否撤销）。以 POST 提交，使分享地址不出现在任何 URL 与日志中；响应不回显 token。
 
 `POST /_admin/v1/resources/{id}/takedown`，请求体 `{"reason": "…"}`：下架。该资源的全部链接停止交付，访问记录以 `taken_down` 结果记录；所有者在资源页看到下架原因，不能为其创建新链接，可以删除该资源。返回更新后的资源元数据。快速分享没有所有者可以通知，下架即删除，此时返回 `{"id": "…", "deleted": true}`。
@@ -183,10 +197,26 @@ PLAINMOTE-ADMIN-V1
 ```json
 {
   "id": "…", "at": "…", "key": "3f9a1c0e7b2d4a61",
-  "action": "resource.takedown", "target_type": "resource", "target_id": "…",
-  "reason": "…", "remote_ip": "…"
+  "action": "user.plan.grant", "target_type": "user", "target_id": "…",
+  "target_label": "mira",
+  "reason": "…",
+  "detail": { "plan_id": "…", "plan_name": "friends", "expires_at": null },
+  "remote_ip": "…"
 }
 ```
+
+- `target_label` 为操作时对象的名称快照，对象删除后仍保留：用户为登录名，资源为名称（无名称时为文件名），套餐为名称，链接为链接名称（无名称时为所属资源的名称）。早于该字段的记录为空字符串。
+- `reason` 为管理员填写的原文。
+- `detail` 为操作的结构化补充信息，无则为 `null`：
+
+| `action` | `detail` |
+| --- | --- |
+| `user.suspend`、`user.unsuspend`、`resource.restore`、`resource.delete` | `null` |
+| `resource.takedown` | `null`；快速分享因下架而被删除时为 `{"deleted": true}` |
+| `user.plan.grant` | `{"plan_id", "plan_name", "expires_at"}` |
+| `user.plan.revoke` | `{"plan_id", "plan_name"}` |
+| `plan.create` | `{"max_resources", "max_storage"}` |
+| `link.revoke` | `{"resource_id"}` |
 
 审计记录只追加，不提供修改或删除接口，也不随访问记录的保留期清理。
 

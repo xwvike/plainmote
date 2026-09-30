@@ -244,6 +244,17 @@ func TestAdminTakedownAndLookup(t *testing.T) {
 		t.Fatalf("a reported address finds its resource, and the token is not echoed: %d %s", status, body)
 	}
 
+	status, links, body := client.call(http.MethodGet, "/_admin/v1/resources/"+resource.ID+"/links", nil)
+	if status != http.StatusOK || links["total"].(float64) != 1 || strings.Contains(body, link.Token) {
+		t.Fatalf("a resource's links are listed without their tokens: %d %s", status, body)
+	}
+	if item := links["items"].([]any)[0].(map[string]any); item["id"] != link.ID || item["name"] != "web-01" || item["live"] != true {
+		t.Fatalf("each link carries its id, name and state: %v", item)
+	}
+	if status, _, _ := client.call(http.MethodGet, "/_admin/v1/resources/00000000-0000-0000-0000-00000000abcd/links", nil); status != http.StatusNotFound {
+		t.Fatalf("links of a missing resource: %d", status)
+	}
+
 	status, detail, _ := client.call(http.MethodPost, "/_admin/v1/resources/"+resource.ID+"/takedown", map[string]string{"reason": "malware"})
 	if status != http.StatusOK || detail["status"] != "taken_down" {
 		t.Fatalf("takedown: %d", status)
@@ -282,6 +293,16 @@ func TestAdminTakedownAndLookup(t *testing.T) {
 	if audit["total"].(float64) != 4 {
 		t.Fatalf("takedown, restore, revoke and delete are all recorded: %v", audit)
 	}
+	// Newest first: the deletion still names what it deleted, and the
+	// revocation names the link and the resource it belonged to.
+	entries := audit["items"].([]any)
+	deletion, revocation := entries[0].(map[string]any), entries[1].(map[string]any)
+	if deletion["action"] != "resource.delete" || deletion["target_label"] != "Example" || deletion["detail"] != nil {
+		t.Fatalf("a deletion keeps the name it had: %v", deletion)
+	}
+	if revocation["target_label"] != "web-01" || revocation["detail"].(map[string]any)["resource_id"] != resource.ID {
+		t.Fatalf("a revocation names its link and resource: %v", revocation)
+	}
 }
 
 func TestAdminTakedownOfAQuickShareDeletesIt(t *testing.T) {
@@ -310,8 +331,15 @@ func TestAdminPlans(t *testing.T) {
 	}
 	planID := plan["id"].(string)
 	status, detail, body := client.call(http.MethodPost, "/_admin/v1/users/"+user.ID+"/plans", map[string]any{"plan_id": planID, "reason": "friend"})
-	if status != http.StatusOK || detail["storage"].(map[string]any)["limit_bytes"].(float64) != float64(100<<20+1<<30) {
-		t.Fatalf("a granted plan adds to the limit: %d %s", status, body)
+	if status != http.StatusOK || detail["storage"].(map[string]any)["limit_bytes"].(float64) != float64(100<<20+1<<30) ||
+		detail["resources_limit"].(float64) != 1100 {
+		t.Fatalf("a granted plan adds to both limits: %d %s", status, body)
+	}
+	_, audit, _ := client.call(http.MethodGet, "/_admin/v1/audit?target="+user.ID, nil)
+	grant := audit["items"].([]any)[0].(map[string]any)
+	if grant["reason"] != "friend" || grant["target_label"] != "alice" || grant["detail"].(map[string]any)["plan_id"] != planID ||
+		grant["detail"].(map[string]any)["plan_name"] != "friends" {
+		t.Fatalf("the reason stays as written and the plan goes in the detail: %v", grant)
 	}
 	_, plans, _ := client.call(http.MethodGet, "/_admin/v1/plans", nil)
 	var defaultID string

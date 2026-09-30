@@ -247,5 +247,10 @@ CREATE TABLE IF NOT EXISTS admin_audit (
   reason TEXT NOT NULL DEFAULT '',
   remote_ip TEXT NOT NULL DEFAULT ''
 );
+-- target_label is what the target was called when the change was made, so
+-- the record still names it after it is gone; detail carries structured
+-- facts about the change as JSON, apart from the operator's own reason.
+ALTER TABLE admin_audit ADD COLUMN IF NOT EXISTS target_label TEXT NOT NULL DEFAULT '';
+ALTER TABLE admin_audit ADD COLUMN IF NOT EXISTS detail JSONB;
 CREATE INDEX IF NOT EXISTS admin_audit_at_idx ON admin_audit(at DESC);
 CREATE INDEX IF NOT EXISTS admin_audit_target_idx ON admin_audit(target_id, at DESC);
