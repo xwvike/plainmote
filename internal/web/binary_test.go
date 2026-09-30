@@ -160,7 +160,7 @@ func TestUploadedBinarySurvivesTheRoundTrip(t *testing.T) {
 func TestSavedVideoLoadsMetadataAndFirstFrame(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	video, err := db.CreateResource(ctx, user.ID, "Clip", "clip.mp4", []byte("video fixture"), "", "")
+	video, err := db.CreateResource(ctx, user.ID, "Clip", "clip.mp4", []byte("video\x00fixture"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

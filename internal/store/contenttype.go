@@ -1,12 +1,14 @@
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"mime"
 	"net/http"
 	"path"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // Content types this service is willing to serve. Nothing here is executed by
@@ -48,10 +50,13 @@ func SafeContentType(contentType string) string {
 	return contentType
 }
 
-// byExtension maps the delivery filename's suffix to a type. The filename is the
-// strongest signal available and the owner types it deliberately, so it wins
-// over sniffing the bytes. Text suffixes are decoded with the resource's
-// recorded encoding or the detector before they are admitted to the editor.
+// byExtension maps the delivery filename's suffix to a type. The owner types
+// the filename deliberately, so it decides between formats the bytes cannot
+// tell apart - YAML from TOML, an AAC stream from nothing in particular. It
+// does not outvote bytes that plainly say something else: a file replaced by
+// another keeps its old name, and a PNG called movie.mp4 is still a PNG. Text
+// suffixes are decoded with the resource's recorded encoding or the detector
+// before they are admitted to the editor.
 var byExtension = map[string]string{
 	".json": typeJSON,
 	".yaml": typeYAML,
@@ -118,7 +123,7 @@ func DetectContent(publicPath string, content []byte, encodingHint string) (stri
 	if extension := strings.ToLower(path.Ext(publicPath)); extension != "" {
 		if known, ok := byExtension[extension]; ok {
 			if !TextLike(known) {
-				return known, ""
+				return binaryByName(known, content)
 			}
 			// A text-looking suffix cannot hide a recognised binary signature.
 			if magic := sniffMagic(content); magic != "" {
@@ -141,6 +146,72 @@ func DetectContent(publicPath string, content []byte, encodingHint string) (stri
 		return typeBinary, ""
 	}
 	return sniffContentType([]byte(decoded)), encodingName
+}
+
+// binaryByName settles a binary suffix against the bytes. A signature the
+// bytes carry wins when it names a different kind of thing: an image where
+// the name says video, an archive where it says PDF. Audio and video are left
+// to the name - one container holds either, and an M4A sniffs as MP4 - as
+// are formats with no signature to read. Bytes that would run in a browser
+// are named nothing, and bytes that are plainly UTF-8 text are text.
+func binaryByName(known string, content []byte) (string, string) {
+	magic := sniffMagic(content)
+	switch {
+	case magic == typeBinary:
+		return typeBinary, ""
+	case magic != "" && signatureOverrules(known, magic):
+		return magic, ""
+	case magic == "" && len(content) > 0 && utf8.Valid(content) && !bytes.ContainsRune(content, 0):
+		return sniffContentType(content), "utf-8"
+	}
+	return known, ""
+}
+
+func signatureOverrules(known, magic string) bool {
+	if known == magic {
+		return false
+	}
+	gzip := func(t string) string {
+		if t == "application/x-gzip" {
+			return "application/gzip"
+		}
+		return t
+	}
+	knownFamily, _, _ := strings.Cut(known, "/")
+	magicFamily, _, _ := strings.Cut(magic, "/")
+	media := func(family string) bool { return family == "audio" || family == "video" }
+	switch {
+	case knownFamily != magicFamily:
+		return !(media(knownFamily) && media(magicFamily))
+	case knownFamily == "image":
+		// Image signatures are exact; a JPEG saved over logo.png is a JPEG.
+		return true
+	case knownFamily == "application":
+		return gzip(known) != gzip(magic)
+	}
+	return false
+}
+
+// ExtensionType is the type a filename's suffix names, or "" for none.
+func ExtensionType(name string) string {
+	return byExtension[strings.ToLower(path.Ext(name))]
+}
+
+// RefitFilename keeps a filename unless the content now under it makes it
+// wrong: a suffix naming a different kind of thing than the bytes are. Then
+// the other name is used - the replacement file's own, or the one a restored
+// version had - so the image that replaced a video is not handed out as
+// movie.mp4. A name with no suffix this knows, Dockerfile or app.conf.bak,
+// is the owner's and stays.
+func RefitFilename(name, other string, content []byte) string {
+	byName := ExtensionType(name)
+	if other == "" || byName == "" {
+		return name
+	}
+	if detected, _ := DetectContent(name, content, ""); detected == byName {
+		return name
+	}
+	return other
 }
 
 // TextFilename reports whether a filename explicitly denotes a format that

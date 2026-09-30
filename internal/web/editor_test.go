@@ -98,7 +98,7 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	if remotePage := createPage("/resources/new?kind=remote"); strings.Contains(remotePage, `/static/editor.js`) || strings.Contains(remotePage, `/static/upload.js`) {
 		t.Error("the remote resource form must not load the editor")
 	}
-	opaque, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not text"), "", "")
+	opaque, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not\x00text"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

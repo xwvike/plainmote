@@ -14,6 +14,9 @@ func TestDetectContentType(t *testing.T) {
 	jpegBytes := append([]byte{0xff, 0xd8, 0xff, 0xe0}, make([]byte, 32)...)
 	gifBytes := append([]byte("GIF89a"), make([]byte, 32)...)
 	pdfBytes := append([]byte("%PDF-1.7"), make([]byte, 32)...)
+	mp3Bytes := "ID3\x04\x00\x00\x00\x00\x00\x00" + strings.Repeat("\x00", 32)
+	mp4Bytes := "\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom\x00\x00\x00\x08free"
+	zipBytes := "PK\x03\x04" + strings.Repeat("\x00", 32)
 	singbox := "{\n  \"log\": {\"level\": \"info\"},\n  \"outbounds\": [{\"type\": \"direct\"}]\n}\n"
 
 	for _, tc := range []struct{ name, path, body, want string }{
@@ -42,8 +45,16 @@ func TestDetectContentType(t *testing.T) {
 		{"png 无后缀", "logo", string(pngBytes), "image/png"},
 		{"jpeg 无后缀", "photo", string(jpegBytes), "image/jpeg"},
 		{"gif 无后缀", "anim", string(gifBytes), "image/gif"},
-		{"mp3 带后缀", "song.mp3", "whatever", "audio/mpeg"},
-		{"mp4 带后缀", "clip.mp4", "whatever", "video/mp4"},
+		{"mp3 带后缀", "song.mp3", mp3Bytes, "audio/mpeg"},
+		{"mp4 带后缀", "clip.mp4", mp4Bytes, "video/mp4"},
+		{"无签名的二进制按后缀", "voice.aac", "\x00\xff\xf1\x50", "audio/aac"},
+		// A replacement keeps the old name; the bytes say what it is now.
+		{"视频名下的 PNG 是图片", "movie.mp4", string(pngBytes), "image/png"},
+		{"图片名下的 MP4 是视频", "logo.png", mp4Bytes, "video/mp4"},
+		{"png 名下的 JPEG 是 JPEG", "logo.png", string(jpegBytes), "image/jpeg"},
+		{"PDF 名下的 zip 是 zip", "doc.pdf", zipBytes, "application/zip"},
+		{"媒体名下的文本是文本", "movie.mp4", clash, typeText},
+		{"音频名下的 MP4 容器仍按后缀", "voice.m4a", mp4Bytes, "audio/mp4"},
 		{"pdf 无后缀", "doc", string(pdfBytes), "application/pdf"},
 		{"未知二进制", "blob", "\x00\x01\xff\xfe乱", typeBinary},
 	} {
