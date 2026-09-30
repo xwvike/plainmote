@@ -58,6 +58,27 @@ FROM resources WHERE owner_id = $1 ORDER BY created_at, id
 	return resources, nil
 }
 
+// ExportVersions returns the earlier versions of every resource the account
+// owns, by resource and then oldest first.
+func (d *Store) ExportVersions(ctx context.Context, ownerID string) ([]Version, error) {
+	if !validUUIDs(ownerID) {
+		return nil, ErrNotFound
+	}
+	rows, err := d.db.Query(ctx, `
+SELECT `+versionColumns+`
+FROM resource_versions v JOIN resources r ON r.id = v.resource_id
+WHERE r.owner_id = $1 ORDER BY v.resource_id, v.version
+`, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("export versions: %w: %w", ErrInternal, err)
+	}
+	versions, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Version, error) { return scanVersion(row) })
+	if err != nil {
+		return nil, fmt.Errorf("export versions: %w: %w", ErrInternal, err)
+	}
+	return versions, nil
+}
+
 // EachAccessLog streams the account's access log, oldest first. It is a
 // callback rather than a slice because the log is the one part of an account
 // with no quota on it: a month of traffic on a popular link is a lot of rows.
@@ -71,7 +92,7 @@ SELECT
   COALESCE(link_id::text, ''), link_name, outcome, remote_ip, remote_addr,
   host, query, proto, user_agent, referer, forwarded, x_forwarded_for,
   cf_connecting_ip, cf_ray, content_length, tls, method, path, status,
-  detail, hits, first_at, occurred_at
+  detail, hits, first_at, occurred_at, COALESCE(resource_version, 0)
 FROM access_logs WHERE owner_id = $1 ORDER BY occurred_at, id
 `, ownerID)
 	if err != nil {
@@ -86,7 +107,7 @@ FROM access_logs WHERE owner_id = $1 ORDER BY occurred_at, id
 			&item.Host, &item.Query, &item.Proto, &item.UserAgent, &item.Referer,
 			&item.Forwarded, &item.XForwardedFor, &item.CFConnectingIP, &item.CFRay,
 			&item.ContentLength, &item.TLS, &item.Method, &item.Path, &item.Status,
-			&item.Detail, &item.Hits, &item.FirstAt, &item.OccurredAt,
+			&item.Detail, &item.Hits, &item.FirstAt, &item.OccurredAt, &item.Version,
 		); err != nil {
 			return fmt.Errorf("export access logs: %w: %w", ErrInternal, err)
 		}
@@ -100,9 +121,9 @@ FROM access_logs WHERE owner_id = $1 ORDER BY occurred_at, id
 	return nil
 }
 
-// DeleteAccount removes the account and everything it owns: resources, links,
-// sessions, plan grants, pending quick-share claims and the access log all go
-// with the user row, and the stored bodies after it.
+// DeleteAccount removes the account and everything it owns: resources, their
+// earlier versions, links, sessions, plan grants, pending quick-share claims
+// and the access log all go with the user row, and the stored bodies after it.
 //
 // The user row is locked first. Every write that adds or replaces a body takes
 // the same lock in quotaGate, so one that was already running finishes before
@@ -119,14 +140,24 @@ func (d *Store) DeleteAccount(ctx context.Context, userID string) error {
 		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&locked); err != nil {
 			return translateNotFound(err)
 		}
-		rows, err := tx.Query(ctx, `DELETE FROM resources WHERE owner_id = $1 RETURNING content_key`, userID)
+		rows, err := tx.Query(ctx, `
+DELETE FROM resource_versions WHERE resource_id IN (SELECT id FROM resources WHERE owner_id = $1)
+RETURNING content_key`, userID)
+		if err != nil {
+			return fmt.Errorf("delete account history: %w: %w", ErrInternal, err)
+		}
+		if keys, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+			return fmt.Errorf("delete account history: %w: %w", ErrInternal, err)
+		}
+		rows, err = tx.Query(ctx, `DELETE FROM resources WHERE owner_id = $1 RETURNING content_key`, userID)
 		if err != nil {
 			return fmt.Errorf("delete account resources: %w: %w", ErrInternal, err)
 		}
-		keys, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		current, err := pgx.CollectRows(rows, pgx.RowTo[string])
 		if err != nil {
 			return fmt.Errorf("delete account resources: %w: %w", ErrInternal, err)
 		}
+		keys = append(keys, current...)
 		if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
 			return fmt.Errorf("delete account: %w: %w", ErrInternal, err)
 		}

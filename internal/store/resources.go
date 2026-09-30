@@ -121,6 +121,7 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 		ID: uuid.NewString(), OwnerID: ownerID, Name: input.Name, Filename: input.Filename,
 		ContentType: input.ContentType, ContentEncoding: input.Encoding,
 		OriginURL: input.OriginURL, CreatedAt: now, UpdatedAt: now,
+		Version: 1, VersionAt: now,
 	}
 
 	// The body is written before the transaction opens. Object storage has no
@@ -132,11 +133,13 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 	if len(input.Content) > 0 {
 		resource.ContentKey = contentKey(resource.ID)
 		resource.ContentSize = int64(len(input.Content))
+		resource.ContentSHA256 = contentSHA256(input.Content)
 		if err := d.blobs.Put(ctx, resource.ContentKey, bytes.NewReader(input.Content), resource.ContentSize); err != nil {
 			return Resource{}, fmt.Errorf("store resource body: %w: %w", ErrInternal, err)
 		}
 	}
 
+	var dropped []string
 	err = d.withTx(ctx, func(tx pgx.Tx) error {
 		limit, usage, err := quotaGate(ctx, tx, ownerID, "", now)
 		if err != nil {
@@ -149,14 +152,17 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
 		_, err = tx.Exec(ctx, `
-INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url,
+                      created_at, updated_at, version, version_at, content_sha256)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 1, $10, $11)
 `, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
-			resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.OriginURL, now)
+			resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.OriginURL, now, resource.ContentSHA256)
 		if err != nil {
 			return fmt.Errorf("create resource: %w: %w", ErrInternal, err)
 		}
-		return nil
+		// New content takes its room from the history, if the history was in it.
+		dropped, err = trimHistoryTx(ctx, tx, ownerID, "", limit.StorageBytes)
+		return err
 	})
 	if err != nil {
 		if resource.ContentKey != "" {
@@ -164,6 +170,7 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
 		}
 		return Resource{}, err
 	}
+	d.dropObjects(ctx, dropped)
 	return resource, nil
 }
 
@@ -177,13 +184,15 @@ func (d *Store) resourceForOwner(ctx context.Context, q storeQuerier, ownerID, i
 	}
 	var resource Resource
 	err := q.QueryRow(ctx, `
-SELECT id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at
+SELECT id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at,
+       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), content_sha256
 FROM resources
 WHERE id = $1 AND owner_id = $2
 `, id, ownerID).Scan(
 		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
 		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding, &resource.OriginURL,
 		&resource.CreatedAt, &resource.UpdatedAt,
+		&resource.Version, &resource.VersionAt, &resource.RestoredFrom, &resource.ContentSHA256,
 	)
 	if err != nil {
 		return Resource{}, translateNotFound(err)
@@ -240,44 +249,86 @@ func escapeLikePattern(value string) string {
 	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(value)
 }
 
+// ResourceEdit is one save of the resource screen. A nil Content keeps the
+// stored bytes. BaseVersion is the version the edit was made against; a save
+// that would replace newer content than that is refused with a
+// VersionConflict. Zero skips the check.
+type ResourceEdit struct {
+	Name            string
+	Filename        string
+	Content         []byte
+	ContentEncoding string
+	OriginURL       string
+	BaseVersion     int
+}
+
+// UpdateResource saves without a base version: whatever is current is replaced.
 func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename string, content []byte, contentEncoding, originURL string) error {
+	_, err := d.SaveResource(ctx, ownerID, id, ResourceEdit{
+		Name: name, Filename: filename, Content: content, ContentEncoding: contentEncoding, OriginURL: originURL,
+	})
+	return err
+}
+
+// SaveResource writes an edit. Content that differs from what is stored
+// becomes a new version and the old content joins the history; the same bytes
+// again, or a change of name alone, keep the version as it is.
+func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit ResourceEdit) (SaveResult, error) {
 	current, err := d.ResourceForOwner(ctx, ownerID, id)
 	if err != nil {
-		return err
+		return SaveResult{}, err
 	}
+	content, contentEncoding := edit.Content, edit.ContentEncoding
 	replaceContent := content != nil
-	if !replaceContent && !current.Remote() && strings.TrimSpace(originURL) == "" {
+	if !replaceContent && !current.Remote() && strings.TrimSpace(edit.OriginURL) == "" {
 		content, err = d.ReadContent(ctx, current)
 		if err != nil {
-			return err
+			return SaveResult{}, err
 		}
 		// Encoding describes the stored bytes. A metadata-only request cannot
 		// change it without replacing those bytes, or the next read may decode
 		// the same object as an unrelated character set.
 		contentEncoding = current.ContentEncoding
 	}
-	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL)
+	input, err := normalizeResourceInput(edit.Name, edit.Filename, content, contentEncoding, edit.OriginURL)
 	if err != nil {
-		return err
+		return SaveResult{}, err
+	}
+
+	// The same bytes again are not a new version. The editor always posts its
+	// text, so without this every rename would file a copy of the content.
+	nextSHA := ""
+	if len(input.Content) > 0 {
+		nextSHA = contentSHA256(input.Content)
+	}
+	storedSHA := current.ContentSHA256
+	if replaceContent && storedSHA == "" && current.ContentKey != "" && !current.Remote() {
+		// Written before hashes were kept. Read once; the save stores it.
+		if stored, err := d.ReadContent(ctx, current); err == nil {
+			storedSHA = contentSHA256(stored)
+		}
+	}
+	if replaceContent && input.OriginURL == "" && !current.Remote() && nextSHA == storedSHA && input.Encoding == current.ContentEncoding {
+		replaceContent = false
 	}
 
 	// Same ordering as CreateResource: the object is written before the
 	// transaction, so no S3 round trip happens under the account lock.
-	previousKey := current.ContentKey
-	nextKey, nextSize := previousKey, current.ContentSize
+	nextKey, nextSize := "", int64(0)
 	wroteNewObject := false
 	if replaceContent && len(input.Content) > 0 {
 		nextKey = contentKey(id)
 		nextSize = int64(len(input.Content))
 		if err := d.blobs.Put(ctx, nextKey, bytes.NewReader(input.Content), nextSize); err != nil {
-			return fmt.Errorf("store resource body: %w: %w", ErrInternal, err)
+			return SaveResult{}, fmt.Errorf("store resource body: %w: %w", ErrInternal, err)
 		}
 		wroteNewObject = true
-	} else if input.OriginURL != "" {
-		nextKey, nextSize = "", 0
 	}
+	toRemote := input.OriginURL != ""
 
 	now := time.Now().UTC()
+	var result SaveResult
+	var dropped []string
 	err = d.withTx(ctx, func(tx pgx.Tx) error {
 		// The resource is left out of the usage total, so the replacement is
 		// measured in place of what it replaces rather than on top of it.
@@ -285,32 +336,77 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 		if err != nil {
 			return err
 		}
-		if usage.StorageBytes+nextSize > limit.StorageBytes {
-			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, nextSize)
+		locked, err := lockContentTx(ctx, tx, ownerID, id)
+		if err != nil {
+			return err
+		}
+		// Checked against the content, not just the number: posting back
+		// exactly what is current loses nobody's work, however stale the page.
+		if edit.BaseVersion > 0 && edit.Content != nil && locked.Version != edit.BaseVersion && nextSHA != locked.SHA256 {
+			return &VersionConflict{Current: locked.Version, At: locked.VersionAt}
+		}
+
+		next := locked
+		next.Type, next.Encoding = input.ContentType, input.Encoding
+		if locked.SHA256 == "" && !replaceContent && !toRemote {
+			next.SHA256 = storedSHA
+		}
+		switch {
+		case toRemote:
+			// A reference has no content of its own, and so no versions:
+			// what the resource held goes, history and all.
+			next = currentContent{Version: locked.Version + 1, VersionAt: now, Remote: true}
+			if !locked.Remote {
+				rows, err := tx.Query(ctx, `DELETE FROM resource_versions WHERE resource_id = $1 RETURNING content_key`, id)
+				if err != nil {
+					return fmt.Errorf("drop history: %w: %w", ErrInternal, err)
+				}
+				keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+				if err != nil {
+					return fmt.Errorf("drop history: %w: %w", ErrInternal, err)
+				}
+				dropped = append(keys, locked.Key)
+			} else {
+				next.Version = locked.Version
+			}
+		case wroteNewObject:
+			if err := retireTx(ctx, tx, id, locked, now); err != nil {
+				return err
+			}
+			next.Version = locked.Version + 1
+			next.Key, next.Size, next.SHA256 = nextKey, nextSize, nextSHA
+			next.VersionAt, next.RestoredFrom, next.Remote = now, 0, false
+		}
+		if usage.StorageBytes+next.Size > limit.StorageBytes {
+			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, next.Size)
 		}
 		tag, err := tx.Exec(ctx, `
 UPDATE resources
-SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, content_encoding = $6, origin_url = $7, updated_at = $8
-WHERE id = $9 AND owner_id = $10
-`, input.Name, input.Filename, nextKey, nextSize, input.ContentType, input.Encoding, input.OriginURL, now, id, ownerID)
+SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, content_encoding = $6,
+    origin_url = $7, updated_at = $8, version = $9, version_at = $10, restored_from = NULLIF($11, 0), content_sha256 = $12
+WHERE id = $13 AND owner_id = $14
+`, input.Name, input.Filename, next.Key, next.Size, next.Type, next.Encoding,
+			input.OriginURL, now, next.Version, next.VersionAt, next.RestoredFrom, next.SHA256, id, ownerID)
 		if err != nil {
 			return fmt.Errorf("update resource: %w: %w", ErrInternal, err)
 		}
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		return nil
+		result.Version = next.Version
+		trimmed, err := trimHistoryTx(ctx, tx, ownerID, id, limit.StorageBytes)
+		result.Trimmed = len(trimmed)
+		dropped = append(dropped, trimmed...)
+		return err
 	})
 	if err != nil {
 		if wroteNewObject {
 			_ = d.blobs.Delete(ctx, nextKey)
 		}
-		return err
+		return SaveResult{}, err
 	}
-	if previousKey != "" && previousKey != nextKey {
-		_ = d.blobs.Delete(ctx, previousKey)
-	}
-	return nil
+	d.dropObjects(ctx, dropped)
+	return result, nil
 }
 
 // DeleteResource removes a resource, the links that point at it and the object
@@ -325,10 +421,26 @@ func (d *Store) DeleteResource(ctx context.Context, ownerID, id string) error {
 		return ErrNotFound
 	}
 	var contentKey string
+	var history []string
 	err := d.withTx(ctx, func(tx pgx.Tx) error {
-		// Links go with it through ON DELETE CASCADE, so every address handed
-		// out for this resource stops resolving in the same statement.
-		err := tx.QueryRow(ctx, `
+		// The row is locked before the history is read. A save files the
+		// version it replaces under the same lock, so none can be added
+		// between this read and the delete and be left without its object.
+		var locked string
+		if err := tx.QueryRow(ctx, `SELECT id FROM resources WHERE id = $1 AND owner_id = $2 FOR UPDATE`, id, ownerID).Scan(&locked); err != nil {
+			return translateNotFound(err)
+		}
+		rows, err := tx.Query(ctx, `SELECT content_key FROM resource_versions WHERE resource_id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("read history: %w: %w", ErrInternal, err)
+		}
+		if history, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+			return fmt.Errorf("read history: %w: %w", ErrInternal, err)
+		}
+		// Links and versions go with it through ON DELETE CASCADE, so every
+		// address handed out for this resource stops resolving in the same
+		// statement.
+		err = tx.QueryRow(ctx, `
 DELETE FROM resources WHERE id = $1 AND owner_id = $2 RETURNING content_key
 `, id, ownerID).Scan(&contentKey)
 		return translateNotFound(err)
@@ -336,8 +448,9 @@ DELETE FROM resources WHERE id = $1 AND owner_id = $2 RETURNING content_key
 	if err != nil {
 		return err
 	}
-	// The object goes last. An object left behind by a failure here costs
+	// The objects go last. An object left behind by a failure here costs
 	// storage; a row pointing at an object already gone costs a resource.
+	d.dropObjects(ctx, history)
 	if contentKey != "" {
 		if err := d.blobs.Delete(ctx, contentKey); err != nil {
 			return fmt.Errorf("delete resource body: %w: %w", ErrInternal, err)

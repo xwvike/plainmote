@@ -87,6 +87,19 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Two earlier versions: text, and a video an image replaced under a new name.
+	if _, err := db.SaveResource(ctx, user.ID, resource.ID, store.ResourceEdit{Name: "Example", Filename: "example.conf", Content: []byte("answer=43\n")}); err != nil {
+		t.Fatal(err)
+	}
+	video := []byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom\x00\x00\x00\x08free")
+	clip, err := db.CreateResource(ctx, user.ID, "Clip", "movie.mp4", video, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	picture := append([]byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}, make([]byte, 32)...)
+	if _, err := db.SaveResource(ctx, user.ID, clip.ID, store.ResourceEdit{Name: "Clip", Filename: "photo.png", Content: picture}); err != nil {
+		t.Fatal(err)
+	}
 	client := signedIn(t, db, user)
 
 	if forged := client.do(http.MethodPost, "/account/export", url.Values{}); forged.Code != http.StatusForbidden {
@@ -121,8 +134,14 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 	if _, ok := files["resources.json"]; ok {
 		t.Fatal("the export still contains resources.json")
 	}
-	if body := string(files["files/"+resource.ID+"/example.conf"]); body != "answer=42\n" {
+	if body := string(files["files/"+resource.ID+"/example.conf"]); body != "answer=43\n" {
 		t.Fatalf("the named file body is %q", body)
+	}
+	if body := string(files["files/"+resource.ID+"/versions/v1/example.conf"]); body != "answer=42\n" {
+		t.Fatalf("the earlier version sits beside the current one: %q", body)
+	}
+	if !bytes.Equal(files["files/"+clip.ID+"/photo.png"], picture) || !bytes.Equal(files["files/"+clip.ID+"/versions/v1/movie.mp4"], video) {
+		t.Fatal("each version is exported under the name it had while it was current")
 	}
 	if body := string(files["files/"+note.ID+"/Notes.txt"]); body != "remember this\n" {
 		t.Fatalf("the editor resource did not receive a .txt filename: %q", body)

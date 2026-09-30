@@ -110,6 +110,8 @@ type AccessEvent struct {
 	Outcome      string
 	Status       int
 	Detail       string
+	// Version is the content version delivered; 0 when nothing stored was.
+	Version int
 }
 
 func insertAccessTx(ctx context.Context, tx pgx.Tx, event AccessEvent, meta RequestMeta, now time.Time) error {
@@ -147,19 +149,19 @@ INSERT INTO access_logs(
   id, owner_id, resource_id, resource_name, resource_file, link_id, link_name, outcome,
   remote_ip, remote_addr, host, query, proto,
   user_agent, referer, forwarded, x_forwarded_for, cf_connecting_ip, cf_ray,
-  content_length, tls, method, path, status, detail, hits, first_at, occurred_at
+  content_length, tls, method, path, status, detail, hits, first_at, occurred_at, resource_version
 )
 VALUES(
   $1, $2, $3, $4, $5, $6, $7, $8,
   $9, $10, $11, $12, $13,
   $14, $15, $16, $17, $18, $19,
-  $20, $21, $22, $23, $24, $25, 1, $26, $26
+  $20, $21, $22, $23, $24, $25, 1, $26, $26, NULLIF($27, 0)
 )
 `, uuid.NewString(), optionalUUID(event.OwnerID), optionalUUID(event.ResourceID),
 		event.ResourceName, event.ResourceFile, optionalUUID(event.LinkID), event.LinkName, event.Outcome,
 		meta.RemoteIP, meta.RemoteAddr, meta.Host, meta.Query, meta.Proto,
 		meta.UserAgent, meta.Referer, meta.Forwarded, meta.XForwardedFor, meta.CFConnectingIP, meta.CFRay,
-		meta.ContentLength, meta.TLS, meta.Method, meta.Path, event.Status, event.Detail, now)
+		meta.ContentLength, meta.TLS, meta.Method, meta.Path, event.Status, event.Detail, now, event.Version)
 	return err
 }
 
@@ -205,7 +207,11 @@ SELECT
   COALESCE(a.link_id::text, ''), a.link_name, a.outcome, a.remote_ip, a.remote_addr,
   a.host, a.query, a.proto, a.user_agent, a.referer, a.forwarded, a.x_forwarded_for,
   a.cf_connecting_ip, a.cf_ray, a.content_length, a.tls, a.method, a.path, a.status,
-  a.detail, a.hits, a.first_at, a.occurred_at
+  a.detail, a.hits, a.first_at, a.occurred_at,
+  COALESCE(a.resource_version, 0), COALESCE(r.version, 0),
+  COALESCE(a.resource_version = r.version OR EXISTS (
+    SELECT 1 FROM resource_versions v WHERE v.resource_id = a.resource_id AND v.version = a.resource_version
+  ), FALSE)
 FROM access_logs a
 LEFT JOIN resources r ON r.id = a.resource_id
 WHERE a.owner_id = $1
@@ -228,6 +234,7 @@ LIMIT $4 OFFSET $5
 			&item.Forwarded, &item.XForwardedFor, &item.CFConnectingIP, &item.CFRay,
 			&item.ContentLength, &item.TLS, &item.Method, &item.Path, &item.Status,
 			&item.Detail, &item.Hits, &item.FirstAt, &item.OccurredAt,
+			&item.Version, &item.CurrentVersion, &item.VersionAvailable,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -246,10 +253,12 @@ type PruneResult struct {
 	AccessLogs int64
 	Sessions   int64
 	Pastes     int64
+	Versions   int64
 }
 
 // Prune removes access logs older than retention, sessions that have expired,
-// and anonymous pastes nothing can reach any more. Retention zero keeps the
+// anonymous pastes nothing can reach any more, and versions replaced longer
+// ago than HistoryRetention. Retention zero keeps the
 // logs; sessions go either way, since SessionUser only deletes the row for the
 // token actually presented, and pastes go either way too - a lifetime measured
 // in minutes is what the open endpoint rests on, not a retention setting.
@@ -295,6 +304,11 @@ WHERE id IN (SELECT id FROM sessions WHERE expires_at < $1 ORDER BY expires_at L
 	result.Pastes, err = d.pruneAnonymous(ctx, conn, now)
 	if err != nil {
 		return result, fmt.Errorf("prune anonymous pastes: %w", err)
+	}
+
+	result.Versions, err = d.pruneHistory(ctx, conn, now)
+	if err != nil {
+		return result, fmt.Errorf("prune history: %w", err)
 	}
 
 	if _, err = deleteInBatches(ctx, conn, `

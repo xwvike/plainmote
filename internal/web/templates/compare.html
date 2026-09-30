@@ -1,0 +1,78 @@
+{{define "compare.html"}}<!doctype html>
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
+<head>
+  {{template "htmlhead" .}}
+  <title>v{{.DiffFrom.Number}} → v{{.DiffTo.Number}} · {{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}} · PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  {{$base := printf "/resources/%s/versions" .Resource.ID}}
+  <main class="page">
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}</a><span>/</span><a href="{{$base}}">{{tr .Locale "history"}}</a><span>/</span><span>{{tr .Locale "compare"}}</span></div>
+    <div class="ph">
+      <h1>{{tr .Locale "compare"}}</h1>
+      <span class="sp">
+        <a class="txt" href="{{$base}}">{{tr .Locale "history"}}</a>
+        {{if ne .DiffFrom.Number .Resource.Version}}<a class="btn" href="{{$base}}/{{.DiffFrom.Number}}?restore=1">{{printf (tr .Locale "restore_title") .DiffFrom.Number}}</a>{{end}}
+      </span>
+    </div>
+    {{/* A plain GET form: any two versions, with or without scripts. */}}
+    <form class="filters cmpbar" method="get" action="{{$base}}/compare">
+      <label class="pick"><span>{{tr .Locale "compare_from"}}</span>
+        <select name="from">{{range .DiffChoices}}<option value="{{.}}"{{if eq . $.DiffFrom.Number}} selected{{end}}>v{{.}}{{if eq . $.Resource.Version}} · {{tr $.Locale "version_current"}}{{end}}</option>{{end}}</select>
+      </label>
+      <span class="arrow" aria-hidden="true">→</span>
+      <label class="pick"><span>{{tr .Locale "compare_to"}}</span>
+        <select name="to">{{range .DiffChoices}}<option value="{{.}}"{{if eq . $.DiffTo.Number}} selected{{end}}>v{{.}}{{if eq . $.Resource.Version}} · {{tr $.Locale "version_current"}}{{end}}</option>{{end}}</select>
+      </label>
+      <button type="submit">{{tr .Locale "compare"}}</button>
+    </form>
+
+    <div class="panel ruled">
+      <div class="pt">
+        <span class="sec">v{{.DiffFrom.Number}} → v{{.DiffTo.Number}}</span>
+        <span class="sp">
+          {{if not .DiffNote}}<span class="stat"><span class="a">+{{.Diff.Added}}</span> <span class="d">−{{.Diff.Removed}}</span></span>{{end}}
+          <em class="content-meta">{{bytesText .DiffFrom.Size}} → {{bytesText .DiffTo.Size}}</em>
+          {{if and (not .DiffNote) (not .DiffFull)}}<a class="txt" href="{{$base}}/compare?from={{.DiffFrom.Number}}&amp;to={{.DiffTo.Number}}&amp;full=1">{{tr .Locale "compare_show_all"}}</a>{{end}}
+        </span>
+      </div>
+      <div class="pb{{if not .DiffNote}} diff-sheet{{end}}">
+        {{if .DiffNote}}
+        <p class="ro">{{tr .Locale .DiffNote}}</p>
+        {{if .DiffSides}}
+        {{/* Anything that is not text is looked at rather than read: both
+             versions next to each other, each as its own page would show it. */}}
+        <div class="cmp-sides">
+          {{range .DiffSides}}
+          <section class="cmp-side">
+            <header>
+              <a class="v" href="{{.PageURL}}">v{{.Number}}</a>{{if .Current}}<span class="cur-tag">{{tr $.Locale "version_current"}}</span>{{end}}
+              <em>{{.Type}} · {{bytesText .Size}}{{if .Width}} · {{.Width}} × {{.Height}}{{end}}</em>
+            </header>
+            <div class="media-stage cmp-stage">
+              {{if eq .Kind "image"}}<img class="resource-media resource-image" src="{{.RawURL}}" alt="v{{.Number}}">
+              {{else if eq .Kind "audio"}}<audio class="resource-media resource-audio" controls preload="metadata" src="{{.RawURL}}" aria-label="v{{.Number}}"></audio>
+              {{else if eq .Kind "video"}}<video class="resource-media resource-video" controls preload="metadata" src="{{.RawURL}}" aria-label="v{{.Number}}"></video>
+              {{else}}<div class="file-card">
+                <strong>{{or .Filename (printf "v%d" .Number)}}</strong>
+                <span>{{.Type}} · {{bytesText .Size}}</span>
+                {{if eq .Kind "text"}}<a class="btn sm" href="{{.PageURL}}">{{tr $.Locale "view"}}</a>{{else}}<a class="btn sm" href="{{.RawURL}}" target="_blank" rel="noopener">{{tr $.Locale "open_file"}}</a>{{end}}
+              </div>{{end}}
+            </div>
+            <footer>sha256 <code title="{{.SHA256}}">{{slice .SHA256 0 12}}</code></footer>
+          </section>
+          {{end}}
+        </div>
+        {{end}}
+        {{else}}
+        <div class="diff">
+          {{range .Diff.Lines}}{{if eq .Kind "fold"}}<span class="fold">{{if eq .Skipped 1}}{{tr $.Locale "compare_fold_one"}}{{else}}{{printf (tr $.Locale "compare_fold") .Skipped}}{{end}}</span>{{else}}<div class="row{{if eq .Kind "+"}} add{{else if eq .Kind "-"}} del{{end}}"><span>{{if .Old}}{{.Old}}{{end}}</span><span>{{if .New}}{{.New}}{{end}}</span><span>{{if eq .Kind "+"}}+{{else if eq .Kind "-"}}−{{end}}</span><span>{{.Text}}</span></div>{{end}}{{end}}
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </main>
+  {{template "footer" .}}
+</body>
+</html>{{end}}

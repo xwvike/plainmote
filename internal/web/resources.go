@@ -51,6 +51,8 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 		a.handleRawPreview(w, r, user, resourceID)
 	case len(parts) == 2 && parts[1] == "share":
 		a.handleShare(w, r, user, sessionID, resourceID)
+	case len(parts) >= 2 && parts[1] == "versions":
+		a.handleVersions(w, r, user, sessionID, resourceID, parts[2:])
 	default:
 		writePlainError(w, http.StatusNotFound, "not found")
 	}
@@ -211,12 +213,13 @@ func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (r
 	// Only a multipart submission can carry a file; anything else simply has
 	// none, which is not an error.
 	if multipartForm {
-		if uploaded, err := readUploadedFile(r, maxBytes); err != nil {
+		if uploaded, uploadedAs, err := readUploadedFile(r, maxBytes); err != nil {
 			return form, err
 		} else if uploaded != nil {
 			form.Content = uploaded
 			form.ContentGiven = true
 			form.Uploaded = true
+			form.Filename = store.RefitFilename(form.Filename, uploadedAs, uploaded)
 		}
 	}
 	if form.OriginURL == "" && form.ContentGiven && !form.Uploaded {
@@ -237,29 +240,31 @@ func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (r
 	return form, nil
 }
 
-func readUploadedFile(r *http.Request, maxBytes int64) ([]byte, error) {
+// readUploadedFile returns the chosen file's bytes and the name it was
+// chosen under.
+func readUploadedFile(r *http.Request, maxBytes int64) ([]byte, string, error) {
 	file, header, err := r.FormFile("upload")
 	if errors.Is(err, http.ErrMissingFile) {
-		return nil, nil
+		return nil, "", nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read upload: %w", err)
+		return nil, "", fmt.Errorf("read upload: %w", err)
 	}
 	defer file.Close()
 	if header.Size > maxBytes {
-		return nil, errors.New("uploaded file is too large")
+		return nil, "", errors.New("uploaded file is too large")
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read upload: %w", err)
+		return nil, "", fmt.Errorf("read upload: %w", err)
 	}
 	if int64(len(data)) > maxBytes {
-		return nil, errors.New("uploaded file is too large")
+		return nil, "", errors.New("uploaded file is too large")
 	}
 	if len(data) == 0 {
-		return nil, nil
+		return nil, "", nil
 	}
-	return data, nil
+	return data, uploadName(header.Filename), nil
 }
 
 func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, sessionID, resourceID string) {
@@ -280,7 +285,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		if r.FormValue("action") == actionDelete {
 			if err := a.db.DeleteResource(r.Context(), user.ID, resourceID); err != nil {
 				text, status := a.writeErrorText("delete resource", err)
-				a.renderResourcePage(w, r, user, resource, text, status, nil)
+				a.renderResourcePage(w, r, user, resource, text, status, nil, nil)
 				return
 			}
 			http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
@@ -288,7 +293,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		}
 		form, err := readResourceForm(w, r, a.cfg.MaxContent)
 		if err != nil {
-			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest, nil)
+			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest, nil, nil)
 			return
 		}
 		if r.FormValue("action") == actionPreview {
@@ -297,7 +302,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			// stored row is untouched either way.
 			pending := resource
 			pending.Name, pending.Filename, pending.OriginURL = form.Name, form.Filename, form.OriginURL
-			a.renderResourcePage(w, r, user, pending, "", http.StatusOK, nil)
+			a.renderResourcePage(w, r, user, pending, "", http.StatusOK, nil, nil)
 			return
 		}
 		content := form.Content
@@ -305,7 +310,25 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			// A nil body tells the store to retain the current object.
 			content = nil
 		}
-		if err := a.db.UpdateResource(r.Context(), user.ID, resourceID, form.Name, form.Filename, content, form.ContentEncoding, form.OriginURL); err != nil {
+		base := versionNumber(r.FormValue("base_version"))
+		result, err := a.db.SaveResource(r.Context(), user.ID, resourceID, store.ResourceEdit{
+			Name: form.Name, Filename: form.Filename, Content: content,
+			ContentEncoding: form.ContentEncoding, OriginURL: form.OriginURL, BaseVersion: base,
+		})
+		if conflict := (*store.VersionConflict)(nil); errors.As(err, &conflict) {
+			// Nothing was written, and nothing is lost: the page comes back
+			// with the submission in the editor, says what happened, and the
+			// next save is made against the version that is current - which
+			// is how "save anyway" works, with no flag of its own.
+			pending := resource
+			pending.Name, pending.Filename = form.Name, form.Filename
+			pending.ContentEncoding = form.ContentEncoding
+			a.renderResourcePage(w, r, user, pending, "", http.StatusConflict, content, func(data *pageData) {
+				data.Conflict, data.ConflictBase = conflict, base
+			})
+			return
+		}
+		if err != nil {
 			text, status := a.writeErrorText("update resource", err)
 			// The refused page comes back carrying the submission, not the
 			// stored row: the fields as they were typed, and the body as it
@@ -322,17 +345,21 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 					text += "（该内容无法在页面中保留，请重新选择文件）"
 				}
 			}
-			a.renderResourcePage(w, r, user, pending, text, status, pendingBody)
+			a.renderResourcePage(w, r, user, pending, text, status, pendingBody, nil)
 			return
 		}
-		http.Redirect(w, r, "/resources/"+resourceID, http.StatusSeeOther)
+		target := "/resources/" + resourceID
+		if result.Trimmed > 0 {
+			target += "?trimmed=" + strconv.Itoa(result.Trimmed)
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
 		return
 	}
 	if r.Method != http.MethodGet {
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	a.renderResourcePage(w, r, user, resource, r.URL.Query().Get("error"), http.StatusOK, nil)
+	a.renderResourcePage(w, r, user, resource, r.URL.Query().Get("error"), http.StatusOK, nil, nil)
 }
 
 // writeErrorText is what the owner of a resource is shown when a write is
@@ -351,7 +378,9 @@ func (a *App) writeErrorText(what string, err error) (string, int) {
 // refused: their work only exists in that request, so re-reading the stored
 // object would quietly replace it with the version they were editing away
 // from. nil means there is nothing pending and the stored object is the truth.
-func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user User, resource Resource, pageError string, status int, pendingBody []byte) {
+//
+// adjust, when given, sets whatever else the page is to say before it renders.
+func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user User, resource Resource, pageError string, status int, pendingBody []byte, adjust func(*pageData)) {
 	now := time.Now().UTC()
 	shares, ended, err := a.listShares(r.Context(), user.ID, resource.ID, now)
 	if err != nil {
@@ -360,6 +389,25 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 	data := a.basePage(r, user)
 	data.Error = pageError
+	if !resource.Remote() {
+		if data.HistoryCount, err = a.db.HistoryCount(r.Context(), user.ID, resource.ID); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	query := r.URL.Query()
+	// The confirmations are read from the address the action redirected to,
+	// and only believed while they are still true: a restore notice for
+	// content that has since been saved over would be wrong.
+	if restored := versionNumber(query.Get("restored")); restored > 0 && restored == resource.RestoredFrom {
+		data.RestoredFrom = restored
+		if resource.Version > 1 {
+			if _, err := a.db.VersionForOwner(r.Context(), user.ID, resource.ID, resource.Version-1); err == nil {
+				data.UndoVersion = resource.Version - 1
+			}
+		}
+	}
+	data.Trimmed = versionNumber(query.Get("trimmed"))
 	// Reconsider only old opaque local rows with an explicitly textual name.
 	// A known image whose filename happens to end in .txt, and remote resources
 	// with no stored body, must keep their existing handling.
@@ -417,6 +465,9 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		}
 	} else if r.URL.Query().Get("delete") != "" {
 		data.DeleteOpen = true
+	}
+	if adjust != nil {
+		adjust(&data)
 	}
 
 	a.renderTemplate(w, r, status, "resource.html", data)
@@ -585,13 +636,29 @@ func (a *App) handleRawPreview(w http.ResponseWriter, r *http.Request, user User
 		writePlainError(w, http.StatusNotFound, "remote resources have no stored bytes")
 		return
 	}
-	w.Header().Set("Content-Type", store.ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding))
-	w.Header().Set("Content-Disposition", `inline; filename="`+deliveryFilename(resource, resource.ContentType)+`"`)
+	a.serveOwnedBytes(w, r,
+		store.ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding),
+		`inline; filename="`+deliveryFilename(resource, resource.ContentType)+`"`,
+		resource.ContentSize,
+		func() (io.ReadCloser, int64, error) { return a.db.OpenContent(r.Context(), resource) },
+		func(start, end int64) (io.ReadCloser, int64, error) {
+			return a.db.OpenContentRange(r.Context(), resource, start, end)
+		})
+}
+
+// serveOwnedBytes sends stored bytes to their owner for a page to show, whole
+// or as one byte range - a video cannot be sought without ranges, and Safari
+// will not play one at all. The type comes from detection, which never
+// produces anything a browser would execute, and nosniff and the sandbox keep
+// it that way.
+func (a *App) serveOwnedBytes(w http.ResponseWriter, r *http.Request, contentType, disposition string, size int64,
+	open func() (io.ReadCloser, int64, error), openRange func(start, end int64) (io.ReadCloser, int64, error)) {
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", disposition)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", deliveredContentSecurityPolicy)
+	w.Header().Set("Content-Security-Policy", deliveredPolicy(contentType))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Accept-Ranges", "bytes")
-	size := resource.ContentSize
 	requestedRange, err := parseByteRange(r.Header.Get("Range"), size)
 	if err != nil {
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", size))
@@ -600,10 +667,10 @@ func (a *App) handleRawPreview(w http.ResponseWriter, r *http.Request, user User
 	}
 	var body io.ReadCloser
 	if requestedRange == nil {
-		body, size, err = a.db.OpenContent(r.Context(), resource)
+		body, size, err = open()
 	} else {
 		var opened int64
-		body, opened, err = a.db.OpenContentRange(r.Context(), resource, requestedRange.start, requestedRange.end)
+		body, opened, err = openRange(requestedRange.start, requestedRange.end)
 		if err == nil && opened != requestedRange.length() {
 			_ = body.Close()
 			err = fmt.Errorf("blob range length %d, want %d", opened, requestedRange.length())

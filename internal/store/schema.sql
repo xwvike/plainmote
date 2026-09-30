@@ -92,6 +92,42 @@ CREATE TABLE IF NOT EXISTS resources (
   updated_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS resources_owner_idx ON resources(owner_id);
+-- The content a resource holds now is its current version. version counts the
+-- saves that changed the content; version_at is when this one was saved, which
+-- updated_at is not - that moves with a rename too. restored_from names the
+-- version this content was brought back from, if it was. content_sha256 lets a
+-- save that changes nothing be told apart without reading the stored object;
+-- rows from before it have none, and their next save is simply a new version.
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS version_at TIMESTAMPTZ;
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS restored_from INTEGER;
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS content_sha256 TEXT NOT NULL DEFAULT '';
+UPDATE resources SET version_at = updated_at WHERE version_at IS NULL;
+
+-- What a resource held before, one row per replaced version. Kept whole rather
+-- than as changes against the next one, so any version can be read, compared
+-- or dropped on its own. replaced_at is when it stopped being current, and is
+-- what the retention period counts from: the version replaced a minute ago is
+-- the one most worth keeping, however long ago it was first saved.
+CREATE TABLE IF NOT EXISTS resource_versions (
+  resource_id UUID NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  content_key TEXT NOT NULL,
+  content_size BIGINT NOT NULL CHECK (content_size >= 0),
+  content_type TEXT NOT NULL,
+  content_encoding TEXT NOT NULL DEFAULT '',
+  content_sha256 TEXT NOT NULL DEFAULT '',
+  restored_from INTEGER,
+  saved_at TIMESTAMPTZ NOT NULL,
+  replaced_at TIMESTAMPTZ NOT NULL,
+  -- The filename the resource had while this was its content. Only a
+  -- restore reads it, and only when the current name would misname what
+  -- comes back: an image restored over a video.
+  filename TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (resource_id, version)
+);
+ALTER TABLE resource_versions ADD COLUMN IF NOT EXISTS filename TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS resource_versions_replaced_idx ON resource_versions(replaced_at);
 
 CREATE TABLE IF NOT EXISTS links (
   id UUID PRIMARY KEY,
@@ -169,8 +205,16 @@ CREATE TABLE IF NOT EXISTS access_logs (
   -- so occurred_at stays the most recent one.
   hits INTEGER NOT NULL DEFAULT 1 CHECK (hits > 0),
   first_at TIMESTAMPTZ NOT NULL,
-  occurred_at TIMESTAMPTZ NOT NULL
+  occurred_at TIMESTAMPTZ NOT NULL,
+  -- Which version of the content was delivered. Only a delivery of stored
+  -- content has one: a refusal delivered nothing, and a remote resource is
+  -- whatever its origin returned.
+  resource_version INTEGER
 );
+ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS resource_version INTEGER;
+-- Which version each link last delivered. Partial, so rows from before
+-- versions were recorded, and refusals, cost it nothing.
+CREATE INDEX IF NOT EXISTS access_logs_delivered_idx ON access_logs(link_id, occurred_at DESC) WHERE resource_version IS NOT NULL;
 CREATE INDEX IF NOT EXISTS access_logs_fold_idx ON access_logs(link_id, outcome, remote_ip, occurred_at DESC) WHERE link_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS access_logs_owner_idx ON access_logs(owner_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_resource_idx ON access_logs(resource_id, occurred_at DESC);

@@ -119,7 +119,36 @@ func (a *App) templateSet() *template.Template {
 		"deleteWarning":      deleteWarning,
 		"legalDuration":      legalDuration,
 		"legalBytes":         legalBytes,
+		"storageMeter":       storageMeter,
+		"inc":                func(n int) int { return n + 1 },
 	}).ParseFS(webAssets, "templates/*.html"))
+}
+
+// meterView is the storage bar: current content, the history living in the
+// room it leaves, and what is free, which add up to the limit. Available is
+// what a save may use - free room and history's alike, since history gives
+// its room back.
+type meterView struct {
+	Current, History, Free, Limit, Used, Available int64
+	Style                                          template.CSS
+}
+
+func storageMeter(quota store.UserQuota) meterView {
+	limit := quota.Limit.StorageBytes
+	current, history := quota.Usage.StorageBytes, quota.Usage.HistoryBytes
+	view := meterView{
+		Current: current, History: history, Limit: limit, Used: current + history,
+		Free: max(limit-current-history, 0), Available: max(limit-current, 0),
+	}
+	share := func(part int64) float64 {
+		if limit <= 0 {
+			return 0
+		}
+		return math.Min(float64(part)/float64(limit)*100, 100)
+	}
+	// Numbers this function formats, so safe to hand over as CSS.
+	view.Style = template.CSS(fmt.Sprintf("--cur:%.2f%%;--his:%.2f%%", share(current), math.Min(share(history), 100-share(current))))
+	return view
 }
 
 // leftPercent is how much of a link's current terms is still to run, 0 to

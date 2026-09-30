@@ -171,10 +171,11 @@ func (d *Store) insertPaste(ctx context.Context, creatorID, filename string, con
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
 		if _, err := tx.Exec(ctx, `
-INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, '', $9, $9)
+INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url,
+                      created_at, updated_at, version, version_at, content_sha256)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, '', $9, $9, 1, $9, $10)
 `, resource.ID, resource.OwnerID, resource.Name, resource.Filename, resource.ContentKey,
-			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now); err != nil {
+			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, contentSHA256(content)); err != nil {
 			return fmt.Errorf("create paste: %w: %w", ErrInternal, err)
 		}
 		if err := d.insertLink(ctx, tx, &link, now); err != nil {
@@ -293,6 +294,7 @@ func (d *Store) ClaimAnonymousPaste(ctx context.Context, userID, resourceID stri
 		return Resource{}, ErrNotFound
 	}
 	var resource Resource
+	var dropped []string
 	err := d.withTx(ctx, func(tx pgx.Tx) error {
 		limit, usage, err := quotaGate(ctx, tx, userID, "", now)
 		if err != nil {
@@ -319,11 +321,15 @@ func (d *Store) ClaimAnonymousPaste(ctx context.Context, userID, resourceID stri
 		}
 		resource.OwnerID = userID
 		resource.UpdatedAt = now
-		return nil
+		// The account now holds more content, which the history may have to
+		// make room for.
+		dropped, err = trimHistoryTx(ctx, tx, userID, "", limit.StorageBytes)
+		return err
 	})
 	if err != nil {
 		return Resource{}, err
 	}
+	d.dropObjects(ctx, dropped)
 	return resource, nil
 }
 

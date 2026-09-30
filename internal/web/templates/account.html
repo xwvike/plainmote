@@ -16,8 +16,25 @@
         <div><dt>{{tr .Locale "account_login"}}</dt><dd>{{.Account.User.Login}}</dd></div>
         <div><dt>{{tr .Locale "account_name"}}</dt><dd>{{if .Account.User.Name}}{{.Account.User.Name}}{{else}}<span class="mut">—</span>{{end}}</dd></div>
         <div><dt>{{tr .Locale "account_created"}}</dt><dd>{{formatTime .Account.CreatedAt}}</dd></div>
-        <div><dt>{{tr .Locale "account_usage"}}</dt><dd>{{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</dd></div>
+        <div><dt>{{tr .Locale "account_usage"}}</dt><dd>{{with storageMeter .Quota}}{{bytesText .Used}}/{{bytesText .Limit}}{{end}}</dd></div>
       </dl>
+      {{/* One bar in three parts - what is kept, what the history has
+           borrowed, what is free - and under it a bracket over everything a
+           save may use, borrowed room included. */}}
+      {{with storageMeter .Quota}}
+      <div class="storage">
+        <div class="meter" style="{{.Style}}">
+          <span class="meter-bar" role="img" aria-label="{{printf (tr $.Locale "meter_title") (bytesText .Current) (bytesText .History) (bytesText .Free)}}"><span class="cur"></span><span class="his"></span></span>
+          <span class="avail"><span>{{printf (tr $.Locale "meter_available") (bytesText .Available)}}{{if .History}}{{if .Free}}{{printf (tr $.Locale "meter_lent") (bytesText .History)}}{{else}}{{tr $.Locale "meter_lent_all"}}{{end}}{{end}}</span></span>
+        </div>
+        <ul class="mlg">
+          <li><i class="cur"></i>{{tr $.Locale "meter_current"}}<b>{{bytesText .Current}}</b></li>
+          {{if .History}}<li><i class="his"></i>{{tr $.Locale "meter_history"}}<b>{{bytesText .History}}</b></li>{{end}}
+          <li><i class="free"></i>{{tr $.Locale "meter_free"}}<b>{{bytesText .Free}}</b></li>
+          <li class="tot">{{tr $.Locale "limit"}}<b>{{bytesText .Limit}}</b></li>
+        </ul>
+      </div>
+      {{end}}
     </section>
 
     {{if .Anonymous}}

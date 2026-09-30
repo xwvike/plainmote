@@ -1,0 +1,79 @@
+{{define "versions.html"}}<!doctype html>
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
+<head>
+  {{template "htmlhead" .}}
+  <title>{{tr .Locale "history"}} · {{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}} · PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page">
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}</a><span>/</span><span>{{tr .Locale "history"}}</span></div>
+    <div class="ph">
+      <h1>{{tr .Locale "history"}}</h1>
+      <span class="cnt">v{{.Resource.Version}} · {{countText .Locale .HistoryCount "versions"}}</span>
+      <span class="sp"><a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "back_to_resource"}}</a></span>
+    </div>
+    {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    {{if .Resource.Remote}}
+    <p class="ro">{{tr .Locale "history_remote"}}</p>
+    {{else}}
+    <div class="panel">
+      <div class="lh"><span>{{tr .Locale "col_version"}}</span><span>{{tr .Locale "col_saved"}}</span><span class="z">{{tr .Locale "size"}}</span><span>{{tr .Locale "col_last_delivered"}}</span><span></span></div>
+      {{/* One row per version, current first. Which links last received a
+           version is what tells the owner who is behind. */}}
+      <ul class="vl">
+        {{range .Versions}}
+        <li{{if .Current}} class="cur"{{end}}>
+          <span class="v">{{if .Current}}v{{.Number}}{{else}}<a href="/resources/{{$.Resource.ID}}/versions/{{.Number}}">v{{.Number}}</a>{{end}}</span>
+          <span class="t">{{formatMinute .SavedAt}}</span>
+          <span class="z">{{bytesText .Size}}</span>
+          <span class="got">
+            {{if .Current}}<span class="cur-tag">{{tr $.Locale "version_current"}}</span>{{end}}
+            {{range .Links}}<span class="tag">{{or . (tr $.Locale "untitled_share")}}</span>{{end}}
+            {{if .RestoredFrom}}<span class="from">{{printf (tr $.Locale "restored_from") .RestoredFrom}}</span>{{end}}
+            {{if and (not .Current) (not .Links) (not .RestoredFrom)}}<span class="mut">—</span>{{end}}
+          </span>
+          <span class="acts">
+            {{if .Current}}<a class="txt" href="/resources/{{$.Resource.ID}}">{{tr $.Locale "edit"}}</a>
+            {{else}}
+            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}">{{tr $.Locale "view"}}</a>
+            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/compare?from={{.Number}}&amp;to={{$.Resource.Version}}">{{tr $.Locale "compare_current"}}</a>
+            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}?restore=1">{{tr $.Locale "restore"}}</a>
+            <a class="txt danger" href="/resources/{{$.Resource.ID}}/versions?remove={{.Number}}">{{tr $.Locale "delete"}}</a>
+            {{end}}
+          </span>
+        </li>
+        {{end}}
+        {{with .HistoryGone}}{{if index . 1}}
+        <li class="gone"><span>{{if eq (index . 0) (index . 1)}}{{printf (tr $.Locale "history_gone_one") (index . 0)}}{{else}}{{printf (tr $.Locale "history_gone_range") (index . 0) (index . 1)}}{{end}}</span></li>
+        {{end}}{{end}}
+      </ul>
+      <div class="pf"><span class="hint">{{if .HistoryCount}}{{printf (tr .Locale "history_rules") (bytesText .HistoryBytes) .HistoryKeep .HistoryDays}}{{else}}{{printf (tr .Locale "history_empty") .HistoryKeep .HistoryDays}}{{end}}</span></div>
+    </div>
+    {{end}}
+  </main>
+
+  {{if .RemoveVersion}}
+  <div class="scrim"></div>
+  <dialog class="dlg" open>
+    <header>
+      <b>{{printf (tr .Locale "remove_title") .RemoveVersion}}</b>
+      <a class="x" href="/resources/{{.Resource.ID}}/versions" aria-label="{{tr .Locale "close"}}">&times;</a>
+    </header>
+    <div class="body">
+      <p class="err">{{printf (tr .Locale "remove_warning") .RemoveVersion}}</p>
+      <p class="hint">{{printf (tr .Locale "remove_hint") .RemoveVersion}}</p>
+    </div>
+    <footer>
+      <a class="btn" href="/resources/{{.Resource.ID}}/versions">{{tr .Locale "cancel"}}</a>
+      <form method="post" action="/resources/{{.Resource.ID}}/versions/{{.RemoveVersion}}" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="delete">
+        <button type="submit" class="bad">{{printf (tr .Locale "remove_confirm") .RemoveVersion}}</button>
+      </form>
+    </footer>
+  </dialog>
+  {{end}}
+  {{template "footer" .}}
+</body>
+</html>{{end}}

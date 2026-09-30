@@ -592,7 +592,7 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .meta { font: 400 10.5px var(--mono); color: var(--ink3); word-break: break-all; }
 
 /* access log: native <details> rows, columns aligned by a shared grid template */
-.lg { --cols: 150px 170px minmax(0, 1fr) 160px 116px 44px 14px; }
+.lg { --cols: 150px 150px minmax(0, 1fr) 150px 48px 116px 44px 14px; }
 .lgh { display: grid; grid-template-columns: var(--cols); gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line2); font-size: 12px; font-weight: 600; color: var(--ink2); }
 .lg details { border-bottom: 1px solid var(--line); }
 .lg details:last-of-type { border-bottom: 0; }
@@ -722,6 +722,114 @@ a.who:hover, a.who[aria-current] { color: var(--ink); }
 .signin .foot { justify-content: center; width: 344px; max-width: 100%; margin-top: 14px; padding: 0; border: 0; }
 .signin .foot-name { display: none; }
 
+/* Version history. The entry sits beside "delete" in the title row: a word
+   and a count, like the share counts. */
+.ph .hist { font: 500 12px/1.5 var(--sans); color: var(--ink2); white-space: nowrap; }
+.ph .hist b { margin-left: 5px; font: 400 11px var(--mono); color: var(--ink3); }
+.ph .hist:hover { color: var(--ink); text-decoration: none; }
+.ph .hist:hover b { color: var(--ink2); }
+.ph .vtag { flex: none; padding: 0 7px; border-radius: 2px; background: var(--sunk); font: 500 11px/20px var(--mono); color: var(--ink2); }
+.vnav { display: inline-flex; gap: 2px; }
+.vnav a, .vnav span { display: grid; place-items: center; min-width: 24px; height: 22px; padding: 0 6px; border-radius: var(--r); font: 400 10.5px var(--mono); color: var(--ink2); white-space: nowrap; }
+.vnav a:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
+.vnav span { color: var(--ink3); opacity: .5; }
+
+/* The version list: one row per version, in columns shared down the list,
+   the current one first on the accent wash. */
+.lh, .vl > li { display: grid; grid-template-columns: 58px 150px 72px minmax(0, 1fr) max-content; column-gap: 18px; align-items: center; }
+.lh { padding: 7px 12px; border-bottom: 1px solid var(--line2); font-size: 12px; font-weight: 600; color: var(--ink2); }
+.lh .z { text-align: right; }
+.vl { list-style: none; margin: 0; padding: 0; }
+.vl > li { min-height: 42px; padding: 6px 12px; font-size: 12.5px; }
+.vl > li + li { border-top: 1px solid var(--line); }
+.vl > li:not(.gone):not(.cur):hover { background: var(--zebra); }
+.vl > li.cur { background: var(--accent-s); }
+.vl .v { font: 600 12px var(--mono); color: var(--ink); }
+.vl .v a { color: inherit; }
+.vl .t { font: 400 10.5px var(--mono); color: var(--ink2); }
+.vl .z { font: 400 10.5px var(--mono); color: var(--ink3); text-align: right; }
+.vl .got { display: flex; min-width: 0; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 12px; color: var(--ink2); }
+.vl .got .tag { max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--sans); font-size: 11px; }
+.vl .got .from { font: 400 10.5px var(--mono); color: var(--ink3); }
+.vl .acts { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; justify-content: flex-end; }
+.cur-tag { display: inline-block; padding: 0 6px; border-radius: 2px; background: var(--accent); color: var(--on-accent); font: 500 10px/18px var(--sans); }
+/* Numbers the retention rules took: said, and hatched, so the list does not
+   seem to skip for no reason. */
+.vl > li.gone { display: block; min-height: 0; padding: 8px 12px; font-size: 12px; color: var(--ink3); background: repeating-linear-gradient(-45deg, transparent 0 6px, color-mix(in oklab, var(--line) 45%, transparent) 6px 7px); }
+
+/* Comparing two versions: old and new line numbers, the sign, the line. */
+.cmpbar .arrow { font: 400 12px var(--mono); color: var(--ink3); }
+.stat { font: 500 11px var(--mono); }
+.stat .a { color: var(--ok); }
+.stat .d { color: var(--bad); }
+.diff-sheet { padding: 0; }
+.diff { overflow-x: auto; font: 400 12px/1.75 var(--mono); }
+.diff .row { display: grid; grid-template-columns: 44px 44px 18px minmax(max-content, 1fr); }
+.diff .row > span:nth-child(-n+2) { padding-right: 8px; text-align: right; font-size: 11px; color: var(--ink3); user-select: none; }
+.diff .row > span:nth-child(2) { border-right: 1px solid var(--line); }
+.diff .row > span:nth-child(3) { text-align: center; user-select: none; }
+.diff .row > span:nth-child(4) { padding-right: 14px; white-space: pre; }
+.diff .add { background: color-mix(in oklab, var(--ok) 11%, var(--panel)); }
+.diff .add > span:nth-child(3) { color: var(--ok); }
+.diff .del { background: color-mix(in oklab, var(--bad) 10%, var(--panel)); }
+.diff .del > span:nth-child(3) { color: var(--bad); }
+.diff .fold { display: block; padding: 3px 12px 3px 106px; border-block: 1px dashed var(--line2); background: var(--head); font: 400 10.5px var(--mono); color: var(--ink3); }
+.diff .fold:first-child { border-top: 0; }
+.diff .fold:last-child { border-bottom: 0; }
+
+/* Files and media are compared by looking: the two versions side by side,
+   each on a stage of the same height so they line up. */
+.cmp-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cmp-side { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+/* A floor on the height, so the side with the "current" tag and the side
+   without it rule off at the same line. */
+.cmp-side > header { display: flex; min-width: 0; min-height: 36px; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.cmp-side > header .v { font: 600 12px var(--mono); color: var(--ink); }
+.cmp-side > header em { margin-left: auto; min-width: 0; overflow-wrap: anywhere; font: 400 10.5px var(--mono); font-style: normal; color: var(--ink3); }
+.cmp-stage { min-height: 280px; background: var(--head); }
+.cmp-stage .resource-image, .cmp-stage .resource-video { max-height: 420px; }
+.cmp-side > footer { padding: 6px 10px; border-top: 1px dashed var(--line2); font: 400 10.5px var(--mono); color: var(--ink3); }
+.cmp-side > footer code { color: var(--ink2); }
+
+/* A save that did not happen because the content moved on: a caution, not an
+   error - nothing failed and nothing was lost. */
+.warnbox { display: grid; gap: 6px; padding: 8px 12px; border-left: 2px solid var(--warn); border-radius: 0 var(--r) var(--r) 0; background: color-mix(in oklab, var(--warn) 10%, var(--panel)); font-size: 12.5px; color: var(--ink); }
+.warnbox b { color: var(--warn); }
+.notice-row { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.notice-row .txt { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.lg .vc { font: 600 11px var(--mono); color: var(--ink); }
+/* Sand, the colour of time here: this caller has not caught up. */
+.lg .vc.old { color: var(--sand-ink); }
+
+/* Storage: one bar in three parts - kept, borrowed by history, free - and
+   under it a bracket over everything a save may use. */
+.meter-bar { position: relative; display: flex; height: 10px; overflow: hidden; border-radius: 2px; background: var(--sunk); box-shadow: inset 0 0 0 1px var(--line); }
+.meter-bar .cur { flex: none; width: var(--cur); background: var(--accent); }
+.meter-bar .his, .mlg i.his { flex: none; width: var(--his); background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--accent) 50%, var(--panel)) 0 2px, color-mix(in oklab, var(--accent) 16%, var(--panel)) 2px 5px); }
+.meter-bar .his { box-shadow: inset 1px 0 0 var(--panel); }
+.meter-bar.mini { width: 120px; height: 6px; }
+.usage { display: inline-flex; align-items: center; gap: 8px; }
+.usage:hover { text-decoration: none; }
+.usage:hover .cnt { color: var(--ink); }
+.storage { display: grid; gap: 12px; padding: 14px 12px; background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r); }
+/* Under the account facts it continues their box, the way the save bar
+   continues the editor: a dashed seam, one outline. */
+.ruled > .pb:has(+ .storage) { border-bottom: 0; border-radius: var(--r) var(--r) 0 0; }
+.ruled > .pb + .storage { margin-top: -8px; border-top: 1px dashed var(--line2); border-radius: 0 0 var(--r) var(--r); }
+.meter { display: grid; }
+/* The words start under the bracket while there is room for them there, and
+   slide left when the bracket is short. */
+.avail { position: relative; padding-top: 13px; padding-left: clamp(0px, var(--cur), calc(100% - 36em)); font-size: 12px; color: var(--ink2); }
+.avail::before { content: ""; position: absolute; top: 3px; left: var(--cur); right: 0; height: 6px; border: 1px solid var(--ink3); border-top: 0; border-radius: 0 0 2px 2px; }
+.mlg { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 12px; color: var(--ink2); }
+.mlg li { display: inline-flex; align-items: center; gap: 7px; }
+.mlg b { font: 500 11.5px var(--mono); color: var(--ink); }
+.mlg i { width: 12px; height: 10px; border-radius: 2px; box-shadow: inset 0 0 0 1px var(--line); }
+.mlg i.cur { background: var(--accent); }
+.mlg i.his { width: 12px; }
+.mlg i.free { background: var(--sunk); }
+.mlg .tot { margin-left: auto; color: var(--ink3); }
+
 /* Below the fixed column width the page goes fluid: the shell stops being a
    centred column and takes the viewport, less a margin. */
 @media (max-width: 1180px) {
@@ -749,6 +857,11 @@ a.who:hover, a.who[aria-current] { color: var(--ink); }
   .pg { flex-wrap: wrap; gap: 8px; }
   .pg .pages { margin-left: 0; }
   .pfx { flex-wrap: wrap; }
+  .cmp-sides { grid-template-columns: minmax(0, 1fr); }
+  .lh { display: none; }
+  .vl > li { grid-template-columns: 50px minmax(0, 1fr) max-content; row-gap: 4px; }
+  .vl .z { text-align: left; }
+  .vl .got, .vl .acts { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
 @media (max-width: 760px) {

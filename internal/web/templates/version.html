@@ -1,0 +1,95 @@
+{{define "version.html"}}<!doctype html>
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
+<head>
+  {{template "htmlhead" .}}
+  <title>v{{.Viewed.Number}} · {{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}} · PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  {{$base := printf "/resources/%s/versions" .Resource.ID}}
+  <main class="page">
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}</a><span>/</span><a href="{{$base}}">{{tr .Locale "history"}}</a><span>/</span><span>v{{.Viewed.Number}}</span></div>
+    <div class="ph">
+      <h1>{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}</h1>
+      <span class="vtag">v{{.Viewed.Number}}</span>
+      <span class="sp">
+        <a class="txt" href="{{$base}}/compare?from={{.Viewed.Number}}&amp;to={{.Resource.Version}}">{{tr .Locale "compare_current"}}</a>
+        <form method="post" action="{{$base}}/{{.Viewed.Number}}" class="inline">
+          <input type="hidden" name="csrf" value="{{.CSRF}}">
+          <input type="hidden" name="action" value="copy">
+          <button type="submit" class="txt">{{tr .Locale "copy_version"}}</button>
+        </form>
+        <a class="txt danger" href="{{$base}}?remove={{.Viewed.Number}}">{{tr .Locale "delete_version"}}</a>
+        <a class="btn pri" href="{{$base}}/{{.Viewed.Number}}?restore=1">{{tr .Locale "restore_this"}}</a>
+      </span>
+    </div>
+    {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    {{/* The one thing easy to get wrong on this page: what is shown here is
+         not what the links return. */}}
+    <p class="ro">{{printf (tr .Locale "version_snapshot") .Viewed.Number .Resource.Version}}</p>
+
+    <div class="panel ruled panel-ed version-sheet">
+      <div class="pt">
+        <span class="sec">v{{.Viewed.Number}} · {{formatMinute .Viewed.SavedAt}}</span>
+        <span class="tag">{{tr .Locale "read_only"}}</span>
+        <span class="sp">
+          {{if .ViewedText}}<span class="tags">{{range .TextEncodings}}{{if eq .Value $.ContentEncoding}}<span class="tag">{{.Label}}</span>{{end}}{{end}}<span class="tag">{{if eq .ContentEOL "crlf"}}CRLF{{else}}LF{{end}}</span></span>{{end}}
+          <em class="content-meta">{{bytesText .Viewed.ContentSize}}</em>
+          <span class="vnav">
+            {{if .PrevVersion}}<a href="{{$base}}/{{.PrevVersion}}">&lsaquo; v{{.PrevVersion}}</a>{{else}}<span>&lsaquo;</span>{{end}}
+            {{if eq .NextVersion .Resource.Version}}<a href="/resources/{{.Resource.ID}}">v{{.NextVersion}} &rsaquo;</a>{{else}}<a href="{{$base}}/{{.NextVersion}}">v{{.NextVersion}} &rsaquo;</a>{{end}}
+          </span>
+        </span>
+      </div>
+      <div class="pb">
+        {{if .ViewedText}}
+        <textarea rows="18" spellcheck="false" disabled aria-label="{{tr .Locale "resource_content"}}" data-preview data-filename="{{or .Viewed.Filename .Resource.Filename}}" data-content-type="{{.Viewed.ContentType}}">{{.ContentText}}</textarea>
+        {{else if hasPrefix .Viewed.ContentType "image/"}}
+        <div class="media-stage"><img class="resource-media resource-image" src="{{$base}}/{{.Viewed.Number}}/raw" alt="v{{.Viewed.Number}}"></div>
+        {{else if hasPrefix .Viewed.ContentType "audio/"}}
+        <div class="media-stage"><audio class="resource-media resource-audio" controls preload="metadata" src="{{$base}}/{{.Viewed.Number}}/raw" aria-label="v{{.Viewed.Number}}"></audio></div>
+        {{else if hasPrefix .Viewed.ContentType "video/"}}
+        <div class="media-stage"><video class="resource-media resource-video" controls preload="metadata" src="{{$base}}/{{.Viewed.Number}}/raw" aria-label="v{{.Viewed.Number}}"></video></div>
+        {{else}}
+        <div class="media-stage">
+          <div class="file-card">
+            <strong>{{or .Viewed.Filename .Resource.Filename (printf "v%d" .Viewed.Number)}}</strong>
+            <span>{{.Viewed.ContentType}} · {{bytesText .Viewed.ContentSize}}</span>
+            <a class="btn sm" href="{{$base}}/{{.Viewed.Number}}/raw" target="_blank" rel="noopener">{{tr .Locale "open_file"}}</a>
+          </div>
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </main>
+
+  {{if .RestoreOpen}}
+  <div class="scrim"></div>
+  <dialog class="dlg" open>
+    <header>
+      <b>{{printf (tr .Locale "restore_title") .Viewed.Number}}</b>
+      <a class="x" href="{{$base}}/{{.Viewed.Number}}" aria-label="{{tr .Locale "close"}}">&times;</a>
+    </header>
+    <div class="body">
+      <p class="ro">{{printf (tr .Locale "restore_explain") .Viewed.Number (inc .Resource.Version) .Resource.Version}}</p>
+      <dl class="kv">
+        <dt>{{tr .Locale "content"}}</dt><dd>v{{.Viewed.Number}} · {{formatMinute .Viewed.SavedAt}} · {{bytesText .Viewed.ContentSize}}</dd>
+        <dt>{{tr .Locale "share_links"}}</dt><dd>{{tr .Locale "restore_links"}}</dd>
+        <dt>{{tr .Locale "restore_kept"}}</dt><dd>{{tr .Locale "restore_kept_value"}}</dd>
+      </dl>
+    </div>
+    <footer>
+      <a class="btn" href="{{$base}}/{{.Viewed.Number}}">{{tr .Locale "cancel"}}</a>
+      <form method="post" action="{{$base}}/{{.Viewed.Number}}" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="restore">
+        {{/* Named for what the person picked, not for the number the result
+             will get: "restore v2", which is what they meant to do. */}}
+        <button type="submit" class="pri">{{printf (tr .Locale "restore_title") .Viewed.Number}}</button>
+      </form>
+    </footer>
+  </dialog>
+  {{end}}
+  {{if .ViewedText}}<script type="module" src="/static/editor.js"></script>{{end}}
+</body>
+</html>{{end}}

@@ -30,6 +30,31 @@ type Resource struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	LiveShares      int
+	// Version numbers the saves that changed the content, from 1. VersionAt is
+	// when the current content was saved; RestoredFrom is the version it was
+	// brought back from, or 0. ContentSHA256 is empty for rows written before
+	// it was kept.
+	Version       int
+	VersionAt     time.Time
+	RestoredFrom  int
+	ContentSHA256 string
+}
+
+// Version is content a resource held before its current one. It is read,
+// compared and restored as a whole; nothing about it depends on the versions
+// around it.
+type Version struct {
+	ResourceID      string
+	Number          int
+	ContentKey      string
+	ContentSize     int64
+	ContentType     string
+	ContentEncoding string
+	ContentSHA256   string
+	RestoredFrom    int
+	SavedAt         time.Time
+	ReplacedAt      time.Time
+	Filename        string
 }
 
 func (r Resource) Remote() bool { return r.OriginURL != "" }
@@ -69,6 +94,12 @@ type AccessLog struct {
 	Hits           int
 	FirstAt        time.Time
 	OccurredAt     time.Time
+	// Version is the content version delivered, 0 when nothing was. The
+	// resource's current version and whether this one can still be opened
+	// come from the resource as it is now; both are 0/false once it is gone.
+	Version          int
+	CurrentVersion   int
+	VersionAvailable bool
 }
 
 type RequestMeta struct {
@@ -103,8 +134,12 @@ type QuotaLimit struct {
 }
 
 type QuotaUsage struct {
-	Resources    int64
+	Resources int64
+	// StorageBytes is the content the resources hold now; it is what the limit
+	// is enforced on. HistoryBytes is their earlier versions, which live in
+	// whatever room that leaves and give it back when a save needs it.
 	StorageBytes int64
+	HistoryBytes int64
 }
 
 type Plan struct {

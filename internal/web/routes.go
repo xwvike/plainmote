@@ -147,6 +147,43 @@ type pageData struct {
 	UpstreamText        string
 	UpstreamTextPreview bool
 	UpstreamError       string
+
+	// Version history. HistoryCount is the number of earlier versions;
+	// Versions the list, current first; HistoryGone the range of numbers the
+	// retention rules removed, zero when none.
+	HistoryCount  int
+	HistoryBytes  int64
+	HistoryKeep   int
+	HistoryDays   int
+	Versions      []versionRow
+	HistoryGone   [2]int
+	RemoveVersion int
+	// The version page: the version shown, whether it is text, and its
+	// neighbours among what is kept (NextVersion may be the current one).
+	Viewed      store.Version
+	ViewedText  bool
+	PrevVersion int
+	NextVersion int
+	RestoreOpen bool
+	// The comparison page.
+	DiffChoices []int
+	DiffFrom    versionBody
+	DiffTo      versionBody
+	Diff        textDiff
+	DiffNote    string
+	DiffFull    bool
+	// Both sides, when they are shown next to each other rather than diffed.
+	DiffSides []versionBody
+	// A save refused because the content moved on while it was being edited,
+	// and the version the edit was made against.
+	Conflict     *store.VersionConflict
+	ConflictBase int
+	// One-line confirmations on the resource page after a restore, and after
+	// a save that took earlier versions' room. UndoVersion is what restoring
+	// back would bring back, 0 when that is not on offer.
+	RestoredFrom int
+	UndoVersion  int
+	Trimmed      int
 }
 
 // pager carries everything the dashboard footer needs; every link is a plain

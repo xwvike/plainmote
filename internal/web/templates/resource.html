@@ -18,16 +18,44 @@
     <div class="ph">
       <h1>{{or .Resource.Name (tr .Locale "untitled_resource")}}</h1>
       <span class="sp">
+        {{/* Beside the one other thing done to the resource as a whole. Shown
+             with nothing in it too: the page behind it says how it fills. */}}
+        {{if not .Resource.Remote}}<a class="hist" href="/resources/{{.Resource.ID}}/versions">{{tr .Locale "history"}}<b>{{.HistoryCount}}</b></a>{{end}}
         <a class="txt danger" href="/resources/{{.Resource.ID}}?delete=1">{{tr .Locale "delete"}}</a>
       </span>
     </div>
     {{end}}
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    {{if .RestoredFrom}}
+    <div class="notice notice-row">
+      <span>{{printf (tr .Locale "notice_restored") .RestoredFrom .Resource.Version}}</span>
+      {{/* Undoing is restoring again, so it adds a version rather than
+           taking one away, and can itself be undone. */}}
+      {{if .UndoVersion}}<form method="post" action="/resources/{{.Resource.ID}}/versions/{{.UndoVersion}}" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="restore">
+        <button type="submit" class="txt">{{tr .Locale "undo"}}</button>
+      </form>{{end}}
+    </div>
+    {{end}}
+    {{if .Trimmed}}<p class="notice">{{if eq .Trimmed 1}}{{tr .Locale "notice_trimmed_one"}}{{else}}{{printf (tr .Locale "notice_trimmed") .Trimmed}}{{end}}</p>{{end}}
+    {{if .Conflict}}
+    {{/* Not an error: nothing failed and nothing is lost. The next save is
+         made against the version now current, which is what saving anyway
+         means. */}}
+    <div class="warnbox" role="alert">
+      <span><b>{{tr .Locale "conflict_title"}}</b> {{printf (tr .Locale "conflict_text") .Conflict.Current}}</span>
+      <span><a href="/resources/{{.Resource.ID}}/versions/compare?from={{.ConflictBase}}&amp;to={{.Conflict.Current}}" target="_blank" rel="noopener">{{printf (tr .Locale "conflict_compare") .ConflictBase .Conflict.Current}}</a></span>
+    </div>
+    {{end}}
     {{$remote := or .Resource.Remote (eq .NewKind "remote")}}
 
     <form class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
-      {{if .IsNew}}<input type="hidden" name="kind" value="{{.NewKind}}">{{end}}
+      {{if .IsNew}}<input type="hidden" name="kind" value="{{.NewKind}}">{{else}}
+      {{/* The version this edit starts from. A save over anything newer is
+           refused rather than silently undoing it. */}}
+      <input type="hidden" name="base_version" value="{{.Resource.Version}}">{{end}}
 
         <div class="panel ruled panel-ed">
           <div class="pt">
@@ -124,7 +152,7 @@
 
 
       <div class="savebar">
-        <button type="submit" class="pri">{{if .IsNew}}{{tr .Locale "create_resource"}}{{else}}{{tr .Locale "save"}}{{end}}</button>
+        <button type="submit" class="pri">{{if .IsNew}}{{tr .Locale "create_resource"}}{{else if .Conflict}}{{printf (tr .Locale "save_anyway") (inc .Conflict.Current)}}{{else}}{{tr .Locale "save"}}{{end}}</button>
         {{if .IsNew}}
         <a class="txt" href="/resources/">{{tr .Locale "cancel"}}</a>
         <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "optional"}}" style="width:140px"></label>
@@ -133,13 +161,14 @@
         {{end}}
         <span class="hint live">{{if $remote}}<a href="/resources/new">{{tr .Locale "switch_direct_edit"}}</a>{{else}}<a href="/resources/new?kind=remote">{{tr .Locale "switch_remote"}}</a>{{end}}</span>
         {{else}}
-        <a class="txt" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>
+        {{if .Conflict}}<a class="txt show" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_mine"}}</a>
+        {{else}}<a class="txt" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>{{end}}
         <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "name_filename_fallback"}}" style="width:140px"></label>
         <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
         {{if .Resource.Remote}}<label class="pick"><span>{{tr .Locale "remote_url"}}</span><input type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" style="width:220px" required></label>{{end}}
         {{/* Appears with the first change and goes with the save: the page
              after a save is the confirmation. */}}
-        <span class="unsaved" data-unsaved>{{tr .Locale "unsaved"}}</span>
+        <span class="unsaved{{if .Conflict}} show{{end}}" data-unsaved>{{tr .Locale "unsaved"}}</span>
         {{end}}
       </div>
     </form>
@@ -150,7 +179,7 @@
          dialog is left for changing one's terms, which is rare. */}}
     {{template "share-panel" .}}
 
-    <p class="meta">{{.Resource.ID}} · {{if .Resource.Remote}}{{tr .Locale "reference"}} · {{originHost .Resource.OriginURL}}{{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}} · {{tr .Locale "created"}} {{formatTime .Resource.CreatedAt}} · {{tr .Locale "updated"}} {{formatTime .Resource.UpdatedAt}}</p>
+    <p class="meta">{{.Resource.ID}} · {{if .Resource.Remote}}{{tr .Locale "reference"}} · {{originHost .Resource.OriginURL}}{{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}} · v{{.Resource.Version}}{{end}} · {{tr .Locale "created"}} {{formatTime .Resource.CreatedAt}} · {{tr .Locale "updated"}} {{formatTime .Resource.UpdatedAt}}</p>
     {{end}}
 
   </main>

@@ -25,6 +25,18 @@ const deliveryPrefix = "/d/"
 // player. The public Blob player uses its own policy in renderMediaPlayer.
 const deliveredContentSecurityPolicy = "sandbox allow-same-origin; default-src 'none'; media-src 'self'"
 
+// deliveredPolicy is the policy for one response. An image opened on its own
+// is shown by the browser's image viewer, which centres it on a dark ground
+// with inline styles; without them Chrome leaves it in the top left corner.
+// The body is an image, not markup, so there is nothing an allowed style
+// could come from but the browser itself - and scripts stay forbidden.
+func deliveredPolicy(contentType string) string {
+	if strings.HasPrefix(contentType, "image/") {
+		return deliveredContentSecurityPolicy + "; style-src 'unsafe-inline'"
+	}
+	return deliveredContentSecurityPolicy
+}
+
 // shareAddress builds the address a link is handed out as: the token routes,
 // and the filename rides along so whoever saves it gets a sensible name. The
 // tail is never empty, because plain `curl -O` names the file after the last
@@ -179,7 +191,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Disposition", disposition)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", deliveredContentSecurityPolicy)
+	w.Header().Set("Content-Security-Policy", deliveredPolicy(contentType))
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	// Public delivery is always full-body. In particular, Range never opens an
@@ -204,6 +216,11 @@ func (a *App) recordAccess(r *http.Request, result store.ConsumeResult, outcome 
 		ResourceName: resource.Name, ResourceFile: resource.Filename,
 		LinkID: result.LinkID, LinkName: result.LinkName,
 		Outcome: outcome, Status: status, Detail: detail,
+	}
+	// Which content went out. A 304 counts: it confirms the caller holds
+	// this version. A remote resource has no versions of its own.
+	if outcome == store.OutcomeSuccess && !resource.Remote() {
+		event.Version = resource.Version
 	}
 	if err := a.db.RecordAccess(r.Context(), event, meta); err != nil {
 		fmt.Fprintf(os.Stderr, "record %s access for resource %s: %v\n", outcome, resource.ID, err)

@@ -9,8 +9,14 @@
   <main class="page">
     <div class="ph">
       <h1>{{tr .Locale "resources"}}</h1>
-      <span class="cnt">{{countText .Locale .Pager.Total "items"}} · {{tr .Locale "used"}} {{bytesText .Quota.Usage.StorageBytes}}/{{bytesText .Quota.Limit.StorageBytes}}</span>
-      <span class="sp"><a class="btn pri" href="/resources/new">{{tr .Locale "new_resource"}}</a></span>
+      <span class="cnt">{{countText .Locale .Pager.Total "items"}}</span>
+      <span class="sp">
+        {{with storageMeter .Quota}}<a class="usage" href="/account" title="{{printf (tr $.Locale "meter_title") (bytesText .Current) (bytesText .History) (bytesText .Free)}}">
+          <span class="meter-bar mini" style="{{.Style}}" aria-hidden="true"><span class="cur"></span><span class="his"></span></span>
+          <span class="cnt">{{bytesText .Used}}/{{bytesText .Limit}}</span>
+        </a>{{end}}
+        <a class="btn pri" href="/resources/new">{{tr .Locale "new_resource"}}</a>
+      </span>
     </div>
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
     {{/* Filters sit above the list they narrow, on the page itself - the same

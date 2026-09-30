@@ -105,11 +105,15 @@ func usageForUser(ctx context.Context, q storeQuerier, userID, excludeID string)
 		return QuotaUsage{}, ErrNotFound
 	}
 	var usage QuotaUsage
+	// History is reported but never excluded: it is not what a save is
+	// measured against, only what gives way to one.
 	err := q.QueryRow(ctx, `
-SELECT COUNT(*), COALESCE(SUM(content_size), 0)
+SELECT COUNT(*), COALESCE(SUM(content_size), 0),
+       (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v
+        JOIN resources r ON r.id = v.resource_id WHERE r.owner_id = $1)
 FROM resources
 WHERE owner_id = $1 AND ($2 = '' OR id <> NULLIF($2, '')::uuid)
-`, userID, excludeID).Scan(&usage.Resources, &usage.StorageBytes)
+`, userID, excludeID).Scan(&usage.Resources, &usage.StorageBytes, &usage.HistoryBytes)
 	if err != nil {
 		return QuotaUsage{}, err
 	}

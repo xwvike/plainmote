@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -137,6 +138,11 @@ func (a *App) handleAccountExport(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, "export resources", err)
 		return
 	}
+	versions, err := a.db.ExportVersions(ctx, user.ID)
+	if err != nil {
+		a.serverError(w, "export versions", err)
+		return
+	}
 
 	// Spent last, once nothing is left that could fail before the download
 	// starts: a refusal from an earlier step should not cost an export.
@@ -156,7 +162,7 @@ func (a *App) handleAccountExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	archive := zip.NewWriter(w)
-	if err := a.writeExport(r, archive, account, resources, now); err != nil {
+	if err := a.writeExport(r, archive, account, resources, versions, now); err != nil {
 		fmt.Fprintf(os.Stderr, "export account %s: %v\n", user.ID, err)
 		return
 	}
@@ -191,11 +197,12 @@ type exportAccessLog struct {
 	CFRay          string    `json:"cf_ray"`
 	ContentLength  string    `json:"content_length"`
 	Hits           int       `json:"hits"`
+	Version        int       `json:"version,omitempty"`
 	FirstAt        time.Time `json:"first_at"`
 	OccurredAt     time.Time `json:"occurred_at"`
 }
 
-func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Account, resources []Resource, now time.Time) error {
+func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Account, resources []Resource, versions []store.Version, now time.Time) error {
 	ctx := r.Context()
 	if err := writeExportAccount(archive, account, now); err != nil {
 		return err
@@ -217,7 +224,7 @@ func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Ac
 			RemoteIP: entry.RemoteIP, RemoteAddr: entry.RemoteAddr, Method: entry.Method, Host: entry.Host, Path: redactDeliveryPath(entry.Path),
 			Query: redactSensitiveQuery(entry.Query), Proto: entry.Proto, TLS: entry.TLS, UserAgent: entry.UserAgent, Referer: redactSensitiveURL(entry.Referer),
 			Forwarded: entry.Forwarded, XForwardedFor: entry.XForwardedFor, CFConnectingIP: entry.CFConnectingIP,
-			CFRay: entry.CFRay, ContentLength: entry.ContentLength, Hits: entry.Hits, FirstAt: entry.FirstAt, OccurredAt: entry.OccurredAt,
+			CFRay: entry.CFRay, ContentLength: entry.ContentLength, Hits: entry.Hits, Version: entry.Version, FirstAt: entry.FirstAt, OccurredAt: entry.OccurredAt,
 		})
 		if err != nil {
 			return err
@@ -253,7 +260,48 @@ func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Ac
 			return fmt.Errorf("resource %s: %w", resource.ID, err)
 		}
 	}
+
+	// Earlier versions sit beside the current content, one directory each,
+	// under the name the resource has now.
+	byID := make(map[string]Resource, len(resources))
+	for _, resource := range resources {
+		byID[resource.ID] = resource
+	}
+	for _, version := range versions {
+		resource, ok := byID[version.ResourceID]
+		if !ok {
+			continue
+		}
+		if err := a.writeExportVersion(r, archive, resource, version); err != nil {
+			return fmt.Errorf("resource %s version %d: %w", resource.ID, version.Number, err)
+		}
+	}
 	return nil
+}
+
+func (a *App) writeExportVersion(r *http.Request, archive *zip.Writer, resource Resource, version store.Version) error {
+	body, _, err := a.db.OpenVersion(r.Context(), version)
+	if err != nil {
+		return err
+	}
+	defer body.Close()
+	// Named as it was named while it was current: a video kept from before an
+	// image replaced it is movie.mp4, not photo.png.
+	resource.ContentType = version.ContentType
+	if version.Filename != "" {
+		resource.Filename = version.Filename
+	}
+	name := path.Base(exportBodyPath(resource))
+	entry, err := archive.CreateHeader(&zip.FileHeader{
+		Name:     fmt.Sprintf("files/%s/versions/v%d/%s", resource.ID, version.Number, name),
+		Method:   zip.Deflate,
+		Modified: version.SavedAt,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(entry, body)
+	return err
 }
 
 func (a *App) writeExportBody(r *http.Request, archive *zip.Writer, resource Resource) error {
