@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/xml"
 	"html/template"
 	"io"
@@ -23,6 +24,7 @@ type App struct {
 	templates *template.Template
 	handler   http.Handler
 	probes    probeLog
+	admin     *adminGate
 }
 
 type upstreamFetcher interface {
@@ -47,10 +49,19 @@ type Config struct {
 	ContactEmail     string
 	SourceURL        string
 	BlobEndpoint     string
+	// The admin interface exists only when there is a key to call it with.
+	AdminKeys    []ed25519.PublicKey
+	AdminOrigins []string
+	Version      string
+	Revision     string
+	StartedAt    time.Time
 }
 
 func New(cfg Config, db *store.Store, source upstreamFetcher, github *auth.GitHub) *App {
 	app := &App{cfg: cfg, db: db, upstream: source, github: github}
+	if len(cfg.AdminKeys) > 0 {
+		app.admin = newAdminGate(cfg.AdminKeys, cfg.AdminOrigins)
+	}
 	app.templates = app.templateSet()
 	app.handler = app.routes()
 	return app
@@ -252,6 +263,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/robots.txt", a.handleRobots)
 	mux.HandleFunc("/sitemap.xml", a.handleSitemap)
 	mux.HandleFunc("/llms.txt", a.handleLLMs)
+	// Registered only with a key to call it by: without one the path does not
+	// exist, the same as any other.
+	if a.admin != nil {
+		mux.HandleFunc(adminPrefix, a.handleAdmin)
+	}
 	// Not registered at all when it is off, so the endpoint does not exist
 	// rather than existing and refusing.
 	if a.cfg.AnonymousEnabled {

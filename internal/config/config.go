@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -40,6 +41,11 @@ type Config struct {
 	// SourceURL is where this deployment's source code is published. Under
 	// the AGPL, a deployment of modified code must point at its own.
 	SourceURL string
+	// AdminKeys are the Ed25519 public keys allowed to call the admin
+	// interface; none means there is no admin interface. AdminOrigins are the
+	// browser origins allowed to call it across sites.
+	AdminKeys    []ed25519.PublicKey
+	AdminOrigins []string
 }
 
 // DefaultSourceURL is the upstream repository.
@@ -138,7 +144,55 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	cfg.AdminKeys, err = parseAdminKeys(os.Getenv("PLAINMOTE_ADMIN_KEYS"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.AdminOrigins, err = parseAdminOrigins(os.Getenv("PLAINMOTE_ADMIN_ORIGINS"))
+	if err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// parseAdminKeys reads Base64 Ed25519 public keys, comma-separated. More than
+// one lets a new key be put in place before the old one is taken out.
+func parseAdminKeys(value string) ([]ed25519.PublicKey, error) {
+	var keys []ed25519.PublicKey
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(part)
+		if err != nil {
+			raw, err = base64.RawURLEncoding.DecodeString(part)
+		}
+		if err != nil || len(raw) != ed25519.PublicKeySize {
+			return nil, errors.New("PLAINMOTE_ADMIN_KEYS must be Base64 Ed25519 public keys (32 bytes each), comma-separated")
+		}
+		keys = append(keys, ed25519.PublicKey(raw))
+	}
+	return keys, nil
+}
+
+// parseAdminOrigins reads browser origins - scheme, host and port, nothing
+// after - that may call the admin interface from another site.
+func parseAdminOrigins(value string) ([]string, error) {
+	var origins []string
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		parsed, err := url.Parse(part)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
+			(parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+			return nil, fmt.Errorf("PLAINMOTE_ADMIN_ORIGINS: %q is not an origin such as https://admin.example.com", part)
+		}
+		origins = append(origins, parsed.Scheme+"://"+strings.ToLower(parsed.Host))
+	}
+	return origins, nil
 }
 
 // parseSourceURL takes an absolute http(s) address: it is a link every page

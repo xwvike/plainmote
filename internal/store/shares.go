@@ -163,9 +163,19 @@ func shareExpiry(now time.Time, ttl time.Duration) *time.Time {
 	return &deadline
 }
 
+// ErrTakenDown refuses a new link for a resource the operator took down.
+var ErrTakenDown = errors.New("此资源已被下架，不能创建分享链接")
+
 func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name string, ttl time.Duration, maxUses int) (Link, error) {
 	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {
 		return Link{}, err
+	}
+	var takenDown bool
+	if err := d.db.QueryRow(ctx, `SELECT taken_down_at IS NOT NULL FROM resources WHERE id = $1`, resourceID).Scan(&takenDown); err != nil {
+		return Link{}, translateNotFound(err)
+	}
+	if takenDown {
+		return Link{}, ErrTakenDown
 	}
 	if err := validateShareTerms(ttl, maxUses); err != nil {
 		return Link{}, err
@@ -328,14 +338,20 @@ func (d *Store) ConsumeToken(ctx context.Context, token string, meta RequestMeta
 	hash := hashToken(token)
 	err = d.withTx(ctx, func(tx pgx.Tx) error {
 		var linkID, linkName, resourceID string
+		// A link delivers only while its resource is up and its owner is not
+		// suspended; otherwise nothing is spent and the refusal says why.
 		err := tx.QueryRow(ctx, `
-UPDATE links
-SET used_count = used_count + 1, last_used_at = $1
-WHERE token_hash = $2
-  AND revoked_at IS NULL
-  AND (expires_at IS NULL OR expires_at > $1)
-  AND (max_uses = 0 OR used_count < max_uses)
-RETURNING id, resource_id, name
+UPDATE links l
+SET used_count = l.used_count + 1, last_used_at = $1
+FROM resources r JOIN users u ON u.id = r.owner_id
+WHERE l.token_hash = $2
+  AND r.id = l.resource_id
+  AND r.taken_down_at IS NULL
+  AND u.suspended_at IS NULL
+  AND l.revoked_at IS NULL
+  AND (l.expires_at IS NULL OR l.expires_at > $1)
+  AND (l.max_uses = 0 OR l.used_count < l.max_uses)
+RETURNING l.id, l.resource_id, l.name
 `, now, hash).Scan(&linkID, &resourceID, &linkName)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return d.recordRefusalTx(ctx, tx, hash, meta, now, &result)
@@ -361,6 +377,7 @@ func (d *Store) recordRefusalTx(ctx context.Context, tx pgx.Tx, hash string, met
 	var linkID, resourceID, name, ownerID, resourceName, resourceFile string
 	var expires, revoked pgtype.Timestamptz
 	var maxUses, usedCount int
+	var takenDown, suspended bool
 	// The resource comes along so the refusal is recorded against an owner and
 	// keeps the name it was reached under. The join is inner because a link
 	// cannot outlive its resource - links cascade with it - and a row that
@@ -368,12 +385,13 @@ func (d *Store) recordRefusalTx(ctx context.Context, tx pgx.Tx, hash string, met
 	// token is the honest answer.
 	err := tx.QueryRow(ctx, `
 SELECT l.id, l.resource_id, l.name, l.expires_at, l.revoked_at, l.max_uses, l.used_count,
-       r.owner_id, r.name, r.filename
+       r.owner_id, r.name, r.filename, r.taken_down_at IS NOT NULL, u.suspended_at IS NOT NULL
 FROM links l
 JOIN resources r ON r.id = l.resource_id
+JOIN users u ON u.id = r.owner_id
 WHERE l.token_hash = $1
 `, hash).Scan(&linkID, &resourceID, &name, &expires, &revoked, &maxUses, &usedCount,
-		&ownerID, &resourceName, &resourceFile)
+		&ownerID, &resourceName, &resourceFile, &takenDown, &suspended)
 	if errors.Is(err, pgx.ErrNoRows) {
 		result.Reason = ReasonInvalid
 		return nil
@@ -385,6 +403,10 @@ WHERE l.token_hash = $1
 	result.LinkName = name
 	reason, detail := OutcomeExhausted, "link is used up"
 	switch {
+	case takenDown:
+		reason, detail = OutcomeTakenDown, "resource was taken down"
+	case suspended:
+		reason, detail = OutcomeSuspended, "owner is suspended"
 	case revoked.Valid:
 		reason, detail = OutcomeRevoked, "link was revoked"
 	case expires.Valid && !now.Before(expires.Time):
@@ -429,8 +451,8 @@ SELECT CASE
   WHEN r.content_type = $2 THEN 'encrypted'
   WHEN r.content_type LIKE 'audio/%' OR r.content_type LIKE 'video/%' THEN 'media'
   ELSE '' END
-FROM links l JOIN resources r ON r.id = l.resource_id
-WHERE l.token_hash = $1 AND r.origin_url = ''`, hashToken(token), EncryptedContentType).Scan(&shell)
+FROM links l JOIN resources r ON r.id = l.resource_id JOIN users u ON u.id = r.owner_id
+WHERE l.token_hash = $1 AND r.origin_url = '' AND r.taken_down_at IS NULL AND u.suspended_at IS NULL`, hashToken(token), EncryptedContentType).Scan(&shell)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ShellNone, nil
 	}

@@ -152,3 +152,10 @@ func isNotFound(err error) bool {
 	var notFound *types.NotFound
 	return errors.As(err, &notFound)
 }
+
+// Ping checks that the bucket answers, with one metadata request that reads
+// no object.
+func (s *S3) Ping(ctx context.Context) error {
+	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(s.bucket)})
+	return err
+}

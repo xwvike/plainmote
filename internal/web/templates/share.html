@@ -10,11 +10,11 @@
         <button type="submit" class="txt danger">{{tr .Locale "revoke_all"}}</button>
       </form>
       {{end}}
-      <form method="post" action="/resources/{{.Resource.ID}}/share" class="inline" data-share-create>
+      {{if not .Resource.TakenDown}}<form method="post" action="/resources/{{.Resource.ID}}/share" class="inline" data-share-create>
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="create">
         <button type="submit" class="sm">{{tr .Locale "new_share"}}</button>
-      </form>
+      </form>{{end}}
     </span>
   </div>
   <div class="pb{{if or .Shares .EndedShares}} shl-sheet{{end}}">

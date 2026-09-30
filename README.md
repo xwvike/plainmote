@@ -108,6 +108,12 @@ Optional:
 | `PLAINMOTE_OPERATOR` | empty | Operator name, shown in the about page, privacy policy and terms |
 | `PLAINMOTE_CONTACT_EMAIL` | empty | Contact email; the about, privacy, terms and contact pages are served only when it is set |
 | `PLAINMOTE_SOURCE_URL` | this repository | Where the "Source code" link at the foot of every page points; a modified deployment must point it at its modified source, as the AGPL requires |
+| `PLAINMOTE_ADMIN_KEYS` | empty | Ed25519 public keys allowed to call the admin interface, Base64, comma-separated; the interface does not exist while this is empty |
+| `PLAINMOTE_ADMIN_ORIGINS` | empty | Browser origins of admin pages allowed to call the admin interface across sites, comma-separated |
+
+### Administration
+
+The service has no administration pages. It offers a signed JSON interface instead, described in [`docs/admin-api.md`](docs/admin-api.md) (in Chinese), which an administration page hosted anywhere, including on a local machine, can call. Requests are signed with an Ed25519 private key held by the administrator; the service holds only the public key. The interface covers a deployment overview, suspending accounts, taking down or deleting resources, revoking links and granting plans, and records every change in an append-only audit log. It never returns resource content, share addresses or the client details of access records. `go run ./cmd/plainmote-admin keygen` generates a key pair, and `go run ./cmd/plainmote-admin call` signs individual requests.
 
 ### About the legal pages
 
@@ -141,6 +147,7 @@ The bundle is rebuilt with `tools/codemirror/build.sh`; regular builds do not re
 
 ```text
 cmd/plainmote/       service entry point
+cmd/plainmote-admin/ admin key generation and request signing
 internal/app/        service assembly and HTTP lifecycle
 internal/auth/       GitHub OAuth
 internal/blob/       S3-compatible object storage

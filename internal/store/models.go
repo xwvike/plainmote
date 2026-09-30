@@ -12,6 +12,10 @@ type User struct {
 	Login     string
 	Name      string
 	AvatarURL string
+	// SuspendedReason is set, and Suspended true, for an account the
+	// operator has suspended. Only GetUser reads them.
+	Suspended       bool
+	SuspendedReason string
 }
 
 type Resource struct {
@@ -38,6 +42,10 @@ type Resource struct {
 	VersionAt     time.Time
 	RestoredFrom  int
 	ContentSHA256 string
+	// TakenDown marks a resource the operator has taken down, with the
+	// reason its owner is shown.
+	TakenDown      bool
+	TakedownReason string
 }
 
 // Version is content a resource held before its current one. It is read,

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"plainmote/internal/auth"
@@ -158,6 +159,29 @@ func TestLoadSourceURL(t *testing.T) {
 		t.Setenv("PLAINMOTE_SOURCE_URL", bad)
 		if _, err := Load(); err == nil {
 			t.Errorf("%q must be refused", bad)
+		}
+	}
+}
+
+func TestAdminKeysAndOrigins(t *testing.T) {
+	key := strings.Repeat("A", 43) + "="
+	keys, err := parseAdminKeys(" " + key + " , " + key)
+	if err != nil || len(keys) != 2 {
+		t.Fatalf("two Base64 keys: %v %v", keys, err)
+	}
+	if keys, err := parseAdminKeys(""); err != nil || keys != nil {
+		t.Fatal("no keys is no admin interface, not an error")
+	}
+	if _, err := parseAdminKeys("dGVzdA=="); err == nil {
+		t.Fatal("a key that is not 32 bytes is refused")
+	}
+	origins, err := parseAdminOrigins("http://localhost:5173, https://Admin.Example.com/")
+	if err != nil || len(origins) != 2 || origins[1] != "https://admin.example.com" {
+		t.Fatalf("origins: %v %v", origins, err)
+	}
+	for _, bad := range []string{"localhost:5173", "https://a.example/path", "https://a.example?x=1", "ftp://a.example"} {
+		if _, err := parseAdminOrigins(bad); err == nil {
+			t.Fatalf("%q is not an origin", bad)
 		}
 	}
 }

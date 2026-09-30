@@ -97,7 +97,7 @@ func (a *App) templateSet() *template.Template {
 				return "on"
 			case store.OutcomeExpired, store.OutcomeExhausted:
 				return "wa"
-			case store.OutcomeRevoked, store.OutcomeUpstreamError, "invalid", "missing_token":
+			case store.OutcomeRevoked, store.OutcomeUpstreamError, store.OutcomeTakenDown, store.OutcomeSuspended, "invalid", "missing_token":
 				return "no"
 			default:
 				return "off"

@@ -43,7 +43,8 @@
                 {{else}}<span class="mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
               </td>
               <td>
-                {{if .LiveShares}}<span class="st on"><i></i><span>{{countText $.Locale .LiveShares "shares"}}</span></span>
+                {{if .TakenDown}}<span class="st no"><i></i><span>{{tr $.Locale "taken_down"}}</span></span>
+                {{else if .LiveShares}}<span class="st on"><i></i><span>{{countText $.Locale .LiveShares "shares"}}</span></span>
                 {{else}}<span class="st off"><i></i><span>{{tr $.Locale "not_shared"}}</span></span>{{end}}
               </td>
               <td class="num">{{formatMinute .UpdatedAt}}</td>

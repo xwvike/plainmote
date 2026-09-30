@@ -22,6 +22,9 @@ const (
 	OutcomeExhausted     = "exhausted"
 	OutcomeRevoked       = "revoked"
 	OutcomeUpstreamError = "upstream_error"
+	// The operator took the resource down, or suspended its owner.
+	OutcomeTakenDown = "taken_down"
+	OutcomeSuspended = "suspended"
 
 	// ReasonInvalid is reported to the caller but never stored: a token nobody
 	// issued has no resource to hang the row off, and so no owner to read it.
@@ -29,7 +32,7 @@ const (
 )
 
 // AccessOutcomes are the stored outcomes, in the order the filter offers them.
-var AccessOutcomes = []string{OutcomeSuccess, OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError}
+var AccessOutcomes = []string{OutcomeSuccess, OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError, OutcomeTakenDown, OutcomeSuspended}
 
 // accessFoldWindow is how long one caller's repeat of the same refusal folds
 // into the row already there instead of adding another.
@@ -42,7 +45,7 @@ const accessFoldWindow = time.Minute
 // is something they asked to see.
 func foldable(outcome string) bool {
 	switch outcome {
-	case OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError:
+	case OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError, OutcomeTakenDown, OutcomeSuspended:
 		return true
 	}
 	return false
@@ -317,6 +320,9 @@ WHERE id IN (SELECT id FROM account_exports WHERE created_at < $1 ORDER BY creat
 `, now.Add(-ExportWindow)); err != nil {
 		return result, fmt.Errorf("prune account exports: %w", err)
 	}
+	d.pruneMu.Lock()
+	d.pruneAt, d.pruneLast = now, result
+	d.pruneMu.Unlock()
 	return result, nil
 }
 

@@ -11,6 +11,13 @@ CREATE TABLE IF NOT EXISTS users (
   e2ee BOOLEAN NOT NULL DEFAULT FALSE
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS e2ee BOOLEAN NOT NULL DEFAULT FALSE;
+-- An account the operator has suspended: it cannot sign in and its links
+-- deliver nothing, but nothing it holds is deleted. The reason is shown to
+-- its owner at sign-in.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_reason TEXT NOT NULL DEFAULT '';
+-- When the account last signed in, for the operator's overview.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_signed_in_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS plans (
   id UUID PRIMARY KEY,
@@ -103,6 +110,10 @@ ALTER TABLE resources ADD COLUMN IF NOT EXISTS version_at TIMESTAMPTZ;
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS restored_from INTEGER;
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS content_sha256 TEXT NOT NULL DEFAULT '';
 UPDATE resources SET version_at = updated_at WHERE version_at IS NULL;
+-- A resource the operator has taken down: its links deliver nothing and no
+-- new ones can be made; its owner sees the reason and may delete it.
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS taken_down_at TIMESTAMPTZ;
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS takedown_reason TEXT NOT NULL DEFAULT '';
 
 -- What a resource held before, one row per replaced version. Kept whole rather
 -- than as changes against the next one, so any version can be read, compared
@@ -223,3 +234,18 @@ CREATE INDEX IF NOT EXISTS access_logs_time_idx ON access_logs(occurred_at DESC)
 -- The access log copied the same placeholders; see the resources update above.
 UPDATE access_logs SET link_name = '' WHERE link_name = '未命名分享';
 UPDATE access_logs SET resource_name = '' WHERE resource_name IN ('未命名资源', '匿名内容') AND resource_file = '';
+
+-- Every change made through the admin interface, append only. Targets are
+-- plain text rather than references, so the record outlives what it names.
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id UUID PRIMARY KEY,
+  at TIMESTAMPTZ NOT NULL,
+  key_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  remote_ip TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS admin_audit_at_idx ON admin_audit(at DESC);
+CREATE INDEX IF NOT EXISTS admin_audit_target_idx ON admin_audit(target_id, at DESC);

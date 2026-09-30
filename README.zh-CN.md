@@ -108,6 +108,12 @@ docker compose up -d
 | `PLAINMOTE_OPERATOR` | 空 | 运营者名称，显示在关于、隐私政策和服务条款中 |
 | `PLAINMOTE_CONTACT_EMAIL` | 空 | 联系邮箱；设置后才提供关于、隐私政策、服务条款和联系页面 |
 | `PLAINMOTE_SOURCE_URL` | 本仓库地址 | 页面底部“源代码”链接指向的地址；部署修改过的版本时，依 AGPL 须指向修改后的源代码 |
+| `PLAINMOTE_ADMIN_KEYS` | 空 | 允许调用管理接口的 Ed25519 公钥，Base64 编码，逗号分隔；为空时管理接口不存在 |
+| `PLAINMOTE_ADMIN_ORIGINS` | 空 | 允许在浏览器中跨域调用管理接口的管理页面来源，逗号分隔 |
+
+### 管理
+
+本服务不包含管理页面，而是提供一组签名保护的 JSON 接口（见 [`docs/admin-api.md`](docs/admin-api.md)），供部署在任意位置（包括本机）的管理页面调用。请求由管理员持有的 Ed25519 私钥签名，服务端仅保存公钥。接口涵盖部署概况、停用账号、下架或删除资源、撤销链接及授予套餐，所有变更写入只追加的审计记录；接口不返回资源内容、分享地址及访问记录中的客户端信息。`go run ./cmd/plainmote-admin keygen` 生成密钥对，`go run ./cmd/plainmote-admin call` 可为单个请求签名。
 
 ### 关于法律文本
 
@@ -141,6 +147,7 @@ npm --prefix tools/codemirror test
 
 ```text
 cmd/plainmote/       服务入口
+cmd/plainmote-admin/ 管理密钥生成与请求签名工具
 internal/app/        服务组装与 HTTP 生命周期
 internal/auth/       GitHub OAuth
 internal/blob/       S3 兼容对象存储

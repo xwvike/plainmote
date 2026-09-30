@@ -185,7 +185,8 @@ func (d *Store) resourceForOwner(ctx context.Context, q storeQuerier, ownerID, i
 	var resource Resource
 	err := q.QueryRow(ctx, `
 SELECT id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at,
-       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), content_sha256
+       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), content_sha256,
+       taken_down_at IS NOT NULL, takedown_reason
 FROM resources
 WHERE id = $1 AND owner_id = $2
 `, id, ownerID).Scan(
@@ -193,6 +194,7 @@ WHERE id = $1 AND owner_id = $2
 		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding, &resource.OriginURL,
 		&resource.CreatedAt, &resource.UpdatedAt,
 		&resource.Version, &resource.VersionAt, &resource.RestoredFrom, &resource.ContentSHA256,
+		&resource.TakenDown, &resource.TakedownReason,
 	)
 	if err != nil {
 		return Resource{}, translateNotFound(err)
@@ -221,7 +223,8 @@ WHERE owner_id = $1 AND ($2 = '' OR name ILIKE $3 ESCAPE '\' OR filename ILIKE $
 SELECT r.id, r.owner_id, r.name, r.filename, r.content_type, r.content_encoding, r.origin_url, r.updated_at,
        (SELECT COUNT(*) FROM links l WHERE l.resource_id = r.id AND l.revoked_at IS NULL
           AND (l.expires_at IS NULL OR l.expires_at > $1)
-          AND (l.max_uses = 0 OR l.used_count < l.max_uses))
+          AND (l.max_uses = 0 OR l.used_count < l.max_uses)),
+       r.taken_down_at IS NOT NULL
 FROM resources r
 WHERE r.owner_id = $2 AND ($3 = '' OR r.name ILIKE $4 ESCAPE '\' OR r.filename ILIKE $4 ESCAPE '\')
 ORDER BY r.updated_at DESC, r.id
@@ -237,6 +240,7 @@ LIMIT $5 OFFSET $6
 		if err := rows.Scan(
 			&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
 			&resource.ContentType, &resource.ContentEncoding, &resource.OriginURL, &resource.UpdatedAt, &resource.LiveShares,
+			&resource.TakenDown,
 		); err != nil {
 			return nil, 0, err
 		}

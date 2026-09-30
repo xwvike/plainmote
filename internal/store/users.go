@@ -48,6 +48,9 @@ RETURNING id, github_id, login, name, avatar_url
 	return user, nil
 }
 
+// ErrSuspended is a sign-in by an account the operator has suspended.
+var ErrSuspended = errors.New("store: account suspended")
+
 func (d *Store) CreateSession(ctx context.Context, userID string, ttl time.Duration) (token, csrf string, expires time.Time, err error) {
 	token, err = randomSecret(32)
 	if err != nil {
@@ -59,10 +62,24 @@ func (d *Store) CreateSession(ctx context.Context, userID string, ttl time.Durat
 	}
 	now := time.Now().UTC()
 	expires = now.Add(ttl)
-	_, err = d.db.Exec(ctx, `
+	err = d.withTx(ctx, func(tx pgx.Tx) error {
+		// A suspended account gets no session, however it got this far.
+		tag, err := tx.Exec(ctx, `UPDATE users SET last_signed_in_at = $2 WHERE id = $1 AND suspended_at IS NULL`, userID, now)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrSuspended
+		}
+		_, err = tx.Exec(ctx, `
 INSERT INTO sessions(id, user_id, token_hash, csrf_hash, expires_at, created_at)
 VALUES($1, $2, $3, $4, $5, $6)
 `, uuid.NewString(), userID, hashToken(token), hashToken(csrf), expires, now)
+		return err
+	})
+	if errors.Is(err, ErrSuspended) {
+		return "", "", time.Time{}, err
+	}
 	if err != nil {
 		return "", "", time.Time{}, fmt.Errorf("save session: %w", err)
 	}
@@ -77,7 +94,7 @@ func (d *Store) SessionUser(ctx context.Context, token string) (User, string, er
 SELECT s.id, u.id, u.github_id, u.login, u.name, u.avatar_url
 FROM sessions s
 JOIN users u ON u.id = s.user_id
-WHERE s.token_hash = $1 AND s.expires_at > $2
+WHERE s.token_hash = $1 AND s.expires_at > $2 AND u.suspended_at IS NULL
 `, tokenHash, time.Now().UTC()).Scan(
 		&sessionID, &user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
 	)
@@ -104,8 +121,10 @@ func (d *Store) DeleteSession(ctx context.Context, sessionID string) error {
 
 func (d *Store) GetUser(ctx context.Context, githubID string) (User, error) {
 	var user User
-	err := d.db.QueryRow(ctx, `SELECT id, github_id, login, name, avatar_url FROM users WHERE github_id = $1`, githubID).Scan(
-		&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
+	err := d.db.QueryRow(ctx, `
+SELECT id, github_id, login, name, avatar_url, suspended_at IS NOT NULL, suspended_reason FROM users WHERE github_id = $1
+`, githubID).Scan(
+		&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL, &user.Suspended, &user.SuspendedReason,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrNotFound

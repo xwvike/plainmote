@@ -29,6 +29,10 @@ func accessOutcomeText(locale, outcome string) string {
 		return translate(locale, "outcome_revoked")
 	case store.OutcomeUpstreamError:
 		return translate(locale, "outcome_upstream_error")
+	case store.OutcomeTakenDown:
+		return translate(locale, "outcome_taken_down")
+	case store.OutcomeSuspended:
+		return translate(locale, "outcome_suspended")
 	case "invalid":
 		return translate(locale, "outcome_invalid")
 	case "missing_token":
@@ -50,6 +54,10 @@ func accessOutcomeDescription(locale, outcome string) string {
 		return translate(locale, "outcome_desc_revoked")
 	case store.OutcomeUpstreamError:
 		return translate(locale, "outcome_desc_upstream_error")
+	case store.OutcomeTakenDown:
+		return translate(locale, "outcome_desc_taken_down")
+	case store.OutcomeSuspended:
+		return translate(locale, "outcome_desc_suspended")
 	case "invalid", "missing_token":
 		return translate(locale, "outcome_desc_invalid")
 	default:

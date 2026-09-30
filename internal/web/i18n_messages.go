@@ -372,6 +372,14 @@ var messageTable = map[string][6]string{
 	"meter_history":               {"Earlier versions (borrowed)", "历史版本（借用）", "歷史版本（借用）", "以前のバージョン（借用）", "Versions précédentes (empruntées)", "Frühere Versionen (geliehen)"},
 	"meter_free":                  {"Free", "空闲", "空閒", "空き", "Libre", "Frei"},
 	"compare_files_differ":        {"The two versions differ; they are shown side by side.", "两个版本内容不同，并列显示如下。", "兩個版本內容不同，並列顯示如下。", "2 つのバージョンは内容が異なります。並べて表示します。", "Les deux versions diffèrent ; elles sont affichées côte à côte.", "Die beiden Versionen unterscheiden sich; sie werden nebeneinander angezeigt."},
+	"account_suspended":           {"This account has been suspended. Reason: ", "此账号已被停用。原因：", "此帳號已被停用。原因：", "このアカウントは停止されています。理由：", "Ce compte a été suspendu. Motif : ", "Dieses Konto wurde gesperrt. Grund: "},
+	"takedown_notice":             {"This resource has been taken down by the operator; its share links no longer deliver it and no new links can be created. You can still delete it. Reason: ", "此资源已被运营者下架，分享链接已停止交付，也不能创建新链接；您仍可删除它。原因：", "此資源已被營運者下架，分享連結已停止交付，也不能建立新連結；您仍可刪除它。原因：", "このリソースは運営者により公開停止されました。共有リンクからは取得できず、新しいリンクも作成できません。削除は可能です。理由：", "Cette ressource a été retirée par l’exploitant : ses liens de partage ne la transmettent plus et aucun nouveau lien ne peut être créé. Vous pouvez toujours la supprimer. Motif : ", "Diese Ressource wurde vom Betreiber gesperrt: Ihre Freigabelinks liefern sie nicht mehr aus, und es können keine neuen Links erstellt werden. Sie können sie weiterhin löschen. Grund: "},
+	"taken_down":                  {"Taken down", "已下架", "已下架", "公開停止", "Retirée", "Gesperrt"},
+	"error_taken_down":            {"This resource has been taken down; no share links can be created for it.", "此资源已被下架，不能创建分享链接。", "此資源已被下架，不能建立分享連結。", "このリソースは公開停止中のため、共有リンクを作成できません。", "Cette ressource a été retirée ; aucun lien de partage ne peut être créé.", "Diese Ressource ist gesperrt; es können keine Freigabelinks erstellt werden."},
+	"outcome_taken_down":          {"Taken down", "已下架", "已下架", "公開停止", "Retirée", "Gesperrt"},
+	"outcome_suspended":           {"Account suspended", "账号已停用", "帳號已停用", "アカウント停止", "Compte suspendu", "Konto gesperrt"},
+	"outcome_desc_taken_down":     {"The resource had been taken down by the operator", "资源已被运营者下架", "資源已被營運者下架", "リソースは運営者により公開停止されていました", "La ressource avait été retirée par l’exploitant", "Die Ressource war vom Betreiber gesperrt"},
+	"outcome_desc_suspended":      {"The owner’s account had been suspended", "资源所有者的账号已被停用", "資源擁有者的帳號已被停用", "所有者のアカウントが停止されていました", "Le compte du propriétaire avait été suspendu", "Das Konto des Eigentümers war gesperrt"},
 }
 
 var messageCatalogs = func() map[string]map[string]string {

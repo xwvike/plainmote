@@ -74,6 +74,10 @@ func (a *App) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, csrf, expires, err := a.db.CreateSession(r.Context(), user.ID, a.cfg.SessionTTL)
+	if errors.Is(err, store.ErrSuspended) {
+		a.renderSuspended(w, r, profile.ID)
+		return
+	}
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
@@ -107,4 +111,17 @@ func (a *App) githubIdentityAdmitted(ctx context.Context, githubID string) (bool
 func (a *App) clearOAuthStateCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: stateCookie, Value: "", Path: "/auth/github", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	http.SetCookie(w, &http.Cookie{Name: nextCookie, Value: "", Path: "/auth/github", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+}
+
+// renderSuspended answers a sign-in by a suspended account with the sign-in
+// page and the reason it was given, rather than a bare refusal.
+func (a *App) renderSuspended(w http.ResponseWriter, r *http.Request, githubID string) {
+	a.clearOAuthStateCookie(w)
+	locale := requestLanguage(r).Locale
+	message := translate(locale, "account_suspended")
+	if user, err := a.db.GetUser(r.Context(), githubID); err == nil && user.SuspendedReason != "" {
+		message += user.SuspendedReason
+	}
+	data := pageData{LoginURL: "/auth/github", RegistrationMode: a.cfg.RegistrationMode, Error: message}
+	a.renderTemplate(w, r, http.StatusForbidden, "login.html", data)
 }

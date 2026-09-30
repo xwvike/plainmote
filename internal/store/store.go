@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,6 +21,11 @@ type Store struct {
 	db     *pgxpool.Pool
 	blobs  blob.Store
 	cipher *tokenCipher
+
+	// The last prune that finished, for the operator's overview.
+	pruneMu   sync.Mutex
+	pruneAt   time.Time
+	pruneLast PruneResult
 }
 
 func Open(ctx context.Context, databaseURL string, key []byte, blobs blob.Store) (*Store, error) {

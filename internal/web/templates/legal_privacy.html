@@ -37,6 +37,7 @@
 
 <h2>二、我们如何使用信息</h2>
 <p>我们仅将上述信息用于以下目的：提供本服务，包括登录、内容存储与分发，以及向资源所有者展示访问记录；保障服务安全，调查和处理滥用行为；排查和修复故障。我们不会将上述信息用于广告投放、用户画像或机器学习模型训练，也不会出售上述信息。</p>
+<p>运营者通过管理接口管理本服务。该接口仅提供账号与资源的元数据（如 GitHub 用户名、资源名称、文件名、类型、大小及分享链接的数量与状态）和汇总统计，不提供资源内容、分享链接地址或访问记录中的访问者信息。通过该接口进行的停用账号、下架或删除资源等操作均记录操作时间、对象、原因及操作来源 IP。</p>
 
 <h2>三、我们如何共享和披露信息</h2>
 <ul>
@@ -54,6 +55,7 @@
   <li>数据导出记录：{{legalDuration true .Legal.ExportWindow}}后删除。</li>
   <li>资源与分享链接：保存至您主动删除。删除资源将同时删除其正文、历史版本及全部分享链接。</li>
   <li>资源的历史版本：资源内容被替换后，原内容作为历史版本保留，每个资源最多保留 {{.Legal.HistoryKeep}} 个，每个版本自被替换时起最长保留 {{legalDuration true .Legal.HistoryRetention}}；存储空间不足时，最早被替换的版本将提前删除。您可以随时删除单个历史版本。</li>
+  <li>管理操作记录：长期保存，用于核查运营者进行的管理操作；删除账号或资源不会删除针对其作出的管理操作记录。</li>
   <li>访问记录：{{if .Legal.LogRetention}}保存 {{legalDuration true .Legal.LogRetention}}后自动删除；删除资源不会提前删除其访问记录。{{else}}不自动删除；删除资源亦不会删除其访问记录。{{end}}</li>
   {{if .Legal.Anonymous}}<li>临时分享：链接失效后删除。</li>{{end}}
 </ul>
@@ -121,6 +123,7 @@
 
 <h2>2. How we use information</h2>
 <p>We use the information above only to: provide the Service, including sign-in, content storage and delivery, and displaying access records to resource owners; maintain the security of the Service and investigate and address abuse; and diagnose and fix faults. We do not use this information for advertising, profiling or training machine learning models, and we do not sell it.</p>
+<p>The operator manages the Service through an administration interface. It provides only metadata about accounts and resources (such as the GitHub username, resource name, filename, type and size, and the number and state of share links) and aggregate statistics; it does not provide resource content, share link addresses or visitor information from access records. Actions taken through it, such as suspending an account or taking down or deleting a resource, are recorded with the time, the object, the reason and the source IP address of the action.</p>
 
 <h2>3. How we share and disclose information</h2>
 <ul>
@@ -138,6 +141,7 @@
   <li>Data export records: deleted after {{legalDuration false .Legal.ExportWindow}}.</li>
   <li>Resources and share links: retained until you delete them. Deleting a resource also deletes its body, its earlier versions and all of its share links.</li>
   <li>Earlier versions of resources: when the content of a resource is replaced, the previous content is kept as an earlier version. Each resource keeps at most {{.Legal.HistoryKeep}}, each for at most {{legalDuration false .Legal.HistoryRetention}} from when it was replaced; when storage runs short, the versions replaced longest ago are deleted sooner. You may delete any earlier version at any time.</li>
+  <li>Records of administrative actions: retained indefinitely, so that the operator’s actions can be reviewed. Deleting an account or a resource does not delete the records of actions taken on it.</li>
   <li>Access records: {{if .Legal.LogRetention}}deleted automatically after {{legalDuration false .Legal.LogRetention}}. Deleting a resource does not cause its access records to be deleted earlier.{{else}}not deleted automatically. Deleting a resource does not delete its access records.{{end}}</li>
   {{if .Legal.Anonymous}}<li>Quick shares: deleted after the link expires.</li>{{end}}
 </ul>

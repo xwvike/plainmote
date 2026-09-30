@@ -18,6 +18,13 @@ import (
 	"plainmote/internal/web"
 )
 
+// Version and Revision name the build. The image build sets them with
+// -ldflags; a build from source leaves them as they are here.
+var (
+	Version  = "dev"
+	Revision = "unknown"
+)
+
 // Run starts the web service from environment configuration and blocks until
 // it receives SIGINT or SIGTERM.
 func Run() error {
@@ -59,6 +66,11 @@ func Run() error {
 		ContactEmail:     cfg.ContactEmail,
 		SourceURL:        cfg.SourceURL,
 		BlobEndpoint:     cfg.BlobEndpoint,
+		AdminKeys:        cfg.AdminKeys,
+		AdminOrigins:     cfg.AdminOrigins,
+		Version:          Version,
+		Revision:         Revision,
+		StartedAt:        time.Now().UTC(),
 	}, db, upstream.New(cfg.MaxContent), auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
 
 	fmt.Fprintf(os.Stderr, "listening on %s\n", cfg.Listen)
