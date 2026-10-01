@@ -38,8 +38,8 @@
             {{else}}
             <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}">{{tr $.Locale "view"}}</a>
             <a class="txt" href="/resources/{{$.Resource.ID}}/versions/compare?from={{.Number}}&amp;to={{$.Resource.Version}}">{{tr $.Locale "compare_current"}}</a>
-            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}?restore=1">{{tr $.Locale "restore"}}</a>
-            <a class="txt danger" href="/resources/{{$.Resource.ID}}/versions?remove={{.Number}}">{{tr $.Locale "delete"}}</a>
+            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}?restore=1" data-dialog>{{tr $.Locale "restore"}}</a>
+            <a class="txt danger" href="/resources/{{$.Resource.ID}}/versions?remove={{.Number}}" data-dialog>{{tr $.Locale "delete"}}</a>
             {{end}}
           </span>
         </li>
@@ -53,19 +53,27 @@
     {{end}}
   </main>
 
+  {{if .RemoveVersion}}<div class="scrim"></div>{{end}}
+  {{template "versions-dialog" .}}
+  {{template "footer" .}}
+  <script type="module" src="/static/parts.js"></script>
+</body>
+</html>{{end}}
+
+
+{{define "versions-dialog"}}
   {{if .RemoveVersion}}
-  <div class="scrim"></div>
-  <dialog class="dlg" open>
+  <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{printf (tr .Locale "remove_title") .RemoveVersion}}</b>
-      <a class="x" href="/resources/{{.Resource.ID}}/versions" aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="/resources/{{.Resource.ID}}/versions" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       <p class="err">{{printf (tr .Locale "remove_warning") .RemoveVersion}}</p>
       <p class="hint">{{printf (tr .Locale "remove_hint") .RemoveVersion}}</p>
     </div>
     <footer>
-      <a class="btn" href="/resources/{{.Resource.ID}}/versions">{{tr .Locale "cancel"}}</a>
+      <a class="btn" href="/resources/{{.Resource.ID}}/versions" data-close>{{tr .Locale "cancel"}}</a>
       <form method="post" action="/resources/{{.Resource.ID}}/versions/{{.RemoveVersion}}" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="delete">
@@ -74,6 +82,6 @@
     </footer>
   </dialog>
   {{end}}
-  {{template "footer" .}}
-</body>
-</html>{{end}}
+{{end}}
+
+{{define "versions.html#parts"}}{{template "versions-dialog" .}}{{end}}

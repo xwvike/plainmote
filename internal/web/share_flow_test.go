@@ -190,43 +190,50 @@ func TestShareFlowThroughRouter(t *testing.T) {
 	}
 }
 
-func TestCreateShareReturnsARefreshableFragment(t *testing.T) {
+// TestShareActionsAnswerWithParts follows parts.js through a share action:
+// the POST redirects as it always has, and the page it lands on, asked for
+// with the parts header, answers with the share list instead of the page.
+func TestShareActionsAnswerWithParts(t *testing.T) {
 	db, user, resource := testDatabase(t)
-	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
-	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
-	if err != nil {
-		t.Fatal(err)
+	client := newVersionClient(t, db, user)
+	base := "/resources/" + resource.ID
+
+	created := client.do(http.MethodPost, base+"/share", url.Values{"action": {"create"}})
+	if created.Code != http.StatusSeeOther || created.Header().Get("Location") != base {
+		t.Fatalf("create redirects to the resource: %d %q", created.Code, created.Header().Get("Location"))
 	}
-	form := url.Values{"action": {"create"}, "csrf": {csrf}}
-	request := httptest.NewRequest(http.MethodPost, "https://cfg.test/resources/"+resource.ID+"/share", strings.NewReader(form.Encode()))
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Set("X-PlainMote-Fragment", "shares")
-	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
-	request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
-	response := httptest.NewRecorder()
-	app.Handler().ServeHTTP(response, request)
-	if response.Code != http.StatusOK {
-		t.Fatalf("fragment create: %d %q", response.Code, response.Body.String())
-	}
-	body := response.Body.String()
-	if strings.Contains(body, "<html") || !strings.Contains(body, "data-share-panel") {
-		t.Fatalf("response is not the share fragment: %q", body)
-	}
-	shares, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
+	shares, err := db.ListShares(context.Background(), user.ID, resource.ID, time.Now().UTC())
 	if err != nil || len(shares) != 1 {
 		t.Fatalf("created shares: %d %v", len(shares), err)
 	}
-	if !strings.Contains(body, shares[0].Token) {
-		t.Fatal("fragment does not contain the new share")
+
+	parts := client.partsPage(base)
+	if strings.Contains(parts, "<html") || strings.Contains(parts, "answer=42") {
+		t.Fatalf("the parts carry neither the page nor the body: %q", parts)
+	}
+	for _, want := range []string{`data-part="shares"`, `data-part="flash"`, shares[0].Token, `data-dialog`} {
+		if !strings.Contains(parts, want) {
+			t.Fatalf("the parts are missing %q", want)
+		}
+	}
+	if strings.Contains(parts, `data-part="dialog"`) {
+		t.Fatal("no dialog was asked for")
 	}
 
-	pageRequest := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+resource.ID, nil)
-	pageRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
-	page := httptest.NewRecorder()
-	app.Handler().ServeHTTP(page, pageRequest)
-	if !strings.Contains(page.Body.String(), `data-share-create`) || !strings.Contains(page.Body.String(), `/static/resource.js`) {
-		t.Fatal("resource page does not enable the partial share refresh")
+	// The settings link opens the dialog over the page; a refused update
+	// comes back as the same dialog with the message inside it.
+	settings := client.partsPage(base + "?share=" + shares[0].ID)
+	if !strings.Contains(settings, `data-part="dialog"`) || !strings.Contains(settings, `name="share_id" value="`+shares[0].ID+`"`) || !strings.Contains(settings, "data-parts") {
+		t.Fatal("the settings link answers with the share dialog")
+	}
+	refused := client.partsPage(base + "?share=" + shares[0].ID + "&error=bad+lifetime")
+	if !strings.Contains(refused, `<p class="err">bad lifetime</p>`) || strings.Contains(refused, `<div data-part="flash"><p`) {
+		t.Fatal("a refusal is shown in the dialog, not behind it")
+	}
+
+	page := client.page(base)
+	if !strings.Contains(page, `/static/parts.js`) || !strings.Contains(page, `data-part="shares"`) {
+		t.Fatal("the resource page loads parts.js and marks its parts")
 	}
 }
 

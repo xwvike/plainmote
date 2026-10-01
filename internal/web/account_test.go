@@ -185,7 +185,7 @@ func TestDeleteAccountThroughTheRouter(t *testing.T) {
 
 	// The typed username only opens the confirmation; nothing is deleted yet.
 	confirm := client.do(http.MethodPost, "/account/delete", url.Values{"csrf": {client.csrf}, "confirm": {"ALICE"}})
-	if confirm.Code != http.StatusOK || !strings.Contains(confirm.Body.String(), `<dialog class="dlg" open>`) ||
+	if confirm.Code != http.StatusOK || !strings.Contains(confirm.Body.String(), `<dialog class="dlg" open data-part="dialog">`) ||
 		!strings.Contains(confirm.Body.String(), `name="final" value="1"`) {
 		t.Fatalf("the username must open a confirmation dialog: %d", confirm.Code)
 	}

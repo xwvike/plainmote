@@ -394,7 +394,12 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 	data := a.basePage(r, user)
 	data.Error = pageError
-	if !resource.Remote() {
+	// A request from parts.js renders neither the editor nor the heading, so
+	// it reads neither the body nor the history count - except the body or the
+	// upstream type of a resource with no filename, which is what names it in
+	// the addresses of its links.
+	parts := wantsParts(r)
+	if !resource.Remote() && !parts {
 		if data.HistoryCount, err = a.db.HistoryCount(r.Context(), user.ID, resource.ID); err != nil {
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
@@ -425,7 +430,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	// A known image whose filename happens to end in .txt, and remote resources
 	// with no stored body, must keep their existing handling.
 	recoverOpaqueText := !resource.Remote() && resource.ContentType == "application/octet-stream" && store.TextFilename(resource.Filename)
-	if resource.Editable() || recoverOpaqueText {
+	if (resource.Editable() || recoverOpaqueText) && (!parts || resource.Filename == "") {
 		text := pendingBody
 		if text == nil {
 			var err error
@@ -457,7 +462,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	// links are rendered. For a remote resource that means asking upstream,
 	// which is the same fetch the preview needs.
 	servedType := resource.ContentType
-	if resource.Remote() {
+	if resource.Remote() && (!parts || resource.Filename == "") {
 		if fetched := a.previewUpstream(r.Context(), &data, resource.OriginURL); fetched != "" {
 			servedType = fetched
 		}
@@ -563,40 +568,6 @@ func shareDurationInput(duration time.Duration) string {
 		}
 	}
 	return text.String()
-}
-
-// renderShareFragment refreshes the part of a resource page changed by a
-// share action. It deliberately does not read the resource body, so creating a
-// link for a large object never reloads the editor or pulls that object again.
-func (a *App) renderShareFragment(w http.ResponseWriter, r *http.Request, user User, resourceID string) {
-	resource, err := a.db.ResourceForOwner(r.Context(), user.ID, resourceID)
-	if errors.Is(err, store.ErrNotFound) {
-		writePlainError(w, http.StatusNotFound, "resource not found")
-		return
-	}
-	if err != nil {
-		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
-	now := time.Now().UTC()
-	shares, ended, err := a.listShares(r.Context(), user.ID, resource.ID, now)
-	if err != nil {
-		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
-	data := a.basePage(r, user)
-	data.Resource = resource
-	servedType := resource.ContentType
-	// The filename is decorative, but preserve the full-page address for the
-	// unusual remote resource whose owner left it blank.
-	if resource.Remote() && resource.Filename == "" {
-		if fetched := a.previewUpstream(r.Context(), &data, resource.OriginURL); fetched != "" {
-			servedType = fetched
-		}
-	}
-	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares, now)
-	data.EndedShares = buildShareViews(data.BaseURL, resource, servedType, ended, now)
-	a.renderTemplate(w, r, http.StatusOK, "share-fragment", data)
 }
 
 // previewUpstream reads the address exactly as a public request would and fills
@@ -735,14 +706,8 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 	case "", "create":
 		// Pressing 分享 mints the link straight away: the dialog it opens is
 		// meant to already hold something you can send.
-		link, err := a.db.CreateShare(r.Context(), user.ID, resourceID, strings.TrimSpace(r.FormValue("name")), defaultShareTTL, defaultShareUses)
-		if err != nil {
+		if _, err := a.db.CreateShare(r.Context(), user.ID, resourceID, strings.TrimSpace(r.FormValue("name")), defaultShareTTL, defaultShareUses); err != nil {
 			back("", err.Error())
-			return
-		}
-		_ = link
-		if r.Header.Get("X-PlainMote-Fragment") == "shares" {
-			a.renderShareFragment(w, r, user, resourceID)
 			return
 		}
 		back("", "")

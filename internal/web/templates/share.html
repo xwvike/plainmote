@@ -1,4 +1,4 @@
-{{define "share-panel"}}<div class="panel ruled" data-share-panel>
+{{define "share-panel"}}<div class="panel ruled" data-share-panel data-part="shares">
   <div class="pt">
     <span class="sec">{{tr .Locale "share_links"}}</span>
     <span class="sp">
@@ -10,7 +10,7 @@
         <button type="submit" class="txt danger">{{tr .Locale "revoke_all"}}</button>
       </form>
       {{end}}
-      {{if not .Resource.TakenDown}}<form method="post" action="/resources/{{.Resource.ID}}/share" class="inline" data-share-create>
+      {{if not .Resource.TakenDown}}<form method="post" action="/resources/{{.Resource.ID}}/share" class="inline" data-parts>
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="create">
         <button type="submit" class="sm">{{tr .Locale "new_share"}}</button>
@@ -51,7 +51,7 @@
         <span class="acts until">
           {{if not .Link.Unreadable}}
           <button type="button" class="sm" data-copy="{{.URL}}">{{template "copy-label" $}}</button>
-          <a class="txt" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}">{{tr $.Locale "settings"}}</a>
+          <a class="txt" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}" data-dialog>{{tr $.Locale "settings"}}</a>
           {{end}}
           <form method="post" action="/resources/{{$.Resource.ID}}/share" class="inline">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
@@ -97,5 +97,3 @@
     {{end}}
   </div>
 </div>{{end}}
-
-{{define "share-fragment"}}{{template "share-panel" .}}{{end}}

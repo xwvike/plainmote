@@ -474,7 +474,13 @@ details.pan[open] .chev { transform: rotate(90deg); }
 /* The UA stylesheet gives <dialog> inset-inline: 0 and margin: auto. Setting
    only left would leave right: 0 in place and centre the box in the right
    half of the viewport, so keep both insets and let the margins centre it. */
-.dlg { position: fixed; inset-inline: 0; top: 64px; margin: 0 auto; width: min(640px, calc(100% - 24px)); max-height: calc(100vh - 96px); overflow: auto; padding: 0; background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r); color: var(--ink); box-shadow: var(--shadow); }
+.dlg { position: fixed; inset-inline: 0; top: 64px; bottom: auto; margin: 0 auto; width: min(640px, calc(100% - 24px)); max-height: calc(100vh - 96px); overflow: auto; padding: 0; background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r); color: var(--ink); box-shadow: var(--shadow); }
+/* Opened by parts.js as a modal dialog, it brings its own scrim. Older engines
+   do not pass custom properties into ::backdrop, hence the fallback. */
+.dlg::backdrop { background: var(--scrim, rgb(12 20 19 / .42)); }
+a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
+/* The slot a message is put into, which takes no room while it is empty. */
+[data-part="flash"] { display: contents; }
 .dlg > header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .dlg > header b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
 .dlg > header .x { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--r); color: var(--ink3); font: 400 16px var(--sans); text-decoration: none; }

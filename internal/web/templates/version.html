@@ -19,8 +19,8 @@
           <input type="hidden" name="action" value="copy">
           <button type="submit" class="txt">{{tr .Locale "copy_version"}}</button>
         </form>{{end}}
-        <a class="txt danger" href="{{$base}}?remove={{.Viewed.Number}}">{{tr .Locale "delete_version"}}</a>
-        <a class="btn pri" href="{{$base}}/{{.Viewed.Number}}?restore=1">{{tr .Locale "restore_this"}}</a>
+        <a class="txt danger" href="{{$base}}?remove={{.Viewed.Number}}" data-dialog>{{tr .Locale "delete_version"}}</a>
+        <a class="btn pri" href="{{$base}}/{{.Viewed.Number}}?restore=1" data-dialog>{{tr .Locale "restore_this"}}</a>
       </span>
     </div>
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
@@ -63,12 +63,21 @@
     </div>
   </main>
 
+  {{if .RestoreOpen}}<div class="scrim"></div>{{end}}
+  {{template "version-dialog" .}}
+  {{if .ViewedText}}<script type="module" src="/static/editor.js"></script>{{end}}
+  <script type="module" src="/static/parts.js"></script>
+</body>
+</html>{{end}}
+
+
+{{define "version-dialog"}}
   {{if .RestoreOpen}}
-  <div class="scrim"></div>
-  <dialog class="dlg" open>
+  {{$base := printf "/resources/%s/versions" .Resource.ID}}
+  <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{printf (tr .Locale "restore_title") .Viewed.Number}}</b>
-      <a class="x" href="{{$base}}/{{.Viewed.Number}}" aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="{{$base}}/{{.Viewed.Number}}" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       <p class="ro">{{printf (tr .Locale "restore_explain") .Viewed.Number (inc .Resource.Version) .Resource.Version}}</p>
@@ -79,7 +88,7 @@
       </dl>
     </div>
     <footer>
-      <a class="btn" href="{{$base}}/{{.Viewed.Number}}">{{tr .Locale "cancel"}}</a>
+      <a class="btn" href="{{$base}}/{{.Viewed.Number}}" data-close>{{tr .Locale "cancel"}}</a>
       <form method="post" action="{{$base}}/{{.Viewed.Number}}" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="restore">
@@ -90,6 +99,6 @@
     </footer>
   </dialog>
   {{end}}
-  {{if .ViewedText}}<script type="module" src="/static/editor.js"></script>{{end}}
-</body>
-</html>{{end}}
+{{end}}
+
+{{define "version.html#parts"}}{{template "version-dialog" .}}{{end}}

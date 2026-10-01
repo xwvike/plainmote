@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -106,6 +108,27 @@ func TestStaticAssetsServed(t *testing.T) {
 
 // TestStaticRejectsUnlisted keeps the handler on its allow list. Serving the
 // embedded tree by path would expose whatever lands in the directory next.
+// TestTemplatesReferenceServedAssets catches a script or stylesheet added to
+// a page but not to the embedded list, which would quietly answer 404.
+func TestTemplatesReferenceServedAssets(t *testing.T) {
+	reference := regexp.MustCompile(`/static/([A-Za-z0-9_./-]+\.(?:js|css|png|ico))`)
+	templates, err := fs.Glob(webAssets, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range templates {
+		body, err := fs.ReadFile(webAssets, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range reference.FindAllSubmatch(body, -1) {
+			if _, ok := staticAssets[string(match[1])]; !ok {
+				t.Errorf("%s references /static/%s, which is not served", name, match[1])
+			}
+		}
+	}
+}
+
 func TestStaticRejectsUnlisted(t *testing.T) {
 	app := staticApp(t)
 	for _, path := range []string{"/static/", "/static/missing.css", "/static/logo.png/extra", "/static/templates/login.html"} {

@@ -418,6 +418,16 @@ func bytesText(value any) string {
 	}
 }
 
+// partsHeader marks a request from parts.js, which wants only the pieces of a
+// page an action can change - its dialog, its share list, its message line -
+// rather than the page around them. A page offers them as a template named
+// after it with "#parts" appended; one that has none answers in full.
+const partsHeader = "X-PlainMote-Fragment"
+
+func wantsParts(r *http.Request) bool {
+	return r.Header.Get(partsHeader) != ""
+}
+
 func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int, name string, data pageData) {
 	// A deployment-wide fact, set at the one place every page goes through
 	// rather than at each of the handlers that build a pageData. The top bar
@@ -439,6 +449,7 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	data.UpstreamError = localizePageError(data.Locale, data.UpstreamError)
 	w.Header().Add("Vary", "Accept-Language")
 	w.Header().Add("Vary", "Cookie")
+	w.Header().Add("Vary", partsHeader)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	// No page here is meant to be framed. The session cookie is SameSite=Lax,
@@ -463,6 +474,9 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	}
 	if status != http.StatusOK {
 		w.WriteHeader(status)
+	}
+	if wantsParts(r) && a.templates.Lookup(name+"#parts") != nil {
+		name += "#parts"
 	}
 	if err := a.templates.ExecuteTemplate(w, name, data); err != nil {
 		// The marker stays on the page so a broken template is visible and the

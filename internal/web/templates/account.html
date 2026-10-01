@@ -8,7 +8,7 @@
   {{template "topbar" .}}
   <main class="page account">
     <div class="ph"><h1>{{tr .Locale "account"}}</h1></div>
-    {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    {{template "account-flash" .}}
 
     <section class="panel ruled">
       <div class="pt"><span class="sec">{{tr .Locale "account_info"}}</span></div>
@@ -89,7 +89,7 @@
       <div class="pt"><span class="sec">{{tr .Locale "delete_account_title"}}</span></div>
       <div class="pb account-action">
         <p class="hint">{{tr .Locale "delete_account_body"}}</p>
-        <form method="post" action="/account/delete" class="account-confirm">
+        <form method="post" action="/account/delete" class="account-confirm" data-parts>
           <input type="hidden" name="csrf" value="{{.CSRF}}">
           <label><span>{{tr .Locale "delete_account_label"}}</span>
             <input type="text" name="confirm" required autocomplete="off" spellcheck="false">
@@ -101,18 +101,28 @@
     </div>
   </main>
 
+  {{if .DeleteOpen}}<div class="scrim"></div>{{end}}
+  {{template "account-dialog" .}}
+  {{template "footer" .}}
+  <script type="module" src="/static/parts.js"></script>
+</body>
+</html>{{end}}
+
+
+{{define "account-flash"}}<div data-part="flash">{{if .Error}}<p class="err">{{.Error}}</p>{{end}}</div>{{end}}
+
+{{define "account-dialog"}}
   {{if .DeleteOpen}}
-  <div class="scrim"></div>
-  <dialog class="dlg" open>
+  <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{tr .Locale "delete_account_title"}} <q>{{.Account.User.Login}}</q></b>
-      <a class="x" href="/account" aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="/account" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       <p class="ro">{{tr .Locale "delete_account_body"}}</p>
     </div>
     <footer>
-      <a class="btn" href="/account" autofocus>{{tr .Locale "cancel"}}</a>
+      <a class="btn" href="/account" data-close autofocus>{{tr .Locale "cancel"}}</a>
       <form method="post" action="/account/delete" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="confirm" value="{{.Account.User.Login}}">
@@ -122,6 +132,6 @@
     </footer>
   </dialog>
   {{end}}
-  {{template "footer" .}}
-</body>
-</html>{{end}}
+{{end}}
+
+{{define "account.html#parts"}}{{template "account-flash" .}}{{template "account-dialog" .}}{{end}}

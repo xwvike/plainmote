@@ -21,11 +21,11 @@
         {{/* Beside the one other thing done to the resource as a whole. Shown
              with nothing in it too: the page behind it says how it fills. */}}
         {{if not .Resource.Remote}}<a class="hist" href="/resources/{{.Resource.ID}}/versions">{{tr .Locale "history"}}<b>{{.HistoryCount}}</b></a>{{end}}
-        <a class="txt danger" href="/resources/{{.Resource.ID}}?delete=1">{{tr .Locale "delete"}}</a>
+        <a class="txt danger" href="/resources/{{.Resource.ID}}?delete=1" data-dialog>{{tr .Locale "delete"}}</a>
       </span>
     </div>
     {{end}}
-    {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    {{template "resource-flash" .}}
     {{if .Resource.TakenDown}}<p class="err">{{tr .Locale "takedown_notice"}}{{.Resource.TakedownReason}}</p>{{end}}
     {{if .Created}}
     <div class="notice notice-row" role="status">
@@ -194,15 +194,52 @@
 
   </main>
 
+  {{if or .ShareOpen .DeleteOpen}}<div class="scrim"></div>{{end}}
+  {{template "resource-dialogs" .}}
+
+  {{if not $remote}}<script type="module" src="/static/upload.js"></script>{{end}}
+  {{if not .IsNew}}<script type="module" src="/static/resource.js"></script>
+  <script type="module" src="/static/parts.js"></script>{{end}}
+  {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
+  <script type="module" src="/static/editor.js"></script>
+  {{end}}
+  {{template "copy-status" .}}
+  <script>
+    document.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-copy]');
+      if (!button) return;
+      var value = button.getAttribute('data-copy');
+      if (!navigator.clipboard) { window.prompt('{{tr .Locale "copy_link"}}', value); return; }
+      navigator.clipboard.writeText(value).then(function () {
+        var status = document.querySelector('[data-copy-status]');
+        clearTimeout(button.copiedTimer);
+        button.classList.add('copied');
+        if (status) { status.textContent = ''; status.textContent = status.getAttribute('data-message'); }
+        button.copiedTimer = setTimeout(function () {
+          button.classList.remove('copied');
+          if (status) status.textContent = '';
+        }, 1400);
+      });
+    });
+  </script>
+</body>
+</html>{{end}}
+
+
+{{/* A refused share action reopens the share it was about, and the message
+     goes in that dialog instead of behind it. */}}
+{{define "resource-flash"}}<div data-part="flash">{{if and .Error (not .ShareOpen)}}<p class="err">{{.Error}}</p>{{end}}</div>{{end}}
+
+{{define "resource-dialogs"}}
   {{if .ShareOpen}}
-  <div class="scrim"></div>
-  <dialog class="dlg" open>
+  <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{tr .Locale "share_settings"}}</b>
-      <a class="x" href="/resources/{{.Resource.ID}}" aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="/resources/{{.Resource.ID}}" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
-      <form method="post" action="/resources/{{.Resource.ID}}/share" style="display:grid;gap:12px">
+      {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+      <form method="post" action="/resources/{{.Resource.ID}}/share" style="display:grid;gap:12px" data-parts>
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="update">
         <input type="hidden" name="share_id" value="{{.FocusShare.Link.ID}}">
@@ -245,7 +282,7 @@
         </dl>
         <div class="fl" style="justify-content:flex-end">
           <span class="hint" style="margin-right:auto">{{tr .Locale "terms_restart_now"}}</span>
-          <a class="btn" href="/resources/{{.Resource.ID}}">{{tr .Locale "cancel"}}</a>
+          <a class="btn" href="/resources/{{.Resource.ID}}" data-close>{{tr .Locale "cancel"}}</a>
           <button type="submit" class="pri">{{tr .Locale "apply"}}</button>
         </div>
       </form>
@@ -254,18 +291,17 @@
   {{end}}
 
   {{if .DeleteOpen}}
-  <div class="scrim"></div>
-  <dialog class="dlg" open>
+  <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{tr .Locale "delete"}} <q>{{or .Resource.Name (tr .Locale "untitled_resource")}}</q></b>
-      <a class="x" href="/resources/{{.Resource.ID}}" aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="/resources/{{.Resource.ID}}" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       <p class="ro">{{deleteWarning .Locale (len .Shares)}}</p>
       <p class="hint">{{tr .Locale "logs_retained"}}</p>
     </div>
     <footer>
-      <a class="btn" href="/resources/{{.Resource.ID}}">{{tr .Locale "cancel"}}</a>
+      <a class="btn" href="/resources/{{.Resource.ID}}" data-close>{{tr .Locale "cancel"}}</a>
       <form method="post" action="/resources/{{.Resource.ID}}" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="delete">
@@ -274,30 +310,7 @@
     </footer>
   </dialog>
   {{end}}
+{{end}}
 
-  {{if not $remote}}<script type="module" src="/static/upload.js"></script>{{end}}
-  {{if not .IsNew}}<script type="module" src="/static/resource.js"></script>{{end}}
-  {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
-  <script type="module" src="/static/editor.js"></script>
-  {{end}}
-  {{template "copy-status" .}}
-  <script>
-    document.addEventListener('click', function (event) {
-      var button = event.target.closest('[data-copy]');
-      if (!button) return;
-      var value = button.getAttribute('data-copy');
-      if (!navigator.clipboard) { window.prompt('{{tr .Locale "copy_link"}}', value); return; }
-      navigator.clipboard.writeText(value).then(function () {
-        var status = document.querySelector('[data-copy-status]');
-        clearTimeout(button.copiedTimer);
-        button.classList.add('copied');
-        if (status) { status.textContent = ''; status.textContent = status.getAttribute('data-message'); }
-        button.copiedTimer = setTimeout(function () {
-          button.classList.remove('copied');
-          if (status) status.textContent = '';
-        }, 1400);
-      });
-    });
-  </script>
-</body>
-</html>{{end}}
+{{/* What parts.js asks for: the pieces of this page an action can change. */}}
+{{define "resource.html#parts"}}{{template "share-panel" .}}{{template "resource-flash" .}}{{template "resource-dialogs" .}}{{end}}

@@ -7,7 +7,7 @@ globalThis.document = { documentElement: { style: {} }, querySelectorAll: () => 
 
 const { decodeBytes, detectFileEncoding, sniffToken, submissionSource, SUPPORTED_ENCODINGS, tokenFor } = await import("../../internal/web/static/editor.js");
 const { classifyUpload, primeVideo } = await import("../../internal/web/static/upload.js");
-const { formActionURL } = await import("../../internal/web/static/resource.js");
+const { formActionURL } = await import("../../internal/web/static/parts.js");
 
 const fromHex = (value) => Uint8Array.from(value.match(/../g).map((pair) => Number.parseInt(pair, 16)));
 

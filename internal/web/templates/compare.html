@@ -13,7 +13,7 @@
       <h1>{{tr .Locale "compare"}}</h1>
       <span class="sp">
         <a class="txt" href="{{$base}}">{{tr .Locale "history"}}</a>
-        {{if ne .DiffFrom.Number .Resource.Version}}<a class="btn" href="{{$base}}/{{.DiffFrom.Number}}?restore=1">{{printf (tr .Locale "restore_title") .DiffFrom.Number}}</a>{{end}}
+        {{if ne .DiffFrom.Number .Resource.Version}}<a class="btn" href="{{$base}}/{{.DiffFrom.Number}}?restore=1" data-dialog>{{printf (tr .Locale "restore_title") .DiffFrom.Number}}</a>{{end}}
       </span>
     </div>
     {{/* A plain GET form: any two versions, with or without scripts. */}}
@@ -74,5 +74,6 @@
     </div>
   </main>
   {{template "footer" .}}
+  <script type="module" src="/static/parts.js"></script>
 </body>
 </html>{{end}}

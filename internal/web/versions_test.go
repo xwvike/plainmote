@@ -22,6 +22,7 @@ type versionClient struct {
 	app     *App
 	session string
 	csrf    string
+	asParts bool
 }
 
 func newVersionClient(t *testing.T, db *store.Store, user User) *versionClient {
@@ -44,11 +45,36 @@ func (c *versionClient) do(method, target string, form url.Values) *httptest.Res
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	request.Header.Set("Accept-Language", "en")
+	if c.asParts {
+		request.Header.Set(partsHeader, "1")
+	}
 	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: c.session})
 	request.AddCookie(&http.Cookie{Name: csrfCookie, Value: c.csrf})
 	response := httptest.NewRecorder()
 	c.app.handler.ServeHTTP(response, request)
 	return response
+}
+
+// parts makes a request the way parts.js does.
+func (c *versionClient) parts(method, target string, form url.Values) *httptest.ResponseRecorder {
+	c.t.Helper()
+	c.asParts = true
+	defer func() { c.asParts = false }()
+	response := c.do(method, target, form)
+	if !strings.Contains(strings.Join(response.Header().Values("Vary"), ","), partsHeader) {
+		c.t.Fatalf("%s %s (parts) does not vary on the parts header", method, target)
+	}
+	return response
+}
+
+// partsPage is a GET through parts that must succeed.
+func (c *versionClient) partsPage(target string) string {
+	c.t.Helper()
+	response := c.parts(http.MethodGet, target, nil)
+	if response.Code != http.StatusOK {
+		c.t.Fatalf("GET %s (parts): %d %s", target, response.Code, response.Body.String())
+	}
+	return response.Body.String()
 }
 
 func (c *versionClient) page(target string) string {
@@ -201,6 +227,53 @@ func TestCreateAndSaveSayWhatHappened(t *testing.T) {
 	stale := client.page(base + "?saved=2&created=1")
 	if strings.Contains(stale, "Saved as v2") || strings.Contains(stale, "Created “") {
 		t.Fatal("notices that are no longer true are not shown")
+	}
+}
+
+// TestDialogsOpenAsParts checks every dialog link answers parts.js with the
+// dialog alone, while the same address loaded plainly still shows it on the
+// page for a browser without the script.
+func TestDialogsOpenAsParts(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	client := newVersionClient(t, db, user)
+	base := "/resources/" + resource.ID
+	client.save(resource, "answer=43\n", 1) // v1 is now an earlier version
+
+	for _, tc := range []struct{ target, want string }{
+		{base + "?delete=1", `name="action" value="delete"`},
+		{base + "/versions?remove=1", "Delete v1"},
+		{base + "/versions/1?restore=1", "Restore v1"},
+	} {
+		parts := client.partsPage(tc.target)
+		if strings.Contains(parts, "<html") || !strings.Contains(parts, `data-part="dialog"`) || !strings.Contains(parts, tc.want) || !strings.Contains(parts, "data-close") {
+			t.Fatalf("%s: the parts are not the dialog: %q", tc.target, parts)
+		}
+		if strings.Contains(parts, "scrim") {
+			t.Fatalf("%s: a modal dialog brings its own backdrop", tc.target)
+		}
+		page := client.page(tc.target)
+		if !strings.Contains(page, `<div class="scrim"></div>`) || !strings.Contains(page, `<dialog class="dlg" open data-part="dialog">`) || !strings.Contains(page, "/static/parts.js") {
+			t.Fatalf("%s: the plain page still shows the dialog", tc.target)
+		}
+	}
+	// Deleting the account: the typed name is checked through parts too, and
+	// answers with a message or with the last confirmation.
+	mismatch := client.parts(http.MethodPost, "/account/delete", url.Values{"confirm": {"nobody"}})
+	if body := mismatch.Body.String(); mismatch.Code != http.StatusBadRequest || strings.Contains(body, "<html") || !strings.Contains(body, `<div data-part="flash"><p class="err">`) {
+		t.Fatalf("a wrong name answers with the message: %d %q", mismatch.Code, body)
+	}
+	confirm := client.parts(http.MethodPost, "/account/delete", url.Values{"confirm": {user.Login}})
+	if body := confirm.Body.String(); confirm.Code != http.StatusOK || !strings.Contains(body, `data-part="dialog"`) || !strings.Contains(body, `name="final" value="1"`) {
+		t.Fatalf("the right name answers with the confirmation: %d %q", confirm.Code, body)
+	}
+	if page := client.page("/account"); !strings.Contains(page, "data-parts") || !strings.Contains(page, "/static/parts.js") {
+		t.Fatal("the account form is sent through parts.js")
+	}
+
+	for _, target := range []string{base, base + "/versions", base + "/versions/1", base + "/versions/compare?from=1&to=2"} {
+		if page := client.page(target); !strings.Contains(page, "data-dialog") {
+			t.Fatalf("%s has no dialog links", target)
+		}
 	}
 }
 
