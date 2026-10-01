@@ -14,11 +14,11 @@
       <span class="vtag">v{{.Viewed.Number}}</span>
       <span class="sp">
         <a class="txt" href="{{$base}}/compare?from={{.Viewed.Number}}&amp;to={{.Resource.Version}}">{{tr .Locale "compare_current"}}</a>
-        <form method="post" action="{{$base}}/{{.Viewed.Number}}" class="inline">
+        {{if not .Resource.TakenDown}}<form method="post" action="{{$base}}/{{.Viewed.Number}}" class="inline">
           <input type="hidden" name="csrf" value="{{.CSRF}}">
           <input type="hidden" name="action" value="copy">
           <button type="submit" class="txt">{{tr .Locale "copy_version"}}</button>
-        </form>
+        </form>{{end}}
         <a class="txt danger" href="{{$base}}?remove={{.Viewed.Number}}">{{tr .Locale "delete_version"}}</a>
         <a class="btn pri" href="{{$base}}/{{.Viewed.Number}}?restore=1">{{tr .Locale "restore_this"}}</a>
       </span>

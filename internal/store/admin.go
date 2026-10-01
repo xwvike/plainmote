@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -371,7 +372,7 @@ FROM plans p WHERE p.id <> $2 ORDER BY p.is_default DESC, p.name
 // AdminCreatePlan adds a plan that can be granted on top of the default.
 func (d *Store) AdminCreatePlan(ctx context.Context, actor AdminActor, name string, maxResources, maxStorage int64, reason string, now time.Time) (AdminPlan, error) {
 	plan := AdminPlan{ID: uuid.NewString(), Name: strings.TrimSpace(name), MaxResources: maxResources, MaxStorage: maxStorage}
-	if plan.Name == "" || maxResources < 0 || maxStorage < 0 {
+	if plan.Name == "" || utf8.RuneCountInString(plan.Name) > 100 || maxResources < 0 || maxStorage < 0 {
 		return AdminPlan{}, errors.New("invalid_plan")
 	}
 	err := d.withTx(ctx, func(tx pgx.Tx) error {
@@ -436,11 +437,17 @@ func (d *Store) AdminGrantPlan(ctx context.Context, actor AdminActor, userID, pl
 	}
 	return d.withTx(ctx, func(tx pgx.Tx) error {
 		var login, planName string
+		var isDefault bool
 		if err := tx.QueryRow(ctx, `SELECT login FROM users WHERE id = $1`, userID).Scan(&login); err != nil {
 			return translateNotFound(err)
 		}
-		if err := tx.QueryRow(ctx, `SELECT name FROM plans WHERE id = $1`, planID).Scan(&planName); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT name, is_default FROM plans WHERE id = $1`, planID).Scan(&planName, &isDefault); err != nil {
 			return translateNotFound(err)
+		}
+		// Every account already holds the default plan; granting it again
+		// could only set an expiry on it, and take the account's floor away.
+		if isDefault {
+			return ErrPlanProtected
 		}
 		if _, err := tx.Exec(ctx, `
 INSERT INTO user_plans(user_id, plan_id, granted_at, expires_at) VALUES($1, $2, $3, $4)

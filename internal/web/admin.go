@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -32,7 +33,9 @@ const adminPrefix = "/_admin/v1/"
 const (
 	adminSignatureLabel = "PLAINMOTE-ADMIN-V1"
 	adminClockSkew      = 5 * time.Minute
-	adminNonceWindow    = 10 * time.Minute
+	// A timestamp is accepted from adminClockSkew before arrival to as long
+	// after, so a nonce must be remembered for longer than that whole span.
+	adminNonceWindow    = 2*adminClockSkew + time.Minute
 	adminBodyLimit      = 64 << 10
 	adminReasonMaxRunes = 500
 	// Failed attempts per source address per minute before it is refused
@@ -223,10 +226,18 @@ func (q adminRequest) failWith(err error) {
 	case errors.Is(err, store.ErrInternal) || errors.As(err, &quota):
 		fmt.Fprintf(os.Stderr, "admin %s %s: %v\n", q.r.Method, q.r.URL.Path, err)
 		q.fail(http.StatusInternalServerError, "internal", "the service could not complete the request")
-	default:
+	case adminErrorCode.MatchString(err.Error()):
 		q.fail(http.StatusConflict, err.Error(), err.Error())
+	default:
+		// Anything that is not one of the store's own codes is the service
+		// failing, whatever wrapped it.
+		fmt.Fprintf(os.Stderr, "admin %s %s: %v\n", q.r.Method, q.r.URL.Path, err)
+		q.fail(http.StatusInternalServerError, "internal", "the service could not complete the request")
 	}
 }
+
+// adminErrorCode is the shape of the conflict codes the store returns.
+var adminErrorCode = regexp.MustCompile(`^[a-z]+(_[a-z]+)*$`)
 
 // reason reads the reason every change must carry.
 func (q adminRequest) reason(into any) (string, bool) {

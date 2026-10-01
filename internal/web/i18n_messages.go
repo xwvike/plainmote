@@ -380,6 +380,7 @@ var messageTable = map[string][6]string{
 	"outcome_suspended":           {"Account suspended", "账号已停用", "帳號已停用", "アカウント停止", "Compte suspendu", "Konto gesperrt"},
 	"outcome_desc_taken_down":     {"The resource had been taken down by the operator", "资源已被运营者下架", "資源已被營運者下架", "リソースは運営者により公開停止されていました", "La ressource avait été retirée par l’exploitant", "Die Ressource war vom Betreiber gesperrt"},
 	"outcome_desc_suspended":      {"The owner’s account had been suspended", "资源所有者的账号已被停用", "資源擁有者的帳號已被停用", "所有者のアカウントが停止されていました", "Le compte du propriétaire avait été suspendu", "Das Konto des Eigentümers war gesperrt"},
+	"error_copy_taken_down":       {"This resource has been taken down; it cannot be copied into a new resource.", "此资源已被下架，不能另存为新资源。", "此資源已被下架，不能另存為新資源。", "このリソースは公開停止中のため、新しいリソースとして保存できません。", "Cette ressource a été retirée ; elle ne peut pas être copiée dans une nouvelle ressource.", "Diese Ressource ist gesperrt; sie kann nicht in eine neue Ressource kopiert werden."},
 }
 
 var messageCatalogs = func() map[string]map[string]string {

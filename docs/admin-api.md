@@ -59,7 +59,7 @@ PLAINMOTE-ADMIN-V1
 <请求体 SHA-256，小写十六进制；无请求体时为空字符串的 SHA-256>
 ```
 
-服务端拒绝以下请求：时间戳与服务器时间相差超过 300 秒；同一 nonce 在 600 秒内重复出现；公钥标识不在 `PLAINMOTE_ADMIN_KEYS` 中；签名无效。
+服务端拒绝以下请求：时间戳与服务器时间相差超过 300 秒；同一 nonce 在 660 秒内重复出现；公钥标识不在 `PLAINMOTE_ADMIN_KEYS` 中；签名无效。已使用的 nonce 记录在服务进程内存中，进程重启后清空。
 
 浏览器端使用 WebCrypto 的 Ed25519（Chrome 137+、Firefox 129+、Safari 17+）。建议管理端将私钥以 `extractable: false` 导入，仅保存在当前会话，或以 `CryptoKey` 对象存入 IndexedDB，不以明文形式保存。
 
@@ -137,11 +137,11 @@ PLAINMOTE-ADMIN-V1
 
 `GET /_admin/v1/plans`：全部套餐及其上限、是否默认、使用人数。快速分享使用的匿名额度不是可授予的套餐，不在其中。
 
-`POST /_admin/v1/plans`，请求体 `{"name": "…", "max_resources": 100, "max_storage": 1073741824, "reason": "…"}`：新建一个可授予的套餐。错误代码：`plan_exists`、`invalid_plan`。
+`POST /_admin/v1/plans`，请求体 `{"name": "…", "max_resources": 100, "max_storage": 1073741824, "reason": "…"}`：新建一个可授予的套餐。名称为 1–100 字，上限不能为负数。错误代码：`plan_exists`、`invalid_plan`。
 
 `DELETE /_admin/v1/plans/{id}`，请求体 `{"reason": "…"}`：删除套餐，成功返回 `{"id": "…", "deleted": true}`。默认套餐不能删除（`plan_protected`）；仍有用户持有（含已到期但尚未撤回的授予）时不能删除（`plan_in_use`），须先逐个撤回，删除不会降低任何人的额度。
 
-`POST /_admin/v1/users/{id}/plans`，请求体 `{"plan_id": "…", "expires_at": null, "reason": "…"}`：为用户追加套餐，上限与已有套餐相加。
+`POST /_admin/v1/users/{id}/plans`，请求体 `{"plan_id": "…", "expires_at": null, "reason": "…"}`：为用户追加套餐，上限与已有套餐相加；对已持有的套餐再次授予时只更新到期时间。默认套餐人人都有，不能授予（`plan_protected`），以免为其设置到期时间。
 
 `DELETE /_admin/v1/users/{id}/plans/{plan_id}`，请求体 `{"reason": "…"}`：撤回追加的套餐。默认套餐不能撤回（`plan_protected`）。
 
@@ -182,7 +182,7 @@ PLAINMOTE-ADMIN-V1
 
 `POST /_admin/v1/lookup`，请求体 `{"link": "<举报中的分享地址或 token>"}`：由分享地址找到资源，返回上述资源元数据及该链接自身的状态（名称、有效期、次数、是否撤销）。以 POST 提交，使分享地址不出现在任何 URL 与日志中；响应不回显 token。
 
-`POST /_admin/v1/resources/{id}/takedown`，请求体 `{"reason": "…"}`：下架。该资源的全部链接停止交付，访问记录以 `taken_down` 结果记录；所有者在资源页看到下架原因，不能为其创建新链接，可以删除该资源。返回更新后的资源元数据。快速分享没有所有者可以通知，下架即删除，此时返回 `{"id": "…", "deleted": true}`。
+`POST /_admin/v1/resources/{id}/takedown`，请求体 `{"reason": "…"}`：下架。该资源的全部链接停止交付，访问记录以 `taken_down` 结果记录；所有者在资源页看到下架原因，不能为其创建新链接，也不能将其历史版本另存为新资源，可以编辑或删除该资源。返回更新后的资源元数据。快速分享没有所有者可以通知，下架即删除，此时返回 `{"id": "…", "deleted": true}`。
 
 `POST /_admin/v1/resources/{id}/restore`，请求体 `{"reason": "…"}`：撤销下架。
 
@@ -230,6 +230,6 @@ PLAINMOTE-ADMIN-V1
 ## 对用户的影响
 
 - 停用账号的用户登录时，登录页显示"此账号已被停用"及停用原因。
-- 下架资源的所有者在资源页顶部看到下架原因，"新建分享"按钮不再显示；资源列表中该资源的状态显示为"已下架"。
+- 下架资源的所有者在资源页顶部看到下架原因，"新建分享"与"从此版本新建资源"按钮不再显示；资源列表中该资源的状态显示为"已下架"。
 - 访问记录新增"已下架""账号已停用"两种结果。
 - 公开链接对下架或停用的内容一律返回 `401`，与链接失效时相同，不说明原因。

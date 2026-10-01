@@ -23,6 +23,7 @@ var localizedErrorCodes = map[string]string{
 	"请先填写远程地址。":                                             "error_remote_required",
 	"使用次数无法识别":                                              "error_share_uses",
 	"此资源已被下架，不能创建分享链接":                                      "error_taken_down",
+	"此资源已被下架，不能另存为新资源":                                      "error_copy_taken_down",
 	"存活时长无法识别":                                              "error_share_lifetime",
 	"自定义时长无法识别，单位 s / m / h / d，例如 90m":                     "error_share_custom_lifetime",
 	"存活时长不能为负":                                              "error_lifetime_negative",

@@ -95,6 +95,16 @@ func TestAdminRefusalsLookLikeNothing(t *testing.T) {
 	if response := client.serve(httptest.NewRequest(http.MethodGet, "https://cfg.test/_admin/v1/overview", nil)); response.Code != http.StatusNotFound {
 		t.Fatalf("unsigned: %d", response.Code)
 	}
+	// Answered the same with the interface on as with it off: the mux's
+	// redirect from the bare prefix would say it exists.
+	off := newTestApp(db)
+	for _, path := range []string{"/_admin/v1", "/_admin/v1/", "/_admin/v1/overview"} {
+		on, absent := client.serve(httptest.NewRequest(http.MethodGet, "https://cfg.test"+path, nil)), httptest.NewRecorder()
+		off.handler.ServeHTTP(absent, httptest.NewRequest(http.MethodGet, "https://cfg.test"+path, nil))
+		if on.Code != absent.Code || on.Body.String() != absent.Body.String() || on.Header().Get("Location") != "" {
+			t.Fatalf("%s answers %d %q with the interface on, %d %q with it off", path, on.Code, on.Body.String(), absent.Code, absent.Body.String())
+		}
+	}
 	stale := client.signed(http.MethodGet, "/_admin/v1/overview", nil, now.Add(-10*time.Minute), "")
 	if response := client.serve(stale); response.Code != http.StatusNotFound {
 		t.Fatalf("stale timestamp: %d", response.Code)
@@ -271,6 +281,12 @@ func TestAdminTakedownAndLookup(t *testing.T) {
 	if _, err := db.CreateShare(ctx, user.ID, resource.ID, "new", time.Hour, 0); !errors.Is(err, store.ErrTakenDown) {
 		t.Fatalf("no new links for a taken-down resource: %v", err)
 	}
+	if _, err := db.SaveResource(ctx, user.ID, resource.ID, store.ResourceEdit{Name: "Example", Filename: "example.conf", Content: []byte("answer=0\n")}); err != nil {
+		t.Fatalf("the owner may still edit what was taken down: %v", err)
+	}
+	if _, err := db.CopyVersion(ctx, user.ID, resource.ID, 1, "escape"); !errors.Is(err, store.ErrCopyTakenDown) {
+		t.Fatalf("a taken-down resource cannot be copied out from under the takedown: %v", err)
+	}
 	owner := newVersionClient(t, db, user)
 	page := owner.page("/resources/" + resource.ID)
 	if !strings.Contains(page, "taken down by the operator") || !strings.Contains(page, "malware") || strings.Contains(page, "data-share-create") {
@@ -353,6 +369,12 @@ func TestAdminPlans(t *testing.T) {
 	}
 	if status, _, _ := client.call(http.MethodDelete, "/_admin/v1/users/"+user.ID+"/plans/"+defaultID, map[string]string{"reason": "no"}); status != http.StatusConflict {
 		t.Fatalf("the default plan cannot be taken back: %d", status)
+	}
+	if status, failure, _ := client.call(http.MethodPost, "/_admin/v1/users/"+user.ID+"/plans", map[string]any{"plan_id": defaultID, "expires_at": "2026-01-01T00:00:00Z", "reason": "no"}); status != http.StatusConflict || failure["error"] != "plan_protected" {
+		t.Fatalf("granting the default plan again could only set an expiry on it: %d %v", status, failure)
+	}
+	if status, failure, _ := client.call(http.MethodPost, "/_admin/v1/plans", map[string]any{"name": strings.Repeat("x", 101), "reason": "long"}); status != http.StatusConflict || failure["error"] != "invalid_plan" {
+		t.Fatalf("a plan name is held to 100 characters: %d %v", status, failure)
 	}
 	if status, failure, _ := client.call(http.MethodDelete, "/_admin/v1/plans/"+planID, map[string]string{"reason": "unused"}); status != http.StatusConflict || failure["error"] != "plan_in_use" {
 		t.Fatalf("a plan someone holds cannot be deleted: %d %v", status, failure)

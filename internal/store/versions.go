@@ -350,6 +350,11 @@ func (d *Store) CopyVersion(ctx context.Context, ownerID, resourceID string, num
 	if err != nil {
 		return Resource{}, err
 	}
+	// A copy would be a new resource, free of the takedown: one click around
+	// it. The owner can still edit or delete what was taken down.
+	if resource.TakenDown {
+		return Resource{}, ErrCopyTakenDown
+	}
 	body, err := d.ReadVersion(ctx, source)
 	if err != nil {
 		return Resource{}, fmt.Errorf("read version %d: %w: %w", number, ErrInternal, err)
@@ -380,6 +385,9 @@ RETURNING v.content_key
 	}
 	return nil
 }
+
+// ErrCopyTakenDown refuses a new resource made from one the operator took down.
+var ErrCopyTakenDown = errors.New("此资源已被下架，不能另存为新资源")
 
 // LinkVersion is the version a live link last delivered.
 type LinkVersion struct {

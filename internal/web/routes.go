@@ -267,6 +267,12 @@ func (a *App) routes() http.Handler {
 	// exist, the same as any other.
 	if a.admin != nil {
 		mux.HandleFunc(adminPrefix, a.handleAdmin)
+		// The bare prefix would otherwise get the mux's redirect to the
+		// subtree, which a deployment without the interface does not give:
+		// answer it the way that deployment does.
+		mux.HandleFunc(strings.TrimSuffix(adminPrefix, "/"), func(w http.ResponseWriter, r *http.Request) {
+			writePlainError(w, http.StatusNotFound, "not found")
+		})
 	}
 	// Not registered at all when it is off, so the endpoint does not exist
 	// rather than existing and refusing.
