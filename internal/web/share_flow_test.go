@@ -131,15 +131,25 @@ func TestShareFlowThroughRouter(t *testing.T) {
 
 	// An unreadable count is reported rather than silently widening the share.
 	if bad := do(http.MethodPost, "/resources/"+resource.ID+"/share",
-		url.Values{"action": {"update"}, "share_id": {share.ID}, "ttl": {"24h"}, "uses": {"once"}}); !strings.Contains(bad.Header().Get("Location"), "error=") {
-		t.Fatalf("an unreadable use count must be reported, got %q", bad.Header().Get("Location"))
+		url.Values{"action": {"update"}, "share_id": {share.ID}, "ttl": {"24h"}, "uses": {"once"}}); bad.Code != http.StatusBadRequest || !strings.Contains(bad.Body.String(), `<p class="err">`) {
+		t.Fatalf("an unreadable use count must be reported, got %d", bad.Code)
 	}
 
-	// A custom duration that cannot be parsed comes back as an error, not a panic.
+	// A custom duration that cannot be parsed comes back as an error, not a
+	// panic - in the dialog, still holding what was typed so it can be fixed.
 	bad := do(http.MethodPost, "/resources/"+resource.ID+"/share",
-		url.Values{"action": {"update"}, "share_id": {share.ID}, "ttl": {"custom"}, "ttl_custom": {"soon"}})
-	if !strings.Contains(bad.Header().Get("Location"), "error=") {
-		t.Fatalf("a bad custom duration must be reported, got %q", bad.Header().Get("Location"))
+		url.Values{"action": {"update"}, "share_id": {share.ID}, "name": {"typed note"}, "ttl": {"custom"}, "ttl_custom": {"soon"}, "uses": {"2"}})
+	refused := bad.Body.String()
+	if bad.Code != http.StatusBadRequest || !strings.Contains(refused, `<dialog class="dlg" open data-part="dialog">`) {
+		t.Fatalf("a bad custom duration must be reported in the dialog, got %d", bad.Code)
+	}
+	for _, want := range []string{`<p class="err">`, `value="typed note"`, `name="ttl" value="custom" checked`, `value="soon"`, `name="uses" value="2" checked`} {
+		if !strings.Contains(refused, want) {
+			t.Fatalf("the refused dialog is missing %q", want)
+		}
+	}
+	if stored, _ := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC()); stored[0].Name == "typed note" {
+		t.Fatal("a refused update changed the share")
 	}
 
 	// Revoking kills it for whoever already holds the link.
@@ -231,9 +241,33 @@ func TestShareActionsAnswerWithParts(t *testing.T) {
 		t.Fatal("a refusal is shown in the dialog, not behind it")
 	}
 
+	// Through parts, a refused update answers with the dialog itself.
+	terms := client.parts(http.MethodPost, base+"/share", url.Values{"action": {"update"}, "share_id": {shares[0].ID}, "ttl": {"custom"}, "ttl_custom": {"soon"}})
+	if body := terms.Body.String(); terms.Code != http.StatusBadRequest || strings.Contains(body, "<html") || !strings.Contains(body, `data-part="dialog"`) || !strings.Contains(body, `value="soon"`) {
+		t.Fatalf("a refused update answers with the dialog as typed: %d", terms.Code)
+	}
+
+	// Every action on the list is sent in place.
 	page := client.page(base)
 	if !strings.Contains(page, `/static/parts.js`) || !strings.Contains(page, `data-part="shares"`) {
 		t.Fatal("the resource page loads parts.js and marks its parts")
+	}
+	for _, action := range []string{"revoke_all", "create", "revoke"} {
+		marker := `<input type="hidden" name="action" value="` + action + `">`
+		at := strings.Index(page, marker)
+		if at < 0 {
+			t.Fatalf("no %s form", action)
+		}
+		if form := page[strings.LastIndex(page[:at], "<form"):at]; !strings.Contains(form, "data-parts") {
+			t.Fatalf("the %s form is not sent in place", action)
+		}
+	}
+	revoked := client.parts(http.MethodPost, base+"/share", url.Values{"action": {"revoke"}, "share_id": {shares[0].ID}})
+	if revoked.Code != http.StatusSeeOther || revoked.Header().Get("Location") != base {
+		t.Fatalf("revoke redirects to the resource: %d", revoked.Code)
+	}
+	if after := client.partsPage(base); !strings.Contains(after, `class="ended"`) {
+		t.Fatal("the revoked link moves to the ended rows")
 	}
 }
 

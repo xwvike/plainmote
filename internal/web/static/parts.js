@@ -58,7 +58,10 @@ async function fetchParts(url, init) {
   };
 }
 
-function apply({ parts, title }, opener, closeTo) {
+// A part inside a form belongs to that form and changes only with an answer
+// to it. The version an edit starts from is one: refreshed by a share action,
+// it would let the next save go over a change made elsewhere unnoticed.
+function apply({ parts, title }, opener, closeTo, submitted = null) {
   let dialog = null;
   for (const part of parts) {
     const node = document.adoptNode(part);
@@ -67,7 +70,8 @@ function apply({ parts, title }, opener, closeTo) {
       continue;
     }
     const current = document.querySelector(`[data-part="${node.dataset.part}"]`);
-    if (current) {
+    const owner = current ? current.closest("form") : null;
+    if (current && (!owner || owner === submitted)) {
       current.replaceWith(node);
       announce(node);
     }
@@ -185,7 +189,7 @@ async function submit(event) {
         // address, and closing it takes the address back to the page.
         closeTo = window.location.pathname;
       }
-      apply(answer, null, closeTo);
+      apply(answer, null, closeTo, form);
       form.dispatchEvent(new CustomEvent("plainmote:submitted", { detail: { saved: answer.redirected } }));
     }
   } catch (error) {

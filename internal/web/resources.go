@@ -683,20 +683,13 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 		writePlainError(w, http.StatusForbidden, "invalid request")
 		return
 	}
-	// Every share action lands back on the resource, where the list is. A
-	// refusal reopens the share it was about so the message has something to
-	// be next to; success just shows the list, which now holds the result.
-	back := func(shareID, message string) {
+	// Every share action lands back on the resource, where the list is, and
+	// shows the list, which now holds the result - or the reason it does not.
+	// A refused change of terms is the exception: see refuseShareUpdate.
+	back := func(message string) {
 		target := "/resources/" + resourceID
-		values := url.Values{}
 		if message != "" {
-			values.Set("error", message)
-			if shareID != "" {
-				values.Set("share", shareID)
-			}
-		}
-		if len(values) > 0 {
-			target += "?" + values.Encode()
+			target += "?" + url.Values{"error": {message}}.Encode()
 		}
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	}
@@ -706,48 +699,81 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 		// Pressing 分享 mints the link straight away: the dialog it opens is
 		// meant to already hold something you can send.
 		if _, err := a.db.CreateShare(r.Context(), user.ID, resourceID, strings.TrimSpace(r.FormValue("name")), defaultShareTTL, defaultShareUses); err != nil {
-			back("", err.Error())
+			back(err.Error())
 			return
 		}
-		back("", "")
+		back("")
 	case "update":
 		shareID := r.FormValue("share_id")
 		ttl, err := shareTTL(r)
 		if err != nil {
-			back(shareID, err.Error())
+			a.refuseShareUpdate(w, r, user, resourceID, shareID, err.Error(), http.StatusBadRequest)
 			return
 		}
 		maxUses, err := shareUses(r)
 		if err != nil {
-			back(shareID, err.Error())
+			a.refuseShareUpdate(w, r, user, resourceID, shareID, err.Error(), http.StatusBadRequest)
 			return
 		}
 		if err := a.db.UpdateShare(r.Context(), user.ID, resourceID, shareID, strings.TrimSpace(r.FormValue("name")), ttl, maxUses); err != nil {
-			back(shareID, err.Error())
+			text, status := a.writeErrorText("update share", err)
+			a.refuseShareUpdate(w, r, user, resourceID, shareID, text, status)
 			return
 		}
-		back(shareID, "")
+		back("")
 	case "revoke":
 		if err := a.db.RevokeLink(r.Context(), user.ID, resourceID, r.FormValue("share_id")); err != nil {
-			back("", err.Error())
+			back(err.Error())
 			return
 		}
-		back("", "")
+		back("")
 	case "delete":
 		if err := a.db.DeleteEndedLink(r.Context(), user.ID, resourceID, r.FormValue("share_id"), time.Now().UTC()); err != nil {
-			back("", err.Error())
+			back(err.Error())
 			return
 		}
-		back("", "")
+		back("")
 	case "revoke_all":
 		if err := a.db.RevokeShares(r.Context(), user.ID, resourceID); err != nil {
-			back("", err.Error())
+			back(err.Error())
 			return
 		}
-		back("", "")
+		back("")
 	default:
 		writePlainError(w, http.StatusBadRequest, "unknown share action")
 	}
+}
+
+// refuseShareUpdate answers a refused change of terms with the dialog still
+// open, holding what was typed and saying what was wrong with it. Redirecting
+// would reopen the dialog with the stored terms and lose the entry that was
+// being corrected. A share that has gone meanwhile has no dialog to reopen,
+// and the message goes on the page instead.
+func (a *App) refuseShareUpdate(w http.ResponseWriter, r *http.Request, user User, resourceID, shareID, message string, status int) {
+	resource, err := a.db.ResourceForOwner(r.Context(), user.ID, resourceID)
+	if errors.Is(err, store.ErrNotFound) {
+		writePlainError(w, http.StatusNotFound, "resource not found")
+		return
+	}
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	uses, usesErr := strconv.Atoi(strings.TrimSpace(r.FormValue("uses")))
+	a.renderResourcePage(w, r, user, resource, message, status, nil, func(data *pageData) {
+		for _, view := range data.Shares {
+			if view.Link.ID != shareID || view.Link.Unreadable {
+				continue
+			}
+			view.Link.Name = r.FormValue("name")
+			view.TTLChoice, view.TTLCustom = r.FormValue("ttl"), r.FormValue("ttl_custom")
+			if usesErr == nil {
+				view.Link.MaxUses = uses
+			}
+			data.FocusShare, data.ShareOpen, data.DeleteOpen = view, true, false
+			return
+		}
+	})
 }
 
 // shareUses reads the use-count radios. A missing value means no limit, which
