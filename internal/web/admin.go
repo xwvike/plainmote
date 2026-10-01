@@ -284,6 +284,8 @@ func (q adminRequest) route(parts []string) {
 		q.plans()
 	case is(http.MethodPost, 1) && parts[0] == "plans":
 		q.createPlan()
+	case is(http.MethodDelete, 2) && parts[0] == "plans":
+		q.deletePlan(parts[1])
 	case is(http.MethodGet, 1) && parts[0] == "resources":
 		q.resources()
 	case is(http.MethodGet, 2) && parts[0] == "resources":
@@ -414,6 +416,18 @@ func (q adminRequest) createPlan() {
 		return
 	}
 	q.json(http.StatusCreated, plan)
+}
+
+func (q adminRequest) deletePlan(id string) {
+	reason, ok := q.reason(nil)
+	if !ok {
+		return
+	}
+	if err := q.app.db.AdminDeletePlan(q.r.Context(), q.actor, id, reason, q.now); err != nil {
+		q.failWith(err)
+		return
+	}
+	q.json(http.StatusOK, map[string]any{"id": id, "deleted": true})
 }
 
 func (q adminRequest) grantPlan(userID string) {

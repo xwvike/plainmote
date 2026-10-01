@@ -139,6 +139,8 @@ PLAINMOTE-ADMIN-V1
 
 `POST /_admin/v1/plans`，请求体 `{"name": "…", "max_resources": 100, "max_storage": 1073741824, "reason": "…"}`：新建一个可授予的套餐。错误代码：`plan_exists`、`invalid_plan`。
 
+`DELETE /_admin/v1/plans/{id}`，请求体 `{"reason": "…"}`：删除套餐，成功返回 `{"id": "…", "deleted": true}`。默认套餐不能删除（`plan_protected`）；仍有用户持有（含已到期但尚未撤回的授予）时不能删除（`plan_in_use`），须先逐个撤回，删除不会降低任何人的额度。
+
 `POST /_admin/v1/users/{id}/plans`，请求体 `{"plan_id": "…", "expires_at": null, "reason": "…"}`：为用户追加套餐，上限与已有套餐相加。
 
 `DELETE /_admin/v1/users/{id}/plans/{plan_id}`，请求体 `{"reason": "…"}`：撤回追加的套餐。默认套餐不能撤回（`plan_protected`）。
@@ -215,7 +217,7 @@ PLAINMOTE-ADMIN-V1
 | `resource.takedown` | `null`；快速分享因下架而被删除时为 `{"deleted": true}` |
 | `user.plan.grant` | `{"plan_id", "plan_name", "expires_at"}` |
 | `user.plan.revoke` | `{"plan_id", "plan_name"}` |
-| `plan.create` | `{"max_resources", "max_storage"}` |
+| `plan.create`、`plan.delete` | `{"max_resources", "max_storage"}` |
 | `link.revoke` | `{"resource_id"}` |
 
 审计记录只追加，不提供修改或删除接口，也不随访问记录的保留期清理。

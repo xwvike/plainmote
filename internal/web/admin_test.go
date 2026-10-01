@@ -354,7 +354,25 @@ func TestAdminPlans(t *testing.T) {
 	if status, _, _ := client.call(http.MethodDelete, "/_admin/v1/users/"+user.ID+"/plans/"+defaultID, map[string]string{"reason": "no"}); status != http.StatusConflict {
 		t.Fatalf("the default plan cannot be taken back: %d", status)
 	}
+	if status, failure, _ := client.call(http.MethodDelete, "/_admin/v1/plans/"+planID, map[string]string{"reason": "unused"}); status != http.StatusConflict || failure["error"] != "plan_in_use" {
+		t.Fatalf("a plan someone holds cannot be deleted: %d %v", status, failure)
+	}
 	if status, _, _ := client.call(http.MethodDelete, "/_admin/v1/users/"+user.ID+"/plans/"+planID, map[string]string{"reason": "ended"}); status != http.StatusOK {
 		t.Fatalf("a granted plan can: %d", status)
+	}
+	if status, failure, _ := client.call(http.MethodDelete, "/_admin/v1/plans/"+defaultID, map[string]string{"reason": "no"}); status != http.StatusConflict || failure["error"] != "plan_protected" {
+		t.Fatalf("the default plan cannot be deleted: %d %v", status, failure)
+	}
+	if status, _, _ := client.call(http.MethodDelete, "/_admin/v1/plans/00000000-0000-0000-0000-000000000002", map[string]string{"reason": "no"}); status != http.StatusNotFound {
+		t.Fatalf("the anonymous fuse is not a plan: %d", status)
+	}
+	status, deleted, _ := client.call(http.MethodDelete, "/_admin/v1/plans/"+planID, map[string]string{"reason": "unused"})
+	if status != http.StatusOK || deleted["deleted"] != true {
+		t.Fatalf("a plan nobody holds is deleted: %d %v", status, deleted)
+	}
+	_, planAudit, _ := client.call(http.MethodGet, "/_admin/v1/audit?target="+planID, nil)
+	removal := planAudit["items"].([]any)[0].(map[string]any)
+	if removal["action"] != "plan.delete" || removal["target_label"] != "friends" || removal["detail"].(map[string]any)["max_storage"].(float64) != float64(1<<30) {
+		t.Fatalf("the deletion is recorded with what was deleted: %v", removal)
 	}
 }

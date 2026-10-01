@@ -33,6 +33,7 @@ var (
 	ErrAlreadyTakenDown = errors.New("already_taken_down")
 	ErrNotTakenDown     = errors.New("not_taken_down")
 	ErrPlanProtected    = errors.New("plan_protected")
+	ErrPlanInUse        = errors.New("plan_in_use")
 )
 
 // auditEntry is one change as it is recorded. Label is what the target was
@@ -388,6 +389,40 @@ VALUES($1, $2, $3, $4, FALSE, $5, $5) ON CONFLICT (name) DO NOTHING
 			Detail: map[string]any{"max_resources": maxResources, "max_storage": maxStorage}}, now)
 	})
 	return plan, err
+}
+
+// AdminDeletePlan deletes a plan nobody holds. One still granted - expired
+// grants included, until they are revoked - is refused rather than taken
+// from its holders behind their backs, and the default plan is what every
+// account stands on.
+func (d *Store) AdminDeletePlan(ctx context.Context, actor AdminActor, id, reason string, now time.Time) error {
+	if !validUUIDs(id) || id == anonymousPlanID {
+		return ErrNotFound
+	}
+	return d.withTx(ctx, func(tx pgx.Tx) error {
+		var name string
+		var isDefault bool
+		var maxResources, maxStorage int64
+		if err := tx.QueryRow(ctx, `SELECT name, is_default, max_resources, max_storage FROM plans WHERE id = $1 FOR UPDATE`, id).
+			Scan(&name, &isDefault, &maxResources, &maxStorage); err != nil {
+			return translateNotFound(err)
+		}
+		if isDefault {
+			return ErrPlanProtected
+		}
+		var holders int
+		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM user_plans WHERE plan_id = $1`, id).Scan(&holders); err != nil {
+			return fmt.Errorf("count plan holders: %w: %w", ErrInternal, err)
+		}
+		if holders > 0 {
+			return ErrPlanInUse
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM plans WHERE id = $1`, id); err != nil {
+			return fmt.Errorf("delete plan: %w: %w", ErrInternal, err)
+		}
+		return auditTx(ctx, tx, actor, auditEntry{Action: "plan.delete", TargetType: "plan", TargetID: id, Label: name, Reason: reason,
+			Detail: map[string]any{"max_resources": maxResources, "max_storage": maxStorage}}, now)
+	})
 }
 
 // anonymousPlanID is the fuse on quick shares; it is not something to grant.
