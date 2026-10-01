@@ -281,7 +281,7 @@ func TestUntitledNamesFollowTheReadersLanguage(t *testing.T) {
 		{"en", "Untitled resource", "Untitled share"},
 		{"zh-CN", "未命名资源", "未命名分享"},
 	} {
-		if page := get("/resources/"+resource.ID, tc.language); !strings.Contains(page, "<h1>"+tc.resource+"</h1>") {
+		if page := get("/resources/"+resource.ID, tc.language); !strings.Contains(page, `<h1 data-part="title">`+tc.resource+"</h1>") {
 			t.Errorf("%s resource page does not say %q", tc.language, tc.resource)
 		}
 		if page := get("/resources/", tc.language); !strings.Contains(page, ">"+tc.resource+"</a>") {

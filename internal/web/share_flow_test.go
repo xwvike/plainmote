@@ -211,7 +211,7 @@ func TestShareActionsAnswerWithParts(t *testing.T) {
 	if strings.Contains(parts, "<html") || strings.Contains(parts, "answer=42") {
 		t.Fatalf("the parts carry neither the page nor the body: %q", parts)
 	}
-	for _, want := range []string{`data-part="shares"`, `data-part="flash"`, shares[0].Token, `data-dialog`} {
+	for _, want := range []string{`data-part="shares"`, `data-part="notices"`, shares[0].Token, `data-dialog`} {
 		if !strings.Contains(parts, want) {
 			t.Fatalf("the parts are missing %q", want)
 		}
@@ -227,7 +227,7 @@ func TestShareActionsAnswerWithParts(t *testing.T) {
 		t.Fatal("the settings link answers with the share dialog")
 	}
 	refused := client.partsPage(base + "?share=" + shares[0].ID + "&error=bad+lifetime")
-	if !strings.Contains(refused, `<p class="err">bad lifetime</p>`) || strings.Contains(refused, `<div data-part="flash"><p`) {
+	if !strings.Contains(refused, `<p class="err">bad lifetime</p>`) || strings.Count(refused, "bad lifetime") != 1 {
 		t.Fatal("a refusal is shown in the dialog, not behind it")
 	}
 

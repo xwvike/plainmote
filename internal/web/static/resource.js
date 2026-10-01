@@ -17,8 +17,21 @@ function syncWithin(root) {
   for (const box of root.querySelectorAll("[data-ttl-custom]")) syncLifetime(box, false);
 }
 
+// Command-S or Ctrl-S saves, from the editor or any field of the form, the
+// way pressing the save button does. The browser's own "save page as" is no
+// use here.
+function saveShortcut(event) {
+  if (event.key !== "s" || event.shiftKey || event.altKey || !(event.metaKey || event.ctrlKey)) return;
+  const form = document.querySelector("form.rform");
+  const button = form ? form.querySelector("button[type='submit'][data-part='submit']") : null;
+  if (!button || document.querySelector("dialog[open]")) return;
+  event.preventDefault();
+  if (!button.disabled) form.requestSubmit(button);
+}
+
 if (typeof document !== "undefined" && document.addEventListener) {
   document.addEventListener("change", followLifetime);
+  document.addEventListener("keydown", saveShortcut);
   // The share dialog arrives after the page has loaded, through parts.js.
   document.addEventListener("plainmote:parts", (event) => syncWithin(event.detail.root));
   syncWithin(document);

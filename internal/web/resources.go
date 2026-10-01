@@ -394,12 +394,11 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 	data := a.basePage(r, user)
 	data.Error = pageError
-	// A request from parts.js renders neither the editor nor the heading, so
-	// it reads neither the body nor the history count - except the body or the
-	// upstream type of a resource with no filename, which is what names it in
-	// the addresses of its links.
+	// A request from parts.js renders everything but the editor, so it does
+	// not read the body - except for a resource with no filename, whose body
+	// or upstream type is what names it in the addresses of its links.
 	parts := wantsParts(r)
-	if !resource.Remote() && !parts {
+	if !resource.Remote() {
 		if data.HistoryCount, err = a.db.HistoryCount(r.Context(), user.ID, resource.ID); err != nil {
 			a.renderError(w, http.StatusInternalServerError, err)
 			return

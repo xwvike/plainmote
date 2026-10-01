@@ -480,7 +480,7 @@ details.pan[open] .chev { transform: rotate(90deg); }
 .dlg::backdrop { background: var(--scrim, rgb(12 20 19 / .42)); }
 a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 /* The slot a message is put into, which takes no room while it is empty. */
-[data-part="flash"] { display: contents; }
+[data-part="flash"], [data-part="notices"] { display: contents; }
 .dlg > header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .dlg > header b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
 .dlg > header .x { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--r); color: var(--ink3); font: 400 16px var(--sans); text-decoration: none; }

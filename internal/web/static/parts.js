@@ -10,7 +10,11 @@
 //
 // A part named "dialog" is the dialog to show; an answer without one closes
 // the dialog that is open. Any other part replaces the element of the same
-// name on the page.
+// name on the page, and a <title> in the answer becomes the page's title.
+//
+// A posted form that the server redirected - an action that went through -
+// moves the address to where the redirect pointed, as the plain request
+// would have, and the form hears "plainmote:submitted" with the outcome.
 
 const partsHeader = "X-PlainMote-Fragment";
 
@@ -45,10 +49,16 @@ async function fetchParts(url, init) {
   const parsed = new DOMParser().parseFromString(await response.text(), "text/html");
   const parts = [...parsed.body.querySelectorAll("[data-part]")];
   if (parts.length === 0) throw new Error(`answer has no parts: ${response.status}`);
-  return parts;
+  const title = parsed.querySelector("title");
+  return {
+    parts,
+    title: title ? title.textContent : null,
+    redirected: response.redirected,
+    url: response.url,
+  };
 }
 
-function apply(parts, opener) {
+function apply({ parts, title }, opener, closeTo) {
   let dialog = null;
   for (const part of parts) {
     const node = document.adoptNode(part);
@@ -62,9 +72,10 @@ function apply(parts, opener) {
       announce(node);
     }
   }
+  if (title !== null) document.title = title;
   const open = document.querySelector("dialog[data-part='dialog'][open]");
   if (dialog) {
-    show(dialog, open, opener);
+    show(dialog, open, opener, closeTo);
   } else if (open) {
     open.close();
   }
@@ -76,7 +87,7 @@ function announce(root) {
   document.dispatchEvent(new CustomEvent("plainmote:parts", { detail: { root } }));
 }
 
-function show(dialog, current, opener) {
+function show(dialog, current, opener, closeTo) {
   dialog.removeAttribute("open");
   if (current) {
     // A refused submission comes back as the same dialog with a message in
@@ -88,7 +99,7 @@ function show(dialog, current, opener) {
     dialog.opener = opener;
     document.body.append(dialog);
   }
-  wire(dialog);
+  wire(dialog, closeTo);
   dialog.showModal();
   announce(dialog);
 }
@@ -118,8 +129,8 @@ async function openDialog(event) {
   busy = true;
   link.setAttribute("aria-busy", "true");
   try {
-    const parts = await fetchParts(link.href, { method: "GET" });
-    if (parts) apply(parts, link);
+    const answer = await fetchParts(link.href, { method: "GET" });
+    if (answer) apply(answer, link);
   } catch (error) {
     // Nothing was changed by asking, so the plain link is a safe fallback.
     console.error("parts: cannot open dialog", error);
@@ -130,9 +141,30 @@ async function openDialog(event) {
   }
 }
 
+// A chosen file can change what kind of page comes back - a picture where
+// there was text - so a form carrying one is sent the plain way.
+function carriesFile(form) {
+  return [...form.querySelectorAll("input[type='file']")].some((input) => input.files && input.files.length > 0);
+}
+
+// Said where the page puts its messages, when the answer to a posted form
+// never arrives. Reloading instead would be safe for the server but would
+// throw away an edit the save was meant to keep.
+function unconfirmed() {
+  const message = document.body.dataset.msgRequestFailed;
+  const slot = document.querySelector("[data-part='notices'], [data-part='flash']");
+  if (!message || !slot) return false;
+  const line = document.createElement("p");
+  line.className = "err";
+  line.setAttribute("role", "alert");
+  line.textContent = message;
+  slot.replaceChildren(line);
+  return true;
+}
+
 async function submit(event) {
   const form = event.target.closest("form[data-parts]");
-  if (!form || event.defaultPrevented) return;
+  if (!form || event.defaultPrevented || carriesFile(form)) return;
   const target = formActionURL(form, window.location.href);
   if (!sameOrigin(target, window.location.href)) return;
   event.preventDefault();
@@ -144,13 +176,22 @@ async function submit(event) {
   for (const button of buttons) button.disabled = true;
   form.setAttribute("aria-busy", "true");
   try {
-    const parts = await fetchParts(target, { method: "POST", body });
-    if (parts) apply(parts, null);
+    const answer = await fetchParts(target, { method: "POST", body });
+    if (answer) {
+      let closeTo = null;
+      if (answer.redirected) {
+        history.replaceState(history.state, "", answer.url);
+        // A dialog the redirect reopened - a refusal - was opened by the
+        // address, and closing it takes the address back to the page.
+        closeTo = window.location.pathname;
+      }
+      apply(answer, null, closeTo);
+      form.dispatchEvent(new CustomEvent("plainmote:submitted", { detail: { saved: answer.redirected } }));
+    }
   } catch (error) {
-    // The POST may already have taken effect, so it is never repeated. A
-    // reload shows whichever result reached the server.
+    // The POST may already have taken effect, so it is never repeated.
     console.error("parts: cannot apply the answer", error);
-    window.location.reload();
+    if (!unconfirmed()) window.location.reload();
   } finally {
     busy = false;
     for (const button of buttons) button.disabled = false;

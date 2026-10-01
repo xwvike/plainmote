@@ -61,7 +61,9 @@ func (c *versionClient) parts(method, target string, form url.Values) *httptest.
 	c.asParts = true
 	defer func() { c.asParts = false }()
 	response := c.do(method, target, form)
-	if !strings.Contains(strings.Join(response.Header().Values("Vary"), ","), partsHeader) {
+	// A page answered both ways must not be cached as one; a redirect has
+	// no body to confuse.
+	if response.Code != http.StatusSeeOther && !strings.Contains(strings.Join(response.Header().Values("Vary"), ","), partsHeader) {
 		c.t.Fatalf("%s %s (parts) does not vary on the parts header", method, target)
 	}
 	return response
@@ -274,6 +276,70 @@ func TestDialogsOpenAsParts(t *testing.T) {
 		if page := client.page(target); !strings.Contains(page, "data-dialog") {
 			t.Fatalf("%s has no dialog links", target)
 		}
+	}
+}
+
+// TestSavingInPlace follows a save made by parts.js: the same redirect as a
+// plain save, then the parts of the page a save changes - and a conflict
+// answered with those parts too, the editor left alone.
+func TestSavingInPlace(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	client := newVersionClient(t, db, user)
+	base := "/resources/" + resource.ID
+
+	if page := client.page(base); !strings.Contains(page, `class="rform" method="post" enctype="multipart/form-data" action="`+base+`" data-parts>`) {
+		t.Fatal("the edit form is sent through parts.js")
+	}
+	if page := client.page("/resources/new"); strings.Contains(page, `data-parts>`) {
+		t.Fatal("creating a resource leads to another page and is sent plainly")
+	}
+
+	form := url.Values{
+		"name": {"Renamed"}, "filename": {resource.Filename}, "content": {"answer=43\n"},
+		"content_encoding": {"utf-8"}, "content_eol": {"lf"}, "base_version": {"1"},
+	}
+	saved := client.parts(http.MethodPost, base, form)
+	if saved.Code != http.StatusSeeOther || saved.Header().Get("Location") != base+"?saved=2" {
+		t.Fatalf("an in-place save redirects like a plain one: %d %q", saved.Code, saved.Header().Get("Location"))
+	}
+	parts := client.partsPage(base + "?saved=2")
+	for _, want := range []string{
+		"<title>Renamed · PlainMote</title>", `<h1 data-part="title">Renamed</h1>`, `data-part="crumb"`,
+		"Versions<b>1</b>", "Saved as v2.", `name="base_version" value="2" data-part="base"`,
+		`data-part="submit">Save</button>`, " · v2 · ", `data-part="shares"`,
+	} {
+		if !strings.Contains(parts, want) {
+			t.Fatalf("the parts after a save are missing %q", want)
+		}
+	}
+	if strings.Contains(parts, "answer=4") || strings.Contains(parts, "<textarea") {
+		t.Fatal("the editor is not sent back")
+	}
+
+	// Saved elsewhere meanwhile: the stale save is refused with the parts
+	// that say so and let the next save go over it.
+	form.Set("content", "answer=44\n")
+	if err := db.UpdateResource(context.Background(), user.ID, resource.ID, "Renamed", resource.Filename, []byte("answer=45\n"), "utf-8", ""); err != nil {
+		t.Fatal(err)
+	}
+	form.Set("base_version", "2")
+	conflict := client.parts(http.MethodPost, base, form)
+	body := conflict.Body.String()
+	if conflict.Code != http.StatusConflict || strings.Contains(body, "<html") || strings.Contains(body, "<textarea") {
+		t.Fatalf("a conflict answers with parts: %d", conflict.Code)
+	}
+	for _, want := range []string{`class="warnbox"`, `name="base_version" value="3" data-part="base"`, "Save anyway as v4"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("the conflict parts are missing %q", want)
+		}
+	}
+
+	// A refused save says why in the notices.
+	form.Set("base_version", "3")
+	form.Set("filename", strings.Repeat("x", 300))
+	refused := client.parts(http.MethodPost, base, form)
+	if body := refused.Body.String(); refused.Code != http.StatusBadRequest || !strings.Contains(body, `<div data-part="notices">`) || !strings.Contains(body, `<p class="err">`) {
+		t.Fatalf("a refused save answers with the message: %d %q", refused.Code, body)
 	}
 }
 

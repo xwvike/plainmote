@@ -464,7 +464,9 @@ function enhance(textarea) {
   // There is nothing to revert to until something has been changed, and a
   // "discard changes" button offered the moment a save lands reads as though
   // the save did not take.
+  let changes = 0;
   const markDirty = () => {
+    changes += 1;
     if (revert) revert.classList.add("show");
     if (unsaved) unsaved.classList.add("show");
   };
@@ -586,6 +588,22 @@ function enhance(textarea) {
     // In the capture phase, so the textarea holds the editor's text before
     // any other submit handler reads it - the encrypting form reads it there.
     form.addEventListener("submit", sync, true);
+    // A save made in place (parts.js) leaves the page as it is, so the page
+    // has to stop saying there is something unsaved - unless more was typed
+    // while the save was on its way, which that save did not carry.
+    let sent = null;
+    form.addEventListener("submit", () => {
+      sent = { doc: view.state.doc, changes };
+    }, true);
+    form.addEventListener("plainmote:submitted", (event) => {
+      if (!event.detail.saved || !sent) return;
+      if (sent.doc === view.state.doc && sent.changes === changes) {
+        editorDirty = false;
+        if (revert) revert.classList.remove("show");
+        if (unsaved) unsaved.classList.remove("show");
+      }
+      sent = null;
+    });
     form.addEventListener("formdata", (event) => {
       sync();
       if (!textarea.name) return;
