@@ -189,9 +189,14 @@ type pageData struct {
 	// and the version the edit was made against.
 	Conflict     *store.VersionConflict
 	ConflictBase int
-	// One-line confirmations on the resource page after a restore, and after
-	// a save that took earlier versions' room. UndoVersion is what restoring
-	// back would bring back, 0 when that is not on offer.
+	// One-line confirmations on the resource page after a creation, a save,
+	// a restore, and a save that took earlier versions' room. SavedVersion is
+	// the version a save made, 0 when it left the content as it was.
+	// UndoVersion is what restoring back would bring back, 0 when that is
+	// not on offer.
+	Created      bool
+	Saved        bool
+	SavedVersion int
 	RestoredFrom int
 	UndoVersion  int
 	Trimmed      int

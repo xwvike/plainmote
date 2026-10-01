@@ -158,6 +158,52 @@ func TestStaleSaveComesBackAsAConflict(t *testing.T) {
 	}
 }
 
+// TestCreateAndSaveSayWhatHappened checks the confirmations: a new resource
+// says it was made and offers the next one, a save names the version it made,
+// and a notice that is no longer true is not shown.
+func TestCreateAndSaveSayWhatHappened(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	client := newVersionClient(t, db, user)
+	base := "/resources/" + resource.ID
+
+	created := client.do(http.MethodPost, "/resources/new", url.Values{
+		"kind": {"local"}, "name": {"Second"}, "filename": {"second.conf"}, "content": {"a=1\n"},
+		"content_encoding": {"utf-8"}, "content_eol": {"lf"},
+	})
+	location := created.Header().Get("Location")
+	if created.Code != http.StatusSeeOther || !strings.HasSuffix(location, "?created=1") {
+		t.Fatalf("create lands on the resource with a notice: %d %q", created.Code, location)
+	}
+	page := client.page(location)
+	for _, want := range []string{"Created “Second”.", `href="/resources/new">Create another`, `href="/resources/">Back to resources`} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("the created notice is missing %q", want)
+		}
+	}
+
+	saved := client.save(resource, "answer=43\n", 1)
+	if saved.Header().Get("Location") != base+"?saved=2" {
+		t.Fatalf("a save that changes the content names its version, got %q", saved.Header().Get("Location"))
+	}
+	if page := client.page(base + "?saved=2"); !strings.Contains(page, "Saved as v2.") {
+		t.Fatal("the save notice names the version")
+	}
+	resource.Name = "Renamed"
+	renamed := client.save(resource, "answer=43\n", 2)
+	if renamed.Header().Get("Location") != base+"?saved=0" {
+		t.Fatalf("a rename makes no version, got %q", renamed.Header().Get("Location"))
+	}
+	if page := client.page(base + "?saved=0"); !strings.Contains(page, "Saved.") || strings.Contains(page, "Saved as") {
+		t.Fatal("a rename is confirmed without a version")
+	}
+
+	client.save(resource, "answer=44\n", 2)
+	stale := client.page(base + "?saved=2&created=1")
+	if strings.Contains(stale, "Saved as v2") || strings.Contains(stale, "Created “") {
+		t.Fatal("notices that are no longer true are not shown")
+	}
+}
+
 func TestDeletingAndCopyingVersions(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	client := newVersionClient(t, db, user)

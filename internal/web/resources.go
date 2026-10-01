@@ -116,7 +116,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		var resource Resource
 		resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.ContentEncoding, form.OriginURL)
 		if err == nil {
-			http.Redirect(w, r, "/resources/"+resource.ID, http.StatusSeeOther)
+			http.Redirect(w, r, "/resources/"+resource.ID+"?created=1", http.StatusSeeOther)
 			return
 		}
 	}
@@ -348,11 +348,16 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			a.renderResourcePage(w, r, user, pending, text, status, pendingBody, nil)
 			return
 		}
-		target := "/resources/" + resourceID
-		if result.Trimmed > 0 {
-			target += "?trimmed=" + strconv.Itoa(result.Trimmed)
+		// saved=0 is a save that changed only the name or the address: the
+		// content, and so the version, stayed where it was.
+		values := url.Values{"saved": {"0"}}
+		if result.NewVersion {
+			values.Set("saved", strconv.Itoa(result.Version))
 		}
-		http.Redirect(w, r, target, http.StatusSeeOther)
+		if result.Trimmed > 0 {
+			values.Set("trimmed", strconv.Itoa(result.Trimmed))
+		}
+		http.Redirect(w, r, "/resources/"+resourceID+"?"+values.Encode(), http.StatusSeeOther)
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -405,6 +410,14 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 			if _, err := a.db.VersionForOwner(r.Context(), user.ID, resource.ID, resource.Version-1); err == nil {
 				data.UndoVersion = resource.Version - 1
 			}
+		}
+	}
+	// A creation is believed while nothing has been saved over it, and a
+	// numbered save while its version is still the current one.
+	data.Created = query.Get("created") == "1" && resource.Version == 1
+	if query.Has("saved") && data.RestoredFrom == 0 {
+		if saved := versionNumber(query.Get("saved")); saved == 0 || (saved == resource.Version && !resource.Remote()) {
+			data.Saved, data.SavedVersion = true, saved
 		}
 	}
 	data.Trimmed = versionNumber(query.Get("trimmed"))

@@ -27,6 +27,15 @@
     {{end}}
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
     {{if .Resource.TakenDown}}<p class="err">{{tr .Locale "takedown_notice"}}{{.Resource.TakedownReason}}</p>{{end}}
+    {{if .Created}}
+    <div class="notice notice-row" role="status">
+      <span>{{printf (tr .Locale "notice_created") (or .Resource.Name (tr .Locale "untitled_resource"))}}</span>
+      <a class="txt" href="/resources/new{{if .Resource.Remote}}?kind=remote{{end}}">{{tr .Locale "create_another"}}</a>
+      <a class="txt" href="/resources/">{{tr .Locale "back_to_resources"}}</a>
+    </div>
+    {{else if .Saved}}
+    <p class="notice" role="status">{{if .SavedVersion}}{{printf (tr .Locale "notice_saved_version") .SavedVersion}}{{else}}{{tr .Locale "notice_saved"}}{{end}}</p>
+    {{end}}
     {{if .RestoredFrom}}
     <div class="notice notice-row">
       <span>{{printf (tr .Locale "notice_restored") .RestoredFrom .Resource.Version}}</span>

@@ -380,6 +380,7 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 			next.Version = locked.Version + 1
 			next.Key, next.Size, next.SHA256 = nextKey, nextSize, nextSHA
 			next.VersionAt, next.RestoredFrom, next.Remote = now, 0, false
+			result.NewVersion = true
 		}
 		if usage.StorageBytes+next.Size > limit.StorageBytes {
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, next.Size)

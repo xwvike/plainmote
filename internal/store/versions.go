@@ -42,11 +42,13 @@ func (e *VersionConflict) Error() string {
 	return fmt.Sprintf("此资源已在别处更新为 v%d", e.Current)
 }
 
-// SaveResult is what a save did besides saving: the version now current, and
-// how many earlier versions gave up their room to it.
+// SaveResult is what a save did besides saving: the version now current,
+// whether this save is what made it, and how many earlier versions gave up
+// their room to it.
 type SaveResult struct {
-	Version int
-	Trimmed int
+	Version    int
+	NewVersion bool
+	Trimmed    int
 }
 
 func contentSHA256(content []byte) string {
