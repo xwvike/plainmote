@@ -6,7 +6,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-PlainMote is a web service for sharing configuration files, logs and other files. Content is stored and delivered byte for byte. A single piece of content can be issued a separate link for each recipient or machine; each link has its own expiry and use limit, can be revoked independently, and every access through it is recorded.
+PlainMote is a web service for sharing configuration files, logs and other files. Content is stored and delivered byte for byte. Each piece of content can be shared through a separate link for each recipient or machine; each link has its own expiry and use limit, can be revoked independently, and records every access made through it.
 
 Reference deployment: [plainmote.link](https://plainmote.link)
 
@@ -17,15 +17,15 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 
 ## Features
 
-- **Quick share**: no account required. Text pasted or a file uploaded on the home page (up to 10 MiB) becomes a share link valid for 10 minutes, 1 hour, 1 day, 7 days or 30 days; the default is 1 hour. Content can also be submitted from the command line with curl.
-- **Resources and share links**: signed-in users store files (100 MiB per account by default) and issue any number of links to each resource. Each link has its own expiry and use limit; revoking one leaves the others in effect. When a resource is updated, every link serves the new content at the same address.
+- **Quick share**: no account is required. Text or a file of up to 10 MiB submitted on the home page receives a share link valid for 10 minutes, 1 hour, 1 day, 7 days or 30 days; the default is 1 hour. Content can also be submitted from the command line with curl.
+- **Resources and share links**: signed-in users can store files (100 MiB per account by default) and issue any number of share links for each resource. Each link has its own expiry and use limit; revoking one leaves the others in effect. When a resource is updated, every link keeps its address and serves the new content immediately.
 - **Access history**: every access through a link is recorded with its time, result, source IP address and client details, visible only to the owner of the resource. Records are kept for 30 days by default.
-- **Version history**: each save that changes a resource's content keeps the version it replaces: up to 10 per resource, each for 30 days after it was replaced. Earlier versions can be viewed, compared with any other version (text line by line; images, audio, video and other files side by side, with their size, SHA-256 and, for images, dimensions), restored as a new version, copied into a new resource or deleted individually. They count towards storage but use only the space current content leaves free; when a save needs that space, the versions replaced longest ago are removed first. The access history records which version each access received. If the content was changed elsewhere while it was being edited, the save is not applied and the conflict is reported, so the other change is not overwritten.
+- **Version history**: each save that changes a resource's content retains the version it replaces, up to 10 per resource, each for 30 days after it was replaced. Earlier versions can be viewed, compared with any other version, restored as a new version, copied into a new resource or deleted individually. Text is compared line by line; images, audio, video and other files are shown side by side with their size, SHA-256 digest and, for images, dimensions. Earlier versions count towards storage but occupy only the space not used by current content; when a save requires that space, the versions replaced longest ago are removed first. The access history records which version each access received. A save based on an outdated version is not applied; the conflict is reported instead, so that newer content is not overwritten.
 - **Remote resources**: a resource may consist of a public URL only, in which case the service fetches the content from the origin on each access.
 - **Conditional requests**: share links answer `HEAD`, and responses carry an `ETag` (and, for stored content, `Last-Modified`). A request with `If-None-Match` or `If-Modified-Since` receives `304` with no body while the content is unchanged. Every response counts as one use and is recorded.
 - **Editor**: built on CodeMirror 6, with syntax highlighting for YAML, JSON, TOML, XML, INI and `.env`, shell, nginx, Dockerfile, SQL, diffs and logs; the quick share box uses the same editor. UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings are detected, and files are saved in their original encoding and line endings.
-- **End-to-end encryption (optional)**: signed-in users can enable it in their account settings. Quick shares made on the home page, text or file, are then encrypted in the browser before upload, and the service stores only ciphertext.
-- **Media preview**: opened in a browser, images are displayed and audio and video are played; other clients receive the raw bytes.
+- **End-to-end encryption (optional)**: signed-in users can enable it in their account settings. Quick shares created on the home page, whether text or files, are then encrypted in the browser before upload, and the service stores only ciphertext.
+- **Media preview**: when a share link is opened in a browser, images are displayed and audio and video are played; other clients receive the original bytes.
 - **No JavaScript required**: core functions work with scripts disabled; scripts only enhance the interface. End-to-end encryption is the exception, as encryption and decryption run in the browser.
 - **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, selected from the browser's language. The home page and legal pages also have a separate address per language (such as `/zh-cn/` or `/ja/`) for search engines. Light and dark themes are available.
 
@@ -57,7 +57,7 @@ curl https://plainmote.link/paste    # prints usage
 - **Not indexed**: share links, resources and account pages are excluded from search engines; only the pages describing the service can be indexed.
 - **No web hosting**: types a browser may execute (HTML, scripts, SVG and similar) are never delivered as themselves. For quick shares made without an account, text is delivered as plain text, images, audio and video confirmed by their file signatures are delivered as their own types, and all other files are delivered only as downloads; encrypted shares are always delivered as ciphertext.
 - **End-to-end encryption**: uses only the browser's built-in WebCrypto, with AES-256-GCM. By default the key is carried in the part of the link after `#`, which browsers do not send to the server. The creator may use a four-character code instead, in which case the recipient's browser derives the key from the code with PBKDF2-SHA-256 (600,000 iterations).
-- **Limits of encryption**: decryption requires JavaScript; a lost link or code cannot be recovered; content size and access history are not encrypted. A code is drawn from 31 characters, about 920,000 combinations: it prevents viewing by someone who merely sees the link, but not by an attacker who obtains the link and tries every code, so sensitive content should be shared with the full link and its key. The encryption code is delivered by the service, so its trustworthiness depends on the integrity of the deployed code, which is one reason this project is open source.
+- **Limits of encryption**: decryption requires JavaScript; a lost link or code cannot be recovered; content size and access history are not encrypted. A code is drawn from 31 characters, about 920,000 combinations: it prevents viewing by someone who merely sees the link, but not by an attacker who obtains the link and tries every code, so sensitive content should be shared with the full link and its key. Because the encryption code is delivered by the service, its trustworthiness depends on the integrity of the deployed code; the published source code allows this to be verified.
 
 ## Self-hosting
 
@@ -113,14 +113,13 @@ Optional:
 
 ### Administration
 
-The service has no administration pages. It offers a signed JSON interface instead, described in [`docs/admin-api.md`](docs/admin-api.md) (in Chinese), which an administration page hosted anywhere, including on a local machine, can call. Requests are signed with an Ed25519 private key held by the administrator; the service holds only the public key. The interface covers a deployment overview, suspending accounts, taking down or deleting resources, revoking links and granting plans, and records every change in an append-only audit log. It never returns resource content, share addresses or the client details of access records. `go run ./cmd/plainmote-admin keygen` generates a key pair, and `go run ./cmd/plainmote-admin call` signs individual requests.
+The service has no administration pages. It provides a signed JSON interface instead, described in [`docs/admin-api.md`](docs/admin-api.md) (in Chinese), for use by an administration page hosted elsewhere or run locally. Requests are signed with an Ed25519 private key held by the administrator; the service holds only the public key. The interface covers a deployment overview, suspending accounts, taking down or deleting resources, revoking links and granting plans, and records every change in an append-only audit log. It never returns resource content, share addresses or the client details of access records. `go run ./cmd/plainmote-admin keygen` generates a key pair, and `go run ./cmd/plainmote-admin call` signs individual requests.
+
+[PlainMote Admin](https://github.com/xwvike/plainmote-admin) (MIT) is an administration page for this interface. It runs entirely in the browser, stores the private key as a non-extractable key and can manage several deployments. It can be run locally, deployed as a static site or used at its published address, [xwvike.github.io/plainmote-admin](https://xwvike.github.io/plainmote-admin/). The origin it is served from must be listed in `PLAINMOTE_ADMIN_ORIGINS`. Browsers store the key per origin, so any script served from the same origin can use it; the page should therefore be served from an origin that hosts no other content.
 
 ### About the legal pages
 
-When `PLAINMOTE_CONTACT_EMAIL` is set, the service provides an about page, a privacy policy, terms of service and a contact page (in Simplified Chinese and English).
-These texts describe the actual behaviour of the reference deployment; durations, sizes and other values are taken from the running configuration.
-**Operators of other deployments should review these texts and adapt them to the applicable law and their own operation**
-(the files are in `internal/web/templates/legal_*.html`). Each operator is responsible for the commitments made on its site.
+When `PLAINMOTE_CONTACT_EMAIL` is set, the service provides an about page, a privacy policy, terms of service and a contact page in Simplified Chinese and English. These texts describe the behaviour of the reference deployment; durations, sizes and other values are taken from the running configuration. **Operators of other deployments should review these texts and adapt them to the applicable law and their own operation** (the files are `internal/web/templates/legal_*.html`). Each operator is responsible for the commitments made on its site.
 
 ## Development
 
@@ -142,8 +141,7 @@ node tools/e2ee/e2ee_test.mjs
 npm --prefix tools/codemirror test
 ```
 
-The dependencies of the editor and of encoding detection are committed as a bundle and are not loaded from a third-party CDN at runtime.
-The bundle is rebuilt with `tools/codemirror/build.sh`; regular builds do not require Node.js.
+The dependencies of the editor and of encoding detection are committed as a bundle and are not loaded from a third-party CDN at runtime. The bundle is rebuilt with `tools/codemirror/build.sh`; regular builds do not require Node.js.
 
 ```text
 cmd/plainmote/       service entry point

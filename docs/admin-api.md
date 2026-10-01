@@ -2,7 +2,7 @@
 
 PlainMote 不提供管理界面，只提供一组签名保护的 HTTP 接口。管理界面是独立的网页，部署在任何地方（包括本机）均可，持有私钥即可调用。
 
-本文档是接口约定，管理端据此实现。
+本文档是接口约定，管理端据此实现。现成的管理页面见 [PlainMote Admin](https://github.com/xwvike/plainmote-admin)。
 
 ## 设计原则
 
