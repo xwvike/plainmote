@@ -134,6 +134,9 @@ type ConsumeResult struct {
 	LinkID   string
 	LinkName string
 	Reason   string
+	// AccessID is the log row an allowed use was recorded under, for the
+	// delivery to correct once it knows how it ended.
+	AccessID string
 }
 
 type QuotaLimit struct {

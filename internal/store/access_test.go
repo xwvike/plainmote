@@ -173,3 +173,65 @@ func TestDeliveriesAreNeverFolded(t *testing.T) {
 		t.Fatalf("every delivery must be its own row, found %d", got)
 	}
 }
+
+// TestEveryUseIsRecordedWithIt pins the rule the delivery path rests on: a
+// use of a link is spent and recorded in one write. If the record cannot be
+// written, the use is not spent and the caller is told nothing went through,
+// so content can never leave without a row naming who took it.
+func TestEveryUseIsRecordedWithIt(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	share, err := db.CreateShare(ctx, user.ID, resource.ID, "web-01", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := RequestMeta{Method: "GET", RemoteIP: "203.0.113.9", Path: "/d/x"}
+
+	for i := 1; i <= 3; i++ {
+		result, err := db.ConsumeToken(ctx, share.Token, meta, time.Now().UTC())
+		if err != nil || !result.Allowed || result.AccessID == "" {
+			t.Fatalf("use %d: %+v %v", i, result, err)
+		}
+		if got := countAccessLogs(t, db, OutcomeSuccess); got != i {
+			t.Fatalf("use %d left %d success rows", i, got)
+		}
+	}
+	logs, err := db.ListAccess(ctx, user.ID, resource.ID, OutcomeSuccess, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range logs {
+		if row.LinkName != "web-01" || row.RemoteIP != "203.0.113.9" || row.Status != 200 || row.Version != resource.Version {
+			t.Fatalf("the row does not describe the use: %+v", row)
+		}
+	}
+
+	// The record cannot be written: the use must not be spent either.
+	if _, err := db.db.Exec(ctx, `
+CREATE FUNCTION refuse_access_log() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'access log unavailable'; END $$;
+CREATE TRIGGER refuse_access_log BEFORE INSERT ON access_logs FOR EACH ROW EXECUTE FUNCTION refuse_access_log();
+`); err != nil {
+		t.Fatal(err)
+	}
+	result, err := db.ConsumeToken(ctx, share.Token, meta, time.Now().UTC())
+	if err == nil || result.Allowed {
+		t.Fatalf("a use whose record failed went through: %+v %v", result, err)
+	}
+	if _, err := db.db.Exec(ctx, `DROP TRIGGER refuse_access_log ON access_logs`); err != nil {
+		t.Fatal(err)
+	}
+	live, err := db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
+	if err != nil || len(live) != 1 || live[0].UsedCount != 3 {
+		t.Fatalf("the failed use was spent: %+v %v", live, err)
+	}
+
+	// A delivery that ends without content corrects its row, and the row no
+	// longer claims a version went out.
+	if err := db.AmendAccess(ctx, logs[0].ID, OutcomeUpstreamError, 502, "upstream timed out", false); err != nil {
+		t.Fatal(err)
+	}
+	amended, err := db.ListAccess(ctx, user.ID, resource.ID, OutcomeUpstreamError, 10)
+	if err != nil || len(amended) != 1 || amended[0].Status != 502 || amended[0].Version != 0 || amended[0].Detail != "upstream timed out" {
+		t.Fatalf("the correction did not land: %+v %v", amended, err)
+	}
+}

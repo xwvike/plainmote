@@ -363,14 +363,34 @@ RETURNING l.id, l.resource_id, l.name
 		if err != nil {
 			return err
 		}
+		// The use and its record are one write: a use is never spent without
+		// a row saying who spent it, and the caller sends nothing until both
+		// are committed. Whatever later goes wrong with the delivery is then
+		// a correction to an existing row, never a row that failed to appear.
+		event := AccessEvent{
+			ID: uuid.NewString(), OwnerID: resource.OwnerID, ResourceID: resource.ID,
+			ResourceName: resource.Name, ResourceFile: resource.Filename,
+			LinkID: linkID, LinkName: linkName,
+			Outcome: OutcomeSuccess, Status: httpStatusOK, Detail: "link accepted",
+		}
+		if !resource.Remote() {
+			event.Version = resource.Version
+		}
+		if err := insertAccessTx(ctx, tx, event, meta, now); err != nil {
+			return err
+		}
 		result.Resource = resource
 		result.LinkID = linkID
 		result.LinkName = linkName
+		result.AccessID = event.ID
 		result.Allowed = true
 		result.Reason = OutcomeSuccess
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return ConsumeResult{}, err
+	}
+	return result, nil
 }
 
 func (d *Store) recordRefusalTx(ctx context.Context, tx pgx.Tx, hash string, meta RequestMeta, now time.Time, result *ConsumeResult) error {

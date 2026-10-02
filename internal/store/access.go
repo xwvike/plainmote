@@ -12,7 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const httpStatusUnauthorized = 401
+const (
+	httpStatusOK           = 200
+	httpStatusUnauthorized = 401
+)
 
 // Access outcomes. Every value the public handler can record lives here so the
 // log filter and the store cannot drift apart.
@@ -104,6 +107,9 @@ func optionalUUID(value string) any {
 // fields are copied rather than referenced: the row has to stay readable after
 // what it describes is gone.
 type AccessEvent struct {
+	// ID names the row when the caller needs to find it again; empty means
+	// a new one is made up.
+	ID           string
 	OwnerID      string
 	ResourceID   string
 	ResourceName string
@@ -147,6 +153,9 @@ WHERE id = (
 	event.Outcome = limitAccessText(event.Outcome, accessIPMaxBytes)
 	event.Detail = limitAccessText(event.Detail, accessTextMaxBytes)
 
+	if event.ID == "" {
+		event.ID = uuid.NewString()
+	}
 	_, err := tx.Exec(ctx, `
 INSERT INTO access_logs(
   id, owner_id, resource_id, resource_name, resource_file, link_id, link_name, outcome,
@@ -160,7 +169,7 @@ VALUES(
   $14, $15, $16, $17, $18, $19,
   $20, $21, $22, $23, $24, $25, 1, $26, $26, NULLIF($27, 0)
 )
-`, uuid.NewString(), optionalUUID(event.OwnerID), optionalUUID(event.ResourceID),
+`, event.ID, optionalUUID(event.OwnerID), optionalUUID(event.ResourceID),
 		event.ResourceName, event.ResourceFile, optionalUUID(event.LinkID), event.LinkName, event.Outcome,
 		meta.RemoteIP, meta.RemoteAddr, meta.Host, meta.Query, meta.Proto,
 		meta.UserAgent, meta.Referer, meta.Forwarded, meta.XForwardedFor, meta.CFConnectingIP, meta.CFRay,
@@ -172,6 +181,27 @@ func (d *Store) RecordAccess(ctx context.Context, event AccessEvent, meta Reques
 	return d.withTx(ctx, func(tx pgx.Tx) error {
 		return insertAccessTx(ctx, tx, event, meta, time.Now().UTC())
 	})
+}
+
+// AmendAccess corrects the row a delivery was recorded under once its end is
+// known: a 304, an upstream that failed, a body that could not be read. The
+// row itself is written with the use it records (see ConsumeToken), so this
+// only ever narrows what it says; delivered=false clears the version, since
+// no content went out.
+func (d *Store) AmendAccess(ctx context.Context, id, outcome string, status int, detail string, delivered bool) error {
+	if !validUUIDs(id) {
+		return ErrNotFound
+	}
+	_, err := d.db.Exec(ctx, `
+UPDATE access_logs
+SET outcome = $2, status = $3, detail = $4,
+    resource_version = CASE WHEN $5 THEN resource_version ELSE NULL END
+WHERE id = $1
+`, id, limitAccessText(outcome, accessIPMaxBytes), status, limitAccessText(detail, accessTextMaxBytes), delivered)
+	if err != nil {
+		return fmt.Errorf("amend access log: %w: %w", ErrInternal, err)
+	}
+	return nil
 }
 
 func (d *Store) ListAccess(ctx context.Context, ownerID, resourceID, outcome string, limit int) ([]AccessLog, error) {

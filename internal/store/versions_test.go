@@ -373,12 +373,6 @@ func TestDeliveriesRecordTheirVersion(t *testing.T) {
 		if err != nil || !result.Allowed {
 			t.Fatalf("delivery refused: %+v %v", result, err)
 		}
-		if err := db.RecordAccess(ctx, AccessEvent{
-			OwnerID: result.Resource.OwnerID, ResourceID: result.Resource.ID, LinkID: result.LinkID, LinkName: result.LinkName,
-			Outcome: OutcomeSuccess, Status: 200, Version: result.Resource.Version,
-		}, RequestMeta{RemoteIP: "10.0.0.1", Method: "GET", Path: "/d/x"}); err != nil {
-			t.Fatal(err)
-		}
 	}
 	deliver()
 	save(t, db, user, resource, "answer=43\n")

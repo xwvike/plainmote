@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -139,6 +140,8 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusUnauthorized, "link is not valid")
 		return
 	}
+	// From here the use is spent and recorded as delivered; each way the
+	// delivery can still end without sending the content corrects that row.
 	resource := result.Resource
 	contentType := resource.ContentType
 	filenameType := contentType
@@ -149,7 +152,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	if resource.Remote() {
 		fetched, upstreamType, err := a.upstream.Fetch(r.Context(), resource.OriginURL)
 		if err != nil {
-			a.recordAccess(r, result, store.OutcomeUpstreamError, meta, http.StatusBadGateway, err.Error())
+			a.amendAccess(r, result, store.OutcomeUpstreamError, http.StatusBadGateway, err.Error(), false)
 			writePlainError(w, http.StatusBadGateway, "upstream unavailable")
 			return
 		}
@@ -167,7 +170,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	if notModified(r, etag, modified) {
-		a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusNotModified, "not modified")
+		a.amendAccess(r, result, store.OutcomeSuccess, http.StatusNotModified, "not modified", true)
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
@@ -177,13 +180,13 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		} else {
 			body, size, err = a.db.OpenContent(r.Context(), resource)
 			if err != nil {
+				a.amendAccess(r, result, store.OutcomeSuccess, http.StatusInternalServerError, "stored content could not be read", false)
 				a.serverError(w, "open content", err)
 				return
 			}
 		}
 	}
 	defer body.Close()
-	a.recordAccess(r, result, store.OutcomeSuccess, meta, http.StatusOK, "link accepted")
 	w.Header().Set("Content-Type", contentType)
 	disposition := contentDisposition(deliveryFilename(resource, filenameType))
 	if (!store.TextLike(contentType) && !strings.HasPrefix(contentType, "image/")) || r.URL.Query().Get("download") == "1" {
@@ -206,24 +209,16 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// recordAccess writes one delivery event. The record matters, but it is not
-// what the caller asked for: a failure here is reported to stderr and the
-// response carries on, because the work it describes has already happened.
-func (a *App) recordAccess(r *http.Request, result store.ConsumeResult, outcome string, meta store.RequestMeta, status int, detail string) {
-	resource := result.Resource
-	event := store.AccessEvent{
-		OwnerID: resource.OwnerID, ResourceID: resource.ID,
-		ResourceName: resource.Name, ResourceFile: resource.Filename,
-		LinkID: result.LinkID, LinkName: result.LinkName,
-		Outcome: outcome, Status: status, Detail: detail,
-	}
-	// Which content went out. A 304 counts: it confirms the caller holds
-	// this version. A remote resource has no versions of its own.
-	if outcome == store.OutcomeSuccess && !resource.Remote() {
-		event.Version = resource.Version
-	}
-	if err := a.db.RecordAccess(r.Context(), event, meta); err != nil {
-		fmt.Fprintf(os.Stderr, "record %s access for resource %s: %v\n", outcome, resource.ID, err)
+// amendAccess corrects the row ConsumeToken wrote for this use. A 304
+// confirms the caller holds this version; anything else means no content
+// went out. The correction is made even if the caller has gone - it is the
+// record that must be right - and a failure leaves the row overstating the
+// delivery, never missing it.
+func (a *App) amendAccess(r *http.Request, result store.ConsumeResult, outcome string, status int, detail string, delivered bool) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	defer cancel()
+	if err := a.db.AmendAccess(ctx, result.AccessID, outcome, status, detail, delivered); err != nil {
+		fmt.Fprintf(os.Stderr, "amend %s access for resource %s: %v\n", outcome, result.Resource.ID, err)
 	}
 }
 
