@@ -129,6 +129,37 @@ func TestTemplatesReferenceServedAssets(t *testing.T) {
 	}
 }
 
+// TestTemplatesRunNoInlineScript keeps the pages within their policy, which
+// runs only the site's own script files: an inline script or a handler
+// attribute would be refused by the browser and quietly do nothing.
+func TestTemplatesRunNoInlineScript(t *testing.T) {
+	scriptTag := regexp.MustCompile(`<script\b[^>]*>`)
+	handler := regexp.MustCompile(`(?i)\son[a-z]+\s*=`)
+	templates, err := fs.Glob(webAssets, "templates/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range templates {
+		body, err := fs.ReadFile(webAssets, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tag := range scriptTag.FindAll(body, -1) {
+			if !bytes.Contains(tag, []byte(` src="/static/`)) && !bytes.Contains(tag, []byte(`type="application/ld+json"`)) {
+				t.Errorf("%s has an inline script: %s", name, tag)
+			}
+		}
+		if found := handler.Find(body); found != nil {
+			t.Errorf("%s has a handler attribute: %s", name, found)
+		}
+	}
+	page := httptest.NewRecorder()
+	staticApp(t).handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/login", nil))
+	if policy := page.Header().Get("Content-Security-Policy"); !strings.Contains(policy, "script-src 'self'") || !strings.Contains(policy, "frame-ancestors 'none'") {
+		t.Fatalf("the sign-in page policy is %q", policy)
+	}
+}
+
 func TestStaticRejectsUnlisted(t *testing.T) {
 	app := staticApp(t)
 	for _, path := range []string{"/static/", "/static/missing.css", "/static/logo.png/extra", "/static/templates/login.html"} {

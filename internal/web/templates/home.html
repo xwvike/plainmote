@@ -195,23 +195,5 @@
   {{if not .PasteURL}}<script type="module" src="/static/editor.js"></script>{{end}}
   {{if or .E2EE .PasteEncrypted}}<script type="module" src="/static/e2ee-share.js"></script>{{end}}
   {{template "copy-status" .}}
-  <script>
-    document.addEventListener('click', function (event) {
-      var button = event.target.closest('[data-copy]');
-      if (!button) return;
-      var value = button.getAttribute('data-copy');
-      if (!navigator.clipboard) { window.prompt('{{tr .Locale "copy_link"}}', value); return; }
-      navigator.clipboard.writeText(value).then(function () {
-        var status = document.querySelector('[data-copy-status]');
-        clearTimeout(button.copiedTimer);
-        button.classList.add('copied');
-        if (status) { status.textContent = ''; status.textContent = status.getAttribute('data-message'); }
-        button.copiedTimer = setTimeout(function () {
-          button.classList.remove('copied');
-          if (status) status.textContent = '';
-        }, 1400);
-      });
-    });
-  </script>
 </body>
 </html>{{end}}

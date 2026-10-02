@@ -24,7 +24,8 @@
      word alone, in every language, before and after. What happened is said
      out loud by the page's copy-status region, not by the button. */}}
 {{define "copy-label"}}<span class="flip"><span>{{tr .Locale "copy"}}</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"></path></svg></span>{{end}}
-{{define "copy-status"}}<p class="sr" role="status" data-copy-status data-message="{{tr .Locale "copied"}}"></p>{{end}}
+{{define "copy-status"}}<p class="sr" role="status" data-copy-status data-message="{{tr .Locale "copied"}}" data-prompt="{{tr .Locale "copy_link"}}"></p>
+  <script defer src="/static/copy.js"></script>{{end}}
 {{/* The same page in its other languages, for search engines to tell them
      apart; each address shows its language to everyone. */}}
 {{define "alternates"}}{{range .Alternates}}<link rel="alternate" hreflang="{{.Hreflang}}" href="{{.URL}}">

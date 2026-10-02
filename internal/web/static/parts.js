@@ -151,9 +151,10 @@ function carriesFile(form) {
   return [...form.querySelectorAll("input[type='file']")].some((input) => input.files && input.files.length > 0);
 }
 
-// Said where the page puts its messages, when the answer to a posted form
-// never arrives. Reloading instead would be safe for the server but would
-// throw away an edit the save was meant to keep.
+// Said where the page puts its messages when a posted form gets no usable
+// answer - none at all, or one that is not a page, such as a 404 for a
+// resource deleted in another tab. Reloading instead would be safe for the
+// server but would throw away an edit the save was meant to keep.
 function unconfirmed() {
   const message = document.body.dataset.msgRequestFailed;
   const slot = document.querySelector("[data-part='notices'], [data-part='flash']");

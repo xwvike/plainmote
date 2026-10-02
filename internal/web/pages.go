@@ -418,6 +418,11 @@ func bytesText(value any) string {
 	}
 }
 
+// pagePolicy is the Content-Security-Policy of every rendered page that does
+// not set a stricter one. Styles are left alone: the templates carry inline
+// style attributes, and a style cannot run anything.
+const pagePolicy = "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+
 // partsHeader marks a request from parts.js, which wants only the pieces of a
 // page an action can change - its dialog, its share list, its message line -
 // rather than the page around them. A page offers them as a template named
@@ -452,22 +457,27 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	w.Header().Add("Vary", partsHeader)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	// No page here is meant to be framed. The session cookie is SameSite=Lax,
-	// so a cross-site frame already loads signed out; this closes the rest,
-	// including a same-site host framing the delete and revoke buttons. The
-	// policy stops at frame-ancestors because two templates still carry an
-	// inline script. same-origin keeps a path such as /paste/<id> - which is
-	// what lets a quick share be saved - out of the Referer sent to the font
-	// host.
-	// The media player arrives here with a stricter policy that already has
-	// frame-ancestors. Keep it intact instead of replacing it with the common
-	// page policy.
+	// Scripts come from this site's own files and nowhere else: no inline
+	// script, no handler attribute, no eval. The pages lean on script, and an
+	// encrypted share's key is read by script on the page, so a line of
+	// markup that slipped through escaping must not be able to run. JSON-LD
+	// is data, not script, and is not affected.
+	//
+	// No page here is meant to be framed either. The session cookie is
+	// SameSite=Lax, so a cross-site frame already loads signed out;
+	// frame-ancestors closes the rest, including a same-site host framing the
+	// delete and revoke buttons.
+	//
+	// The media player arrives here with a stricter policy of its own. Keep
+	// it intact instead of replacing it with the common page policy.
 	if w.Header().Get("Content-Security-Policy") == "" {
-		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", pagePolicy)
 	}
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	// A handler that already chose a stricter policy - the media player and the
+	// same-origin keeps a path such as /paste/<id> - which is what lets a
+	// quick share be saved - out of the Referer sent to the font host. A
+	// handler that already chose a stricter policy - the media player and the
 	// delivery path send none at all - keeps it.
 	if w.Header().Get("Referrer-Policy") == "" {
 		w.Header().Set("Referrer-Policy", "same-origin")

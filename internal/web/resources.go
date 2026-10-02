@@ -693,13 +693,19 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 		}
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	}
+	// The message travels in the address, so a failure of the service itself
+	// is named by one sentence; what failed underneath goes to the log.
+	refused := func(what string, err error) {
+		text, _ := a.writeErrorText(what, err)
+		back(text)
+	}
 
 	switch r.FormValue("action") {
 	case "", "create":
 		// Pressing 分享 mints the link straight away: the dialog it opens is
 		// meant to already hold something you can send.
 		if _, err := a.db.CreateShare(r.Context(), user.ID, resourceID, strings.TrimSpace(r.FormValue("name")), defaultShareTTL, defaultShareUses); err != nil {
-			back(err.Error())
+			refused("create share", err)
 			return
 		}
 		back("")
@@ -723,19 +729,19 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 		back("")
 	case "revoke":
 		if err := a.db.RevokeLink(r.Context(), user.ID, resourceID, r.FormValue("share_id")); err != nil {
-			back(err.Error())
+			refused("revoke share", err)
 			return
 		}
 		back("")
 	case "delete":
 		if err := a.db.DeleteEndedLink(r.Context(), user.ID, resourceID, r.FormValue("share_id"), time.Now().UTC()); err != nil {
-			back(err.Error())
+			refused("delete share", err)
 			return
 		}
 		back("")
 	case "revoke_all":
 		if err := a.db.RevokeShares(r.Context(), user.ID, resourceID); err != nil {
-			back(err.Error())
+			refused("revoke shares", err)
 			return
 		}
 		back("")

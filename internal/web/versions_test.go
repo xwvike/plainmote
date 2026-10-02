@@ -66,6 +66,9 @@ func (c *versionClient) parts(method, target string, form url.Values) *httptest.
 	if response.Code != http.StatusSeeOther && !strings.Contains(strings.Join(response.Header().Values("Vary"), ","), partsHeader) {
 		c.t.Fatalf("%s %s (parts) does not vary on the parts header", method, target)
 	}
+	if strings.HasPrefix(response.Header().Get("Content-Type"), "text/html") && response.Header().Get("Cache-Control") != "no-store" {
+		c.t.Fatalf("%s %s (parts) may be cached", method, target)
+	}
 	return response
 }
 
