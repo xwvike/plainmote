@@ -97,6 +97,7 @@ type AccessLog struct {
 	TLS            bool
 	Method         string
 	Path           string
+	Location       Location
 	Status         int
 	Detail         string
 	Hits           int
@@ -126,6 +127,16 @@ type RequestMeta struct {
 	TLS            bool
 	Method         string
 	Path           string
+	Location       Location
+}
+
+// Location is where a caller was, as estimated from their IP address by the
+// proxy in front of the service. Country is an ISO 3166-1 alpha-2 code (or
+// T1 for Tor); every field may be empty.
+type Location struct {
+	Country string
+	Region  string
+	City    string
 }
 
 type ConsumeResult struct {

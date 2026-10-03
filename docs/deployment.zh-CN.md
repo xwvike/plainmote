@@ -217,6 +217,7 @@ Docker 或 Tunnel 场景下，应用看到的直连地址可能是网桥网关�
 3. 根据需要对 `/d/*` 设置访问限流，但绝不能启用 `Cache Everything`。
 4. 保留应用发出的 `Cache-Control: no-store`，确保撤销和次数限制不会被边缘缓存绕过。
 5. 不要把容器端口同时发布到公网，否则会形成绕过 Tunnel 和限流规则的入口。
+6. 如需在访问记录中显示访问者的大致位置，可在 Cloudflare 控制台（Rules → Settings）开启托管转换“Add visitor location headers”，并设置 `PLAINMOTE_VISITOR_LOCATION=cloudflare`。开启后，应用记录 Cloudflare 根据客户端 IP 估算的国家或地区、省级行政区和城市，隐私政策同步说明这一点。应用只读取来自 `PLAINMOTE_TRUSTED_PROXIES` 所列地址的位置请求头；该列表为空时设置此项，应用将拒绝启动。不要在其他代理后设置此项：会原样转发客户端请求头的代理，会让访问者自行决定记录的位置。开启前产生的访问记录不含位置。
 
 ## 6. 升级与回滚
 

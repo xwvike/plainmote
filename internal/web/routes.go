@@ -39,18 +39,21 @@ type Link = store.Link
 type AccessLog = store.AccessLog
 
 type Config struct {
-	PublicURL        string
-	SessionTTL       time.Duration
-	MaxContent       int64
-	AllowedIDs       map[string]bool
-	TrustedProxies   []netip.Prefix
-	RegistrationMode auth.RegistrationMode
-	AnonymousEnabled bool
-	LogRetention     time.Duration
-	Operator         string
-	ContactEmail     string
-	SourceURL        string
-	BlobEndpoint     string
+	PublicURL      string
+	SessionTTL     time.Duration
+	MaxContent     int64
+	AllowedIDs     map[string]bool
+	TrustedProxies []netip.Prefix
+	// CloudflareLocation believes the visitor location headers Cloudflare
+	// adds, when they come from a trusted proxy.
+	CloudflareLocation bool
+	RegistrationMode   auth.RegistrationMode
+	AnonymousEnabled   bool
+	LogRetention       time.Duration
+	Operator           string
+	ContactEmail       string
+	SourceURL          string
+	BlobEndpoint       string
 	// The admin interface exists only when there is a key to call it with.
 	AdminKeys    []ed25519.PublicKey
 	AdminOrigins []string

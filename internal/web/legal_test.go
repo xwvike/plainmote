@@ -132,6 +132,31 @@ func TestPrivacyPolicyNamesR2OnlyWhenConfigured(t *testing.T) {
 	}
 }
 
+// The location is disclosed exactly when it is collected.
+func TestPrivacyPolicyStatesLocationOnlyWhenCollected(t *testing.T) {
+	for _, collected := range []bool{false, true} {
+		app := legalApp(Config{ContactEmail: "ops@example.com", CloudflareLocation: collected})
+		zh := getLegal(app, "/privacy", "zh-CN").Body.String()
+		en := getLegal(app, "/privacy", "").Body.String()
+		for _, said := range []bool{
+			strings.Contains(zh, "访问者的 IP 地址、大致地理位置和浏览器信息"),
+			strings.Contains(zh, "根据 IP 地址估算的大致地理位置，精确至国家或地区、省级行政区和城市"),
+			strings.Contains(en, "IP address, approximate location and browser information, and this record"),
+			strings.Contains(en, "an approximate location estimated from the IP address"),
+		} {
+			if said != collected {
+				t.Errorf("collected=%v but the policy says otherwise", collected)
+			}
+		}
+		article := zh[strings.Index(zh, `<article class="doc">`):strings.Index(zh, "</article>")]
+		for _, detail := range []string{"CF-IP", "cf-ip", "Cloudflare"} {
+			if strings.Contains(article, detail) {
+				t.Errorf("the policy exposes how the location is obtained: %q", detail)
+			}
+		}
+	}
+}
+
 func TestLegalDuration(t *testing.T) {
 	for _, tc := range []struct {
 		d      time.Duration

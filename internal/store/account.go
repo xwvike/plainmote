@@ -87,7 +87,8 @@ SELECT
   COALESCE(link_id::text, ''), link_name, outcome, remote_ip, remote_addr,
   host, query, proto, user_agent, referer, forwarded, x_forwarded_for,
   cf_connecting_ip, cf_ray, content_length, tls, method, path, status,
-  detail, hits, first_at, occurred_at, COALESCE(resource_version, 0)
+  detail, hits, first_at, occurred_at, COALESCE(resource_version, 0),
+  country, region, city
 FROM access_logs WHERE owner_id = $1 ORDER BY occurred_at, id
 `, ownerID)
 	if err != nil {
@@ -103,6 +104,7 @@ FROM access_logs WHERE owner_id = $1 ORDER BY occurred_at, id
 			&item.Forwarded, &item.XForwardedFor, &item.CFConnectingIP, &item.CFRay,
 			&item.ContentLength, &item.TLS, &item.Method, &item.Path, &item.Status,
 			&item.Detail, &item.Hits, &item.FirstAt, &item.OccurredAt, &item.Version,
+			&item.Location.Country, &item.Location.Region, &item.Location.City,
 		); err != nil {
 			return fmt.Errorf("export access logs: %w: %w", ErrInternal, err)
 		}

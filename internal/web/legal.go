@@ -17,7 +17,7 @@ var legalPages = []string{"about", "privacy", "terms", "contact"}
 
 // legalUpdated is the date printed at the top of the privacy policy and the
 // terms. Change it in the same commit as the text.
-const legalUpdated = "2026-10-02"
+const legalUpdated = "2026-10-04"
 
 // legalView is what the texts need to be true of this deployment rather than
 // of some deployment: every retention period and limit they state is read from
@@ -39,6 +39,9 @@ type legalView struct {
 	ExportLimit   int
 	ExportWindow  time.Duration
 	SourceURL     string
+	// Location is whether access records carry a location estimated from
+	// the visitor's IP address.
+	Location bool
 	// How many earlier versions a resource keeps, and for how long after
 	// each was replaced.
 	HistoryKeep      int
@@ -81,6 +84,7 @@ func (a *App) serveLegal(w http.ResponseWriter, r *http.Request, page string) {
 		Operator:      a.cfg.Operator,
 		Email:         a.cfg.ContactEmail,
 		SourceURL:     a.cfg.SourceURL,
+		Location:      a.cfg.CloudflareLocation,
 		Updated:       legalUpdated,
 		R2:            cloudflareR2(a.cfg.BlobEndpoint),
 		SessionTTL:    a.cfg.SessionTTL,

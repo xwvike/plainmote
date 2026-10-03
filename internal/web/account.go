@@ -224,6 +224,9 @@ type exportAccessLog struct {
 	Detail         string    `json:"detail"`
 	RemoteIP       string    `json:"remote_ip"`
 	RemoteAddr     string    `json:"remote_addr"`
+	Country        string    `json:"country,omitempty"`
+	Region         string    `json:"region,omitempty"`
+	City           string    `json:"city,omitempty"`
 	Method         string    `json:"method"`
 	Host           string    `json:"host"`
 	Path           string    `json:"path"`
@@ -262,7 +265,8 @@ func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Ac
 		line, err := json.Marshal(exportAccessLog{
 			ID: entry.ID, ResourceID: entry.ResourceID, ResourceName: entry.ResourceName, ResourceFile: entry.ResourceFile,
 			LinkID: entry.LinkID, LinkName: entry.LinkName, Outcome: entry.Outcome, Status: entry.Status, Detail: entry.Detail,
-			RemoteIP: entry.RemoteIP, RemoteAddr: entry.RemoteAddr, Method: entry.Method, Host: entry.Host, Path: redactDeliveryPath(entry.Path),
+			RemoteIP: entry.RemoteIP, RemoteAddr: entry.RemoteAddr,
+			Country: entry.Location.Country, Region: entry.Location.Region, City: entry.Location.City, Method: entry.Method, Host: entry.Host, Path: redactDeliveryPath(entry.Path),
 			Query: redactSensitiveQuery(entry.Query), Proto: entry.Proto, TLS: entry.TLS, UserAgent: entry.UserAgent, Referer: redactSensitiveURL(entry.Referer),
 			Forwarded: entry.Forwarded, XForwardedFor: entry.XForwardedFor, CFConnectingIP: entry.CFConnectingIP,
 			CFRay: entry.CFRay, ContentLength: entry.ContentLength, Hits: entry.Hits, Version: entry.Version, FirstAt: entry.FirstAt, OccurredAt: entry.OccurredAt,

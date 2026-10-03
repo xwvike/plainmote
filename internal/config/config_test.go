@@ -116,6 +116,39 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+func TestLoadVisitorLocation(t *testing.T) {
+	for _, tc := range []struct {
+		value, proxies string
+		want           string
+		wantErr        bool
+	}{
+		{value: "", want: ""},
+		{value: " Cloudflare ", proxies: "127.0.0.1", want: LocationCloudflare},
+		// Believed only from a trusted proxy, so without one it would never apply.
+		{value: "cloudflare", wantErr: true},
+		{value: "maxmind", proxies: "127.0.0.1", wantErr: true},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			setRequiredEnvironment(t)
+			t.Setenv("PLAINMOTE_VISITOR_LOCATION", tc.value)
+			t.Setenv("PLAINMOTE_TRUSTED_PROXIES", tc.proxies)
+			cfg, err := Load()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("%q was accepted", tc.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.VisitorLocation != tc.want {
+				t.Fatalf("got %q, want %q", cfg.VisitorLocation, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadContactEmail(t *testing.T) {
 	for _, tc := range []struct {
 		value   string

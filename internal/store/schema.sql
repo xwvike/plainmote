@@ -220,9 +220,18 @@ CREATE TABLE IF NOT EXISTS access_logs (
   -- Which version of the content was delivered. Only a delivery of stored
   -- content has one: a refusal delivered nothing, and a remote resource is
   -- whatever its origin returned.
-  resource_version INTEGER
+  resource_version INTEGER,
+  -- Where the caller was, as the proxy in front estimated it from their IP
+  -- at the time: an address changes hands, so it cannot be looked up later.
+  -- country is an ISO 3166-1 alpha-2 code; empty when nobody said.
+  country TEXT NOT NULL DEFAULT '',
+  region TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT ''
 );
 ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS resource_version INTEGER;
+ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS country TEXT NOT NULL DEFAULT '';
+ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS region TEXT NOT NULL DEFAULT '';
+ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
 -- Which version each link last delivered. Partial, so rows from before
 -- versions were recorded, and refusals, cost it nothing.
 CREATE INDEX IF NOT EXISTS access_logs_delivered_idx ON access_logs(link_id, occurred_at DESC) WHERE resource_version IS NOT NULL;

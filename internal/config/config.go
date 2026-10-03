@@ -28,6 +28,9 @@ type Config struct {
 	PublicURL        string
 	AnonymousEnabled bool
 	TrustedProxies   []netip.Prefix
+	// VisitorLocation names who tells the service where a caller is; empty
+	// means nobody does and access history has no location.
+	VisitorLocation  string
 	SessionTTL       time.Duration
 	LogRetention     time.Duration
 	MaxContent       int64
@@ -50,6 +53,10 @@ type Config struct {
 	// offers for download.
 	CLIDir string
 }
+
+// LocationCloudflare reads the visitor location headers Cloudflare adds in
+// front of the service.
+const LocationCloudflare = "cloudflare"
 
 // DefaultCLIDir is where the container image puts the command line builds.
 const DefaultCLIDir = "/cli"
@@ -121,6 +128,18 @@ func Load() (Config, error) {
 	cfg.TrustedProxies, err = parseTrustedProxies(os.Getenv("PLAINMOTE_TRUSTED_PROXIES"))
 	if err != nil {
 		return Config{}, err
+	}
+	// The location headers are as forgeable as any other: they are believed
+	// only from a trusted proxy, so turning this on without one is a mistake
+	// worth refusing rather than a switch that silently does nothing.
+	switch cfg.VisitorLocation = strings.ToLower(strings.TrimSpace(os.Getenv("PLAINMOTE_VISITOR_LOCATION"))); cfg.VisitorLocation {
+	case "":
+	case LocationCloudflare:
+		if len(cfg.TrustedProxies) == 0 {
+			return Config{}, errors.New("PLAINMOTE_VISITOR_LOCATION requires PLAINMOTE_TRUSTED_PROXIES")
+		}
+	default:
+		return Config{}, fmt.Errorf("PLAINMOTE_VISITOR_LOCATION must be empty or %s", LocationCloudflare)
 	}
 	cfg.SessionTTL, err = parseDuration("PLAINMOTE_SESSION_TTL", 30*24*time.Hour)
 	if err != nil {

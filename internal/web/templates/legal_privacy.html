@@ -7,7 +7,7 @@
 <ul>
   <li>本服务不展示广告，不使用任何分析或跟踪工具，不出售用户信息。</li>
   <li>使用 GitHub 登录时，本服务仅读取您的公开资料，不获取邮箱地址。</li>
-  <li>通过分享链接访问内容时，本服务会记录访问者的 IP 地址和浏览器信息，该记录对链接创建者可见。</li>
+  <li>通过分享链接访问内容时，本服务会记录访问者的 IP 地址{{if .Legal.Location}}、大致地理位置{{end}}和浏览器信息，该记录对链接创建者可见。</li>
 </ul>
 
 <h2>一、我们收集的信息</h2>
@@ -22,8 +22,8 @@
 <p>包括您创建的资源的正文及其历史版本、名称和文件名等信息（远程资源仅保存其源地址），以及分享链接的备注、有效期、次数上限、使用次数和撤销状态。{{if .Legal.R2}}资源正文存放于 Cloudflare R2 对象存储，并以加密形式保存。{{end}}我们在技术上能够访问上述内容，但仅在排查故障、处理滥用举报或依法需要时查看。</p>
 
 <h3>（四）分享链接访问记录</h3>
-<p>通过分享链接获取内容时，无论请求成功或被拒绝，本服务均会生成访问记录，内容包括访问时间、访问结果、IP 地址、浏览器与设备信息、来源页面以及请求地址等网络请求信息。</p>
-<p>访问记录归属于资源所有者，所有者可在“访问记录”页面查看。因此，当您打开他人发送的链接时，链接创建者可以看到您的 IP 地址和浏览器信息。即时通讯软件生成链接预览时发起的请求同样会被记录。</p>
+<p>通过分享链接获取内容时，无论请求成功或被拒绝，本服务均会生成访问记录，内容包括访问时间、访问结果、IP 地址、浏览器与设备信息、来源页面以及请求地址等网络请求信息。{{if .Legal.Location}}访问记录同时包括根据 IP 地址估算的大致地理位置，精确至国家或地区、省级行政区和城市；该位置在访问时由网络服务商估算，可能与实际位置不符，本服务不获取更精确的位置信息。{{end}}</p>
+<p>访问记录归属于资源所有者，所有者可在“访问记录”页面查看。因此，当您打开他人发送的链接时，链接创建者可以看到您的 IP 地址{{if .Legal.Location}}、大致地理位置{{end}}和浏览器信息。即时通讯软件生成链接预览时发起的请求同样会被记录。</p>
 {{if .Legal.Anonymous}}
 <h3>（五）临时分享</h3>
 <p>首页的临时分享（界面中称“快速分享”）无需登录即可使用。本服务保存您提交的文本或文件及文件名（开启端到端加密的，仅保存密文，见本节第三段），链接最长在 {{legalDuration true .Legal.AnonymousTTL}}后失效，失效后相关内容将被删除。本服务不记录临时分享创建者的 IP 地址。在登录状态下创建的临时分享会与您的账号关联：未加密的，用于支持您随后将其保存至个人资源；开启端到端加密的，不能保存为资源，该关联仅用于处理滥用举报。</p>
@@ -95,7 +95,7 @@
 <ul>
   <li>The Service displays no advertising, uses no analytics or tracking tools, and does not sell user information.</li>
   <li>When you sign in with GitHub, the Service reads your public profile only and does not obtain your email address.</li>
-  <li>When content is accessed through a share link, the Service records the visitor’s IP address and browser information, and this record is visible to the creator of the link.</li>
+  <li>When content is accessed through a share link, the Service records the visitor’s IP address{{if .Legal.Location}}, approximate location{{end}} and browser information, and this record is visible to the creator of the link.</li>
 </ul>
 
 <h2>1. Information we collect</h2>
@@ -110,8 +110,8 @@
 <p>This includes the body and earlier versions, name, filename and similar details of the resources you create (for remote resources, only the source URL), together with the note, validity period, use limit, use count and revocation status of your share links. {{if .Legal.R2}}Resource bodies are held in Cloudflare R2 object storage in encrypted form. {{end}}We are technically able to access this content, but do so only to diagnose faults, handle abuse reports or where required by law.</p>
 
 <h3>1.4 Share link access records</h3>
-<p>Whenever content is requested through a share link, whether the request is served or refused, the Service creates an access record containing network request information such as the time, outcome, IP address, browser and device information, referring page and requested address.</p>
-<p>Access records belong to the owner of the resource, who can view them on the Access history page. Consequently, when you open a link sent to you by someone else, the creator of that link can see your IP address and browser information. Requests made by messaging applications to generate link previews are recorded in the same way.</p>
+<p>Whenever content is requested through a share link, whether the request is served or refused, the Service creates an access record containing network request information such as the time, outcome, IP address, browser and device information, referring page and requested address.{{if .Legal.Location}} Access records also include an approximate location estimated from the IP address, to the level of country or region, first-level administrative division and city. The location is estimated by the network provider at the time of access and may not match the actual location; the Service does not obtain more precise location information.{{end}}</p>
+<p>Access records belong to the owner of the resource, who can view them on the Access history page. Consequently, when you open a link sent to you by someone else, the creator of that link can see your IP address{{if .Legal.Location}}, approximate location{{end}} and browser information. Requests made by messaging applications to generate link previews are recorded in the same way.</p>
 {{if .Legal.Anonymous}}
 <h3>1.5 Quick shares</h3>
 <p>Quick shares on the home page can be created without an account. The Service stores the text or file and the filename you submit (or, with end-to-end encryption, only the ciphertext; see the third paragraph of this section). The link expires after at most {{legalDuration false .Legal.AnonymousTTL}}, after which the related content is deleted. The Service does not record the IP address of the person who creates a quick share. A quick share created while signed in is associated with your account: for an unencrypted one, so that you can later save it to your resources; for an end-to-end encrypted one, which cannot be saved as a resource, solely to handle abuse reports.</p>

@@ -598,7 +598,7 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .meta { font: 400 10.5px var(--mono); color: var(--ink3); word-break: break-all; }
 
 /* access log: native <details> rows, columns aligned by a shared grid template */
-.lg { --cols: 150px 150px minmax(0, 1fr) 150px 48px 116px 44px 14px; }
+.lg { --cols: 132px 104px minmax(0, 1.2fr) 112px 44px 112px minmax(150px, 1fr) 40px 14px; }
 .lgh { display: grid; grid-template-columns: var(--cols); gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line2); font-size: 12px; font-weight: 600; color: var(--ink2); }
 .lg details { border-bottom: 1px solid var(--line); }
 .lg details:last-of-type { border-bottom: 0; }

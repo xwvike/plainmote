@@ -378,5 +378,6 @@ func (a *App) requestMetadata(r *http.Request) store.RequestMeta {
 		TLS:            r.TLS != nil,
 		Method:         r.Method,
 		Path:           redactDeliveryPath(r.URL.Path),
+		Location:       a.visitorLocation(r),
 	}
 }

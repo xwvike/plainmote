@@ -105,6 +105,8 @@ func (a *App) templateSet() *template.Template {
 			}
 		},
 		"outcomeText":        accessOutcomeText,
+		"locationText":       locationText,
+		"locationShort":      locationShort,
 		"outcomeDescription": accessOutcomeDescription,
 		"remainText":         remainText,
 		"leftPercent":        leftPercent,

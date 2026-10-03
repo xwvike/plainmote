@@ -81,9 +81,10 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 		OwnerID: user.ID, ResourceID: resource.ID, LinkID: share.ID, Outcome: store.OutcomeSuccess, Status: 200,
 	}, store.RequestMeta{
 		Method: "GET", RemoteIP: "203.0.113.9", UserAgent: "curl/8",
-		Path:    "/d/" + share.Token + "/example.conf",
-		Query:   "token=" + url.QueryEscape(share.Token),
-		Referer: "https://cfg.test/d/" + share.Token + "/example.conf?grant=" + url.QueryEscape(share.Token),
+		Location: store.Location{Country: "DE", Region: "Bavaria", City: "München"},
+		Path:     "/d/" + share.Token + "/example.conf",
+		Query:    "token=" + url.QueryEscape(share.Token),
+		Referer:  "https://cfg.test/d/" + share.Token + "/example.conf?grant=" + url.QueryEscape(share.Token),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +151,8 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 		t.Fatalf("the remote resource shortcut is %q", shortcut)
 	}
 	var logs []exportAccessLog
-	if err := json.Unmarshal(files["access_logs.json"], &logs); err != nil || len(logs) != 1 || logs[0].RemoteIP != "203.0.113.9" {
+	if err := json.Unmarshal(files["access_logs.json"], &logs); err != nil || len(logs) != 1 || logs[0].RemoteIP != "203.0.113.9" ||
+		logs[0].Country != "DE" || logs[0].Region != "Bavaria" || logs[0].City != "München" {
 		t.Fatalf("access_logs.json: %v %s", err, files["access_logs.json"])
 	}
 

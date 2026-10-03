@@ -204,6 +204,8 @@ var messageTable = map[string][6]string{
 	"share_count":               {"1 share", "1 个分享", "1 個分享", "共有 1件", "1 partage", "1 Freigabe"},
 	"share_links":               {"Share links", "分享链接", "分享連結", "共有リンク", "Liens de partage", "Freigabelinks"},
 	"source_code":               {"Source code", "源代码", "原始碼", "ソースコード", "Code source", "Quellcode"},
+	"location":                  {"Location", "位置", "位置", "位置", "Lieu", "Ort"},
+	"approx_location_hint":      {"estimated from the IP address", "根据 IP 地址估算", "根據 IP 位址估算", "IP アドレスからの推定", "estimé d’après l’adresse IP", "anhand der IP-Adresse geschätzt"},
 	"source_ip":                 {"Source IP", "来源 IP", "來源 IP", "送信元IP", "IP d’origine", "Quell-IP"},
 	"status":                    {"Status", "状态", "狀態", "状態", "État", "Status"},
 	"switch_direct_edit":        {"Switch to direct editing", "改回直接编辑", "改回直接編輯", "直接編集に切り替える", "Passer à l’édition directe", "Zur direkten Bearbeitung wechseln"},

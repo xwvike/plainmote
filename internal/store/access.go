@@ -93,6 +93,9 @@ func limitRequestMeta(meta RequestMeta) RequestMeta {
 	meta.ContentLength = limitAccessText(meta.ContentLength, accessTokenMaxBytes)
 	meta.Method = limitAccessText(meta.Method, accessTokenMaxBytes)
 	meta.Path = limitAccessText(meta.Path, accessTargetMaxBytes)
+	meta.Location.Country = limitAccessText(meta.Location.Country, accessTokenMaxBytes)
+	meta.Location.Region = limitAccessText(meta.Location.Region, accessAddressMaxBytes)
+	meta.Location.City = limitAccessText(meta.Location.City, accessAddressMaxBytes)
 	return meta
 }
 
@@ -161,19 +164,22 @@ INSERT INTO access_logs(
   id, owner_id, resource_id, resource_name, resource_file, link_id, link_name, outcome,
   remote_ip, remote_addr, host, query, proto,
   user_agent, referer, forwarded, x_forwarded_for, cf_connecting_ip, cf_ray,
-  content_length, tls, method, path, status, detail, hits, first_at, occurred_at, resource_version
+  content_length, tls, method, path, status, detail, hits, first_at, occurred_at, resource_version,
+  country, region, city
 )
 VALUES(
   $1, $2, $3, $4, $5, $6, $7, $8,
   $9, $10, $11, $12, $13,
   $14, $15, $16, $17, $18, $19,
-  $20, $21, $22, $23, $24, $25, 1, $26, $26, NULLIF($27, 0)
+  $20, $21, $22, $23, $24, $25, 1, $26, $26, NULLIF($27, 0),
+  $28, $29, $30
 )
 `, event.ID, optionalUUID(event.OwnerID), optionalUUID(event.ResourceID),
 		event.ResourceName, event.ResourceFile, optionalUUID(event.LinkID), event.LinkName, event.Outcome,
 		meta.RemoteIP, meta.RemoteAddr, meta.Host, meta.Query, meta.Proto,
 		meta.UserAgent, meta.Referer, meta.Forwarded, meta.XForwardedFor, meta.CFConnectingIP, meta.CFRay,
-		meta.ContentLength, meta.TLS, meta.Method, meta.Path, event.Status, event.Detail, now, event.Version)
+		meta.ContentLength, meta.TLS, meta.Method, meta.Path, event.Status, event.Detail, now, event.Version,
+		meta.Location.Country, meta.Location.Region, meta.Location.City)
 	return err
 }
 
@@ -240,7 +246,7 @@ SELECT
   COALESCE(a.link_id::text, ''), a.link_name, a.outcome, a.remote_ip, a.remote_addr,
   a.host, a.query, a.proto, a.user_agent, a.referer, a.forwarded, a.x_forwarded_for,
   a.cf_connecting_ip, a.cf_ray, a.content_length, a.tls, a.method, a.path, a.status,
-  a.detail, a.hits, a.first_at, a.occurred_at,
+  a.detail, a.hits, a.first_at, a.occurred_at, a.country, a.region, a.city,
   COALESCE(a.resource_version, 0), COALESCE(r.version, 0),
   COALESCE(a.resource_version = r.version OR EXISTS (
     SELECT 1 FROM resource_versions v WHERE v.resource_id = a.resource_id AND v.version = a.resource_version
@@ -267,6 +273,7 @@ LIMIT $4 OFFSET $5
 			&item.Forwarded, &item.XForwardedFor, &item.CFConnectingIP, &item.CFRay,
 			&item.ContentLength, &item.TLS, &item.Method, &item.Path, &item.Status,
 			&item.Detail, &item.Hits, &item.FirstAt, &item.OccurredAt,
+			&item.Location.Country, &item.Location.Region, &item.Location.City,
 			&item.Version, &item.CurrentVersion, &item.VersionAvailable,
 		); err != nil {
 			return nil, 0, err

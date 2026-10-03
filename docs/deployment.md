@@ -201,6 +201,7 @@ With Cloudflare, also:
 3. Rate-limit `/d/*` if needed, but never enable `Cache Everything`.
 4. Keep the `Cache-Control: no-store` the service sends, so that revocations and use limits cannot be bypassed by an edge cache.
 5. Do not also publish the container port to the internet; that would create an entry point that bypasses the tunnel and the rate limits.
+6. Optionally, show visitors' approximate location in the access history: turn on the "Add visitor location headers" Managed Transform in the Cloudflare dashboard (Rules → Settings), then set `PLAINMOTE_VISITOR_LOCATION=cloudflare`. The service then records the country or region, first-level administrative division and city that Cloudflare estimates from the client IP, and the privacy policy says so. The headers are read only from addresses in `PLAINMOTE_TRUSTED_PROXIES`, and the service refuses to start with this setting when that list is empty. Do not set it behind any other proxy: a proxy that passes client headers through would let visitors choose their own location. Records made before it was turned on have no location.
 
 ## 6. Upgrades and rollbacks
 

@@ -29,7 +29,7 @@
       {{if or .LogResource .LogOutcome}}<a class="txt" href="/logs">{{tr .Locale "clear"}}</a>{{end}}
     </form>
     <div class="panel lg">
-      <div class="lgh"><span>{{tr .Locale "time"}}</span><span>{{tr .Locale "result"}}</span><span>{{tr .Locale "resource"}}</span><span>{{tr .Locale "share_used"}}</span><span>{{tr .Locale "col_version"}}</span><span>{{tr .Locale "source_ip"}}</span><span>{{tr .Locale "count"}}</span><span></span></div>
+      <div class="lgh"><span>{{tr .Locale "time"}}</span><span>{{tr .Locale "result"}}</span><span>{{tr .Locale "resource"}}</span><span>{{tr .Locale "share_used"}}</span><span>{{tr .Locale "col_version"}}</span><span>{{tr .Locale "source_ip"}}</span><span>{{tr .Locale "location"}}</span><span>{{tr .Locale "count"}}</span><span></span></div>
       {{range .AccessLogs}}
       <details>
         <summary>
@@ -40,6 +40,7 @@
           {{/* Sand when the content has moved on since: this caller is behind. */}}
           <span class="vc{{if and .Version (ne .Version .CurrentVersion)}} old{{end}}">{{if .Version}}v{{.Version}}{{else}}<span class="mut">—</span>{{end}}</span>
           <span class="mono">{{.RemoteIP}}</span>
+          {{if .Location.Country}}<span title="{{locationText $.Locale .Location}}">{{locationShort $.Locale .Location}}</span>{{else}}<span class="mut">—</span>{{end}}
           <span class="mono">{{.Hits}}</span>
           <svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>
         </summary>
@@ -49,7 +50,7 @@
             <dt>{{tr $.Locale "filename"}}</dt><dd>{{if .ResourceFile}}{{.ResourceFile}}{{else}}<span class="mut">—</span>{{end}}</dd>
             <dt>{{tr $.Locale "share_used"}}</dt><dd>{{or .LinkName (tr $.Locale "untitled_share")}}</dd>
             {{if .Version}}<dt>{{tr $.Locale "col_version"}}</dt><dd>{{if and .VersionAvailable .ResourceID}}<a href="/resources/{{.ResourceID}}/versions/{{.Version}}">v{{.Version}}</a>{{else}}v{{.Version}}{{end}}{{if and .CurrentVersion (ne .Version .CurrentVersion)}} · {{printf (tr $.Locale "log_current_version") .CurrentVersion}}{{end}}</dd>{{end}}
-            <dt>{{tr $.Locale "source_ip"}}</dt><dd>{{if .RemoteIP}}{{.RemoteIP}}{{else}}<span class="mut">—</span>{{end}}</dd>
+            <dt>{{tr $.Locale "source_ip"}}</dt><dd>{{if .RemoteIP}}{{.RemoteIP}}{{else}}<span class="mut">—</span>{{end}}{{with locationText $.Locale .Location}} <span class="mut" title="{{tr $.Locale "approx_location_hint"}}">· {{.}}</span>{{end}}</dd>
             <dt>{{tr $.Locale "access_count"}}</dt><dd>{{.Hits}}</dd>
           </dl>
           <dl class="kv">
