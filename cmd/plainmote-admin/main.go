@@ -126,7 +126,7 @@ func call(args []string, out io.Writer) error {
 	return err
 }
 
-// Sign adds the four admin headers to a request, following docs/admin-api.md.
+// Sign adds the four admin headers to a request, following docs/admin.md.
 func Sign(request *http.Request, private ed25519.PrivateKey, body []byte, now time.Time) error {
 	public := private.Public().(ed25519.PublicKey)
 	sum := sha256.Sum256(public)

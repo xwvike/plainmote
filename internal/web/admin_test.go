@@ -39,7 +39,7 @@ func newAdminClient(t *testing.T, db *store.Store) *adminClient {
 	return &adminClient{t: t, app: app, private: private}
 }
 
-// signed builds a request the way docs/admin-api.md describes.
+// signed builds a request the way docs/admin.md describes.
 func (c *adminClient) signed(method, target string, body []byte, at time.Time, nonce string) *http.Request {
 	request := httptest.NewRequest(method, "https://cfg.test"+target, bytes.NewReader(body))
 	timestamp := strconv.FormatInt(at.Unix(), 10)

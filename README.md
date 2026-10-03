@@ -24,9 +24,9 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 - **Remote resources**: a resource may consist of a public URL only, in which case the service fetches the content from the origin on each access.
 - **Conditional requests**: share links answer `HEAD`, and responses carry an `ETag` (and, for stored content, `Last-Modified`). A request with `If-None-Match` or `If-Modified-Since` receives `304` with no body while the content is unchanged. Every response counts as one use and is recorded.
 - **Editor**: built on CodeMirror 6, with syntax highlighting for YAML, JSON, TOML, XML, INI and `.env`, shell, nginx, Dockerfile, SQL, diffs and logs; the quick share box uses the same editor. UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings are detected, and files are saved in their original encoding and line endings.
+- **Command line**: `plainmote` views, edits and uploads resources from a terminal, editing in the machine's own editor and saving a new version when it is closed; signing in is confirmed in a browser.
 - **End-to-end encryption (optional)**: signed-in users can enable it in their account settings. Quick shares created on the home page, whether text or files, are then encrypted in the browser before upload, and the service stores only ciphertext.
 - **Media preview**: when a share link is opened in a browser, images are displayed and audio and video are played; other clients receive the original bytes.
-- **No JavaScript required**: core functions work with scripts disabled; scripts only enhance the interface. End-to-end encryption is the exception, as encryption and decryption run in the browser.
 - **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, selected from the browser's language. The home page and legal pages also have a separate address per language (such as `/zh-cn/` or `/ja/`) for search engines. Light and dark themes are available.
 
 <picture>
@@ -41,12 +41,22 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 
 ## Command line
 
-### plainmote
+`plainmote` views, edits and uploads resources from a terminal. Editing opens the content in the machine's own editor (Zed, VS Code, Vim and others); when the editor is closed, the content is saved as a new version.
 
-`plainmote` views, edits and uploads resources from a terminal. Editing opens the content in your own editor (Zed, VS Code, Vim and others); when the editor is closed, the content is saved as a new version.
+### Installation
 
 ```bash
-curl -fsSL https://plainmote.link/cli/en | sh # install; Windows: irm https://plainmote.link/cli/en.ps1 | iex
+curl -fsSL https://plainmote.link/cli/en | sh        # macOS, Linux
+irm https://plainmote.link/cli/en.ps1 | iex          # Windows PowerShell
+```
+
+The install script detects the system and processor architecture, downloads the matching build served by the deployment, verifies its SHA-256 and installs it for the current user (`~/.local/bin` on macOS and Linux); no administrator rights are needed. The script can be read at the same address before running it. Builds are provided for macOS, Linux and Windows on amd64 and arm64, stamped with the version of the server that serves them; after the service is upgraded, running the install command again updates the command line.
+
+`/cli/en` installs a command line that speaks English, `/cli/zh` one that speaks Chinese, and `/cli` follows the system's locale. The `/cli` page shows the install command for the visitor's system and lists the builds of every platform with their checksums.
+
+### Usage
+
+```bash
 plainmote login                               # confirm the sign-in in a browser
 plainmote ls nginx
 plainmote edit nginx.conf
@@ -55,9 +65,21 @@ tail -n 200 app.log | plainmote push - --name app.log
 plainmote push ./nginx.conf --to nginx.conf
 ```
 
-`/cli/en` and `/cli/zh` install a command line that speaks English or Chinese; `/cli` follows the system's locale, and `plainmote config language zh|en|auto` changes it later. Editing uses `$VISUAL` or `$EDITOR` when set; otherwise the first edit lists the editors installed on the machine and remembers the one chosen, which `plainmote config editor <command>` changes. The install script detects the system and architecture, downloads the matching build served by the deployment, verifies its SHA-256 and installs it to `~/.local/bin`; it can be read before running at the same address, and `/cli` lists the builds and their checksums. Builds are provided for macOS, Linux and Windows on amd64 and arm64, stamped with the version of the server that serves them.
+A resource is named by its ID, an ID prefix of at least six characters, or its exact name or filename; when several resources match, the candidates are listed instead of one being chosen.
 
-Signing in uses device authorization (RFC 8628): the command line shows a code, which is entered and confirmed in a signed-in browser. The code is never placed in the address that is opened. A save is made against the version that was downloaded; if the resource was saved elsewhere in the meantime, the command line shows the difference and offers to save over it, to edit again on the newer version or to keep the file, and an edit that cannot be saved is never discarded.
+### Signing in
+
+Signing in uses device authorization (RFC 8628). The command line first shows a code and the confirmation address, and opens the browser when Enter is pressed; the address can also be opened by hand on any device. The user enters the code in a signed-in browser, checks the device details and approves. The code is never placed in the address that is opened. `--read-only` requests read-only access; `--no-browser` does not open a browser.
+
+Sign-ins are kept per server, so several deployments can be signed in at once. The server is taken from `--server`, then the `PLAINMOTE_SERVER` environment variable, then the setting saved by `plainmote server <url>`; writing commands such as `edit` and `push` name the server they changed.
+
+### Editing and settings
+
+A save is made against the version that was downloaded. If the resource was saved elsewhere in the meantime, the command line shows the difference and offers to save over it, to edit again on the newer version or to keep the file; an edit that cannot be saved is never discarded.
+
+The editor is taken from the `PLAINMOTE_EDITOR` environment variable, then the setting saved by `plainmote config editor <command>`, then `$VISUAL` and `$EDITOR`; when none is set, the first edit lists the editors installed on the machine and remembers the one chosen. The language of messages is taken from the `PLAINMOTE_LANG` environment variable, then the setting saved by `plainmote config language zh|en|auto`, then the system's locale. `plainmote config` shows every setting.
+
+The API the command line uses is described in [Command line API](docs/api.md).
 
 ### Sharing with curl
 
@@ -76,8 +98,9 @@ curl https://plainmote.link/paste    # prints usage
 - **No cross-site embedding**: requests from other sites that embed a share link as an image, video or script are refused before the token is read.
 - **Not indexed**: share links, resources and account pages are excluded from search engines; only the pages describing the service can be indexed.
 - **No web hosting**: types a browser may execute (HTML, scripts, SVG and similar) are never delivered as themselves. For quick shares made without an account, text is delivered as plain text, images, audio and video confirmed by their file signatures are delivered as their own types, and all other files are delivered only as downloads; encrypted shares are always delivered as ciphertext.
-- **End-to-end encryption**: uses only the browser's built-in WebCrypto, with AES-256-GCM. By default the key is carried in the part of the link after `#`, which browsers do not send to the server. The creator may use a four-character code instead, in which case the recipient's browser derives the key from the code with PBKDF2-SHA-256 (600,000 iterations).
+- **Only the site's own scripts**: a content security policy lets pages run only the script files the site serves, never inline scripts, and keeps other sites from framing them.
 - **Command line tokens**: issued by device authorization and stored only as a digest. A token is valid for 90 days from sign-in, is read-only or read-write, and cannot delete resources, manage share links or change the account. Every signed-in device, with its last use, is listed on the Account page and can be revoked there. The API accepts a token only in the `Authorization` header, never from a cookie or the address, and answers no cross-site requests.
+- **End-to-end encryption**: uses only the browser's built-in WebCrypto, with AES-256-GCM. By default the key is carried in the part of the link after `#`, which browsers do not send to the server. The creator may use a four-character code instead, in which case the recipient's browser derives the key from the code with PBKDF2-SHA-256 (600,000 iterations).
 - **Limits of encryption**: decryption requires JavaScript; a lost link or code cannot be recovered; content size and access history are not encrypted. A code is drawn from 31 characters, about 920,000 combinations: it prevents viewing by someone who merely sees the link, but not by an attacker who obtains the link and tries every code, so sensitive content should be shared with the full link and its key. Because the encryption code is delivered by the service, its trustworthiness depends on the integrity of the deployed code; the published source code allows this to be verified.
 
 ## Self-hosting
@@ -93,7 +116,7 @@ cp .env.example .env    # fill in the database, object storage, OAuth and keys
 docker compose up -d
 ```
 
-Building the image, preparing the external services, public exposure, upgrades and rollbacks are described in [`docs/deployment.md`](docs/deployment.md) (in Chinese).
+Building the image, preparing the external services, public exposure, upgrades and rollbacks are described in the [deployment guide](docs/deployment.md).
 
 ### Configuration
 
@@ -135,13 +158,17 @@ Optional:
 
 ### Administration
 
-The service has no administration pages. It provides a signed JSON interface instead, described in [`docs/admin-api.md`](docs/admin-api.md) (in Chinese), for use by an administration page hosted elsewhere or run locally. Requests are signed with an Ed25519 private key held by the administrator; the service holds only the public key. The interface covers a deployment overview, suspending accounts, taking down or deleting resources, revoking links and granting plans, and records every change in an append-only audit log. It never returns resource content, share addresses or the client details of access records. `go run ./cmd/plainmote-admin keygen` generates a key pair, and `go run ./cmd/plainmote-admin call` signs individual requests.
-
-[PlainMote Admin](https://github.com/xwvike/plainmote-admin) (MIT) is an administration page for this interface. It runs entirely in the browser, stores the private key as a non-extractable key and can manage several deployments. It can be run locally, deployed as a static site or used at its published address, [xwvike.github.io/plainmote-admin](https://xwvike.github.io/plainmote-admin/). The origin it is served from must be listed in `PLAINMOTE_ADMIN_ORIGINS`. Browsers store the key per origin, so any script served from the same origin can use it; the page should therefore be served from an origin that hosts no other content.
+The service has no administration pages. Instead it provides a set of JSON endpoints protected by Ed25519 signatures, covering a deployment overview, suspending and unsuspending accounts, plans, taking down and deleting resources, revoking links and an audit log, for use by an administration page hosted elsewhere or run locally. The service holds only the public key, and the endpoints never return resource content, share addresses or the visitor details of access records. [PlainMote Admin](https://github.com/xwvike/plainmote-admin) is an administration page built on them. The capabilities, setup and complete API reference are in the [administration guide](docs/admin.md).
 
 ### About the legal pages
 
 When `PLAINMOTE_CONTACT_EMAIL` is set, the service provides an about page, a privacy policy, terms of service and a contact page in Simplified Chinese and English. These texts describe the behaviour of the reference deployment; durations, sizes and other values are taken from the running configuration. **Operators of other deployments should review these texts and adapt them to the applicable law and their own operation** (the files are `internal/web/templates/legal_*.html`). Each operator is responsible for the commitments made on its site.
+
+## Documentation
+
+- [Deployment](docs/deployment.md): building the image, external services, the public entry point, upgrades and rollbacks, runtime constraints and backups
+- [Administration](docs/admin.md): what administration covers, setup and the admin API reference
+- [Command line API](docs/api.md): device authorization, tokens and the `/api/v1/` reference
 
 ## Development
 
@@ -178,7 +205,7 @@ internal/store/      PostgreSQL schema and business rules
 internal/upstream/   remote URL validation and fetching
 internal/web/        routes, pages, static assets and public delivery
 tools/               editor bundle and encryption tests
-docs/                deployment guide and images
+docs/                deployment, administration and API documentation, and images
 ```
 
 ## License

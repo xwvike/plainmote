@@ -1,11 +1,12 @@
-# PlainMote 部署
+# Deploying PlainMote
 
-生产容器只运行 PlainMote Web 服务。PostgreSQL、S3 兼容对象存储、TLS 和公网入口均在容器外提供；
-容器本地没有需要保留的数据，也不读取配置文件。
+English | [简体中文](deployment.zh-CN.md)
 
-## 1. 构建镜像
+The production container runs only the PlainMote web service. PostgreSQL, S3-compatible object storage, TLS and the public entry point are provided outside the container; the container holds no data that needs to be kept and reads no configuration file.
 
-在仓库根目录构建当前机器架构的本地镜像：
+## 1. Building the image
+
+Build a local image for the current machine's architecture from the repository root:
 
 ```bash
 test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
@@ -18,7 +19,9 @@ docker buildx build \
   .
 ```
 
-部署到普通 x86 Linux 服务器时，也可以明确构建 amd64 镜像：
+The build also compiles the `plainmote` command line for macOS, Linux and Windows on amd64 and arm64 into the image's `/cli` directory, from which the service's `/cli` page offers them for download. `VERSION` is stamped into both the service and the command line, so their versions always match. The command line builds add about 35 MiB to the image.
+
+For an ordinary x86 Linux server, an amd64 image can be built explicitly:
 
 ```bash
 test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
@@ -32,7 +35,7 @@ docker buildx build \
   .
 ```
 
-发布到 GHCR，并同时生成 amd64 与 arm64 镜像：
+To publish to GHCR with both amd64 and arm64 images:
 
 ```bash
 export IMAGE=ghcr.io/OWNER/plainmote    # OWNER: your GitHub user or organisation
@@ -49,8 +52,7 @@ docker buildx build \
   .
 ```
 
-确认这个版本可以部署后，再单独增加 `latest` 标签。部署文件应始终使用提交版本标签或镜像摘要，不能依赖
-`latest`，否则无法确认当前运行的代码，也无法可靠回滚。
+Add the `latest` tag separately, once the version is known to be deployable. Deployment files should always use a commit tag or an image digest, never `latest`; otherwise the running code cannot be identified and a rollback cannot be relied on.
 
 ```bash
 docker buildx imagetools create \
@@ -58,76 +60,72 @@ docker buildx imagetools create \
   "$IMAGE:$VERSION"
 ```
 
-镜像摘要比标签更严格，标签被重新推送后摘要仍然指向原来的内容。发布后可查询摘要：
+A digest is stricter than a tag: it keeps pointing at the same content even if the tag is pushed again. Query it after publishing:
 
 ```bash
 docker buildx imagetools inspect "$IMAGE:$VERSION"
 ```
 
-需要完全固定构建产物时，在服务器 `.env` 中使用输出的 manifest list 摘要：
+To pin the build exactly, use the manifest list digest it prints in the server's `.env`:
 
 ```dotenv
 PLAINMOTE_IMAGE=ghcr.io/OWNER/plainmote@sha256:DIGEST
 ```
 
-GHCR Token 至少需要 `write:packages`；私有镜像的部署机器需要 `read:packages`。镜像使用
-OCI 标签记录源码仓库、版本和完整提交哈希，可以通过以下命令核对：
+The GHCR token needs at least `write:packages`; servers deploying a private image need `read:packages`. The image records the source repository, version and full commit hash in OCI labels, which can be checked with:
 
 ```bash
 docker image inspect "plainmote:$VERSION" \
   --format '{{json .Config.Labels}}'
 ```
 
-不使用镜像仓库时，可以把单架构镜像导出后传到服务器：
+Without a registry, a single-architecture image can be exported and copied to the server:
 
 ```bash
 docker save "plainmote:$VERSION" | gzip > "plainmote-$VERSION.tar.gz"
 ```
 
-服务器导入后，把 `.env` 中的 `PLAINMOTE_IMAGE` 设置为 `plainmote:VERSION`：
+After loading it on the server, set `PLAINMOTE_IMAGE` in `.env` to `plainmote:VERSION`:
 
 ```bash
 gzip -dc "plainmote-$VERSION.tar.gz" | docker load
 ```
 
-## 2. 准备外部服务
+## 2. Preparing external services
 
 ### PostgreSQL
 
-创建独立数据库和账号，并生成带 TLS 参数的连接 URI：
+Create a dedicated database and account, and build a connection URI with TLS parameters:
 
 ```text
 postgres://plainmote:PASSWORD@postgres.example.com:5432/plainmote?sslmode=require
 ```
 
-密码中的 `@`、`:`、`/` 等字符必须进行 URL 编码。应用启动时会执行内嵌的 `schema.sql`，因此当前版本的
-数据库账号需要连接、建表、建索引和读写权限。项目处于快速迭代期，不提供旧 schema 的自动迁移兼容层；
-升级前应先检查 schema 变更并备份数据库。
+Characters such as `@`, `:` and `/` in the password must be URL-encoded. The service applies its embedded `schema.sql` at startup, so the database account needs permission to connect, create tables and indexes, and read and write. The project is evolving quickly and provides no compatibility layer for migrating old schemas automatically; check the schema changes and back up the database before upgrading.
 
-### S3 或 Cloudflare R2
+### S3 or Cloudflare R2
 
-提前创建 Bucket，并为应用凭据授予该 Bucket 的读取、写入和删除对象权限。Cloudflare R2 的端点格式为：
+Create the bucket in advance and grant the service's credentials permission to read, write and delete objects in it. The Cloudflare R2 endpoint has the form:
 
 ```text
 https://ACCOUNT_ID.r2.cloudflarestorage.com
 ```
 
-R2 使用 `PLAINMOTE_BLOB_REGION=auto`。Bucket 不需要公开访问，所有正文都由 PlainMote 根据分享规则读取并转发。
+R2 uses `PLAINMOTE_BLOB_REGION=auto`. The bucket does not need public access: all content is read and delivered by PlainMote according to the sharing rules.
 
 ### GitHub OAuth App
 
-在 GitHub 创建独立的 OAuth App：
+Create a dedicated OAuth App on GitHub:
 
-- Application name：`PlainMote`
-- Homepage URL：生产环境的 `PLAINMOTE_PUBLIC_URL`
-- Authorization callback URL：`PLAINMOTE_PUBLIC_URL/auth/github/callback`
+- Application name: `PlainMote`
+- Homepage URL: the production `PLAINMOTE_PUBLIC_URL`
+- Authorization callback URL: `PLAINMOTE_PUBLIC_URL/auth/github/callback`
 
-授权页面展示的名称来自这个 OAuth App。应由项目或组织账号持有该 App；使用个人账号创建时，GitHub 仍可能
-在授权信息中展示该账号的归属关系。
+The name shown on the authorization page comes from this OAuth App. It should be owned by a project or organisation account; when it is created under a personal account, GitHub may still show that account's ownership in the authorization details.
 
-## 3. 配置部署目录
+## 3. Preparing the deployment directory
 
-服务器只需要 `compose.yaml` 与 `.env`，不需要克隆源码：
+The server needs only `compose.yaml` and `.env`, not the source code:
 
 ```text
 /opt/plainmote/
@@ -135,46 +133,45 @@ R2 使用 `PLAINMOTE_BLOB_REGION=auto`。Bucket 不需要公开访问，所有�
   .env
 ```
 
-复制 [`.env.example`](../.env.example) 为 `.env`，填写全部必填项，并把镜像固定到刚刚发布的版本或摘要：
+Copy [`.env.example`](../.env.example) to `.env`, fill in every required value, and pin the image to the version or digest just published:
 
 ```dotenv
 PLAINMOTE_IMAGE=ghcr.io/OWNER/plainmote:COMMIT_TAG
 ```
 
-生成 Token 加密密钥：
+Generate the token encryption key:
 
 ```bash
 openssl rand -hex 32
 ```
 
-`PLAINMOTE_TOKEN_KEY` 必须长期备份，并在所有副本之间保持一致。它不是可以随时轮换的登录密码；丢失或替换后，
-数据库里已有的分享 Token 将无法解密。
+`PLAINMOTE_TOKEN_KEY` must be backed up for the long term and be the same for every replica. It is not a password that can be rotated at will: if it is lost or replaced, the share tokens already in the database can no longer be decrypted.
 
-需要对外公开的实例应设置 `PLAINMOTE_CONTACT_EMAIL`（可同时设置 `PLAINMOTE_OPERATOR`），以提供隐私政策、
-服务条款、关于和联系页面。接入 Google 等第三方 OAuth 时，审核要求这些页面位于已验证的域名下；
-`https://<域名>/about` 可以作为应用首页，`/privacy` 和 `/terms` 分别填入隐私政策和服务条款地址。
+To enable the admin interface, set `PLAINMOTE_ADMIN_KEYS` and `PLAINMOTE_ADMIN_ORIGINS`; generating keys and using the administration page are described in [Administration](admin.md). The private key does not belong on the server.
 
-限制 `.env` 的读取权限：
+A publicly available instance should set `PLAINMOTE_CONTACT_EMAIL` (and optionally `PLAINMOTE_OPERATOR`) to provide the privacy policy, terms of service, about and contact pages. Third-party OAuth providers such as Google require these pages on a verified domain for review; `https://<domain>/about` can serve as the application's home page, and `/privacy` and `/terms` as the privacy policy and terms of service addresses.
+
+Restrict access to `.env`:
 
 ```bash
 chmod 600 .env
 ```
 
-如果镜像为私有包，先在部署机器登录 GHCR：
+If the image is a private package, sign in to GHCR on the server first:
 
 ```bash
 printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u OWNER --password-stdin
 ```
 
-## 4. 启动与核验
+## 4. Starting and checking
 
-先检查 Compose 展开后的配置。该命令只检查，不要把包含 Secret 的展开结果保存到日志或发给其他人：
+Check the configuration as Compose expands it. The command only checks; do not save its expanded output, which contains secrets, to a log or send it to anyone:
 
 ```bash
 docker compose config --quiet
 ```
 
-拉取并启动固定版本镜像：
+Pull and start the pinned image:
 
 ```bash
 docker compose pull
@@ -182,35 +179,32 @@ docker compose up -d --remove-orphans
 docker compose ps
 ```
 
-应用默认只发布到宿主机 `127.0.0.1:8964`。从宿主机检查进程：
+By default the service is published only on the host's `127.0.0.1:8964`. Check the process from the host:
 
 ```bash
 curl --fail --silent --show-error http://127.0.0.1:8964/healthz
 docker compose logs --tail=100 plainmote
 ```
 
-`/healthz` 返回 `ok` 只表示 HTTP 进程正在响应。应用在启动时已经连接 PostgreSQL 并执行 schema；S3/R2
-凭据则应通过创建、读取和删除一份测试资源完成部署验收。
+`/healthz` returning `ok` means only that the HTTP process is responding. The service has already connected to PostgreSQL and applied the schema at startup; the S3/R2 credentials should be verified by creating, reading and deleting a test resource as part of acceptance.
 
-## 5. 公网入口
+## 5. Public entry point
 
-PlainMote 自身提供 HTTP，不终止 TLS。使用 Nginx、Caddy 或 Cloudflare Tunnel 将公网 HTTPS origin 转发到
-`127.0.0.1:8964`，并保留 `Host`、`X-Forwarded-Proto` 和真实客户端 IP 头。
+PlainMote serves HTTP and does not terminate TLS. Use Nginx, Caddy or Cloudflare Tunnel to forward the public HTTPS origin to `127.0.0.1:8964`, preserving `Host`, `X-Forwarded-Proto` and the client IP headers.
 
-只有确实与应用直接连接的代理地址才能写入 `PLAINMOTE_TRUSTED_PROXIES`。不要因为某个网段是私网就整体信任它。
-留空时不读取任何转发头，访问记录中的来源 IP 全部是代理自身的地址。
-Docker 或 Tunnel 场景下，应用看到的直连地址可能是网桥网关；部署后访问一个分享地址，访问记录中出现的来源 IP 就是应填写的值，填写后再访问一次，确认记录变为真实客户端 IP。
+Only addresses of proxies that connect to the service directly may be listed in `PLAINMOTE_TRUSTED_PROXIES`. Do not trust a whole range merely because it is private. When the variable is empty, no forwarding header is read and every source IP in the access history is the proxy's own address. With Docker or a tunnel, the address the service sees may be the bridge gateway: after deploying, open a share link; the source IP recorded in the access history is the value to set. Open the link again afterwards to confirm the record now shows the real client IP.
 
-使用 Cloudflare 时还需要：
+With Cloudflare, also:
 
-1. 对以 `/paste` 开头的路径（包括 `/paste/encrypted`）设置写入限流；开放匿名分享时这是必须项。
-2. 根据需要对 `/d/*` 设置访问限流，但绝不能启用 `Cache Everything`。
-3. 保留应用发出的 `Cache-Control: no-store`，确保撤销和次数限制不会被边缘缓存绕过。
-4. 不要把容器端口同时发布到公网，否则会形成绕过 Tunnel 和限流规则的入口。
+1. Rate-limit writes to paths beginning with `/paste` (including `/paste/encrypted`). This is required when anonymous sharing is enabled.
+2. Rate-limit `/api/v1/device/`. The service already limits code requests and polling per IP; a limit at the entry point stops the traffic before it reaches the service.
+3. Rate-limit `/d/*` if needed, but never enable `Cache Everything`.
+4. Keep the `Cache-Control: no-store` the service sends, so that revocations and use limits cannot be bypassed by an edge cache.
+5. Do not also publish the container port to the internet; that would create an entry point that bypasses the tunnel and the rate limits.
 
-## 6. 升级与回滚
+## 6. Upgrades and rollbacks
 
-每次发布都构建新的提交标签。升级时修改 `.env` 中的 `PLAINMOTE_IMAGE`，然后执行：
+Build a new commit tag for every release. To upgrade, change `PLAINMOTE_IMAGE` in `.env` and run:
 
 ```bash
 docker compose pull
@@ -218,34 +212,31 @@ docker compose up -d --remove-orphans
 curl --fail --silent --show-error http://127.0.0.1:8964/healthz
 ```
 
-查看启动日志并完成一次登录、资源读取和分享访问。回滚时把 `PLAINMOTE_IMAGE` 改回上一个提交标签，再执行相同命令。
+Check the startup log and complete a sign-in, a resource read and a share link access. To roll back, set `PLAINMOTE_IMAGE` back to the previous commit tag and run the same commands.
 
-数据库 schema 当前没有向后兼容保证。若新版本已经写入旧版本不能理解的数据，单纯切换旧镜像不构成完整回滚；
-发布前必须同时保留 PostgreSQL 备份。对象正文存放在 S3/R2，也应配置服务商侧的版本控制或备份策略。
+The command line is upgraded with the image: once a new version is deployed, `/cli` serves the new command line, and users upgrade by running the install command again. Existing sign-ins are not affected.
 
-## 7. 运行约束
+The database schema currently carries no backward compatibility guarantee. If the new version has written data the old version cannot understand, switching back to the old image is not a complete rollback; a PostgreSQL backup must be kept before every release. Content stored in S3/R2 should also be covered by the provider's versioning or backup policy.
 
-- 容器以 UID/GID `65532` 运行，根文件系统只读，仅挂载临时 `/tmp`。
-- Compose 将容器日志限制为 3 个、每个 10 MiB，避免 Docker JSON 日志无限占用宿主机磁盘。
-- 收到 SIGTERM 后，服务最多使用 10 秒完成 HTTP 关闭；Compose 给出 15 秒退出时间。
-- 多副本必须共享 PostgreSQL、S3/R2 和同一份 `PLAINMOTE_TOKEN_KEY`。
-- 应用不承担边缘限流；匿名写入和公开交付的抗攻击规则必须在入口层配置。
-- `/d/*`、登录页面和资源页面都不应被 CDN 缓存。
+## 7. Runtime constraints
 
-## 8. 时间与时区
+- The container runs as UID/GID `65532` with a read-only root file system; only a temporary `/tmp` is mounted.
+- Compose limits container logs to 3 files of 10 MiB each, so Docker's JSON logs cannot fill the host's disk.
+- On SIGTERM, the service takes at most 10 seconds to shut down HTTP; Compose allows 15 seconds to exit.
+- Replicas must share PostgreSQL, S3/R2 and the same `PLAINMOTE_TOKEN_KEY`.
+- The following state is held only in the memory of a single process: the rate-limit counts of the command line API and device authorization, the admin interface's authentication failure counts, and the nonces of admin requests already used. With several replicas, rate limits are counted per replica, and a signed admin request could be replayed to another replica within its validity window. If several replicas are needed, add rate limits at the entry point and route `/_admin/` requests to a single replica.
+- The service does not provide edge rate limiting; protection of anonymous writes and public delivery must be configured at the entry point.
+- `/d/*`, the sign-in pages and resource pages must not be cached by a CDN.
 
-数据库中的业务时间使用 `timestamptz` 保存，应用写入和比较的都是同一个绝对时间。生产 PostgreSQL 建议把
-`timezone` 与 `log_timezone` 都设为 `UTC`，这样数据库日志、人工查询和跨地区排障不会混用服务器本地时区。
-宿主机可以继续使用运维人员习惯的时区；它只影响 systemd 定时器和宿主机日志的显示。
+## 8. Time and time zones
 
-页面输出包含 UTC 时间点的 `<time datetime="...">`，浏览器再使用自己的时区和当前界面语言完成格式化。因此日本用户
-会看到日本时间，其他地区用户也不需要在账号中单独设置时区。浏览器禁用 JavaScript 时，页面会明确显示 UTC 作为
-后备值。切换界面语言只改变日期的展示格式，不改变时间点或浏览器时区。
+Times are stored in the database as `timestamptz`; the service writes and compares absolute points in time. Setting both `timezone` and `log_timezone` to `UTC` in production PostgreSQL keeps database logs, manual queries and cross-region troubleshooting free of mixed local time zones. The host can keep whatever time zone its operators prefer; it affects only how systemd timers and host logs are displayed.
 
-## 9. 磁盘、日志与备份
+Pages output `<time datetime="...">` with the point in time in UTC, and the browser formats it in its own time zone and the current interface language. Users in Japan therefore see Japanese time, and no user needs to set a time zone in their account. With JavaScript disabled, pages show UTC explicitly as a fallback. Switching the interface language changes only how dates are formatted, not the point in time or the browser's time zone.
 
-PostgreSQL 没有适合生产环境的“数据库最大 5 GiB”配置。给数据目录设置硬文件系统配额会让写入在配额耗尽时直接
-遇到 `ENOSPC`，可能中断事务、检查点和 WAL 写入。应同时监控以下三个值，并在仍有处理空间时预警：
+## 9. Disk, logs and backups
+
+PostgreSQL has no production-suitable setting for a maximum database size. A hard file system quota on the data directory makes writes fail with `ENOSPC` when it runs out, which can interrupt transactions, checkpoints and WAL writes. Monitor the following three values and alert while there is still room to act:
 
 ```sql
 SELECT pg_size_pretty(pg_database_size(current_database()));
@@ -257,18 +248,14 @@ df -h /
 journalctl --disk-usage
 ```
 
-数据库逻辑大小不包含 WAL、表膨胀、容器日志和备份，所以不能只看 SQL 查询结果。对于约 20 GiB 的根分区，可以从
-下面的阈值开始，再根据增长速度调整：
+The logical database size does not include WAL, table bloat, container logs or backups, so the SQL result alone is not enough. For a root partition of about 20 GiB, the following thresholds are a starting point, to be adjusted to the rate of growth:
 
-- 数据库逻辑大小达到 3 GiB 时警告，4 GiB 时严重告警。
-- PostgreSQL 数据目录达到 4 GiB 时警告，5 GiB 时严重告警。
-- 根分区可用空间低于 3 GiB 时警告，低于 1.5 GiB 时严重告警。
+- Warn when the logical database size reaches 3 GiB; critical at 4 GiB.
+- Warn when the PostgreSQL data directory reaches 4 GiB; critical at 5 GiB.
+- Warn when free space on the root partition falls below 3 GiB; critical below 1.5 GiB.
 
-`PLAINMOTE_LOG_RETENTION` 默认只保留 30 天访问记录。普通 `VACUUM` 会让删除后的空间供 PostgreSQL 重用，但不会立即
-把文件缩小并归还给操作系统；不要把定期 `VACUUM FULL` 当作日常清理方案，因为它会锁表并额外占用临时磁盘空间。
+`PLAINMOTE_LOG_RETENTION` keeps access history for 30 days by default. Ordinary `VACUUM` lets PostgreSQL reuse the space freed by deletions but does not immediately shrink files and return the space to the operating system. Do not use periodic `VACUUM FULL` as routine cleanup: it locks tables and needs additional temporary disk space.
 
-Compose 已把每个容器的 JSON 日志限制为 3 个、每个 10 MiB。宿主机的 journald 也应设置 `SystemMaxUse` 和
-`SystemKeepFree`，否则系统服务日志仍可能持续占用根分区。
+Compose limits each container's JSON logs to 3 files of 10 MiB. The host's journald should also set `SystemMaxUse` and `SystemKeepFree`, otherwise system service logs can keep growing on the root partition.
 
-数据库至少每天执行一次 `pg_dump -Fc`，并用 `pg_restore --list` 验证备份可读。保存在数据库同一块磁盘上的备份只能
-应对误删或逻辑损坏，不能应对磁盘或 VPS 丢失；生产备份还应使用独立凭据复制到另一台机器或独立对象存储。
+Run `pg_dump -Fc` at least daily and verify that each backup is readable with `pg_restore --list`. A backup on the same disk as the database protects only against accidental deletion or logical damage, not against losing the disk or the VPS; production backups should also be copied, with separate credentials, to another machine or independent object storage.
