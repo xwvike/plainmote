@@ -27,22 +27,10 @@ var waitFlags = map[string]string{
 	"sublime_text": "--wait", "mate": "--wait", "atom": "--wait",
 }
 
-// editorCommand is $VISUAL, then $EDITOR, then vi (Notepad on Windows), with
-// the wait flag added for editors that need it.
+// editorCommand is the editor chosen without asking anyone: what
+// chooseEditor does for a script, given only the environment.
 func editorCommand(getenv func(string) string) []string {
-	for _, name := range []string{"VISUAL", "EDITOR"} {
-		if command := splitCommand(getenv(name)); len(command) > 0 {
-			program := strings.TrimSuffix(strings.ToLower(filepath.Base(command[0])), ".exe")
-			if flag, ok := waitFlags[program]; ok && !hasWait(command[1:]) {
-				command = append(command, flag)
-			}
-			return command
-		}
-	}
-	if runtime.GOOS == "windows" {
-		return []string{"notepad"}
-	}
-	return []string{"vi"}
+	return (&cli{getenv: getenv}).chooseEditor(&session{})
 }
 
 func hasWait(args []string) bool {
@@ -148,7 +136,7 @@ func (c *cli) edit(ctx context.Context, args []string) error {
 	if err := c.needArgs(args, 1, "edit", "<resource>"); err != nil {
 		return err
 	}
-	_, api, err := c.signedIn(server)
+	s, api, err := c.signedIn(server)
 	if err != nil {
 		return err
 	}
@@ -183,7 +171,7 @@ func (c *cli) edit(ctx context.Context, args []string) error {
 	if err := os.WriteFile(file, current.Body, 0o600); err != nil {
 		return err
 	}
-	editor := editorCommand(c.getenv)
+	editor := c.chooseEditor(&s)
 	fmt.Fprintln(c.stderr, msg("edit_downloaded", api.host(), tempName(target), current.Version, sizeText(int64(len(current.Body))), filepath.Base(editor[0])))
 	if isWindowed(editor) {
 		fmt.Fprintln(c.stderr, msg("edit_close_hint"))

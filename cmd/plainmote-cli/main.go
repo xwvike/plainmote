@@ -34,6 +34,8 @@ type cli struct {
 	openURL func(string) bool
 	// runEditor runs the editor command on files and waits for it.
 	runEditor func(command []string) error
+	// findEditors lists the editors installed here, to choose from.
+	findEditors func() []editorChoice
 }
 
 func main() {
@@ -42,6 +44,7 @@ func main() {
 		interactive: isTerminal(os.Stdin) && isTerminal(os.Stdout),
 		openURL:     openBrowser,
 		runEditor:   runEditorProcess,
+		findEditors: findInstalledEditors,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -52,7 +55,7 @@ func main() {
 var errUsage = errors.New("usage")
 
 func (c *cli) run(ctx context.Context, args []string) int {
-	lang = detectLanguage(c.getenv)
+	lang = c.language()
 	if len(args) == 0 {
 		fmt.Fprint(c.stdout, msg("usage"))
 		return 0
@@ -74,6 +77,8 @@ func (c *cli) run(ctx context.Context, args []string) int {
 		err = c.whoamiCommand(ctx, rest)
 	case "server":
 		err = c.serverCommand(rest)
+	case "config":
+		err = c.configCommand(rest)
 	case "ls", "list":
 		err = c.ls(ctx, rest)
 	case "cat":
@@ -126,6 +131,25 @@ func (c *cli) flags(name string, args []string, define func(*flag.FlagSet)) ([]s
 		}
 	}
 	return positional, *server, nil
+}
+
+// language is PLAINMOTE_LANG, then the saved choice, then the locale.
+func (c *cli) language() int {
+	choice := strings.ToLower(c.getenv("PLAINMOTE_LANG"))
+	if choice == "" {
+		if path, err := c.credentialsPath(); err == nil {
+			if creds, err := loadCredentials(path); err == nil {
+				choice = creds.Language
+			}
+		}
+	}
+	switch choice {
+	case "zh":
+		return 1
+	case "en":
+		return 0
+	}
+	return detectLanguage(c.getenv)
 }
 
 func (c *cli) credentialsPath() (string, error) {

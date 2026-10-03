@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -439,3 +440,134 @@ func (b *lockedBuffer) String() string {
 func testDatabaseURL(t *testing.T) string { return testsupport.DatabaseURL(t) }
 
 func newMemoryBlobs() *testsupport.MemoryBlobs { return testsupport.NewMemoryBlobs() }
+
+// TestLoginOpensTheBrowserOnEnter: the code comes first, and the browser
+// opens only when Enter is pressed - and never with the code in its address.
+func TestLoginOpensTheBrowserOnEnter(t *testing.T) {
+	h := newHarness(t)
+	keys, typing := io.Pipe()
+	var stderr lockedBuffer
+	var opened []string
+	var mu sync.Mutex
+	c := &cli{interactive: true, stdin: keys, stderr: &stderr, stdout: io.Discard,
+		openURL: func(address string) bool {
+			mu.Lock()
+			defer mu.Unlock()
+			opened = append(opened, address)
+			return true
+		}}
+	env := map[string]string{"PLAINMOTE_CONFIG_DIR": h.config, "PLAINMOTE_SERVER": h.server.URL, "LANG": "en"}
+	c.getenv = func(name string) string { return env[name] }
+	done := make(chan int)
+	go func() { done <- c.run(context.Background(), []string{"login"}) }()
+
+	var code string
+	for deadline := time.Now().Add(5 * time.Second); code == "" && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if match := regexp.MustCompile(`Code   ([A-Z2-9]{4}-[A-Z2-9]{4})`).FindStringSubmatch(stderr.String()); match != nil {
+			code = match[1]
+		}
+	}
+	if code == "" || !strings.Contains(stderr.String(), "Press Enter") {
+		t.Fatalf("the code and the prompt come first: %s", stderr.String())
+	}
+	time.Sleep(100 * time.Millisecond)
+	mu.Lock()
+	early := len(opened)
+	mu.Unlock()
+	if early != 0 {
+		t.Fatal("the browser opened before Enter")
+	}
+	_, _ = typing.Write([]byte("\n"))
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		mu.Lock()
+		n := len(opened)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+	}
+	mu.Lock()
+	if len(opened) != 1 || strings.Contains(opened[0], code) || !strings.HasSuffix(opened[0], "/cli/device") {
+		t.Fatalf("Enter opened %v", opened)
+	}
+	mu.Unlock()
+
+	normalized, _ := store.NormalizeUserCode(code)
+	grant, err := h.db.PendingDeviceGrant(context.Background(), normalized, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.db.DecideDeviceGrant(context.Background(), h.user.ID, grant.ID, normalized, true, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case exit := <-done:
+		if exit != 0 {
+			t.Fatalf("login: %d %s", exit, stderr.String())
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("login did not finish")
+	}
+	_ = typing.Close()
+}
+
+func TestConfigLanguageAndEditor(t *testing.T) {
+	h := newHarness(t)
+	if exit, out, _ := h.run(nil, "config", "language", "zh"); exit != 0 || !strings.Contains(out, "已保存") {
+		t.Fatalf("config language: %d %s", exit, out)
+	}
+	// The saved language wins over the locale, and PLAINMOTE_LANG over both.
+	if _, _, errOut := h.run(nil, "ls"); !strings.Contains(errOut, "尚未登录") {
+		t.Fatalf("the saved language is used: %s", errOut)
+	}
+	c := &cli{getenv: func(name string) string {
+		return map[string]string{"PLAINMOTE_CONFIG_DIR": h.config, "PLAINMOTE_LANG": "en", "LANG": "zh_CN.UTF-8"}[name]
+	}}
+	if c.language() != 0 {
+		t.Fatal("PLAINMOTE_LANG wins over the saved language")
+	}
+	if exit, _, _ := h.run(nil, "config", "language", "klingon"); exit != 2 {
+		t.Fatal("an unknown language is refused")
+	}
+	if exit, _, _ := h.run(nil, "config", "language", "auto"); exit != 0 {
+		t.Fatal("auto clears the language")
+	}
+	if exit, _, _ := h.run(nil, "config", "editor", "zed", "--new-window"); exit != 0 {
+		t.Fatal("config editor")
+	}
+	if _, out, _ := h.run(nil, "config"); !strings.Contains(out, "editor    zed --new-window") || !strings.Contains(out, "language  auto") {
+		t.Fatalf("config shows the settings: %s", out)
+	}
+}
+
+// TestEditorIsChosenOnce: with no editor set anywhere, the first edit asks
+// which of the editors found here to use, remembers it, and does not ask
+// again.
+func TestEditorIsChosenOnce(t *testing.T) {
+	h := newHarness(t)
+	h.signIn("write")
+	h.resource("nginx", "nginx.conf", "listen 80;\n")
+	var used [][]string
+	newCLI := func(answer string) *cli {
+		return &cli{interactive: true, stdin: strings.NewReader(answer),
+			findEditors: func() []editorChoice {
+				return []editorChoice{{Name: "Zed", Command: "zed --wait"}, {Name: "Vim", Command: "vim"}}
+			},
+			runEditor: func(command []string) error {
+				used = append(used, command)
+				return nil
+			}}
+	}
+	exit, _, errOut := h.run(newCLI("2\n"), "edit", "nginx.conf")
+	if exit != 0 || !strings.Contains(errOut, "1) Zed") || !strings.Contains(errOut, "Using Vim from now on") || used[0][0] != "vim" {
+		t.Fatalf("the first edit asks: %d %s %v", exit, errOut, used)
+	}
+	exit, _, errOut = h.run(newCLI(""), "edit", "nginx.conf")
+	if exit != 0 || strings.Contains(errOut, "1) Zed") || used[1][0] != "vim" {
+		t.Fatalf("the choice is remembered: %d %s %v", exit, errOut, used)
+	}
+	saved, _ := loadCredentials(filepath.Join(h.config, "credentials"))
+	if saved.Editor != "vim" {
+		t.Fatalf("saved editor %q", saved.Editor)
+	}
+}

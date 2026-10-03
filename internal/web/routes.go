@@ -101,6 +101,7 @@ type pageData struct {
 	CLIBinaries []cliBinary
 	CLIVersion  string
 	CLIPlatform string
+	CLILang     string
 	DeviceStep  string
 	DeviceGrant store.DeviceGrant
 	DeviceCode  string

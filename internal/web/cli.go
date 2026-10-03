@@ -139,6 +139,7 @@ func (a *App) handleCLI(w http.ResponseWriter, r *http.Request) {
 		data.CLIBinaries = a.cliBinaries()
 		data.CLIVersion = a.cfg.Version
 		data.CLIPlatform = clientPlatform(r)
+		data.CLILang = cliLanguage(requestLanguage(r).Locale)
 		data.Indexable = false
 		a.renderTemplate(w, r, http.StatusOK, "cli.html", data)
 		return
@@ -184,6 +185,21 @@ func (a *App) handleCLIPowerShell(w http.ResponseWriter, r *http.Request) {
 	a.writeScript(w, r, installPowerShell)
 }
 
+// An install script fetched as /cli/<language> (or /cli/<language>.ps1) also
+// sets the command line's language, so a command copied from a page installs
+// a command line that speaks the page's language. Any language tag is taken
+// - zh-TW, ja, fr - and given the nearest the command line speaks.
+var languageTag = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
+
+// cliLanguage is the command line's language for a page's locale or a
+// language tag: Chinese for any Chinese, English for everything else.
+func cliLanguage(locale string) string {
+	if strings.HasPrefix(strings.ToLower(locale), "zh") {
+		return "zh"
+	}
+	return "en"
+}
+
 // scriptSafe is what may stand inside the scripts' single quotes: an address
 // and a version. The address comes from PLAINMOTE_PUBLIC_URL, or failing that
 // from the request's Host, where a quote is allowed; nothing that could end
@@ -191,6 +207,10 @@ func (a *App) handleCLIPowerShell(w http.ResponseWriter, r *http.Request) {
 var scriptSafe = regexp.MustCompile(`^[A-Za-z0-9:/._\[\]-]*$`)
 
 func (a *App) writeScript(w http.ResponseWriter, r *http.Request, script *template.Template) {
+	a.writeScriptIn(w, r, script, "")
+}
+
+func (a *App) writeScriptIn(w http.ResponseWriter, r *http.Request, script *template.Template, language string) {
 	base := a.baseURL(r)
 	if !scriptSafe.MatchString(base) || !scriptSafe.MatchString(a.cfg.Version) {
 		writePlainError(w, http.StatusBadRequest, "this address cannot be written into an install script; set PLAINMOTE_PUBLIC_URL")
@@ -203,7 +223,7 @@ func (a *App) writeScript(w http.ResponseWriter, r *http.Request, script *templa
 		return
 	}
 	_ = script.Execute(w, map[string]any{
-		"Base": base, "Version": a.cfg.Version, "Binaries": a.cliBinaries(),
+		"Base": base, "Version": a.cfg.Version, "Binaries": a.cliBinaries(), "Lang": language,
 	})
 }
 
@@ -217,6 +237,10 @@ func (a *App) handleCLIFiles(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if language, script, ok := scriptPath(r.URL.Path); ok {
+		a.writeScriptIn(w, r, script, language)
 		return
 	}
 	if r.URL.Path == cliChecksums {
@@ -248,6 +272,22 @@ func (a *App) handleCLIFiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, "", time.Time{}, file)
+}
+
+// scriptPath reads /cli/zh, /cli/en.ps1 and the like.
+func scriptPath(path string) (string, *template.Template, bool) {
+	name, found := strings.CutPrefix(path, cliPath+"/")
+	if !found {
+		return "", nil, false
+	}
+	script := installScript
+	if trimmed, ps1 := strings.CutSuffix(name, ".ps1"); ps1 {
+		name, script = trimmed, installPowerShell
+	}
+	if !languageTag.MatchString(name) {
+		return "", nil, false
+	}
+	return cliLanguage(name), script, true
 }
 
 // handleDevicePage is where a command line's sign-in is approved: a code is
@@ -392,6 +432,9 @@ chmod 755 "$tmp/plainmote"
 mkdir -p "$dir"
 mv "$tmp/plainmote" "$dir/plainmote"
 "$dir/plainmote" server "$base" --if-unset >/dev/null
+{{- if .Lang}}
+"$dir/plainmote" config language {{.Lang}} >/dev/null
+{{- end}}
 
 printf 'Installed %s\n' "$dir/plainmote"
 case ":$PATH:" in
@@ -429,6 +472,9 @@ try {
   if (Test-Path $tmp) { Remove-Item -Force $tmp }
 }
 & $target server $base --if-unset | Out-Null
+{{- if .Lang}}
+& $target config language {{.Lang}} | Out-Null
+{{- end}}
 $path = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (-not (($path -split ';') -contains $dir)) {
   [Environment]::SetEnvironmentVariable('Path', ($path.TrimEnd(';') + ';' + $dir), 'User')

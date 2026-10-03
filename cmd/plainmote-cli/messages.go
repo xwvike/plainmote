@@ -21,10 +21,14 @@ Usage:
   plainmote push <file|-> [--to <resource>] [--name <name>] [--filename <file>]
                                     upload a new resource, or a new version of one
   plainmote server [<url>]          show or set the server
+  plainmote config language zh|en|auto
+                                    set the language of these messages
+  plainmote config editor <command> set the editor edit opens; plainmote config shows all
   plainmote version                 show this command line's version
 
 A <resource> is an id, an id prefix of at least six characters, or an exact
-name or filename. Every command takes --server <url>.
+name or filename. Every command takes --server <url>. The first edit asks
+which editor to use unless $VISUAL or $EDITOR is set.
 `, `plainmote – 查看、编辑和上传 PlainMote 资源
 
 用法：
@@ -38,10 +42,14 @@ name or filename. Every command takes --server <url>.
   plainmote push <文件|-> [--to <资源>] [--name <名称>] [--filename <文件名>]
                                     上传为新资源，或作为已有资源的新版本
   plainmote server [<地址>]         查看或设置服务器
+  plainmote config language zh|en|auto
+                                    设置提示语言
+  plainmote config editor <命令>    设置编辑时使用的编辑器；plainmote config 查看全部设置
   plainmote version                 显示命令行版本
 
 <资源> 可以是 ID、至少 6 位的 ID 前缀，或完整的名称、文件名。
-所有命令都可以加 --server <地址>。
+所有命令都可以加 --server <地址>。未设置 $VISUAL 或 $EDITOR 时，
+第一次编辑会让你选择编辑器。
 `},
 	"unknown_command":    {"unknown command %q; run plainmote help", "未知命令 %q，运行 plainmote help 查看用法"},
 	"needs_argument":     {"%s needs %s", "%s 需要参数：%s"},
@@ -50,15 +58,16 @@ name or filename. Every command takes --server <url>.
 	"bad_server":         {"the server must be an https:// address (http:// only for localhost): %s", "服务器地址必须以 https:// 开头（仅 localhost 可用 http://）：%s"},
 	"server_is":          {"Server: %s", "服务器：%s"},
 	"server_set":         {"Server set to %s", "服务器已设置为 %s"},
-	"login_open":         {"Open this address in a browser and enter the code:", "在浏览器中打开以下地址，并输入验证码："},
-	"login_open_any":     {"Open this address in a browser on any device and enter the code:", "在任意设备的浏览器中打开以下地址，并输入验证码："},
+	"login_open":         {"Open this address in a browser, on this device or any other, and enter the code:", "在浏览器中打开以下地址（本机或任意设备均可），并输入验证码："},
 	"login_code":         {"Code", "验证码"},
-	"login_browser":      {"A browser was opened for you. The code is valid for %d minutes.", "已尝试为你打开浏览器。验证码 %d 分钟内有效。"},
+	"login_press_enter":  {"Press Enter to open it in your browser. Waiting for confirmation…", "按 Enter 在浏览器中打开这个地址。等待确认…"},
+	"login_opened":       {"Opened in your browser.", "已在浏览器中打开。"},
+	"login_open_failed":  {"Could not open a browser; open the address above by hand.", "无法自动打开浏览器，请手动打开上面的地址。"},
 	"login_valid":        {"The code is valid for %d minutes.", "验证码 %d 分钟内有效。"},
 	"login_waiting":      {"Waiting for confirmation…", "等待确认…"},
 	"login_denied":       {"The sign-in was denied in the browser.", "已在浏览器中拒绝此次登录。"},
 	"login_expired":      {"The code expired before it was confirmed; run plainmote login again.", "验证码在确认前已过期，请重新运行 plainmote login。"},
-	"login_done":         {"Signed in as %s (%s, expires %s)", "已登录为 %s（%s，%s 到期）"},
+	"login_done":         {"✓ Signed in as %s (%s, expires %s)", "✓ 已登录为 %s（%s，%s 到期）"},
 	"login_saved":        {"Saved to %s", "凭据已保存到 %s"},
 	"scope_write":        {"read & write", "读写"},
 	"scope_read":         {"read only", "只读"},
@@ -76,6 +85,10 @@ name or filename. Every command takes --server <url>.
 	"is_reference":       {"%q points at a remote address and has no stored content", "%q 引用的是远程地址，没有可编辑的内容"},
 	"not_editable":       {"%q is not text and cannot be edited; use plainmote push to replace it", "%q 不是文本内容，无法编辑；可用 plainmote push 替换"},
 	"encrypted":          {"%q is end-to-end encrypted and cannot be edited here", "%q 经过端到端加密，无法在这里编辑"},
+	"editor_pick":        {"Choose the editor to edit with (it is remembered; change it with plainmote config editor):", "选择用来编辑的编辑器（会记住，之后可用 plainmote config editor 修改）："},
+	"editor_number":      {"Number [1-%d, Enter for 1]: ", "编号 [1-%d，回车选 1]："},
+	"editor_saved":       {"Using %s from now on.", "以后将使用 %s。"},
+	"config_saved":       {"Saved.", "已保存。"},
 	"edit_downloaded":    {"Downloaded %[2]s (v%[3]d, %[4]s) from %[1]s, opening it with %[5]s…", "已从 %s 下载 %s（v%d，%s），正在用 %s 打开…"},
 	"edit_close_hint":    {"Close the tab when you are done to upload it.", "编辑完成后关闭标签页即可上传。"},
 	"edit_unchanged":     {"No changes; nothing uploaded.", "没有修改，未上传。"},

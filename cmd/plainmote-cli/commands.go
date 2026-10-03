@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -56,29 +57,45 @@ func (c *cli) login(ctx context.Context, args []string) error {
 	}, &start); err != nil {
 		return err
 	}
-	opened := !noBrowser && c.getenv("PLAINMOTE_NO_BROWSER") == "" && c.openURL(start.VerificationURI)
-	if opened {
-		fmt.Fprintln(c.stderr, msg("login_open"))
-	} else {
-		fmt.Fprintln(c.stderr, msg("login_open_any"))
-	}
+	// The code is shown first, and the browser opens only when asked: the
+	// person reads the code before anything takes them away from it. The
+	// sign-in is polled meanwhile, so the address can as well be opened by
+	// hand, on another device.
+	fmt.Fprintln(c.stderr, msg("login_open"))
 	fmt.Fprintf(c.stderr, "\n    %s\n    %s   %s\n\n", start.VerificationURI, msg("login_code"), start.UserCode)
-	minutes := max(start.ExpiresIn/60, 1)
-	if opened {
-		fmt.Fprintln(c.stderr, msg("login_browser", minutes))
+	fmt.Fprintln(c.stderr, msg("login_valid", max(start.ExpiresIn/60, 1)))
+	var enter <-chan struct{}
+	if !noBrowser && c.getenv("PLAINMOTE_NO_BROWSER") == "" && c.interactive {
+		fmt.Fprintln(c.stderr, msg("login_press_enter"))
+		pressed := make(chan struct{})
+		go func() {
+			if _, err := bufio.NewReader(c.stdin).ReadString('\n'); err == nil {
+				close(pressed)
+			}
+		}()
+		enter = pressed
 	} else {
-		fmt.Fprintln(c.stderr, msg("login_valid", minutes))
+		fmt.Fprintln(c.stderr, msg("login_waiting"))
 	}
-	fmt.Fprint(c.stderr, msg("login_waiting"))
 
 	interval := max(start.Interval, 1)
+	poll := time.NewTimer(time.Duration(interval) * time.Second)
+	defer poll.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Fprintln(c.stderr)
 			return ctx.Err()
-		case <-time.After(time.Duration(interval) * time.Second):
+		case <-enter:
+			enter = nil
+			if c.openURL(start.VerificationURI) {
+				fmt.Fprintln(c.stderr, msg("login_opened"))
+			} else {
+				fmt.Fprintln(c.stderr, msg("login_open_failed"))
+			}
+			continue
+		case <-poll.C:
 		}
+		poll.Reset(time.Duration(interval) * time.Second)
 		var issued struct {
 			AccessToken string    `json:"access_token"`
 			Scope       string    `json:"scope"`
@@ -95,18 +112,14 @@ func (c *cli) login(ctx context.Context, args []string) error {
 				interval = max(refusal.Interval, interval+5)
 				continue
 			case "access_denied":
-				fmt.Fprintln(c.stderr)
 				return fmt.Errorf("%s", msg("login_denied"))
 			case "expired_token":
-				fmt.Fprintln(c.stderr)
 				return fmt.Errorf("%s", msg("login_expired"))
 			}
 		}
 		if err != nil {
-			fmt.Fprintln(c.stderr)
 			return err
 		}
-		fmt.Fprintln(c.stderr, " ✓")
 		if s.creds.Servers == nil {
 			s.creds.Servers = map[string]account{}
 		}
@@ -373,5 +386,86 @@ func (c *cli) push(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Fprintln(c.stdout, msg("push_created", made.label(), api.host(), made.URL))
+	return nil
+}
+
+// configCommand shows or changes the saved settings: the language messages
+// are in, and the editor edit opens.
+//
+//	plainmote config                     show them
+//	plainmote config language zh|en|auto
+//	plainmote config editor <command>    or --unset
+func (c *cli) configCommand(args []string) error {
+	// An editor command is kept as written, flags of its own included:
+	// "zed --new-window" is not plainmote's to parse.
+	var editor []string
+	if len(args) > 0 && args[0] == "editor" {
+		editor, args = args[1:], args[:1]
+	}
+	var unset bool
+	args, _, err := c.flags("config", args, func(set *flag.FlagSet) {
+		set.BoolVar(&unset, "unset", false, "clear the setting")
+	})
+	if err != nil {
+		return err
+	}
+	if len(editor) == 1 && editor[0] == "--unset" {
+		editor, unset = nil, true
+	}
+	args = append(args, editor...)
+	path, err := c.credentialsPath()
+	if err != nil {
+		return err
+	}
+	creds, err := loadCredentials(path)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		s, _ := c.session("")
+		language, editor := creds.Language, creds.Editor
+		if language == "" {
+			language = "auto"
+		}
+		if editor == "" {
+			editor = "-"
+		}
+		fmt.Fprintf(c.stdout, "server    %s\nlanguage  %s\neditor    %s\n", s.server, language, editor)
+		return nil
+	}
+	switch args[0] {
+	case "language":
+		if len(args) != 2 && !unset {
+			return c.needArgs(args, 2, "config language", "zh|en|auto")
+		}
+		value := "auto"
+		if len(args) == 2 {
+			value = strings.ToLower(args[1])
+		}
+		switch value {
+		case "zh", "en":
+			creds.Language = value
+		case "auto":
+			creds.Language = ""
+		default:
+			return c.needArgs(nil, 1, "config language", "zh|en|auto")
+		}
+	case "editor":
+		switch {
+		case unset:
+			creds.Editor = ""
+		case len(args) >= 2:
+			creds.Editor = strings.Join(args[1:], " ")
+		default:
+			return c.needArgs(nil, 1, "config editor", "<command>")
+		}
+	default:
+		return c.needArgs(nil, 1, "config", "language|editor")
+	}
+	if err := creds.save(path); err != nil {
+		return err
+	}
+	lang = c.language()
+	fmt.Fprintln(c.stdout, msg("config_saved"))
 	return nil
 }

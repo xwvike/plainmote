@@ -43,10 +43,10 @@ PlainMote 是一个用于分享配置文件、日志及其他文件的 Web 服�
 
 ### plainmote
 
-`plainmote` 用于在终端中查看、编辑和上传资源。编辑时使用 `$VISUAL` 或 `$EDITOR` 指定的编辑器（Zed、VS Code、Vim 等），关闭编辑器后内容保存为新版本。
+`plainmote` 用于在终端中查看、编辑和上传资源。编辑时使用你自己的编辑器（Zed、VS Code、Vim 等），关闭编辑器后内容保存为新版本。
 
 ```bash
-curl -fsSL https://plainmote.link/cli | sh    # 安装；Windows：irm https://plainmote.link/cli.ps1 | iex
+curl -fsSL https://plainmote.link/cli/zh | sh # 安装；Windows：irm https://plainmote.link/cli/zh.ps1 | iex
 plainmote login                               # 在浏览器中确认登录
 plainmote ls nginx
 plainmote edit nginx.conf
@@ -55,7 +55,7 @@ tail -n 200 app.log | plainmote push - --name app.log
 plainmote push ./nginx.conf --to nginx.conf
 ```
 
-安装脚本识别系统和架构，下载所部署服务提供的对应文件，校验 SHA-256 后安装到 `~/.local/bin`；同一地址可在执行前查看脚本内容，`/cli` 页面列出各平台文件及其校验和。提供 macOS、Linux 和 Windows 的 amd64 与 arm64 版本，版本号与提供它的服务端一致。
+通过 `/cli/zh` 或 `/cli/en` 安装的命令行分别使用中文或英文提示；`/cli` 跟随系统语言，之后可用 `plainmote config language zh|en|auto` 修改。编辑时优先使用 `$VISUAL` 或 `$EDITOR`；均未设置时，第一次编辑会列出本机已安装的编辑器供选择并记住，可用 `plainmote config editor <命令>` 修改。安装脚本识别系统和架构，下载所部署服务提供的对应文件，校验 SHA-256 后安装到 `~/.local/bin`；同一地址可在执行前查看脚本内容，`/cli` 页面列出各平台文件及其校验和。提供 macOS、Linux 和 Windows 的 amd64 与 arm64 版本，版本号与提供它的服务端一致。
 
 登录采用设备授权（RFC 8628）：命令行显示验证码，由用户在已登录的浏览器中输入并确认；验证码不会出现在所打开的地址中。保存时以下载时的版本为基准；如资源在此期间已在别处保存，命令行显示差异，并提供覆盖保存、基于新版本重新编辑或保留文件三种处理方式，无法保存的编辑内容不会被丢弃。
 

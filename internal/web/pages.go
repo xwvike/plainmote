@@ -80,6 +80,7 @@ func (a *App) templateSet() *template.Template {
 			return template.HTML(fmt.Sprintf(`<time datetime="%s" data-local-time="day">%s</time>`,
 				value.Format(time.RFC3339), value.Format("01-02")))
 		},
+		"cliLang":   cliLanguage,
 		"bytesText": bytesText,
 		"hasPrefix": strings.HasPrefix,
 		"originHost": func(value string) string {

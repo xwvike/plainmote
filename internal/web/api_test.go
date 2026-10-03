@@ -394,7 +394,7 @@ func TestInstallPageAndScripts(t *testing.T) {
 
 	// The page leads with the command for the system it is opened on, and
 	// folds the other one and the downloads away.
-	curl, irm := "curl -fsSL https://cfg.test/cli | sh", "irm https://cfg.test/cli.ps1 | iex"
+	curl, irm := "curl -fsSL https://cfg.test/cli/en | sh", "irm https://cfg.test/cli/en.ps1 | iex"
 	pageFor := func(agent, platform string) string {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodGet, "/cli", nil)
@@ -428,6 +428,38 @@ func TestInstallPageAndScripts(t *testing.T) {
 	phone := pageFor("Mozilla/5.0 (Linux; Android 14; Pixel 8)", "")
 	if !before(phone, curl) || !before(phone, irm) {
 		t.Fatal("where the system cannot be told, both commands are shown")
+	}
+
+	// A command copied from a page installs a command line in the page's
+	// language; the plain address leaves the language to the system.
+	chinese := httptest.NewRequest(http.MethodGet, "/cli", nil)
+	chinese.Header.Set("Accept", "text/html")
+	chinese.Header.Set("Accept-Language", "zh-CN")
+	chinese.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh)")
+	zhPage := httptest.NewRecorder()
+	app.handler.ServeHTTP(zhPage, chinese)
+	if !strings.Contains(zhPage.Body.String(), "curl -fsSL https://cfg.test/cli/zh | sh") {
+		t.Fatal("a Chinese page offers the Chinese install command")
+	}
+	for path, want := range map[string]string{
+		"/cli/zh": `"$dir/plainmote" config language zh`, "/cli/en": `"$dir/plainmote" config language en`,
+		"/cli/zh.ps1": "& $target config language zh", "/cli/en.ps1": "& $target config language en",
+	} {
+		if script := get(path, ""); script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
+			t.Fatalf("%s: %d %s", path, script.Code, script.Body.String())
+		}
+	}
+	if plain := get("/cli", "*/*"); strings.Contains(plain.Body.String(), "config language") {
+		t.Fatal("the plain script sets no language")
+	}
+	// Languages it does not speak get the nearest one it does.
+	for path, want := range map[string]string{
+		"/cli/ja": "config language en", "/cli/fr.ps1": "config language en",
+		"/cli/zh-TW": "config language zh", "/cli/zh-Hant-TW": "config language zh",
+	} {
+		if script := get(path, ""); script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
+			t.Fatalf("%s: %d", path, script.Code)
+		}
 	}
 	script := get("/cli", "*/*")
 	body := script.Body.String()

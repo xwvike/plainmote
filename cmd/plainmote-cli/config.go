@@ -22,6 +22,11 @@ const defaultServer = "https://plainmote.link"
 type credentials struct {
 	Server  string             `json:"server,omitempty"`
 	Servers map[string]account `json:"servers,omitempty"`
+	// Language is "zh" or "en"; empty follows the system's locale.
+	Language string `json:"language,omitempty"`
+	// Editor is the command edit opens files with; empty falls back to
+	// $VISUAL, $EDITOR, and then asks.
+	Editor string `json:"editor,omitempty"`
 }
 
 type account struct {

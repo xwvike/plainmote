@@ -43,10 +43,10 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 
 ### plainmote
 
-`plainmote` views, edits and uploads resources from a terminal. Editing uses the editor named in `$VISUAL` or `$EDITOR` (Zed, VS Code, Vim and others); when the editor is closed, the content is saved as a new version.
+`plainmote` views, edits and uploads resources from a terminal. Editing opens the content in your own editor (Zed, VS Code, Vim and others); when the editor is closed, the content is saved as a new version.
 
 ```bash
-curl -fsSL https://plainmote.link/cli | sh    # install; Windows: irm https://plainmote.link/cli.ps1 | iex
+curl -fsSL https://plainmote.link/cli/en | sh # install; Windows: irm https://plainmote.link/cli/en.ps1 | iex
 plainmote login                               # confirm the sign-in in a browser
 plainmote ls nginx
 plainmote edit nginx.conf
@@ -55,7 +55,7 @@ tail -n 200 app.log | plainmote push - --name app.log
 plainmote push ./nginx.conf --to nginx.conf
 ```
 
-The install script detects the system and architecture, downloads the matching build served by the deployment, verifies its SHA-256 and installs it to `~/.local/bin`; it can be read before running at the same address, and `/cli` lists the builds and their checksums. Builds are provided for macOS, Linux and Windows on amd64 and arm64, stamped with the version of the server that serves them.
+`/cli/en` and `/cli/zh` install a command line that speaks English or Chinese; `/cli` follows the system's locale, and `plainmote config language zh|en|auto` changes it later. Editing uses `$VISUAL` or `$EDITOR` when set; otherwise the first edit lists the editors installed on the machine and remembers the one chosen, which `plainmote config editor <command>` changes. The install script detects the system and architecture, downloads the matching build served by the deployment, verifies its SHA-256 and installs it to `~/.local/bin`; it can be read before running at the same address, and `/cli` lists the builds and their checksums. Builds are provided for macOS, Linux and Windows on amd64 and arm64, stamped with the version of the server that serves them.
 
 Signing in uses device authorization (RFC 8628): the command line shows a code, which is entered and confirmed in a signed-in browser. The code is never placed in the address that is opened. A save is made against the version that was downloaded; if the resource was saved elsewhere in the meantime, the command line shows the difference and offers to save over it, to edit again on the newer version or to keep the file, and an edit that cannot be saved is never discarded.
 
