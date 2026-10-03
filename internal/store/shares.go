@@ -441,16 +441,7 @@ WHERE l.token_hash = $1
 }
 
 func resourceByIDTx(ctx context.Context, tx pgx.Tx, id string) (Resource, error) {
-	var resource Resource
-	err := tx.QueryRow(ctx, `
-SELECT id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at, version
-FROM resources WHERE id = $1
-`, id).Scan(
-		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
-		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding, &resource.OriginURL,
-		&resource.CreatedAt, &resource.UpdatedAt, &resource.Version,
-	)
-	return resource, err
+	return scanResource(tx.QueryRow(ctx, `SELECT `+resourceColumns+` FROM resources r WHERE r.id = $1`, id))
 }
 
 // Presentations a browser can be given in place of the bytes.

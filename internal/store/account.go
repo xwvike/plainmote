@@ -39,18 +39,14 @@ func (d *Store) ExportResources(ctx context.Context, ownerID string) ([]Resource
 		return nil, ErrNotFound
 	}
 	rows, err := d.db.Query(ctx, `
-SELECT id, owner_id, name, filename, content_key, content_size, content_type,
-       content_encoding, origin_url, created_at, updated_at
-FROM resources WHERE owner_id = $1 ORDER BY created_at, id
+SELECT `+resourceColumns+`
+FROM resources r WHERE r.owner_id = $1 ORDER BY r.created_at, r.id
 	`, ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("export resources: %w: %w", ErrInternal, err)
 	}
 	resources, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Resource, error) {
-		var r Resource
-		err := row.Scan(&r.ID, &r.OwnerID, &r.Name, &r.Filename, &r.ContentKey, &r.ContentSize,
-			&r.ContentType, &r.ContentEncoding, &r.OriginURL, &r.CreatedAt, &r.UpdatedAt)
-		return r, err
+		return scanResource(row)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("export resources: %w: %w", ErrInternal, err)

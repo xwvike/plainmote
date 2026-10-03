@@ -214,8 +214,7 @@ func (d *Store) AnonymousPasteResult(ctx context.Context, resourceID string, now
 		return Resource{}, Link{}, ErrNotFound
 	}
 	resourceQuery := `
-SELECT r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size,
-       r.content_type, r.content_encoding, r.origin_url, r.created_at, r.updated_at
+SELECT ` + resourceColumns + `
 FROM paste_claims pc
 JOIN resources r ON r.id = pc.resource_id
 WHERE pc.resource_id = $1 AND r.owner_id = $2
@@ -225,12 +224,7 @@ WHERE pc.resource_id = $1 AND r.owner_id = $2
       AND (l.expires_at IS NULL OR l.expires_at > $3)
       AND (l.max_uses = 0 OR l.used_count < l.max_uses)
   )`
-	var resource Resource
-	err := d.db.QueryRow(ctx, resourceQuery, resourceID, AnonymousUserID, now).Scan(
-		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
-		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding,
-		&resource.OriginURL, &resource.CreatedAt, &resource.UpdatedAt,
-	)
+	resource, err := scanResource(d.db.QueryRow(ctx, resourceQuery, resourceID, AnonymousUserID, now))
 	if err != nil {
 		return Resource{}, Link{}, translateNotFound(err)
 	}
@@ -247,8 +241,7 @@ ORDER BY created_at DESC, id DESC LIMIT 1`, resourceID, now))
 
 func (d *Store) claimableAnonymousPaste(ctx context.Context, q storeQuerier, userID, resourceID string, now time.Time, lock bool) (Resource, Link, error) {
 	resourceQuery := `
-SELECT r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size,
-       r.content_type, r.content_encoding, r.origin_url, r.created_at, r.updated_at
+SELECT ` + resourceColumns + `
 FROM paste_claims pc
 JOIN resources r ON r.id = pc.resource_id
 WHERE pc.resource_id = $1 AND pc.user_id IN ($2, $3) AND r.owner_id = $3
@@ -262,12 +255,7 @@ WHERE pc.resource_id = $1 AND pc.user_id IN ($2, $3) AND r.owner_id = $3
 	if lock {
 		resourceQuery += ` FOR UPDATE OF r, pc`
 	}
-	var resource Resource
-	err := q.QueryRow(ctx, resourceQuery, resourceID, userID, AnonymousUserID, now).Scan(
-		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
-		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding,
-		&resource.OriginURL, &resource.CreatedAt, &resource.UpdatedAt,
-	)
+	resource, err := scanResource(q.QueryRow(ctx, resourceQuery, resourceID, userID, AnonymousUserID, now))
 	if err != nil {
 		return Resource{}, Link{}, translateNotFound(err)
 	}

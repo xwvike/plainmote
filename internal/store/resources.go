@@ -174,6 +174,29 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 1, $10, $11)
 	return resource, nil
 }
 
+// resourceColumns is every column a Resource is read from, for a query that
+// names the resources table r. Every reader uses it with scanResource, so a
+// Resource is whole wherever it comes from: a field added to one query and
+// not another - whether it is taken down, say - would otherwise read as its
+// zero value somewhere, and be trusted there.
+const resourceColumns = `r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size, r.content_type,
+       r.content_encoding, r.origin_url, r.created_at, r.updated_at,
+       r.version, COALESCE(r.version_at, r.updated_at), COALESCE(r.restored_from, 0), r.content_sha256,
+       r.taken_down_at IS NOT NULL, r.takedown_reason`
+
+// scanResource reads resourceColumns, then whatever the query selected after
+// them into extra.
+func scanResource(row rowScanner, extra ...any) (Resource, error) {
+	var r Resource
+	err := row.Scan(append([]any{
+		&r.ID, &r.OwnerID, &r.Name, &r.Filename, &r.ContentKey, &r.ContentSize, &r.ContentType,
+		&r.ContentEncoding, &r.OriginURL, &r.CreatedAt, &r.UpdatedAt,
+		&r.Version, &r.VersionAt, &r.RestoredFrom, &r.ContentSHA256,
+		&r.TakenDown, &r.TakedownReason,
+	}, extra...)...)
+	return r, err
+}
+
 func (d *Store) ResourceForOwner(ctx context.Context, ownerID, id string) (Resource, error) {
 	return d.resourceForOwner(ctx, d.db, ownerID, id)
 }
@@ -182,20 +205,11 @@ func (d *Store) resourceForOwner(ctx context.Context, q storeQuerier, ownerID, i
 	if !validUUIDs(ownerID, id) {
 		return Resource{}, ErrNotFound
 	}
-	var resource Resource
-	err := q.QueryRow(ctx, `
-SELECT id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url, created_at, updated_at,
-       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), content_sha256,
-       taken_down_at IS NOT NULL, takedown_reason
-FROM resources
-WHERE id = $1 AND owner_id = $2
-`, id, ownerID).Scan(
-		&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
-		&resource.ContentKey, &resource.ContentSize, &resource.ContentType, &resource.ContentEncoding, &resource.OriginURL,
-		&resource.CreatedAt, &resource.UpdatedAt,
-		&resource.Version, &resource.VersionAt, &resource.RestoredFrom, &resource.ContentSHA256,
-		&resource.TakenDown, &resource.TakedownReason,
-	)
+	resource, err := scanResource(q.QueryRow(ctx, `
+SELECT `+resourceColumns+`
+FROM resources r
+WHERE r.id = $1 AND r.owner_id = $2
+`, id, ownerID))
 	if err != nil {
 		return Resource{}, translateNotFound(err)
 	}
@@ -220,11 +234,10 @@ WHERE owner_id = $1 AND ($2 = '' OR name ILIKE $3 ESCAPE '\' OR filename ILIKE $
 		offset = 0
 	}
 	rows, err := d.db.Query(ctx, `
-SELECT r.id, r.owner_id, r.name, r.filename, r.content_type, r.content_encoding, r.origin_url, r.updated_at,
+SELECT `+resourceColumns+`,
        (SELECT COUNT(*) FROM links l WHERE l.resource_id = r.id AND l.revoked_at IS NULL
           AND (l.expires_at IS NULL OR l.expires_at > $1)
-          AND (l.max_uses = 0 OR l.used_count < l.max_uses)),
-       r.taken_down_at IS NOT NULL
+          AND (l.max_uses = 0 OR l.used_count < l.max_uses))
 FROM resources r
 WHERE r.owner_id = $2 AND ($3 = '' OR r.name ILIKE $4 ESCAPE '\' OR r.filename ILIKE $4 ESCAPE '\')
 ORDER BY r.updated_at DESC, r.id
@@ -236,14 +249,12 @@ LIMIT $5 OFFSET $6
 	defer rows.Close()
 	resources := make([]Resource, 0, limit)
 	for rows.Next() {
-		var resource Resource
-		if err := rows.Scan(
-			&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename,
-			&resource.ContentType, &resource.ContentEncoding, &resource.OriginURL, &resource.UpdatedAt, &resource.LiveShares,
-			&resource.TakenDown,
-		); err != nil {
+		var live int
+		resource, err := scanResource(rows, &live)
+		if err != nil {
 			return nil, 0, err
 		}
+		resource.LiveShares = live
 		resources = append(resources, resource)
 	}
 	return resources, total, rows.Err()

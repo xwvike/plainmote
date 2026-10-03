@@ -57,8 +57,7 @@ func isIDPrefix(value string) bool {
 
 func (d *Store) apiResources(ctx context.Context, where string, args ...any) ([]Resource, error) {
 	rows, err := d.db.Query(ctx, `
-SELECT r.id, r.owner_id, r.name, r.filename, r.content_size, r.content_type, r.content_encoding, r.origin_url,
-       r.created_at, r.updated_at, r.version, r.taken_down_at IS NOT NULL
+SELECT `+resourceColumns+`
 FROM resources r
 `+where, args...)
 	if err != nil {
@@ -67,10 +66,8 @@ FROM resources r
 	defer rows.Close()
 	var resources []Resource
 	for rows.Next() {
-		var resource Resource
-		if err := rows.Scan(&resource.ID, &resource.OwnerID, &resource.Name, &resource.Filename, &resource.ContentSize,
-			&resource.ContentType, &resource.ContentEncoding, &resource.OriginURL, &resource.CreatedAt, &resource.UpdatedAt,
-			&resource.Version, &resource.TakenDown); err != nil {
+		resource, err := scanResource(rows)
+		if err != nil {
 			return nil, fmt.Errorf("list resources: %w: %w", ErrInternal, err)
 		}
 		resources = append(resources, resource)
