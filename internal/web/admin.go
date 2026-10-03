@@ -63,17 +63,12 @@ type adminGate struct {
 
 	mu       sync.Mutex
 	nonces   map[string]time.Time
-	failures map[string]*adminFailures
-}
-
-type adminFailures struct {
-	count int
-	since time.Time
+	failures *windowLimiter
 }
 
 func newAdminGate(keys []ed25519.PublicKey, origins []string) *adminGate {
 	gate := &adminGate{keys: map[string]ed25519.PublicKey{}, origins: origins,
-		nonces: map[string]time.Time{}, failures: map[string]*adminFailures{}}
+		nonces: map[string]time.Time{}, failures: newWindowLimiter(adminFailureLimit, time.Minute)}
 	for _, key := range keys {
 		gate.keys[AdminKeyID(key)] = key
 	}
@@ -82,24 +77,11 @@ func newAdminGate(keys []ed25519.PublicKey, origins []string) *adminGate {
 
 // throttled reports a source that has failed too often in the last minute.
 func (g *adminGate) throttled(ip string, now time.Time) bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	f := g.failures[ip]
-	return f != nil && now.Sub(f.since) < time.Minute && f.count >= adminFailureLimit
+	return g.failures.blocked(ip, now)
 }
 
 func (g *adminGate) fail(ip string, now time.Time) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	f := g.failures[ip]
-	if f == nil || now.Sub(f.since) >= time.Minute {
-		if len(g.failures) > 10000 {
-			clear(g.failures)
-		}
-		f = &adminFailures{since: now}
-		g.failures[ip] = f
-	}
-	f.count++
+	g.failures.allow(ip, now)
 }
 
 // useNonce records a nonce, and reports false if it was already used.

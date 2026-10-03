@@ -12,6 +12,11 @@ import (
 type windowLimiter struct {
 	limit  int
 	window time.Duration
+	// maxKeys bounds the memory a flood of distinct keys can take. Past it,
+	// finished windows are dropped, and if that is not enough the counts
+	// start over: a brake that sometimes forgets beats a process that runs
+	// out of memory.
+	maxKeys int
 
 	mu    sync.Mutex
 	hits  map[string]*windowCount
@@ -24,7 +29,7 @@ type windowCount struct {
 }
 
 func newWindowLimiter(limit int, window time.Duration) *windowLimiter {
-	return &windowLimiter{limit: limit, window: window, hits: map[string]*windowCount{}}
+	return &windowLimiter{limit: limit, window: window, maxKeys: 10000, hits: map[string]*windowCount{}}
 }
 
 // allow counts one attempt for key and reports whether it is within the limit.
@@ -34,6 +39,13 @@ func (l *windowLimiter) allow(key string, now time.Time) bool {
 	l.sweep(now)
 	entry := l.hits[key]
 	if entry == nil || now.Sub(entry.since) >= l.window {
+		if len(l.hits) >= l.maxKeys {
+			l.swept = time.Time{}
+			l.sweep(now)
+			if len(l.hits) >= l.maxKeys {
+				clear(l.hits)
+			}
+		}
 		entry = &windowCount{since: now}
 		l.hits[key] = entry
 	}
