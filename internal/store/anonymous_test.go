@@ -251,7 +251,7 @@ func TestExpiredAnonymousPastesArePruned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	objectsBefore := blobs.count()
+	objectsBefore := blobs.Count()
 
 	// Retention zero, so this run is only about the pastes.
 	result, err := db.Prune(ctx, 0, now.Add(2*time.Minute))
@@ -261,7 +261,7 @@ func TestExpiredAnonymousPastesArePruned(t *testing.T) {
 	if result.Pastes != 1 {
 		t.Fatalf("exactly the expired paste should go, removed %d", result.Pastes)
 	}
-	if got := blobs.count(); got != objectsBefore-1 {
+	if got := blobs.Count(); got != objectsBefore-1 {
 		t.Fatalf("the body must go with it, %d objects -> %d", objectsBefore, got)
 	}
 	if _, err := db.ReadContent(ctx, alive); err != nil {

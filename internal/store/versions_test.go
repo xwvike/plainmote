@@ -121,7 +121,7 @@ func TestHistoryKeepsTheLatestTen(t *testing.T) {
 	if versions[0].Number != 13 || versions[len(versions)-1].Number != 4 {
 		t.Fatalf("kept the wrong ones: v%d..v%d", versions[0].Number, versions[len(versions)-1].Number)
 	}
-	if got := blobs.count(); got != HistoryKeep+1 {
+	if got := blobs.Count(); got != HistoryKeep+1 {
 		t.Fatalf("dropped versions must take their objects: %d objects for %d versions and the current one", got, HistoryKeep)
 	}
 }
@@ -268,14 +268,14 @@ func TestDeletingVersionsTakesTheirObjects(t *testing.T) {
 	blobs := db.blobs.(*memoryBlobs)
 	save(t, db, user, resource, "answer=43\n")
 	save(t, db, user, resource, "answer=44\n")
-	if got := blobs.count(); got != 3 {
+	if got := blobs.Count(); got != 3 {
 		t.Fatalf("three versions, three objects; got %d", got)
 	}
 
 	if err := db.DeleteVersion(ctx, user.ID, resource.ID, 1); err != nil {
 		t.Fatal(err)
 	}
-	if got := blobs.count(); got != 2 {
+	if got := blobs.Count(); got != 2 {
 		t.Fatalf("deleting a version deletes its object; %d left", got)
 	}
 	if err := db.DeleteVersion(ctx, user.ID, resource.ID, 3); !errors.Is(err, ErrNotFound) {
@@ -295,7 +295,7 @@ func TestDeletingVersionsTakesTheirObjects(t *testing.T) {
 	if err := db.DeleteResource(ctx, user.ID, resource.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := blobs.count(); got != 0 {
+	if got := blobs.Count(); got != 0 {
 		t.Fatalf("deleting the resource deletes every version's object; %d left", got)
 	}
 }
@@ -308,7 +308,7 @@ func TestDeletingAccountTakesHistory(t *testing.T) {
 	if err := db.DeleteAccount(ctx, user.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got := blobs.count(); got != 0 {
+	if got := blobs.Count(); got != 0 {
 		t.Fatalf("an account's history goes with it; %d objects left", got)
 	}
 }
@@ -327,7 +327,7 @@ func TestSwitchingToRemoteDropsHistory(t *testing.T) {
 	if count, _ := db.HistoryCount(ctx, user.ID, resource.ID); count != 0 {
 		t.Fatalf("a reference keeps no versions, found %d", count)
 	}
-	if got := blobs.count(); got != 0 {
+	if got := blobs.Count(); got != 0 {
 		t.Fatalf("nothing stored is left for a reference; %d objects", got)
 	}
 }
@@ -353,7 +353,7 @@ func TestOldVersionsArePruned(t *testing.T) {
 	if len(versions) != 1 || versions[0].Number != 2 {
 		t.Fatalf("v2 stays: %+v", versions)
 	}
-	if got := blobs.count(); got != 2 {
+	if got := blobs.Count(); got != 2 {
 		t.Fatalf("the pruned version's object goes too; %d left", got)
 	}
 }

@@ -37,7 +37,7 @@ func TestDeleteFreesTheQuotaAndKeepsTheHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	objectsBefore := blobs.count()
+	objectsBefore := blobs.Count()
 
 	if err := db.DeleteResource(ctx, user.ID, resource.ID); err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestDeleteFreesTheQuotaAndKeepsTheHistory(t *testing.T) {
 	if after.Resources != before.Resources-1 || after.StorageBytes != before.StorageBytes-resource.ContentSize {
 		t.Fatalf("deleting must give the room back: %+v -> %+v", before, after)
 	}
-	if got := blobs.count(); got != objectsBefore-1 {
+	if got := blobs.Count(); got != objectsBefore-1 {
 		t.Fatalf("the body must go with the resource, %d objects -> %d", objectsBefore, got)
 	}
 

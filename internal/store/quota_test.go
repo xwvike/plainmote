@@ -61,11 +61,11 @@ func TestRefusedUploadLeavesNoObject(t *testing.T) {
 	blobs := db.blobs.(*memoryBlobs)
 	setPlanLimits(t, db, 10, 64)
 
-	before := blobs.count()
+	before := blobs.Count()
 	if _, err := db.CreateResource(ctx, user.ID, "大文件", "big.yaml", bytes.Repeat([]byte("a"), 128), "", ""); !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("expected a quota refusal, got %v", err)
 	}
-	if after := blobs.count(); after != before {
+	if after := blobs.Count(); after != before {
 		t.Fatalf("a refused upload must not leave an object behind, %d -> %d", before, after)
 	}
 }

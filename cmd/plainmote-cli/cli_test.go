@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,13 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"plainmote/internal/auth"
-	"plainmote/internal/blob"
 	"plainmote/internal/store"
+	"plainmote/internal/testsupport"
 	"plainmote/internal/upstream"
 	"plainmote/internal/web"
 )
@@ -443,81 +436,6 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-func testDatabaseURL(t *testing.T) string {
-	t.Helper()
-	raw := strings.TrimSpace(os.Getenv("PLAINMOTE_TEST_DATABASE_URL"))
-	if raw == "" {
-		t.Skip("PLAINMOTE_TEST_DATABASE_URL is not set")
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := "test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	identifier := pgx.Identifier{schema}.Sanitize()
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+identifier); err != nil {
-		admin.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+identifier+" CASCADE")
-		admin.Close()
-	})
-	query := parsed.Query()
-	query.Set("search_path", schema)
-	parsed.RawQuery = query.Encode()
-	return parsed.String()
-}
+func testDatabaseURL(t *testing.T) string { return testsupport.DatabaseURL(t) }
 
-type memoryBlobs struct {
-	mu      sync.Mutex
-	objects map[string][]byte
-}
-
-func newMemoryBlobs() *memoryBlobs { return &memoryBlobs{objects: map[string][]byte{}} }
-
-func (m *memoryBlobs) Put(_ context.Context, key string, r io.Reader, size int64) error {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return err
-	}
-	if int64(len(data)) != size {
-		return fmt.Errorf("blob is %d bytes, expected %d", len(data), size)
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.objects[key] = data
-	return nil
-}
-
-func (m *memoryBlobs) Open(_ context.Context, key string) (io.ReadCloser, int64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	data, ok := m.objects[key]
-	if !ok {
-		return nil, 0, blob.ErrNotFound
-	}
-	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), nil
-}
-
-func (m *memoryBlobs) OpenRange(_ context.Context, key string, start, end int64) (io.ReadCloser, int64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	data, ok := m.objects[key]
-	if !ok {
-		return nil, 0, blob.ErrNotFound
-	}
-	return io.NopCloser(bytes.NewReader(data[start : end+1])), end - start + 1, nil
-}
-
-func (m *memoryBlobs) Delete(_ context.Context, key string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.objects, key)
-	return nil
-}
+func newMemoryBlobs() *testsupport.MemoryBlobs { return testsupport.NewMemoryBlobs() }

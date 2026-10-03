@@ -54,7 +54,7 @@ func TestDeleteAccountRemovesEverythingItOwns(t *testing.T) {
 	if _, _, err := db.CreateAnonymousPasteFor(ctx, user.ID, "", []byte("pending claim"), time.Minute, now); err != nil {
 		t.Fatal(err)
 	}
-	objects := blobs.count()
+	objects := blobs.Count()
 
 	if err := db.DeleteAccount(ctx, user.ID); err != nil {
 		t.Fatal(err)
@@ -63,7 +63,7 @@ func TestDeleteAccountRemovesEverythingItOwns(t *testing.T) {
 	if _, err := db.Account(ctx, user.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("the account must be gone, got %v", err)
 	}
-	if got := blobs.count(); got != objects-2 {
+	if got := blobs.Count(); got != objects-2 {
 		t.Fatalf("both bodies must be deleted: %d objects -> %d", objects, got)
 	}
 	if _, _, err := db.SessionUser(ctx, session); err == nil {
@@ -110,11 +110,11 @@ func TestWriteAfterDeleteLeavesNoObject(t *testing.T) {
 	if err := db.DeleteAccount(ctx, user.ID); err != nil {
 		t.Fatal(err)
 	}
-	objects := blobs.count()
+	objects := blobs.Count()
 	if _, err := db.CreateResource(ctx, user.ID, "Late", "late.txt", []byte("late"), "", ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("creating under a deleted account: %v", err)
 	}
-	if got := blobs.count(); got != objects {
+	if got := blobs.Count(); got != objects {
 		t.Fatalf("the refused write left an object behind: %d -> %d", objects, got)
 	}
 }
@@ -138,7 +138,7 @@ func TestDeleteAccountFinishesObjectCleanupAfterRequestCancellation(t *testing.T
 	if !errors.Is(ctx.Err(), context.Canceled) {
 		t.Fatal("the test blob store did not cancel the request context")
 	}
-	if got := base.count(); got != 0 {
+	if got := base.Count(); got != 0 {
 		t.Fatalf("request cancellation left %d object(s) behind", got)
 	}
 }
