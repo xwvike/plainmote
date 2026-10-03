@@ -16,6 +16,7 @@
 
 <h3>（二）登录状态</h3>
 <p>登录后，本服务通过 Cookie 维持您的登录状态。登录有效期为 {{legalDuration true .Legal.SessionTTL}}，退出登录后立即失效。</p>
+<p>您通过命令行工具登录某台设备时，本服务为该设备保存一份登录凭据，并记录命令行上报的设备名称、操作系统和版本，以及登录时间、最后一次使用的时间和 IP 地址。上述信息显示在“账号”页面，供您核对和撤销已登录的设备。命令行登录有效期为 {{legalDuration true .Legal.TokenLifetime}}，在“账号”页面撤销或在命令行中退出登录后立即失效。登录过程中，本服务临时记录发起登录请求的 IP 地址，供您在确认页面核对；该请求在确认后或 {{legalDuration true .Legal.DeviceWindow}}有效期届满后失效，并在定期清理中删除。</p>
 
 <h3>（三）您存储的内容</h3>
 <p>包括您创建的资源的正文及其历史版本、名称和文件名等信息（远程资源仅保存其源地址），以及分享链接的备注、有效期、次数上限、使用次数和撤销状态。{{if .Legal.R2}}资源正文存放于 Cloudflare R2 对象存储，并以加密形式保存。{{end}}我们在技术上能够访问上述内容，但仅在排查故障、处理滥用举报或依法需要时查看。</p>
@@ -52,6 +53,7 @@
 <ul>
   <li>账号信息：在账号存续期间保存，删除账号时立即删除。</li>
   <li>登录状态：过期或退出登录时失效。</li>
+  <li>命令行登录：被撤销或退出登录时立即删除，过期后在定期清理中删除；登录请求在确认后或有效期届满后失效，并在定期清理中删除。</li>
   <li>数据导出记录：{{legalDuration true .Legal.ExportWindow}}后删除。</li>
   <li>资源与分享链接：保存至您主动删除。删除资源将同时删除其正文、历史版本及全部分享链接。</li>
   <li>资源的历史版本：资源内容被替换后，原内容作为历史版本保留，每个资源最多保留 {{.Legal.HistoryKeep}} 个，每个版本自被替换时起最长保留 {{legalDuration true .Legal.HistoryRetention}}；存储空间不足时，最早被替换的版本将提前删除。您可以随时删除单个历史版本。</li>
@@ -102,6 +104,7 @@
 
 <h3>1.2 Sign-in state</h3>
 <p>After you sign in, the Service uses a cookie to keep you signed in. A sign-in remains valid for {{legalDuration false .Legal.SessionTTL}} and ends immediately when you sign out.</p>
+<p>When you sign a device in with the command line tool, the Service keeps a sign-in credential for that device and records the device name, operating system and version reported by the command line, together with the time of sign-in and the time and IP address of its most recent use. This information is shown on the Account page so that you can review and revoke signed-in devices. A command line sign-in remains valid for {{legalDuration false .Legal.TokenLifetime}} and ends immediately when it is revoked on the Account page or signed out from the command line. While a sign-in is pending, the Service temporarily records the IP address that requested it, so that you can check it on the confirmation page; the request lapses once confirmed or after {{legalDuration false .Legal.DeviceWindow}} and is deleted in the next routine cleanup.</p>
 
 <h3>1.3 Content you store</h3>
 <p>This includes the body and earlier versions, name, filename and similar details of the resources you create (for remote resources, only the source URL), together with the note, validity period, use limit, use count and revocation status of your share links. {{if .Legal.R2}}Resource bodies are held in Cloudflare R2 object storage in encrypted form. {{end}}We are technically able to access this content, but do so only to diagnose faults, handle abuse reports or where required by law.</p>
@@ -138,6 +141,7 @@
 <ul>
   <li>Account information: retained for as long as the account exists, and deleted immediately when the account is deleted.</li>
   <li>Sign-in state: ends on expiry or sign-out.</li>
+  <li>Command line sign-ins: deleted immediately on revocation or sign-out, and in routine cleanup after expiry; sign-in requests lapse once confirmed or on expiry and are deleted in routine cleanup.</li>
   <li>Data export records: deleted after {{legalDuration false .Legal.ExportWindow}}.</li>
   <li>Resources and share links: retained until you delete them. Deleting a resource also deletes its body, its earlier versions and all of its share links.</li>
   <li>Earlier versions of resources: when the content of a resource is replaced, the previous content is kept as an earlier version. Each resource keeps at most {{.Legal.HistoryKeep}}, each for at most {{legalDuration false .Legal.HistoryRetention}} from when it was replaced; when storage runs short, the versions replaced longest ago are deleted sooner. You may delete any earlier version at any time.</li>

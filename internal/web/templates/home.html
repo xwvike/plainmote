@@ -180,6 +180,7 @@
       <section>
         <h2>{{tr .Locale "example_cli_title"}}</h2>
         <code class="cli"><b>$</b> tail -n 200 app.log | curl -F <span>'content=&lt;-'</span> <span>{{.BaseURL}}/paste</span></code>
+        <p class="hint"><a href="/cli">{{tr .Locale "home_cli_link"}} →</a></p>
       </section>
       {{else}}
       <section>

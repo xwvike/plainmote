@@ -344,6 +344,21 @@ WHERE id IN (SELECT id FROM sessions WHERE expires_at < $1 ORDER BY expires_at L
 		return result, fmt.Errorf("prune history: %w", err)
 	}
 
+	// Tokens and sign-in codes past their time are refused already; this
+	// only clears the rows.
+	if _, err = deleteInBatches(ctx, conn, `
+DELETE FROM api_tokens
+WHERE id IN (SELECT id FROM api_tokens WHERE expires_at < $1 ORDER BY expires_at LIMIT $2)
+`, now); err != nil {
+		return result, fmt.Errorf("prune api tokens: %w", err)
+	}
+	if _, err = deleteInBatches(ctx, conn, `
+DELETE FROM device_grants
+WHERE id IN (SELECT id FROM device_grants WHERE expires_at < $1 ORDER BY expires_at LIMIT $2)
+`, now); err != nil {
+		return result, fmt.Errorf("prune device grants: %w", err)
+	}
+
 	if _, err = deleteInBatches(ctx, conn, `
 DELETE FROM account_exports
 WHERE id IN (SELECT id FROM account_exports WHERE created_at < $1 ORDER BY created_at LIMIT $2)

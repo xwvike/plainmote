@@ -20,6 +20,7 @@ const (
 	accountPath       = "/account"
 	accountExportPath = "/account/export"
 	accountDeletePath = "/account/delete"
+	accountTokensPath = "/account/tokens"
 )
 
 // exportWriteTimeout replaces the server's 30-second write timeout for the one
@@ -67,7 +68,47 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, p
 	data.Error = pageError
 	data.DeleteOpen = deleteOpen
 	data.E2EE = a.e2eeEnabled(r, user.ID)
+	if data.APITokens, err = a.db.ListAPITokens(r.Context(), user.ID, now); err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	// The revoke dialog opens over the list, for a token that is still on it.
+	if id := r.URL.Query().Get("revoke"); id != "" && !deleteOpen {
+		for _, token := range data.APITokens {
+			if token.ID == id {
+				data.RevokeToken = token
+			}
+		}
+	}
 	a.renderTemplate(w, r, status, "account.html", data)
+}
+
+// handleAccountTokens revokes one signed-in command line. Its next request is
+// refused, and the page comes back without it.
+func (a *App) handleAccountTokens(w http.ResponseWriter, r *http.Request) {
+	user, sessionID, ok := a.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !a.checkCSRF(r, sessionID) {
+		writePlainError(w, http.StatusForbidden, "invalid csrf token")
+		return
+	}
+	if r.FormValue("action") != "revoke" {
+		writePlainError(w, http.StatusBadRequest, "unknown action")
+		return
+	}
+	// Already gone is what was asked for: another tab may have revoked it.
+	if err := a.db.RevokeAPIToken(r.Context(), user.ID, r.FormValue("token")); err != nil && !errors.Is(err, store.ErrNotFound) {
+		a.serverError(w, "revoke token", err)
+		return
+	}
+	http.Redirect(w, r, accountPath, http.StatusSeeOther)
 }
 
 // handleAccountDelete takes two steps: the username typed out, then a dialog

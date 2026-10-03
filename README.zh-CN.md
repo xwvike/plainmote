@@ -41,6 +41,26 @@ PlainMote 是一个用于分享配置文件、日志及其他文件的 Web 服�
 
 ## 命令行
 
+### plainmote
+
+`plainmote` 用于在终端中查看、编辑和上传资源。编辑时使用 `$VISUAL` 或 `$EDITOR` 指定的编辑器（Zed、VS Code、Vim 等），关闭编辑器后内容保存为新版本。
+
+```bash
+curl -fsSL https://plainmote.link/cli | sh    # 安装；Windows：irm https://plainmote.link/cli.ps1 | iex
+plainmote login                               # 在浏览器中确认登录
+plainmote ls nginx
+plainmote edit nginx.conf
+plainmote cat nginx.conf | grep listen
+tail -n 200 app.log | plainmote push - --name app.log
+plainmote push ./nginx.conf --to nginx.conf
+```
+
+安装脚本识别系统和架构，下载所部署服务提供的对应文件，校验 SHA-256 后安装到 `~/.local/bin`；同一地址可在执行前查看脚本内容，`/cli` 页面列出各平台文件及其校验和。提供 macOS、Linux 和 Windows 的 amd64 与 arm64 版本，版本号与提供它的服务端一致。
+
+登录采用设备授权（RFC 8628）：命令行显示验证码，由用户在已登录的浏览器中输入并确认；验证码不会出现在所打开的地址中。保存时以下载时的版本为基准；如资源在此期间已在别处保存，命令行显示差异，并提供覆盖保存、基于新版本重新编辑或保留文件三种处理方式，无法保存的编辑内容不会被丢弃。
+
+### 使用 curl 分享
+
 ```bash
 tail -n 200 app.log | curl -F 'content=<-' https://plainmote.link/paste
 curl -F content=@app.log https://plainmote.link/paste
@@ -57,6 +77,7 @@ curl https://plainmote.link/paste    # 输出用法说明
 - **禁止收录**：分享地址、资源及账号页面均禁止搜索引擎收录，仅介绍服务的页面可被索引。
 - **不提供网页托管**：可能被浏览器执行的类型（HTML、脚本、SVG 等）不会按原类型交付。免登录分享中，文本以纯文本交付，经文件头确认的图片与音视频按原类型交付，其余文件仅以附件形式提供下载；加密分享一律交付密文。
 - **端到端加密**：仅使用浏览器内置的 WebCrypto，算法为 AES-256-GCM。默认情况下，密钥位于链接 `#` 之后的部分，浏览器不会将其发送至服务器。创建者也可改用 4 位口令，此时密钥由接收者的浏览器通过 PBKDF2-SHA-256（600,000 次迭代）从口令推导。
+- **命令行令牌**：通过设备授权签发，服务端仅保存其摘要。令牌自登录起 90 天内有效，分为只读和读写两种，均不能删除资源、管理分享链接或修改账号。所有已登录的设备及其最后使用情况列于“账号”页面，可随时撤销。接口仅从 `Authorization` 请求头读取令牌，不接受 Cookie 或地址中的令牌，也不响应跨站请求。
 - **加密的局限**：解密依赖 JavaScript；链接或口令遗失后内容无法恢复；内容大小与访问记录不在加密范围内。口令取自 31 个字符，共约 92 万种组合，仅能防止偶然看到链接的人查看内容，不能抵御取得链接后逐一尝试的攻击者，敏感内容应使用附带密钥的完整链接。加解密代码由服务端提供，其可信程度取决于所部署代码的完整性；公开的源代码使之可供核查。
 
 ## 自部署
@@ -110,6 +131,7 @@ docker compose up -d
 | `PLAINMOTE_SOURCE_URL` | 本仓库地址 | 页面底部“源代码”链接指向的地址；部署修改过的版本时，依 AGPL 须指向修改后的源代码 |
 | `PLAINMOTE_ADMIN_KEYS` | 空 | 允许调用管理接口的 Ed25519 公钥，Base64 编码，逗号分隔；为空时管理接口不存在 |
 | `PLAINMOTE_ADMIN_ORIGINS` | 空 | 允许在浏览器中跨域调用管理接口的管理页面来源，逗号分隔 |
+| `PLAINMOTE_CLI_DIR` | `/cli` | `/cli` 所提供的命令行文件所在目录；容器镜像已包含这些文件 |
 
 ### 管理
 
@@ -146,10 +168,12 @@ npm --prefix tools/codemirror test
 ```text
 cmd/plainmote/       服务入口
 cmd/plainmote-admin/ 管理密钥生成与请求签名工具
+cmd/plainmote-cli/   plainmote 命令行
 internal/app/        服务组装与 HTTP 生命周期
 internal/auth/       GitHub OAuth
 internal/blob/       S3 兼容对象存储
 internal/config/     环境变量解析与校验
+internal/linediff/   版本页面与命令行共用的行级差异比较
 internal/store/      PostgreSQL schema 与业务约束
 internal/upstream/   远程地址校验与读取
 internal/web/        路由、页面、静态资源与公开分发

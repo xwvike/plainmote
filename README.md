@@ -41,6 +41,26 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 
 ## Command line
 
+### plainmote
+
+`plainmote` views, edits and uploads resources from a terminal. Editing uses the editor named in `$VISUAL` or `$EDITOR` (Zed, VS Code, Vim and others); when the editor is closed, the content is saved as a new version.
+
+```bash
+curl -fsSL https://plainmote.link/cli | sh    # install; Windows: irm https://plainmote.link/cli.ps1 | iex
+plainmote login                               # confirm the sign-in in a browser
+plainmote ls nginx
+plainmote edit nginx.conf
+plainmote cat nginx.conf | grep listen
+tail -n 200 app.log | plainmote push - --name app.log
+plainmote push ./nginx.conf --to nginx.conf
+```
+
+The install script detects the system and architecture, downloads the matching build served by the deployment, verifies its SHA-256 and installs it to `~/.local/bin`; it can be read before running at the same address, and `/cli` lists the builds and their checksums. Builds are provided for macOS, Linux and Windows on amd64 and arm64, stamped with the version of the server that serves them.
+
+Signing in uses device authorization (RFC 8628): the command line shows a code, which is entered and confirmed in a signed-in browser. The code is never placed in the address that is opened. A save is made against the version that was downloaded; if the resource was saved elsewhere in the meantime, the command line shows the difference and offers to save over it, to edit again on the newer version or to keep the file, and an edit that cannot be saved is never discarded.
+
+### Sharing with curl
+
 ```bash
 tail -n 200 app.log | curl -F 'content=<-' https://plainmote.link/paste
 curl -F content=@app.log https://plainmote.link/paste
@@ -57,6 +77,7 @@ curl https://plainmote.link/paste    # prints usage
 - **Not indexed**: share links, resources and account pages are excluded from search engines; only the pages describing the service can be indexed.
 - **No web hosting**: types a browser may execute (HTML, scripts, SVG and similar) are never delivered as themselves. For quick shares made without an account, text is delivered as plain text, images, audio and video confirmed by their file signatures are delivered as their own types, and all other files are delivered only as downloads; encrypted shares are always delivered as ciphertext.
 - **End-to-end encryption**: uses only the browser's built-in WebCrypto, with AES-256-GCM. By default the key is carried in the part of the link after `#`, which browsers do not send to the server. The creator may use a four-character code instead, in which case the recipient's browser derives the key from the code with PBKDF2-SHA-256 (600,000 iterations).
+- **Command line tokens**: issued by device authorization and stored only as a digest. A token is valid for 90 days from sign-in, is read-only or read-write, and cannot delete resources, manage share links or change the account. Every signed-in device, with its last use, is listed on the Account page and can be revoked there. The API accepts a token only in the `Authorization` header, never from a cookie or the address, and answers no cross-site requests.
 - **Limits of encryption**: decryption requires JavaScript; a lost link or code cannot be recovered; content size and access history are not encrypted. A code is drawn from 31 characters, about 920,000 combinations: it prevents viewing by someone who merely sees the link, but not by an attacker who obtains the link and tries every code, so sensitive content should be shared with the full link and its key. Because the encryption code is delivered by the service, its trustworthiness depends on the integrity of the deployed code; the published source code allows this to be verified.
 
 ## Self-hosting
@@ -110,6 +131,7 @@ Optional:
 | `PLAINMOTE_SOURCE_URL` | this repository | Where the "Source code" link at the foot of every page points; a modified deployment must point it at its modified source, as the AGPL requires |
 | `PLAINMOTE_ADMIN_KEYS` | empty | Ed25519 public keys allowed to call the admin interface, Base64, comma-separated; the interface does not exist while this is empty |
 | `PLAINMOTE_ADMIN_ORIGINS` | empty | Browser origins of admin pages allowed to call the admin interface across sites, comma-separated |
+| `PLAINMOTE_CLI_DIR` | `/cli` | Directory holding the command line builds offered at `/cli`; the container image already includes them |
 
 ### Administration
 
@@ -146,10 +168,12 @@ The dependencies of the editor and of encoding detection are committed as a bund
 ```text
 cmd/plainmote/       service entry point
 cmd/plainmote-admin/ admin key generation and request signing
+cmd/plainmote-cli/   the plainmote command line
 internal/app/        service assembly and HTTP lifecycle
 internal/auth/       GitHub OAuth
 internal/blob/       S3-compatible object storage
 internal/config/     environment parsing and validation
+internal/linediff/   line diff for version pages and the command line
 internal/store/      PostgreSQL schema and business rules
 internal/upstream/   remote URL validation and fetching
 internal/web/        routes, pages, static assets and public delivery

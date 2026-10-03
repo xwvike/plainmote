@@ -71,6 +71,24 @@
     </section>
     {{end}}
 
+    {{/* One row per command line signed in to this account. The token itself
+         is not shown, and not kept: only what the command line said about
+         itself, when it signed in and when it was last used. */}}
+    <section class="panel ruled panel-dev">
+      <div class="pt"><span class="sec">{{tr .Locale "cli_section"}}</span>{{if .APITokens}}<span class="sp"><span class="counts"><b>{{len .APITokens}}</b> {{tr .Locale "cli_devices"}}</span></span>{{end}}</div>
+      <div class="pb">
+        {{if .APITokens}}
+        <div class="dev-list">
+          <div class="hd"><span>{{tr .Locale "cli_device"}}</span><span>{{tr .Locale "cli_scope"}}</span><span>{{tr .Locale "cli_signed_in"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
+          {{range .APITokens}}
+          <div><span class="nm"><b>{{or .DeviceName (tr $.Locale "cli_unnamed_device")}}</b><span>{{.DeviceOS}}{{if .ClientVersion}} · {{.ClientVersion}}{{end}}</span></span><span><span class="tag">{{if .CanWrite}}{{tr $.Locale "cli_scope_write"}}{{else}}{{tr $.Locale "cli_scope_read"}}{{end}}</span></span><span class="tm">{{formatMinute .CreatedAt}}</span><span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm">{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account?revoke={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
+          {{end}}
+        </div>
+        {{end}}
+        <div class="dev-foot"><span class="hint">{{tr .Locale "cli_install_hint"}}</span><code>curl -fsSL {{.BaseURL}}/cli | sh</code><a class="txt" href="/cli">{{tr .Locale "cli_install_link"}}</a></div>
+      </div>
+    </section>
+
     <div class="account-grid">
     <section class="panel ruled">
       <div class="pt"><span class="sec">{{tr .Locale "export_title"}}</span></div>
@@ -101,7 +119,7 @@
     </div>
   </main>
 
-  {{if .DeleteOpen}}<div class="scrim"></div>{{end}}
+  {{if or .DeleteOpen .RevokeToken.ID}}<div class="scrim"></div>{{end}}
   {{template "account-dialog" .}}
   {{template "footer" .}}
   <script type="module" src="/static/parts.js"></script>
@@ -128,6 +146,26 @@
         <input type="hidden" name="confirm" value="{{.Account.User.Login}}">
         <input type="hidden" name="final" value="1">
         <button type="submit" class="bad">{{tr .Locale "delete_account_final"}}</button>
+      </form>
+    </footer>
+  </dialog>
+  {{end}}
+  {{if .RevokeToken.ID}}
+  <dialog class="dlg" open data-part="dialog">
+    <header>
+      <b>{{tr .Locale "revoke"}} <q>{{or .RevokeToken.DeviceName (tr .Locale "cli_unnamed_device")}}</q></b>
+      <a class="x" href="/account" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+    </header>
+    <div class="body">
+      <p class="ro">{{tr .Locale "cli_revoke_body"}}</p>
+    </div>
+    <footer>
+      <a class="btn" href="/account" data-close autofocus>{{tr .Locale "cancel"}}</a>
+      <form method="post" action="/account/tokens" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="revoke">
+        <input type="hidden" name="token" value="{{.RevokeToken.ID}}">
+        <button type="submit" class="bad">{{tr .Locale "revoke"}}</button>
       </form>
     </footer>
   </dialog>

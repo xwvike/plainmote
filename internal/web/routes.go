@@ -25,6 +25,8 @@ type App struct {
 	handler   http.Handler
 	probes    probeLog
 	admin     *adminGate
+	limits    *apiLimits
+	cli       *cliIndex
 }
 
 type upstreamFetcher interface {
@@ -55,6 +57,9 @@ type Config struct {
 	Version      string
 	Revision     string
 	StartedAt    time.Time
+	// CLIDir holds the command line builds the install page offers; empty,
+	// or without builds in it, the page says there are none.
+	CLIDir string
 }
 
 func New(cfg Config, db *store.Store, source upstreamFetcher, github *auth.GitHub) *App {
@@ -90,6 +95,19 @@ type pageData struct {
 	Alternates   []alternate
 	LocalePrefix string
 	LegalPrefix  string
+	// The command line: the builds the install page lists, and the device
+	// page's step - "code", "confirm", "done" or "denied" - with the sign-in
+	// being decided and its code as shown.
+	CLIBinaries []cliBinary
+	CLIVersion  string
+	CLIPlatform string
+	DeviceStep  string
+	DeviceGrant store.DeviceGrant
+	DeviceCode  string
+	// APITokens are the account page's signed-in command lines, and
+	// RevokeToken the one its revoke dialog is about.
+	APITokens   []store.APIToken
+	RevokeToken store.APIToken
 	// E2EE is whether this account's quick shares are encrypted in the browser.
 	E2EE             bool
 	RegistrationMode auth.RegistrationMode
@@ -249,6 +267,12 @@ type linkView struct {
 }
 
 func (a *App) routes() http.Handler {
+	if a.limits == nil {
+		a.limits = newAPILimits()
+	}
+	if a.cli == nil {
+		a.cli = &cliIndex{}
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/static/", a.handleStatic)
 	mux.HandleFunc(faviconPath, a.handleFavicon)
@@ -264,7 +288,12 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(accountPath, a.handleAccount)
 	mux.HandleFunc(accountExportPath, a.handleAccountExport)
 	mux.HandleFunc(accountDeletePath, a.handleAccountDelete)
+	mux.HandleFunc(accountTokensPath, a.handleAccountTokens)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
+	mux.HandleFunc(apiPrefix, a.handleAPI)
+	mux.HandleFunc(cliPath, a.handleCLI)
+	mux.HandleFunc(cliPath+"/", a.handleCLIFiles)
+	mux.HandleFunc(cliPowerShell, a.handleCLIPowerShell)
 	mux.HandleFunc("/robots.txt", a.handleRobots)
 	mux.HandleFunc("/sitemap.xml", a.handleSitemap)
 	mux.HandleFunc("/llms.txt", a.handleLLMs)

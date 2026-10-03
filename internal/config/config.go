@@ -46,7 +46,13 @@ type Config struct {
 	// browser origins allowed to call it across sites.
 	AdminKeys    []ed25519.PublicKey
 	AdminOrigins []string
+	// CLIDir is where the image keeps the command line builds that /cli
+	// offers for download.
+	CLIDir string
 }
+
+// DefaultCLIDir is where the container image puts the command line builds.
+const DefaultCLIDir = "/cli"
 
 // DefaultSourceURL is the upstream repository.
 const DefaultSourceURL = "https://github.com/xwvike/plainmote"
@@ -144,6 +150,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	cfg.CLIDir = strings.TrimSpace(env("PLAINMOTE_CLI_DIR", DefaultCLIDir))
 	cfg.AdminKeys, err = parseAdminKeys(os.Getenv("PLAINMOTE_ADMIN_KEYS"))
 	if err != nil {
 		return Config{}, err

@@ -1,0 +1,67 @@
+{{define "device.html"}}<!doctype html>
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
+<head>
+  {{template "htmlhead" .}}
+  <title>{{tr .Locale "device_title"}} · PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page device-page">
+    <div class="panel device-card">
+      <img class="signin-mark" src="/static/logo.png" alt="" width="64" height="64" decoding="async">
+      {{if eq .DeviceStep "confirm"}}
+      {{/* The code once more, large: the one thing to compare with the
+           terminal before allowing anything. What the command line says
+           about itself is a claim; the address is what the server saw. */}}
+      <h1 class="signin-name">{{tr .Locale "device_confirm_title"}}</h1>
+      <p class="big-code">{{.DeviceCode}}</p>
+      <p class="hint">{{tr .Locale "device_confirm_match"}}</p>
+      <div class="rule"></div>
+      <dl class="kv">
+        <dt>{{tr .Locale "device_label"}}</dt><dd>{{or .DeviceGrant.DeviceName (tr .Locale "cli_unnamed_device")}}{{if .DeviceGrant.DeviceOS}} · {{.DeviceGrant.DeviceOS}}{{end}}</dd>
+        {{if .DeviceGrant.ClientVersion}}<dt>{{tr .Locale "device_version"}}</dt><dd>{{.DeviceGrant.ClientVersion}}</dd>{{end}}
+        <dt>{{tr .Locale "device_from"}}</dt><dd>{{or .DeviceGrant.RequestIP "—"}} · {{formatMinute .DeviceGrant.CreatedAt}}</dd>
+        <dt>{{tr .Locale "device_account"}}</dt><dd>{{.User.Login}}</dd>
+        <dt>{{tr .Locale "device_lifetime"}}</dt><dd>{{tr .Locale "device_lifetime_value"}}</dd>
+      </dl>
+      <div class="rule"></div>
+      <div class="scope">
+        <b>{{tr .Locale "device_can"}}</b>
+        <ul><li>{{tr .Locale "device_can_read"}}</li>{{if eq .DeviceGrant.Scope "write"}}<li>{{tr .Locale "device_can_write"}}</li>{{end}}</ul>
+        <b>{{tr .Locale "device_cannot"}}</b>
+        <ul>{{if ne .DeviceGrant.Scope "write"}}<li>{{tr .Locale "device_cannot_write"}}</li>{{end}}<li>{{tr .Locale "device_cannot_manage"}}</li></ul>
+      </div>
+      <form method="post" action="/cli/device" class="device-acts">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="grant" value="{{.DeviceGrant.ID}}">
+        <input type="hidden" name="code" value="{{.DeviceCode}}">
+        <button type="submit" name="action" value="deny">{{tr .Locale "device_deny"}}</button>
+        <button type="submit" name="action" value="approve" class="pri">{{tr .Locale "device_allow"}}</button>
+      </form>
+      <p class="hint device-note">{{tr .Locale "device_revoke_later"}}</p>
+      {{else if eq .DeviceStep "done"}}
+      <h1 class="signin-name">{{printf (tr .Locale "device_done_title") (or .DeviceGrant.DeviceName (tr .Locale "cli_unnamed_device"))}}</h1>
+      <p class="hint signin-lede">{{tr .Locale "device_done_body"}}</p>
+      <div class="rule"></div>
+      <a class="btn signin-go" href="/account">{{tr .Locale "device_manage"}}</a>
+      {{else if eq .DeviceStep "denied"}}
+      <h1 class="signin-name">{{tr .Locale "device_denied_title"}}</h1>
+      <p class="hint signin-lede">{{tr .Locale "device_denied_body"}}</p>
+      {{else}}
+      <h1 class="signin-name">{{tr .Locale "device_title"}}</h1>
+      <p class="hint signin-lede">{{tr .Locale "device_lede"}}</p>
+      <div class="rule"></div>
+      {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+      <form method="post" action="/cli/device" class="device-code">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="lookup">
+        <input type="text" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" placeholder="XXXX-XXXX" required autofocus aria-label="{{tr .Locale "device_code_label"}}">
+        <p class="hint">{{tr .Locale "device_warning"}}</p>
+        <button type="submit" class="pri">{{tr .Locale "device_continue"}}</button>
+      </form>
+      {{end}}
+    </div>
+  </main>
+  {{template "footer" .}}
+</body>
+</html>{{end}}

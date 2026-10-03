@@ -18,6 +18,28 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -ldflags="-s -w -buildid= -X plainmote/internal/app.Version=${VERSION} -X plainmote/internal/app.Revision=${REVISION}" \
     -o /out/plainmote ./cmd/plainmote
 
+# The command line, for every platform /cli offers, built from the same
+# source and stamped with the same version as the server that serves it.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS cli
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -eu; \
+    for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do \
+      os="${target%/*}"; arch="${target#*/}"; ext=""; \
+      if [ "$os" = windows ]; then ext=".exe"; fi; \
+      CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+      go build -buildvcs=false -trimpath \
+      -ldflags="-s -w -buildid= -X main.version=${VERSION}" \
+      -o "/out/cli/plainmote-$os-$arch$ext" ./cmd/plainmote-cli; \
+    done
+
 FROM gcr.io/distroless/static-debian12:nonroot
 
 ARG VERSION=dev
@@ -30,6 +52,7 @@ LABEL org.opencontainers.image.title="PlainMote" \
       org.opencontainers.image.revision="${REVISION}"
 
 COPY --from=build --chown=65532:65532 /out/plainmote /plainmote
+COPY --from=cli --chown=65532:65532 /out/cli /cli
 USER 65532:65532
 EXPOSE 8964
 STOPSIGNAL SIGTERM

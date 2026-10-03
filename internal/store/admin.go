@@ -314,6 +314,14 @@ func (d *Store) AdminSuspendUser(ctx context.Context, actor AdminActor, id, reas
 		if _, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, id); err != nil {
 			return fmt.Errorf("end sessions: %w: %w", ErrInternal, err)
 		}
+		// Command lines too: a suspension ends every way in, and lifting it
+		// asks each one to sign in again rather than quietly waking them.
+		if _, err := tx.Exec(ctx, `DELETE FROM api_tokens WHERE user_id = $1`, id); err != nil {
+			return fmt.Errorf("end tokens: %w: %w", ErrInternal, err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM device_grants WHERE user_id = $1`, id); err != nil {
+			return fmt.Errorf("end sign-ins: %w: %w", ErrInternal, err)
+		}
 		return auditTx(ctx, tx, actor, auditEntry{Action: "user.suspend", TargetType: "user", TargetID: id, Label: login, Reason: reason}, now)
 	})
 }

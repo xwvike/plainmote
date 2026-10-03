@@ -1,0 +1,64 @@
+{{define "cli.html"}}<!doctype html>
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
+<head>
+  {{template "htmlhead" .}}
+  <title>{{tr .Locale "cli_title"}} · PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page cli-page">
+    <div class="ph"><h1>{{tr .Locale "cli_title"}}</h1>{{if and .CLIBinaries .CLIVersion}}<span class="sp"><span class="tag">{{.CLIVersion}}</span></span>{{end}}</div>
+    <p class="hint">{{tr .Locale "cli_lede"}}</p>
+    {{if .CLIBinaries}}
+    {{/* The one command for the system the page was opened on; the other,
+         the downloads and how to read the script first are folded below. */}}
+    {{$unix := ne .CLIPlatform "windows"}}
+    {{$windows := or (eq .CLIPlatform "windows") (not .CLIPlatform)}}
+    <section class="panel ruled">
+      <div class="pt"><span class="sec">{{tr .Locale "cli_install"}}{{if eq .CLIPlatform "macos"}} · macOS{{else if eq .CLIPlatform "linux"}} · Linux{{else if eq .CLIPlatform "windows"}} · Windows{{end}}</span></div>
+      <div class="pb inst">
+        {{if $unix}}{{if not .CLIPlatform}}<h3>macOS / Linux</h3>{{end}}
+        <code class="term-block"><b>$</b> curl -fsSL {{.BaseURL}}/cli | sh</code>{{end}}
+        {{if $windows}}{{if not .CLIPlatform}}<h3>Windows (PowerShell)</h3>{{end}}
+        <code class="term-block"><b>&gt;</b> irm {{.BaseURL}}/cli.ps1 | iex</code>{{end}}
+        <p class="hint">{{tr .Locale "cli_install_short"}}</p>
+        <details class="more">
+          <summary>{{tr .Locale "cli_more"}}</summary>
+          <div class="inst inst-more">
+            {{if eq .CLIPlatform "windows"}}<h3>macOS / Linux</h3>
+            <code class="term-block"><b>$</b> curl -fsSL {{.BaseURL}}/cli | sh</code>
+            {{else if .CLIPlatform}}<h3>Windows (PowerShell)</h3>
+            <code class="term-block"><b>&gt;</b> irm {{.BaseURL}}/cli.ps1 | iex</code>{{end}}
+            <h3>{{tr .Locale "cli_install_review"}}</h3>
+            <code class="term-block"><b>$</b> curl -fsSL {{.BaseURL}}/cli | less</code>
+            <h3>{{tr .Locale "cli_downloads"}}</h3>
+            <div class="dl">
+              {{range .CLIBinaries}}
+              <div><a href="/cli/download/{{.OS}}-{{.Arch}}" download="{{.File}}">{{.Platform}} {{.Arch}}</a><span>{{bytesText .Size}}</span></div>
+              {{end}}
+            </div>
+            <p class="hint">{{tr .Locale "cli_download_note"}} <a href="/cli/checksums.txt">checksums.txt</a></p>
+          </div>
+        </details>
+      </div>
+    </section>
+    {{else}}
+    <p class="notice">{{tr .Locale "cli_unavailable"}}</p>
+    {{end}}
+    <section class="panel ruled">
+      <div class="pt"><span class="sec">{{tr .Locale "cli_usage"}}</span></div>
+      <div class="pb">
+        <dl class="cmds">
+          <dt>plainmote login</dt><dd>{{tr .Locale "cli_cmd_login"}}</dd>
+          <dt>plainmote ls [{{tr .Locale "cli_arg_query"}}]</dt><dd>{{tr .Locale "cli_cmd_ls"}}</dd>
+          <dt>plainmote edit &lt;{{tr .Locale "cli_arg_resource"}}&gt;</dt><dd>{{tr .Locale "cli_cmd_edit"}}</dd>
+          <dt>plainmote cat &lt;{{tr .Locale "cli_arg_resource"}}&gt;</dt><dd>{{tr .Locale "cli_cmd_cat"}}</dd>
+          <dt>plainmote push &lt;{{tr .Locale "cli_arg_file"}}&gt; [--to &lt;{{tr .Locale "cli_arg_resource"}}&gt;]</dt><dd>{{tr .Locale "cli_cmd_push"}}</dd>
+          <dt>plainmote logout</dt><dd>{{tr .Locale "cli_cmd_logout"}}</dd>
+        </dl>
+      </div>
+    </section>
+  </main>
+  {{template "footer" .}}
+</body>
+</html>{{end}}

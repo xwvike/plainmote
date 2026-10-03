@@ -254,3 +254,44 @@ ALTER TABLE admin_audit ADD COLUMN IF NOT EXISTS target_label TEXT NOT NULL DEFA
 ALTER TABLE admin_audit ADD COLUMN IF NOT EXISTS detail JSONB;
 CREATE INDEX IF NOT EXISTS admin_audit_at_idx ON admin_audit(at DESC);
 CREATE INDEX IF NOT EXISTS admin_audit_target_idx ON admin_audit(target_id, at DESC);
+
+-- Personal access tokens, one per command line a person has signed in. Only
+-- the hash is kept: the token itself is handed to the command line once and
+-- never stored or shown here. scope is 'read' or 'write'.
+CREATE TABLE IF NOT EXISTS api_tokens (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  scope TEXT NOT NULL,
+  device_name TEXT NOT NULL DEFAULT '',
+  device_os TEXT NOT NULL DEFAULT '',
+  client_version TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  last_used_at TIMESTAMPTZ,
+  last_used_ip TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS api_tokens_expiry_idx ON api_tokens(expires_at);
+
+-- Device authorization (RFC 8628): a command line asks for a code, its owner
+-- enters the code in a signed-in browser and approves, and the command line
+-- exchanges its device code for a token. Both codes are kept as hashes. A row
+-- lives for minutes; user_id is set when someone approves it.
+CREATE TABLE IF NOT EXISTS device_grants (
+  id UUID PRIMARY KEY,
+  device_code_hash TEXT NOT NULL UNIQUE,
+  user_code_hash TEXT NOT NULL UNIQUE,
+  scope TEXT NOT NULL,
+  device_name TEXT NOT NULL DEFAULT '',
+  device_os TEXT NOT NULL DEFAULT '',
+  client_version TEXT NOT NULL DEFAULT '',
+  request_ip TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'pending',
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  polled_at TIMESTAMPTZ,
+  poll_interval INTEGER NOT NULL DEFAULT 5
+);
+CREATE INDEX IF NOT EXISTS device_grants_expiry_idx ON device_grants(expires_at);
