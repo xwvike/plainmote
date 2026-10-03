@@ -122,7 +122,7 @@
   {{if or .DeleteOpen .RevokeToken.ID}}<div class="scrim"></div>{{end}}
   {{template "account-dialog" .}}
   {{template "footer" .}}
-  <script type="module" src="/static/parts.js"></script>
+  <script type="module" src="{{asset "parts.js"}}"></script>
 </body>
 </html>{{end}}
 

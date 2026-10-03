@@ -193,8 +193,8 @@
 
   </main>
   {{template "footer" .}}
-  {{if not .PasteURL}}<script type="module" src="/static/editor.js"></script>{{end}}
-  {{if or .E2EE .PasteEncrypted}}<script type="module" src="/static/e2ee-share.js"></script>{{end}}
+  {{if not .PasteURL}}<script type="module" src="{{asset "editor.js"}}"></script>{{end}}
+  {{if or .E2EE .PasteEncrypted}}<script type="module" src="{{asset "e2ee-share.js"}}"></script>{{end}}
   {{template "copy-status" .}}
 </body>
 </html>{{end}}

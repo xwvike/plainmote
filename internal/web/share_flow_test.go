@@ -249,7 +249,7 @@ func TestShareActionsAnswerWithParts(t *testing.T) {
 
 	// Every action on the list is sent in place.
 	page := client.page(base)
-	if !strings.Contains(page, `/static/parts.js`) || !strings.Contains(page, `data-part="shares"`) {
+	if !strings.Contains(page, assetPath("parts.js")) || !strings.Contains(page, `data-part="shares"`) {
 		t.Fatal("the resource page loads parts.js and marks its parts")
 	}
 	for _, action := range []string{"revoke_all", "create", "revoke"} {

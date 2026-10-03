@@ -105,6 +105,7 @@ func (a *App) templateSet() *template.Template {
 			}
 		},
 		"outcomeText":        accessOutcomeText,
+		"asset":              assetPath,
 		"locationText":       locationText,
 		"locationShort":      locationShort,
 		"outcomeDescription": accessOutcomeDescription,

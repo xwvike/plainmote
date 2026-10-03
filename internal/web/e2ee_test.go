@@ -65,7 +65,7 @@ func TestE2EESettingChangesTheHomePage(t *testing.T) {
 		t.Fatalf("toggle: %d", got.Code)
 	}
 	page := client.do(http.MethodGet, "/", nil).Body.String()
-	for _, want := range []string{"data-e2ee", `data-endpoint="/paste/encrypted"`, `data-pin-add`, `class="pri end" disabled`, "/static/e2ee-share.js"} {
+	for _, want := range []string{"data-e2ee", `data-endpoint="/paste/encrypted"`, `data-pin-add`, `class="pri end" disabled`, assetPath("e2ee-share.js")} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the encrypting home page is missing %q", want)
 		}
@@ -108,7 +108,7 @@ func TestEncryptedPasteEndpoint(t *testing.T) {
 
 	// The result page marks it and offers no save.
 	result := client.do(http.MethodGet, answer.Result, nil).Body.String()
-	for _, want := range []string{"data-e2ee-result", "data-e2ee-lost", "/static/e2ee-share.js", "Encrypted shares cannot be saved as resources"} {
+	for _, want := range []string{"data-e2ee-result", "data-e2ee-lost", assetPath("e2ee-share.js"), "Encrypted shares cannot be saved as resources"} {
 		if !strings.Contains(result, want) {
 			t.Errorf("the result page is missing %q", want)
 		}
@@ -162,7 +162,7 @@ func TestEncryptedLinkOpensTheDecryptionPage(t *testing.T) {
 		t.Fatalf("decryption page: %d %q", page.Code, page.Header().Get("Content-Security-Policy"))
 	}
 	body := page.Body.String()
-	for _, want := range []string{"data-decrypt", "/static/e2ee-open.js", "?raw=1"} {
+	for _, want := range []string{"data-decrypt", assetPath("e2ee-open.js"), "?raw=1"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the decryption page is missing %q", want)
 		}

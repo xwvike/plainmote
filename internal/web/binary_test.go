@@ -101,7 +101,7 @@ func TestUploadedBinarySurvivesTheRoundTrip(t *testing.T) {
 	if !strings.Contains(page, `src="/resources/`+stored.ID+`/raw"`) {
 		t.Fatal("expected an inline preview of the image")
 	}
-	if !strings.Contains(page, `class="resource-media resource-image"`) || !strings.Contains(page, `/static/upload.js`) {
+	if !strings.Contains(page, `class="resource-media resource-image"`) || !strings.Contains(page, assetPath("upload.js")) {
 		t.Fatal("the image page must use the media preview without loading the editor")
 	}
 

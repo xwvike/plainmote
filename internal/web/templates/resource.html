@@ -166,11 +166,11 @@
   {{if or .ShareOpen .DeleteOpen}}<div class="scrim"></div>{{end}}
   {{template "resource-dialogs" .}}
 
-  {{if not $remote}}<script type="module" src="/static/upload.js"></script>{{end}}
-  {{if not .IsNew}}<script type="module" src="/static/resource.js"></script>
-  <script type="module" src="/static/parts.js"></script>{{end}}
+  {{if not $remote}}<script type="module" src="{{asset "upload.js"}}"></script>{{end}}
+  {{if not .IsNew}}<script type="module" src="{{asset "resource.js"}}"></script>
+  <script type="module" src="{{asset "parts.js"}}"></script>{{end}}
   {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
-  <script type="module" src="/static/editor.js"></script>
+  <script type="module" src="{{asset "editor.js"}}"></script>
   {{end}}
   {{template "copy-status" .}}
 </body>

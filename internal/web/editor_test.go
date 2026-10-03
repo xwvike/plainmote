@@ -64,7 +64,7 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	if !strings.Contains(page, `<label class="btn sm upload-key" data-upload-key>`) || !strings.Contains(page, "Replace file") {
 		t.Error("a stored resource offers to replace its file")
 	}
-	if !strings.Contains(page, `<script type="module" src="/static/editor.js">`) {
+	if !strings.Contains(page, `<script type="module" src="`+assetPath("editor.js")+`">`) {
 		t.Error("the editor module must be linked")
 	}
 	// cm-source is what editor.js adds once it is running. Rendering it here
@@ -85,7 +85,7 @@ func TestResourcePageStaysPostable(t *testing.T) {
 		}
 		return recorder.Body.String()
 	}
-	if uploadPage := createPage("/resources/new"); !strings.Contains(uploadPage, `/static/editor.js`) || !strings.Contains(uploadPage, `/static/upload.js`) {
+	if uploadPage := createPage("/resources/new"); !strings.Contains(uploadPage, assetPath("editor.js")) || !strings.Contains(uploadPage, assetPath("upload.js")) {
 		t.Error("the upload form must load the editor")
 	} else {
 		if !strings.Contains(uploadPage, `data-upload data-max-bytes="4194304"`) {
@@ -95,16 +95,16 @@ func TestResourcePageStaysPostable(t *testing.T) {
 			t.Error("the upload form must include an accessible preview status")
 		}
 	}
-	if remotePage := createPage("/resources/new?kind=remote"); strings.Contains(remotePage, `/static/editor.js`) || strings.Contains(remotePage, `/static/upload.js`) {
+	if remotePage := createPage("/resources/new?kind=remote"); strings.Contains(remotePage, assetPath("editor.js")) || strings.Contains(remotePage, assetPath("upload.js")) {
 		t.Error("the remote resource form must not load the editor")
 	}
 	opaque, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not\x00text"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opaquePage := createPage("/resources/" + opaque.ID); strings.Contains(opaquePage, `/static/editor.js`) {
+	if opaquePage := createPage("/resources/" + opaque.ID); strings.Contains(opaquePage, assetPath("editor.js")) {
 		t.Error("a non-text resource page must not load the editor")
-	} else if !strings.Contains(opaquePage, `/static/upload.js`) || !strings.Contains(opaquePage, `class="media-stage" data-current-content`) {
+	} else if !strings.Contains(opaquePage, assetPath("upload.js")) || !strings.Contains(opaquePage, `class="media-stage" data-current-content`) {
 		t.Error("a non-text resource page must load the lightweight upload preview")
 	}
 	legacyText := "名称: 上海节点\n说明: 中文配置文件\n"

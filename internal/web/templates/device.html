@@ -8,7 +8,7 @@
   {{template "topbar" .}}
   <main class="page device-page">
     <div class="panel device-card">
-      <img class="signin-mark" src="/static/logo.png" alt="" width="64" height="64" decoding="async">
+      <img class="signin-mark" src="{{asset "logo.png"}}" alt="" width="64" height="64" decoding="async">
       {{if eq .DeviceStep "confirm"}}
       {{/* The code once more, large: the one thing to compare with the
            terminal before allowing anything. What the command line says

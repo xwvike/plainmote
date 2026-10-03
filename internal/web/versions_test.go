@@ -257,7 +257,7 @@ func TestDialogsOpenAsParts(t *testing.T) {
 			t.Fatalf("%s: a modal dialog brings its own backdrop", tc.target)
 		}
 		page := client.page(tc.target)
-		if !strings.Contains(page, `<div class="scrim"></div>`) || !strings.Contains(page, `<dialog class="dlg" open data-part="dialog">`) || !strings.Contains(page, "/static/parts.js") {
+		if !strings.Contains(page, `<div class="scrim"></div>`) || !strings.Contains(page, `<dialog class="dlg" open data-part="dialog">`) || !strings.Contains(page, assetPath("parts.js")) {
 			t.Fatalf("%s: the plain page still shows the dialog", tc.target)
 		}
 	}
@@ -271,7 +271,7 @@ func TestDialogsOpenAsParts(t *testing.T) {
 	if body := confirm.Body.String(); confirm.Code != http.StatusOK || !strings.Contains(body, `data-part="dialog"`) || !strings.Contains(body, `name="final" value="1"`) {
 		t.Fatalf("the right name answers with the confirmation: %d %q", confirm.Code, body)
 	}
-	if page := client.page("/account"); !strings.Contains(page, "data-parts") || !strings.Contains(page, "/static/parts.js") {
+	if page := client.page("/account"); !strings.Contains(page, "data-parts") || !strings.Contains(page, assetPath("parts.js")) {
 		t.Fatal("the account form is sent through parts.js")
 	}
 

@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -46,6 +47,33 @@ type staticAsset struct {
 }
 
 var staticAssets = loadStaticAssets()
+
+// staticVersion names this build's set of assets. Pages link to them under
+// /static/v/<version>/, so a deploy that changes any of them changes every
+// address: the proxy in front may hold a stylesheet for hours whatever the
+// service asks, and new markup must never meet an old one. One version for
+// the whole set, rather than one per file, is what keeps a module's relative
+// imports in the same release as the module.
+var staticVersion = func() string {
+	names := make([]string, 0, len(staticAssets))
+	for name := range staticAssets {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	digest := sha256.New()
+	for _, name := range names {
+		fmt.Fprintf(digest, "%s %s\n", name, staticAssets[name].etag)
+	}
+	return fmt.Sprintf("%x", digest.Sum(nil)[:6])
+}()
+
+// staticVersionPrefix is where the current assets are linked from.
+var staticVersionPrefix = staticPrefix + "v/" + staticVersion + "/"
+
+// assetPath is the address a page links an asset by.
+func assetPath(name string) string {
+	return staticVersionPrefix + name
+}
 
 func loadStaticAssets() map[string]staticAsset {
 	assets := make(map[string]staticAsset, len(staticTypes))
@@ -143,7 +171,19 @@ func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	name := strings.TrimPrefix(r.URL.Path, "/static/")
+	name := strings.TrimPrefix(r.URL.Path, staticPrefix)
+	// A versioned address of this build never changes content, so it may be
+	// kept for good. Any other - the bare name, or the version an older page
+	// still links - is answered with what is current, which is why it has to
+	// be checked again on every use.
+	cache := "public, no-cache"
+	if rest, ok := strings.CutPrefix(name, "v/"); ok {
+		version, file, _ := strings.Cut(rest, "/")
+		if version == staticVersion {
+			cache = "public, max-age=31536000, immutable"
+		}
+		name = file
+	}
 	asset, ok := staticAssets[name]
 	if !ok {
 		writePlainError(w, http.StatusNotFound, "not found")
@@ -151,7 +191,7 @@ func (a *App) handleStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	body := asset.body
 	w.Header().Set("Content-Type", asset.contentType)
-	w.Header().Set("Cache-Control", "public, no-cache")
+	w.Header().Set("Cache-Control", cache)
 	w.Header().Set("ETag", asset.etag)
 	if asset.gzipped != nil {
 		w.Header().Set("Vary", "Accept-Encoding")

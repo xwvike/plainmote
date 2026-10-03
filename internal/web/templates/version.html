@@ -65,8 +65,8 @@
 
   {{if .RestoreOpen}}<div class="scrim"></div>{{end}}
   {{template "version-dialog" .}}
-  {{if .ViewedText}}<script type="module" src="/static/editor.js"></script>{{end}}
-  <script type="module" src="/static/parts.js"></script>
+  {{if .ViewedText}}<script type="module" src="{{asset "editor.js"}}"></script>{{end}}
+  <script type="module" src="{{asset "parts.js"}}"></script>
 </body>
 </html>{{end}}
 

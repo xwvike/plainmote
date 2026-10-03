@@ -106,12 +106,47 @@ func TestStaticAssetsServed(t *testing.T) {
 	}
 }
 
+// TestVersionedAssetsAreKeptOnlyWhenCurrent: pages link this build's version,
+// which may be cached for good; an address naming another version gets
+// today's content and must be checked again, or a page from before a deploy
+// would pin whatever it was given next.
+func TestVersionedAssetsAreKeptOnlyWhenCurrent(t *testing.T) {
+	app := staticApp(t)
+	get := func(path string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		app.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		return recorder
+	}
+	for path, want := range map[string]string{
+		assetPath("style.css"):             "public, max-age=31536000, immutable",
+		"/static/v/000000000000/style.css": "public, no-cache",
+		"/static/style.css":                "public, no-cache",
+	} {
+		response := get(path)
+		if response.Code != http.StatusOK || response.Body.String() != string(staticAssets["style.css"].body) && response.Header().Get("Content-Encoding") == "" {
+			t.Fatalf("%s: %d", path, response.Code)
+		}
+		if got := response.Header().Get("Cache-Control"); got != want {
+			t.Errorf("%s: Cache-Control %q, want %q", path, got, want)
+		}
+	}
+	// A module's relative import resolves inside the same version.
+	if response := get(assetPath("upload.js")); response.Code != http.StatusOK {
+		t.Fatalf("relative import: %d", response.Code)
+	}
+	// Pages link the versioned addresses, never the bare ones.
+	page := get("/login").Body.String()
+	if !strings.Contains(page, `href="`+assetPath("style.css")+`"`) || strings.Contains(page, `"/static/style.css"`) {
+		t.Fatal("the page does not link the versioned stylesheet")
+	}
+}
+
 // TestStaticRejectsUnlisted keeps the handler on its allow list. Serving the
 // embedded tree by path would expose whatever lands in the directory next.
 // TestTemplatesReferenceServedAssets catches a script or stylesheet added to
 // a page but not to the embedded list, which would quietly answer 404.
 func TestTemplatesReferenceServedAssets(t *testing.T) {
-	reference := regexp.MustCompile(`/static/([A-Za-z0-9_./-]+\.(?:js|css|png|ico))`)
+	reference := regexp.MustCompile(`(?:/static/|asset ")([A-Za-z0-9_./-]+\.(?:js|css|png|ico))`)
 	templates, err := fs.Glob(webAssets, "templates/*.html")
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +180,7 @@ func TestTemplatesRunNoInlineScript(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, tag := range scriptTag.FindAll(body, -1) {
-			if !bytes.Contains(tag, []byte(` src="/static/`)) && !bytes.Contains(tag, []byte(`type="application/ld+json"`)) {
+			if !bytes.Contains(tag, []byte(` src="{{asset "`)) && !bytes.Contains(tag, []byte(`type="application/ld+json"`)) {
 				t.Errorf("%s has an inline script: %s", name, tag)
 			}
 		}
@@ -162,7 +197,8 @@ func TestTemplatesRunNoInlineScript(t *testing.T) {
 
 func TestStaticRejectsUnlisted(t *testing.T) {
 	app := staticApp(t)
-	for _, path := range []string{"/static/", "/static/missing.css", "/static/logo.png/extra", "/static/templates/login.html"} {
+	for _, path := range []string{"/static/", "/static/missing.css", "/static/logo.png/extra", "/static/templates/login.html",
+		staticVersionPrefix, staticVersionPrefix + "missing.css", staticVersionPrefix + "templates/login.html", "/static/v/" + staticVersion} {
 		recorder := httptest.NewRecorder()
 		app.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
 		if recorder.Code != http.StatusNotFound {
@@ -199,9 +235,9 @@ func TestLoginPageShowsLogo(t *testing.T) {
 	}
 	page := recorder.Body.String()
 	for _, want := range []string{
-		`class="signin-mark" src="/static/logo.png"`,
+		`class="signin-mark" src="` + assetPath("logo.png") + `"`,
 		`rel="icon" href="/favicon.ico" sizes="48x48"`,
-		`rel="icon" href="/static/icon-192.png" type="image/png" sizes="192x192"`,
+		`rel="icon" href="` + assetPath("icon-192.png") + `" type="image/png" sizes="192x192"`,
 		`<h1 class="signin-name">PlainMote</h1>`,
 	} {
 		if !strings.Contains(page, want) {

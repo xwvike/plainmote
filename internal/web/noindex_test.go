@@ -146,7 +146,7 @@ func TestPublicPagesAreIndexable(t *testing.T) {
 			t.Errorf("%s lacks its canonical address or description", page)
 		}
 	}
-	for _, asset := range []string{"/static/style.css", "/static/logo.png"} {
+	for _, asset := range []string{assetPath("style.css"), assetPath("logo.png")} {
 		if tag := get(asset).Header().Get("X-Robots-Tag"); tag != "" {
 			t.Errorf("%s carries X-Robots-Tag %q", asset, tag)
 		}
@@ -221,10 +221,10 @@ func TestNoScriptStylesheetIsLinkedAndServed(t *testing.T) {
 		app.handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://cfg.test"+target, nil))
 		return response
 	}
-	if !strings.Contains(get("/").Body.String(), `<noscript><link rel="stylesheet" href="/static/noscript.css"></noscript>`) {
+	if !strings.Contains(get("/").Body.String(), `<noscript><link rel="stylesheet" href="`+assetPath("noscript.css")+`"></noscript>`) {
 		t.Fatal("pages do not load the no-script stylesheet")
 	}
-	css := get("/static/noscript.css")
+	css := get(assetPath("noscript.css"))
 	if css.Code != http.StatusOK || !strings.Contains(css.Header().Get("Content-Type"), "text/css") {
 		t.Fatalf("noscript.css: %d %q", css.Code, css.Header().Get("Content-Type"))
 	}

@@ -8,7 +8,7 @@
   <div class="signin-language">{{template "theme-switch" .}}{{template "language-switch" .}}</div>
   <main class="signin">
     <div class="panel signin-card">
-      <img class="signin-mark" src="/static/logo.png" alt="" width="64" height="64" decoding="async">
+      <img class="signin-mark" src="{{asset "logo.png"}}" alt="" width="64" height="64" decoding="async">
       <h1 class="signin-name">PlainMote</h1>
       <p class="hint signin-lede">{{tr .Locale "login_lede"}}</p>
       <div class="rule"></div>
