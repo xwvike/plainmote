@@ -111,7 +111,7 @@ type APIToken struct {
 func (t APIToken) CanWrite() bool { return t.Scope == TokenScopeWrite }
 
 // ErrBadScope is a request for a scope that does not exist.
-var ErrBadScope = errors.New("unknown token scope")
+var ErrBadScope = refusal("unknown token scope")
 
 // CreateDeviceGrant starts a sign-in. It returns the device code, which only
 // the command line ever holds, and the user code, which its owner types into

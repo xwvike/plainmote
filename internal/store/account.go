@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -197,7 +196,7 @@ type ExportAllowance struct {
 
 // ErrExportLimit is returned when the account has used every export the
 // window allows.
-var ErrExportLimit = errors.New("export limit reached")
+var ErrExportLimit = refusal("export limit reached")
 
 func (d *Store) ExportAllowance(ctx context.Context, userID string, now time.Time) (ExportAllowance, error) {
 	if !validUUIDs(userID) {

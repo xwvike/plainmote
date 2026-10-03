@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -48,22 +47,22 @@ func validateFilename(name string) error {
 		return nil
 	}
 	if !utf8.ValidString(name) {
-		return errors.New("文件名必须是有效的 UTF-8 文本")
+		return refusal("文件名必须是有效的 UTF-8 文本")
 	}
 	if utf8.RuneCountInString(name) > filenameMaxRunes {
-		return fmt.Errorf("文件名最长 %d 个字符", filenameMaxRunes)
+		return refusalf("文件名最长 %d 个字符", filenameMaxRunes)
 	}
 	if name == "." || name == ".." {
-		return errors.New("文件名不能是 . 或 ..")
+		return refusal("文件名不能是 . 或 ..")
 	}
 	for _, r := range name {
 		switch {
 		case r == '/' || r == '\\':
-			return errors.New("文件名不能包含路径分隔符")
+			return refusal("文件名不能包含路径分隔符")
 		case unicode.IsControl(r):
-			return errors.New("文件名不能包含控制字符")
+			return refusal("文件名不能包含控制字符")
 		case unicode.Is(unicode.Bidi_Control, r):
-			return errors.New("文件名不能包含文字方向控制符")
+			return refusal("文件名不能包含文字方向控制符")
 		}
 	}
 	return nil
@@ -87,14 +86,14 @@ func normalizeResourceInput(name, filename string, content []byte, contentEncodi
 	if originURL != "" {
 		parsed, err := url.Parse(originURL)
 		if err != nil {
-			return resourceInput{}, fmt.Errorf("parse remote link: %w", err)
+			return resourceInput{}, refusalf("parse remote link: %v", err)
 		}
 		if err := upstream.ValidateURL(parsed); err != nil {
-			return resourceInput{}, err
+			return resourceInput{}, refusal(err.Error())
 		}
 		content = nil
 	} else if len(content) == 0 {
-		return resourceInput{}, errors.New("resource content must not be empty")
+		return resourceInput{}, refusal("resource content must not be empty")
 	}
 	contentType := ""
 	detectedEncoding := ""

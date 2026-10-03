@@ -221,11 +221,11 @@ func encodeWithEncoding(content, name string) ([]byte, string, error) {
 		var ok bool
 		canonical, ok = normalizeTextEncoding(name)
 		if !ok {
-			return nil, "", fmt.Errorf("不支持的文本编码 %q", name)
+			return nil, "", refusalf("不支持的文本编码 %q", name)
 		}
 	}
 	if !utf8.ValidString(content) {
-		return nil, "", errors.New("编辑器内容不是有效的 Unicode 文本")
+		return nil, "", refusal("编辑器内容不是有效的 Unicode 文本")
 	}
 	codec := textCodecs[canonical]
 	var encoded []byte
@@ -237,7 +237,7 @@ func encodeWithEncoding(content, name string) ([]byte, string, error) {
 	} else {
 		encoded, _, err = transform.Bytes(codec.codec.NewEncoder(), []byte(content))
 		if err != nil {
-			return nil, "", fmt.Errorf("内容含有 %s 无法表示的字符: %w", canonical, err)
+			return nil, "", refusalf("内容含有 %s 无法表示的字符: %v", canonical, err)
 		}
 	}
 	if len(codec.bom) > 0 {

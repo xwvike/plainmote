@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -29,12 +28,12 @@ type AdminActor struct {
 }
 
 var (
-	ErrAlreadySuspended = errors.New("already_suspended")
-	ErrNotSuspended     = errors.New("not_suspended")
-	ErrAlreadyTakenDown = errors.New("already_taken_down")
-	ErrNotTakenDown     = errors.New("not_taken_down")
-	ErrPlanProtected    = errors.New("plan_protected")
-	ErrPlanInUse        = errors.New("plan_in_use")
+	ErrAlreadySuspended = refusal("already_suspended")
+	ErrNotSuspended     = refusal("not_suspended")
+	ErrAlreadyTakenDown = refusal("already_taken_down")
+	ErrNotTakenDown     = refusal("not_taken_down")
+	ErrPlanProtected    = refusal("plan_protected")
+	ErrPlanInUse        = refusal("plan_in_use")
 )
 
 // auditEntry is one change as it is recorded. Label is what the target was
@@ -381,7 +380,7 @@ FROM plans p WHERE p.id <> $2 ORDER BY p.is_default DESC, p.name
 func (d *Store) AdminCreatePlan(ctx context.Context, actor AdminActor, name string, maxResources, maxStorage int64, reason string, now time.Time) (AdminPlan, error) {
 	plan := AdminPlan{ID: uuid.NewString(), Name: strings.TrimSpace(name), MaxResources: maxResources, MaxStorage: maxStorage}
 	if plan.Name == "" || utf8.RuneCountInString(plan.Name) > 100 || maxResources < 0 || maxStorage < 0 {
-		return AdminPlan{}, errors.New("invalid_plan")
+		return AdminPlan{}, refusal("invalid_plan")
 	}
 	err := d.withTx(ctx, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `
@@ -392,7 +391,7 @@ VALUES($1, $2, $3, $4, FALSE, $5, $5) ON CONFLICT (name) DO NOTHING
 			return fmt.Errorf("create plan: %w: %w", ErrInternal, err)
 		}
 		if tag.RowsAffected() == 0 {
-			return errors.New("plan_exists")
+			return refusal("plan_exists")
 		}
 		return auditTx(ctx, tx, actor, auditEntry{Action: "plan.create", TargetType: "plan", TargetID: plan.ID, Label: plan.Name, Reason: reason,
 			Detail: map[string]any{"max_resources": maxResources, "max_storage": maxStorage}}, now)
@@ -751,7 +750,7 @@ FROM links l JOIN resources r ON r.id = l.resource_id WHERE l.id = $1
 			return fmt.Errorf("revoke link: %w: %w", ErrInternal, err)
 		}
 		if tag.RowsAffected() == 0 {
-			return errors.New("already_revoked")
+			return refusal("already_revoked")
 		}
 		return auditTx(ctx, tx, actor, auditEntry{Action: "link.revoke", TargetType: "link", TargetID: id, Label: label, Reason: reason,
 			Detail: map[string]any{"resource_id": resourceID}}, now)

@@ -49,7 +49,7 @@ RETURNING id, github_id, login, name, avatar_url
 }
 
 // ErrSuspended is a sign-in by an account the operator has suspended.
-var ErrSuspended = errors.New("store: account suspended")
+var ErrSuspended = refusal("store: account suspended")
 
 func (d *Store) CreateSession(ctx context.Context, userID string, ttl time.Duration) (token, csrf string, expires time.Time, err error) {
 	token, err = randomSecret(32)

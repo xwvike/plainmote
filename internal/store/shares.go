@@ -144,13 +144,13 @@ func (d *Store) assertOwnsResource(ctx context.Context, ownerID, resourceID stri
 
 func validateShareTerms(ttl time.Duration, maxUses int) error {
 	if ttl < 0 {
-		return errors.New("存活时长不能为负")
+		return refusal("存活时长不能为负")
 	}
 	if ttl > maxShareTTL {
-		return errors.New("存活时长最长一年，如需更久请选择「永不过期」")
+		return refusal("存活时长最长一年，如需更久请选择「永不过期」")
 	}
 	if maxUses < 0 {
-		return errors.New("使用次数不能为负")
+		return refusal("使用次数不能为负")
 	}
 	return nil
 }
@@ -164,7 +164,7 @@ func shareExpiry(now time.Time, ttl time.Duration) *time.Time {
 }
 
 // ErrTakenDown refuses a new link for a resource the operator took down.
-var ErrTakenDown = errors.New("此资源已被下架，不能创建分享链接")
+var ErrTakenDown = refusal("此资源已被下架，不能创建分享链接")
 
 func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name string, ttl time.Duration, maxUses int) (Link, error) {
 	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {

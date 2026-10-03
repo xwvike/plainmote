@@ -219,15 +219,12 @@ func (q adminRequest) fail(status int, code, message string) {
 // failWith maps a store error to a response. What the service itself got
 // wrong stays in the process log.
 func (q adminRequest) failWith(err error) {
-	var quota *store.QuotaError
+	var refused *store.Refusal
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		q.fail(http.StatusNotFound, "not_found", "no such object")
-	case errors.Is(err, store.ErrInternal) || errors.As(err, &quota):
-		fmt.Fprintf(os.Stderr, "admin %s %s: %v\n", q.r.Method, q.r.URL.Path, err)
-		q.fail(http.StatusInternalServerError, "internal", "the service could not complete the request")
-	case adminErrorCode.MatchString(err.Error()):
-		q.fail(http.StatusConflict, err.Error(), err.Error())
+	case errors.As(err, &refused) && adminErrorCode.MatchString(refused.Error()):
+		q.fail(http.StatusConflict, refused.Error(), refused.Error())
 	default:
 		// Anything that is not one of the store's own codes is the service
 		// failing, whatever wrapped it.

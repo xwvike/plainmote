@@ -389,7 +389,7 @@ RETURNING v.content_key
 }
 
 // ErrCopyTakenDown refuses a new resource made from one the operator took down.
-var ErrCopyTakenDown = errors.New("此资源已被下架，不能另存为新资源")
+var ErrCopyTakenDown = refusal("此资源已被下架，不能另存为新资源")
 
 // LinkVersion is the version a live link last delivered.
 type LinkVersion struct {

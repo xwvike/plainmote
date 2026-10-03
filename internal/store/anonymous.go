@@ -53,7 +53,7 @@ const (
 )
 
 // Minutes and days, not Go durations: %s renders AnonymousMaxTTL as "720h0m0s".
-var errAnonymousTTL = fmt.Errorf("有效期最短 %d 分钟，最长 %d 天",
+var errAnonymousTTL = refusalf("有效期最短 %d 分钟，最长 %d 天",
 	int(AnonymousMinTTL/time.Minute), int(AnonymousMaxTTL/(24*time.Hour)))
 
 // CreateAnonymousPaste writes the body and the one time-limited link that
@@ -83,10 +83,10 @@ func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename
 		return Resource{}, Link{}, err
 	}
 	if len(content) == 0 {
-		return Resource{}, Link{}, errors.New("内容不能为空")
+		return Resource{}, Link{}, refusal("内容不能为空")
 	}
 	if len(content) > AnonymousMaxBytes {
-		return Resource{}, Link{}, fmt.Errorf("内容最大 %s", BytesText(AnonymousMaxBytes))
+		return Resource{}, Link{}, refusalf("内容最大 %s", BytesText(AnonymousMaxBytes))
 	}
 	// The bytes are stored as given. What a textarea does to line endings is
 	// the web layer's to undo; a paste piped in from a terminal is exactly
@@ -135,10 +135,10 @@ func (d *Store) CreateEncryptedPaste(ctx context.Context, creatorID string, enve
 		return Resource{}, Link{}, errAnonymousTTL
 	}
 	if len(envelope) > EncryptedMaxBytes {
-		return Resource{}, Link{}, fmt.Errorf("内容最大 %s", BytesText(AnonymousMaxBytes))
+		return Resource{}, Link{}, refusalf("内容最大 %s", BytesText(AnonymousMaxBytes))
 	}
 	if !ValidEnvelope(envelope) {
-		return Resource{}, Link{}, errors.New("加密内容格式无法识别")
+		return Resource{}, Link{}, refusal("加密内容格式无法识别")
 	}
 	return d.insertPaste(ctx, creatorID, "", envelope, EncryptedContentType, "", now, ttl)
 }

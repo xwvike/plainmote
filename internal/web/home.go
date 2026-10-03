@@ -200,9 +200,9 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	}
 	resource, link, err := a.db.CreateAnonymousPasteFor(r.Context(), creatorID, filename, []byte(content), ttl, time.Now().UTC())
 	if err != nil {
-		if errors.Is(err, store.ErrInternal) {
+		if !store.IsRefusal(err) {
 			fmt.Fprintf(os.Stderr, "create paste: %v\n", err)
-			a.refusePasteWith(w, r, boxContent, filename, ttlValue, "服务暂时无法完成该操作，请稍后重试。", http.StatusInternalServerError)
+			a.refusePasteWith(w, r, boxContent, filename, ttlValue, serviceFailure, http.StatusInternalServerError)
 			return
 		}
 		a.refusePasteWith(w, r, boxContent, filename, ttlValue, err.Error(), http.StatusBadRequest)

@@ -2,7 +2,6 @@ package web
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -105,7 +104,7 @@ func (a *App) handleEncryptedPaste(w http.ResponseWriter, r *http.Request) {
 	ttl, _ := parsePasteTTL(r.FormValue("ttl"))
 	resource, _, err := a.db.CreateEncryptedPaste(r.Context(), user.ID, envelope, ttl, time.Now().UTC())
 	if err != nil {
-		if errors.Is(err, store.ErrInternal) {
+		if !store.IsRefusal(err) {
 			fmt.Fprintf(os.Stderr, "create encrypted paste: %v\n", err)
 			writePlainError(w, http.StatusInternalServerError, translate(locale, "e2ee_failed"))
 			return

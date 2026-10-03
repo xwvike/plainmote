@@ -185,7 +185,7 @@ var ErrInternal = errors.New("store: internal error")
 // ErrQuotaExceeded marks the account reaching its own ceiling rather than the
 // service failing. The caller has to be able to tell the two apart: one is a
 // page telling the user what to free, the other is a 500.
-var ErrQuotaExceeded = errors.New("store: quota exceeded")
+var ErrQuotaExceeded = refusal("store: quota exceeded")
 
 // QuotaError carries the numbers behind the refusal. "over quota" on its own
 // leaves the user guessing which limit they hit and by how much, on a service

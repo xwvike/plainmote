@@ -72,20 +72,20 @@ func (a *App) apiFail(w http.ResponseWriter, status int, code, message string) {
 	a.writeAPI(w, status, apiError{Error: code, Message: message})
 }
 
-// apiRefused answers a write the store turned down, the way the resource page
-// does: a refusal about the request says so in full, a failure of the service
-// is named by one sentence and logged.
+// apiRefused answers what the store turned down, the way the resource page
+// does: a refusal about the request says so in full; anything else is the
+// service failing, named by one sentence and logged.
 func (a *App) apiRefused(w http.ResponseWriter, what string, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		a.apiFail(w, http.StatusNotFound, "not_found", "resource not found")
-	case errors.Is(err, store.ErrInternal):
-		fmt.Fprintf(os.Stderr, "api %s: %v\n", what, err)
-		a.apiFail(w, http.StatusInternalServerError, "internal", "the service could not complete this request")
 	case errors.Is(err, store.ErrQuotaExceeded):
 		a.apiFail(w, http.StatusRequestEntityTooLarge, "quota", localizePageError("en", err.Error()))
-	default:
+	case store.IsRefusal(err):
 		a.apiFail(w, http.StatusBadRequest, "refused", localizePageError("en", err.Error()))
+	default:
+		fmt.Fprintf(os.Stderr, "api %s: %v\n", what, err)
+		a.apiFail(w, http.StatusInternalServerError, "internal", "the service could not complete this request")
 	}
 }
 

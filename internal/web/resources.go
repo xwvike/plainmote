@@ -367,17 +367,22 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 	a.renderResourcePage(w, r, user, resource, r.URL.Query().Get("error"), http.StatusOK, nil, nil)
 }
 
-// writeErrorText is what the owner of a resource is shown when a write is
-// refused. A quota refusal or a bad field is about their own request and says
-// so in full; anything else is the service failing, and its text names database
-// relations and object keys, so it goes to stderr with a status to match.
+// writeErrorText is what the person whose request failed is told, and with
+// which status. A refusal - about their own request: a bad field, a quota
+// reached - is told in full. Anything else is the service failing, however it
+// got here, and its text, which can name tables, hosts and object keys, goes
+// to stderr behind one sentence. Nothing is shown merely because nobody
+// marked it internal.
 func (a *App) writeErrorText(what string, err error) (string, int) {
-	if errors.Is(err, store.ErrInternal) {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", what, err)
-		return "服务暂时无法完成该操作，请稍后重试。", http.StatusInternalServerError
+	if store.IsRefusal(err) {
+		return err.Error(), http.StatusBadRequest
 	}
-	return err.Error(), http.StatusBadRequest
+	fmt.Fprintf(os.Stderr, "%s: %v\n", what, err)
+	return serviceFailure, http.StatusInternalServerError
 }
+
+// serviceFailure is what a failure of the service is called on a page.
+const serviceFailure = "服务暂时无法完成该操作，请稍后重试。"
 
 // pendingBody is the body the user just submitted, for a save that was
 // refused: their work only exists in that request, so re-reading the stored
