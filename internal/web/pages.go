@@ -109,6 +109,7 @@ func (a *App) templateSet() *template.Template {
 		"asset":              assetPath,
 		"locationText":       locationText,
 		"resourceLabel":      resourceLabel,
+		"lockText":           lockText,
 		"locationShort":      locationShort,
 		"outcomeDescription": accessOutcomeDescription,
 		"remainText":         remainText,
@@ -577,4 +578,15 @@ func resourceLabel(locale string, resource Resource) string {
 		return translate(locale, "encrypted_content")
 	}
 	return translate(locale, "untitled_resource")
+}
+
+// lockText is an auto-lock time as the account page offers it.
+func lockText(locale string, minutes int) string {
+	if minutes >= 60 && minutes%60 == 0 {
+		if minutes == 60 {
+			return translate(locale, "keyring_one_hour")
+		}
+		return fmt.Sprintf(translate(locale, "keyring_hours"), minutes/60)
+	}
+	return fmt.Sprintf(translate(locale, "keyring_minutes"), minutes)
 }

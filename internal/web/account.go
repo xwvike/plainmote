@@ -68,6 +68,13 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, p
 	data.Error = pageError
 	data.DeleteOpen = deleteOpen
 	data.E2EE = a.e2eeEnabled(r, user.ID)
+	data.KeyringLockChoices = store.KeyringLockChoices
+	if keyring, err := a.db.Keyring(r.Context(), user.ID); err == nil {
+		data.Keyring = &keyring
+	} else if !errors.Is(err, store.ErrNotFound) {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
 	if data.APITokens, err = a.db.ListAPITokens(r.Context(), user.ID, now); err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return

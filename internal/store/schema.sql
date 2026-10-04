@@ -181,6 +181,28 @@ CREATE INDEX IF NOT EXISTS paste_claims_user_idx ON paste_claims(user_id);
 -- clears the ones already written and finds nothing to do after the first run.
 UPDATE resources SET name = '' WHERE name IN ('未命名资源', '匿名内容') AND filename = '';
 
+-- An account's master password keyring: the account key, generated in the
+-- browser, wrapped twice - by the key the master password derives and by the
+-- recovery key - and the salt and cost of that derivation. Neither the
+-- password, the recovery key nor the account key itself ever reaches here;
+-- what is kept is only good for unwrapping with one of them, in a browser or
+-- the command line. version moves with every change, so two devices cannot
+-- overwrite each other. lock_minutes is how long an unlocked browser keeps the
+-- key while idle.
+CREATE TABLE IF NOT EXISTS keyrings (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  kdf TEXT NOT NULL,
+  iterations INTEGER NOT NULL,
+  salt BYTEA NOT NULL,
+  wrapped_by_password BYTEA NOT NULL,
+  wrapped_by_recovery BYTEA NOT NULL,
+  lock_minutes INTEGER NOT NULL DEFAULT 15,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL,
+  password_at TIMESTAMPTZ NOT NULL,
+  recovery_at TIMESTAMPTZ NOT NULL
+);
+
 -- One row per data export, kept only as long as the rate window needs it.
 CREATE TABLE IF NOT EXISTS account_exports (
   id UUID PRIMARY KEY,

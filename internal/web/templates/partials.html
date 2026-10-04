@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@87.5,400..600&amp;family=Schibsted+Grotesk:wght@400..700&amp;display=swap">
   <link rel="stylesheet" href="{{asset "style.css"}}">
   <script defer src="{{asset "time.js"}}"></script>
+  {{if .SignedIn}}<meta name="plainmote-user" content="{{.User.ID}}">{{end}}
+  <script type="module" src="{{asset "lock.js"}}"></script>
   <noscript><link rel="stylesheet" href="{{asset "noscript.css"}}"></noscript>
   {{/* Sizes in multiples of 48, which is what a search result will take as
        the site's icon; /favicon.ico is also where one looks without asking. */}}

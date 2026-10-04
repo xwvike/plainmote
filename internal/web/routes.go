@@ -113,14 +113,18 @@ type pageData struct {
 	APITokens   []store.APIToken
 	RevokeToken store.APIToken
 	// E2EE is whether this account's quick shares are encrypted in the browser.
-	E2EE             bool
-	RegistrationMode auth.RegistrationMode
-	Resources        []Resource
-	Quota            store.UserQuota
-	Pager            pager
-	IsNew            bool
-	NewKind          string
-	SignedIn         bool
+	E2EE bool
+	// Keyring is the account's master password, if it has one, and
+	// KeyringLockChoices the idle times it may be kept unlocked.
+	Keyring            *store.Keyring
+	KeyringLockChoices []int
+	RegistrationMode   auth.RegistrationMode
+	Resources          []Resource
+	Quota              store.UserQuota
+	Pager              pager
+	IsNew              bool
+	NewKind            string
+	SignedIn           bool
 	// Indexable is set by the one page that is meant to be found. The response
 	// header carries the same exception; both have to agree or the meta tag
 	// quietly undoes it.
@@ -299,6 +303,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(accountExportPath, a.handleAccountExport)
 	mux.HandleFunc(accountDeletePath, a.handleAccountDelete)
 	mux.HandleFunc(accountTokensPath, a.handleAccountTokens)
+	mux.HandleFunc(accountKeyringPath, a.handleAccountKeyring)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc(apiPrefix, a.handleAPI)
 	mux.HandleFunc(cliPath, a.handleCLI)

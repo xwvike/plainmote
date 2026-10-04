@@ -481,12 +481,12 @@ details.pan[open] .chev { transform: rotate(90deg); }
 a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 /* The slot a message is put into, which takes no room while it is empty. */
 [data-part="flash"], [data-part="notices"] { display: contents; }
-.dlg > header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-.dlg > header b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
-.dlg > header .x { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--r); color: var(--ink3); font: 400 16px var(--sans); text-decoration: none; }
-.dlg > header .x:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
-.dlg > .body { padding: 12px; display: grid; gap: 12px; }
-.dlg > footer { display: flex; justify-content: flex-end; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px dashed var(--line2); background: var(--head); }
+.dlg > header, .dlg > form > header { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.dlg > header b, .dlg > form > header b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
+.dlg > header .x, .dlg > form > header .x { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--r); color: var(--ink3); font: 400 16px var(--sans); text-decoration: none; }
+.dlg > header .x:hover, .dlg > form > header .x:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
+.dlg > .body, .dlg > form > .body { padding: 12px; display: grid; gap: 12px; }
+.dlg > footer, .dlg > form > footer { display: flex; justify-content: flex-end; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px dashed var(--line2); background: var(--head); }
 .rr { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .rr label { display: flex; gap: 6px; align-items: center; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 .rr input[type="radio"] { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); flex: none; }
@@ -581,6 +581,30 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
    the text as it was sent, in the address face. */
 .e2ee-set { display: grid; gap: 10px; justify-items: start; }
 .e2ee-set ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+/* The master password. Rows of what is set and what can be done to it, the
+   unlock form above them while locked, and the quick share switch below. */
+.keyring-unlock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; width: 100%; }
+.keyring-unlock input { width: 200px; max-width: 100%; }
+.keyring-unlock .err:empty { display: none; }
+.kv-rows { display: grid; width: 100%; }
+.kv-rows > div { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 32px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.kv-rows > div:last-child { border-bottom: 0; }
+.kv-rows .k { color: var(--ink2); font-size: 12px; }
+.kv-rows .v { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.kv-rows .v select { width: auto; }
+.e2ee-set .sep { width: 100%; margin: 2px 0; border: 0; border-top: 1px solid var(--line2); }
+.qs-enc { display: grid; gap: 8px; justify-items: start; width: 100%; }
+.qs-head { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.dlg header .steps { margin-left: auto; font: 400 11px var(--mono); color: var(--ink3); }
+.dlg .field { display: grid; gap: 4px; font-size: 12px; color: var(--ink2); }
+.dlg .field input { width: 100%; box-sizing: border-box; }
+.dlg .err:empty, .dlg .hint:empty { display: none; }
+.dlg .check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+/* The recovery key, on the terminal's dark ground like every other string
+   meant to be copied exactly. */
+.rk { display: block; padding: 10px 12px; border: 1px solid var(--term-line); border-radius: var(--r); background: var(--term); color: var(--term-ink); font: 500 13px/1.8 var(--mono); letter-spacing: .04em; overflow-wrap: anywhere; user-select: all; }
+.rk-acts { display: flex; gap: 8px; margin: 0; }
+@media (max-width: 640px) { .kv-rows > div { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 6px 0; } }
 /* A disclosure that reads as a line of text with a chevron, not a box. */
 .more > summary { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--accent); cursor: pointer; list-style: none; }
 .more > summary::-webkit-details-marker { display: none; }
