@@ -81,6 +81,8 @@ type harness struct {
 	user   store.User
 	server *httptest.Server
 	config string
+	// env is added to what every run sees.
+	env map[string]string
 }
 
 func newHarness(t *testing.T) *harness {
@@ -122,6 +124,9 @@ func (h *harness) run(c *cli, args ...string) (int, string, string) {
 		c.stdin = strings.NewReader("")
 	}
 	env := map[string]string{"PLAINMOTE_CONFIG_DIR": h.config, "PLAINMOTE_SERVER": h.server.URL, "LANG": "en_US.UTF-8"}
+	for key, value := range h.env {
+		env[key] = value
+	}
 	c.getenv = func(name string) string { return env[name] }
 	if c.openURL == nil {
 		c.openURL = func(string) bool { return false }

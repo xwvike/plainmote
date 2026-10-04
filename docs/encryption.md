@@ -7,7 +7,7 @@ PlainMote can encrypt content in the browser so that the service stores only cip
 - **Encrypted quick shares**: each quick share gets a random key that travels in the link after `#`, or is derived from a four-character code. This is described in the privacy policy and the account page.
 - **Master password**: a password only the account owner knows. It protects an account key, which in turn protects the keys of encrypted resources. This document describes it.
 
-Encrypted resources can be viewed, edited, shared and exported in the browser. The command line does not open them yet.
+Encrypted resources can be viewed, edited, shared and exported in the browser. The command line reads, edits, lists and creates them, asking for the master password each time or reading it from `PLAINMOTE_MASTER_PASSWORD`; it does not keep the account key.
 
 ## Goals
 
@@ -41,7 +41,7 @@ AK ─ wraps ─▶ LK (so the owner can show the full link again)
 
 ## Algorithms
 
-All cryptography is done by WebCrypto in the browser, with no third-party library. The command line will implement the same formats with the Go standard library.
+All cryptography is done by WebCrypto in the browser, with no third-party library. The command line implements the same formats with the Go standard library.
 
 - **Key derivation**: PBKDF2-HMAC-SHA-256, 600,000 iterations, 16-byte random salt. The algorithm name and the iteration count are stored with the keyring, so the count can be raised without breaking existing keyrings. The password is normalised to Unicode NFC before derivation.
 - **Encryption and wrapping**: AES-256-GCM with a fresh random 96-bit IV each time. A wrapped key is `IV (12) | ciphertext (32) | tag (16)`, 60 bytes.

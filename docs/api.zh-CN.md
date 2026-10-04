@@ -117,6 +117,7 @@
 | `POST` | `/api/v1/device/code` | 无需令牌 | 申请验证码 |
 | `POST` | `/api/v1/device/token` | 无需令牌 | 换取令牌 |
 | `GET` | `/api/v1/me` | 只读 | 当前账号与令牌 |
+| `GET` | `/api/v1/keyring` | 只读 | 账号的密钥环，用于端到端加密资源 |
 | `DELETE` | `/api/v1/token` | 只读 | 撤销当前令牌 |
 | `GET` | `/api/v1/resources` | 只读 | 资源列表，或解析资源引用 |
 | `GET` | `/api/v1/resources/{id}` | 只读 | 资源详情 |
@@ -140,6 +141,8 @@
 | `remote` | boolean | 是否为远程资源 |
 | `editable` | boolean | 是否为可以编辑的文本内容 |
 | `encrypted` | boolean | 是否为端到端加密的内容；否时省略 |
+| `sealed_key` | string | 仅以主密码加密的资源有此字段：经账号密钥封装的内容密钥，不带填充的 Base64URL。此类资源的 `name` 与 `filename` 为空，类型为 `application/vnd.plainmote.sealed` |
+| `sealed_meta` | string | 与 `sealed_key` 同时出现：加密后的名称、文件名与内容类型，不带填充的 Base64URL |
 | `taken_down` | boolean | 是否已被运营者下架；否时省略 |
 | `expires_at` | time | 仅快速分享有此字段，为其删除时间。快速分享在资源页转为资源之前为只读（`editable` 为 false） |
 | `url` | string | 资源页地址 |
@@ -151,8 +154,22 @@
 `GET /api/v1/me`
 
 ```json
-{ "login": "mira", "scope": "write", "expires_at": "2026-12-31T08:20:00Z", "device": "mira-mbp", "server_version": "adbcdce8a464" }
+{ "login": "mira", "user_id": "5f0c…", "scope": "write", "expires_at": "2026-12-31T08:20:00Z", "device": "mira-mbp", "server_version": "adbcdce8a464" }
 ```
+
+`user_id` 为账号 ID，账号各封装密钥的附加数据中包含此值。
+
+### 密钥环
+
+`GET /api/v1/keyring`
+
+按保存时的形式返回主密码所解锁的密钥环：分别经主密钥与恢复密钥封装的账号密钥，以及派生主密钥所用的参数。其中任何内容在没有主密码或恢复密钥时均无法打开。未设置主密码的账号返回 `404`。
+
+```json
+{ "kdf": "pbkdf2-sha256", "iterations": 600000, "salt": "…", "wrapped_by_password": "…", "wrapped_by_recovery": "…", "lock_minutes": 15, "version": 1, "user_id": "5f0c…" }
+```
+
+格式与附加数据见 [encryption.zh-CN.md](encryption.zh-CN.md)。
 
 ### 撤销当前令牌
 
@@ -189,7 +206,7 @@
 | `X-PlainMote-Resource-Version` | 版本号，例如 `5` |
 | `X-PlainMote-Encoding` | 文本编码；非文本内容不返回 |
 
-远程资源返回 `409`（`reference`）。
+远程资源返回 `409`（`reference`）。加密资源返回其密文，由客户端使用 `sealed_key` 解密。
 
 ### 保存为新版本
 
@@ -219,6 +236,8 @@
 
 内容大小上限由部署的 `PLAINMOTE_MAX_CONTENT_MIB` 决定。名称与文件名不变；历史版本、容量与冲突检查规则与网页保存相同。
 
+对于加密资源，请求体为以该资源内容密钥加密后的新内容，并须附带请求头 `X-PlainMote-Sealed-Meta`，即与之对应的加密元数据，采用不带填充的 Base64URL。由于同一内容每次加密得到的字节均不相同，每次保存都会产生新版本；基于非当前版本的保存一律视为冲突。
+
 ### 新建资源
 
 `POST /api/v1/resources`
@@ -233,6 +252,8 @@
 | `encoding` | 文本编码，可选；省略时由服务端识别 |
 
 成功时返回 `201` 与资源对象。
+
+新建加密资源时，内容在客户端加密，并以下列三个字段代替 `name`、`filename` 与 `encoding`：`id`，新资源的 ID（由客户端生成的 UUID，加密与之绑定）；`sealed_key`，经账号密钥封装的内容密钥；`sealed_meta`，加密后的元数据。后两者均采用不带填充的 Base64URL。
 
 ### 创建快速分享
 

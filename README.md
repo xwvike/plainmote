@@ -64,7 +64,11 @@ plainmote cat nginx.conf | grep listen
 tail -n 200 app.log | plainmote push - --name app.log
 plainmote push ./nginx.conf --to nginx.conf
 plainmote share ./app.log --ttl 1d              # make a quick share; prints only its link
+plainmote push ./prod.env --encrypt             # create an end-to-end encrypted resource
+plainmote ls --decrypt prod                     # list with encrypted names decrypted
 ```
+
+Commands that open an encrypted resource ask for the master password, or read it from `PLAINMOTE_MASTER_PASSWORD`.
 
 A resource is named by its ID, an ID prefix of at least six characters, or its exact name or filename; when several resources match, the candidates are listed instead of one being chosen.
 

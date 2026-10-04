@@ -88,8 +88,16 @@ type resource struct {
 	TakenDown bool      `json:"taken_down"`
 	// ExpiresAt marks a quick share: read only until kept as a resource.
 	ExpiresAt *time.Time `json:"expires_at"`
-	URL       string     `json:"url"`
+	// SealedKey and SealedMeta mark an end-to-end encrypted resource.
+	SealedKey  string `json:"sealed_key"`
+	SealedMeta string `json:"sealed_meta"`
+	URL        string `json:"url"`
 }
+
+// isSealed is an end-to-end encrypted resource, which this command line
+// opens with the master password. An encrypted quick share is not one: its
+// key travels in its link.
+func (r resource) isSealed() bool { return r.SealedKey != "" }
 
 // label is how a resource is named in messages.
 func (r resource) label() string {
@@ -245,6 +253,36 @@ func (c *client) write(ctx context.Context, id string, body []byte, base int, en
 	defer response.Body.Close()
 	var result saveResult
 	return result, json.NewDecoder(response.Body).Decode(&result)
+}
+
+// createWith makes a resource from a multipart form of the given fields and
+// a content file.
+func (c *client) createWith(ctx context.Context, fields map[string]string, body []byte) (resource, error) {
+	var form bytes.Buffer
+	writer := multipart.NewWriter(&form)
+	for key, value := range fields {
+		_ = writer.WriteField(key, value)
+	}
+	part, err := writer.CreateFormFile("content", "content")
+	if err != nil {
+		return resource{}, err
+	}
+	if _, err := part.Write(body); err != nil {
+		return resource{}, err
+	}
+	if err := writer.Close(); err != nil {
+		return resource{}, err
+	}
+	response, err := c.do(ctx, http.MethodPost, "/api/v1/resources", &form, map[string]string{"Content-Type": writer.FormDataContentType()})
+	if err != nil {
+		return resource{}, err
+	}
+	if response.StatusCode != http.StatusCreated {
+		return resource{}, readError(response)
+	}
+	defer response.Body.Close()
+	var made resource
+	return made, json.NewDecoder(response.Body).Decode(&made)
 }
 
 func (c *client) create(ctx context.Context, name, filename string, body []byte) (resource, error) {

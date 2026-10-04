@@ -144,9 +144,22 @@ func (c *cli) edit(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	var held contentStore = plainContent{api: api, id: target.ID}
 	switch {
 	case target.Remote:
 		return fmt.Errorf("%s", msg("is_reference", target.label()))
+	case target.isSealed():
+		// Decrypted here, edited in a file of this machine's own, and
+		// encrypted again before it leaves.
+		opened, err := c.openSealed(ctx, api, target)
+		if err != nil {
+			return err
+		}
+		if !textLike(opened.meta.Type) {
+			return fmt.Errorf("%s", msg("not_editable", sealedLabel(opened.meta, target.ID)))
+		}
+		target.Name, target.Filename = opened.meta.Name, opened.meta.Filename
+		held = sealedContent{opened: opened, api: api}
 	case target.Encrypted:
 		return fmt.Errorf("%s", msg("encrypted", target.label()))
 	case target.ExpiresAt != nil:
@@ -154,7 +167,7 @@ func (c *cli) edit(ctx context.Context, args []string) error {
 	case !target.Editable:
 		return fmt.Errorf("%s", msg("not_editable", target.label()))
 	}
-	current, err := api.read(ctx, target.ID)
+	current, err := held.read(ctx)
 	if err != nil {
 		return err
 	}
@@ -194,10 +207,10 @@ func (c *cli) edit(ctx context.Context, args []string) error {
 			fmt.Fprintln(c.stdout, msg("edit_unchanged"))
 			return nil
 		}
-		result, err := api.write(ctx, target.ID, edited, current.Version, current.Encoding)
+		result, err := held.write(ctx, edited, current.Version, current.Encoding)
 		var refusal *apiError
 		if errors.As(err, &refusal) && refusal.Code == "conflict" {
-			next, again, err := c.conflict(ctx, api, target, edited, file, refusal.CurrentVersion)
+			next, again, err := c.conflict(ctx, held, edited, file, refusal.CurrentVersion)
 			if err != nil {
 				keep = true
 				if !errors.Is(err, errKept) {
@@ -241,9 +254,9 @@ type conflicted struct {
 // the person's edit differs from what is current now, and lets them choose:
 // save over it, edit again on top of it, or keep the file. Without someone
 // at the terminal to ask, the file is kept.
-func (c *cli) conflict(ctx context.Context, api *client, target resource, edited []byte, file string, currentVersion int) (conflicted, bool, error) {
+func (c *cli) conflict(ctx context.Context, held contentStore, edited []byte, file string, currentVersion int) (conflicted, bool, error) {
 	fmt.Fprintln(c.stderr, msg("conflict", currentVersion))
-	latest, err := api.read(ctx, target.ID)
+	latest, err := held.read(ctx)
 	if err != nil {
 		return conflicted{}, false, err
 	}
@@ -257,7 +270,7 @@ func (c *cli) conflict(ctx context.Context, api *client, target resource, edited
 	for {
 		switch c.ask(msg("conflict_prompt", latest.Version, latest.Version)) {
 		case "o":
-			saved, err := api.write(ctx, target.ID, edited, latest.Version, latest.Encoding)
+			saved, err := held.write(ctx, edited, latest.Version, latest.Encoding)
 			return conflicted{saved: saved}, false, err
 		case "r":
 			mine := file + ".mine"
@@ -300,4 +313,34 @@ func (c *cli) printDiff(before, after string) {
 			fmt.Fprintf(c.stderr, "  … (%d)\n", line.Skipped)
 		}
 	}
+}
+
+// contentStore is where an edit is read from and saved to: as it is stored,
+// or through encryption.
+type contentStore interface {
+	read(ctx context.Context) (content, error)
+	write(ctx context.Context, body []byte, base int, encoding string) (saveResult, error)
+}
+
+type plainContent struct {
+	api *client
+	id  string
+}
+
+func (p plainContent) read(ctx context.Context) (content, error) { return p.api.read(ctx, p.id) }
+
+func (p plainContent) write(ctx context.Context, body []byte, base int, encoding string) (saveResult, error) {
+	return p.api.write(ctx, p.id, body, base, encoding)
+}
+
+// sealedContent is an encrypted resource's content, kept as UTF-8 text.
+type sealedContent struct {
+	opened sealed
+	api    *client
+}
+
+func (s sealedContent) read(ctx context.Context) (content, error) { return s.opened.read(ctx, s.api) }
+
+func (s sealedContent) write(ctx context.Context, body []byte, base int, _ string) (saveResult, error) {
+	return s.opened.write(ctx, s.api, body, base)
 }

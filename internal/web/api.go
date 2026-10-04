@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -107,9 +108,11 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case path == "me" && r.Method == http.MethodGet:
 		a.writeAPI(w, http.StatusOK, map[string]any{
-			"login": user.Login, "scope": token.Scope, "expires_at": token.ExpiresAt,
+			"login": user.Login, "user_id": user.ID, "scope": token.Scope, "expires_at": token.ExpiresAt,
 			"device": token.DeviceName, "server_version": a.cfg.Version,
 		})
+	case path == "keyring" && r.Method == http.MethodGet:
+		a.apiKeyring(w, r, user)
 	case path == "token" && r.Method == http.MethodDelete:
 		if err := a.db.RevokeAPITokenByID(r.Context(), token.ID); err != nil {
 			a.apiRefused(w, "revoke token", err)
@@ -202,7 +205,12 @@ type apiResource struct {
 	// ExpiresAt is set on a quick share not yet kept: read only, and
 	// deleted at that time.
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
-	URL       string     `json:"url"`
+	// SealedKey and SealedMeta are set on an end-to-end encrypted resource:
+	// its content key wrapped by the account key, and its encrypted
+	// metadata (docs/encryption.md). Its content is ciphertext.
+	SealedKey  string `json:"sealed_key,omitempty"`
+	SealedMeta string `json:"sealed_meta,omitempty"`
+	URL        string `json:"url"`
 }
 
 func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
@@ -213,6 +221,7 @@ func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
 		UpdatedAt: resource.UpdatedAt, Remote: resource.Remote(), Encrypted: encrypted,
 		Editable:  resource.Editable() && !encrypted && !resource.Remote() && !resource.QuickShare(),
 		TakenDown: resource.TakenDown, ExpiresAt: resource.ExpiresAt, URL: a.baseURL(r) + "/resources/" + resource.ID,
+		SealedKey: b64url(resource.SealedKey), SealedMeta: b64url(resource.SealedMeta),
 	}
 }
 
@@ -259,10 +268,6 @@ func (a *App) apiReadContent(w http.ResponseWriter, r *http.Request, user User, 
 	}
 	if resource.Remote() {
 		a.apiFail(w, http.StatusConflict, "reference", "this resource points at a remote address and has no stored content")
-		return
-	}
-	if resource.Sealed() {
-		a.apiFail(w, http.StatusConflict, "encrypted", "this resource is end-to-end encrypted; this version of the command line cannot open it")
 		return
 	}
 	body, size, err := a.db.OpenContent(r.Context(), resource)
@@ -312,7 +317,11 @@ func (a *App) apiWriteContent(w http.ResponseWriter, r *http.Request, user User,
 		a.apiFail(w, http.StatusPreconditionRequired, "precondition_required", "send the version the edit started from in If-Match, or * to save over the current one")
 		return
 	}
-	body, ok := a.apiBody(w, r)
+	if resource.Sealed() {
+		a.apiWriteSealed(w, r, user, resource, base)
+		return
+	}
+	body, ok := a.apiBody(w, r, a.cfg.MaxContent)
 	if !ok {
 		return
 	}
@@ -334,12 +343,12 @@ func (a *App) apiWriteContent(w http.ResponseWriter, r *http.Request, user User,
 }
 
 // apiBody reads a request body no larger than a resource may be.
-func (a *App) apiBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
-	if r.ContentLength > a.cfg.MaxContent {
+func (a *App) apiBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, bool) {
+	if r.ContentLength > limit {
 		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
 		return nil, false
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, a.cfg.MaxContent))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
@@ -376,8 +385,24 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	defer file.Close()
-	content, err := io.ReadAll(io.LimitReader(file, a.cfg.MaxContent+1))
-	if err != nil || int64(len(content)) > a.cfg.MaxContent {
+	content, err := io.ReadAll(io.LimitReader(file, a.cfg.MaxContent+sealedOverhead+1))
+	if err != nil || int64(len(content)) > a.cfg.MaxContent+sealedOverhead {
+		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+		return
+	}
+	// Encrypted on the client: stored under the id its encryption is bound
+	// to, with its wrapped key and encrypted metadata.
+	if r.FormValue("sealed_key") != "" {
+		resource, err := a.db.CreateSealedResource(r.Context(), user.ID, r.FormValue("id"),
+			store.SealedPart{Content: content, Meta: base64Field(r, "sealed_meta")}, base64Field(r, "sealed_key"))
+		if err != nil {
+			a.apiRefused(w, "create sealed resource", err)
+			return
+		}
+		a.writeAPI(w, http.StatusCreated, a.apiResourceView(r, resource))
+		return
+	}
+	if int64(len(content)) > a.cfg.MaxContent {
 		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
 		return
 	}
@@ -537,4 +562,61 @@ func (a *App) readAPIJSON(w http.ResponseWriter, r *http.Request, into any) bool
 		return false
 	}
 	return true
+}
+
+// sealedOverhead is what encryption adds to content: the magic, the IV and
+// the tag.
+const sealedOverhead = 64
+
+func b64url(value []byte) string {
+	if len(value) == 0 {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(value)
+}
+
+// apiKeyring hands the command line the account's keyring, wrapped as it is
+// kept: what it needs to unlock with the master password, and nothing that
+// opens without it.
+func (a *App) apiKeyring(w http.ResponseWriter, r *http.Request, user User) {
+	keyring, err := a.db.Keyring(r.Context(), user.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		a.apiFail(w, http.StatusNotFound, "not_found", "this account has no master password")
+		return
+	}
+	if err != nil {
+		a.apiRefused(w, "read keyring", err)
+		return
+	}
+	a.writeAPI(w, http.StatusOK, struct {
+		keyringView
+		UserID string `json:"user_id"`
+	}{keyringJSON(keyring), user.ID})
+}
+
+// apiWriteSealed saves content the command line encrypted: the body is the
+// ciphertext, and X-PlainMote-Sealed-Meta the encrypted metadata to go with
+// it.
+func (a *App) apiWriteSealed(w http.ResponseWriter, r *http.Request, user User, resource Resource, base int) {
+	meta, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(r.Header.Get("X-PlainMote-Sealed-Meta")))
+	if err != nil || len(meta) == 0 {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", "an encrypted resource is saved with its encrypted metadata in X-PlainMote-Sealed-Meta")
+		return
+	}
+	body, ok := a.apiBody(w, r, a.cfg.MaxContent+sealedOverhead)
+	if !ok {
+		return
+	}
+	result, err := a.db.SaveSealedResource(r.Context(), user.ID, resource.ID, base, store.SealedPart{Content: body, Meta: meta})
+	if conflict := (*store.VersionConflict)(nil); errors.As(err, &conflict) {
+		a.writeAPI(w, http.StatusPreconditionFailed, apiError{
+			Error: "conflict", Message: "this resource was saved elsewhere while you were editing", CurrentVersion: conflict.Current,
+		})
+		return
+	}
+	if err != nil {
+		a.apiRefused(w, "save sealed content", err)
+		return
+	}
+	a.writeAPI(w, http.StatusOK, map[string]any{"version": result.Version, "new_version": result.NewVersion, "trimmed": result.Trimmed})
 }

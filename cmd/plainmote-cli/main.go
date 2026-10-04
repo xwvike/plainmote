@@ -36,15 +36,22 @@ type cli struct {
 	runEditor func(command []string) error
 	// findEditors lists the editors installed here, to choose from.
 	findEditors func() []editorChoice
+	// readPassword asks for the master password without echo; nil where
+	// nobody can be asked.
+	readPassword func(prompt string) (string, error)
+	// accountKey is the account key once unlocked, for the rest of this run
+	// only - it is never written anywhere.
+	accountKey []byte
 }
 
 func main() {
 	app := &cli{
 		stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, getenv: os.Getenv,
-		interactive: isTerminal(os.Stdin) && isTerminal(os.Stdout),
-		openURL:     openBrowser,
-		runEditor:   runEditorProcess,
-		findEditors: findInstalledEditors,
+		interactive:  isTerminal(os.Stdin) && isTerminal(os.Stdout),
+		openURL:      openBrowser,
+		runEditor:    runEditorProcess,
+		findEditors:  findInstalledEditors,
+		readPassword: readTerminalPassword,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

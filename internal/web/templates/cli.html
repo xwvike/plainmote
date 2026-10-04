@@ -50,10 +50,10 @@
       <div class="pb">
         <dl class="cmds">
           <dt>plainmote login</dt><dd>{{tr .Locale "cli_cmd_login"}}</dd>
-          <dt>plainmote ls [{{tr .Locale "cli_arg_query"}}]</dt><dd>{{tr .Locale "cli_cmd_ls"}}</dd>
+          <dt>plainmote ls [{{tr .Locale "cli_arg_query"}}] [--decrypt]</dt><dd>{{tr .Locale "cli_cmd_ls"}}</dd>
           <dt>plainmote edit &lt;{{tr .Locale "cli_arg_resource"}}&gt;</dt><dd>{{tr .Locale "cli_cmd_edit"}}</dd>
           <dt>plainmote cat &lt;{{tr .Locale "cli_arg_resource"}}&gt;</dt><dd>{{tr .Locale "cli_cmd_cat"}}</dd>
-          <dt>plainmote push &lt;{{tr .Locale "cli_arg_file"}}&gt; [--to &lt;{{tr .Locale "cli_arg_resource"}}&gt;]</dt><dd>{{tr .Locale "cli_cmd_push"}}</dd>
+          <dt>plainmote push &lt;{{tr .Locale "cli_arg_file"}}&gt; [--to &lt;{{tr .Locale "cli_arg_resource"}}&gt;] [--encrypt]</dt><dd>{{tr .Locale "cli_cmd_push"}}</dd>
           <dt>plainmote share &lt;{{tr .Locale "cli_arg_file"}}&gt; [--ttl 1d]</dt><dd>{{tr .Locale "cli_cmd_share"}}</dd>
           <dt>plainmote config</dt><dd>{{tr .Locale "cli_cmd_config"}}</dd>
           <dt>plainmote logout</dt><dd>{{tr .Locale "cli_cmd_logout"}}</dd>
@@ -70,6 +70,7 @@
         {{if or (eq .CLIPlatform "windows") (not .CLIPlatform)}}<p>{{tr .Locale "cli_tip_editor_windows"}}</p>
         <code class="term-block"><b>&gt;</b> [Environment]::SetEnvironmentVariable("EDITOR", "code", "User")</code>{{end}}
         <p class="hint">{{tr .Locale "cli_tip_editor_more"}}</p>
+        <p class="hint">{{tr .Locale "cli_tip_encrypted"}}</p>
       </div>
     </section>
   </main>

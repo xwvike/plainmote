@@ -117,6 +117,7 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | `POST` | `/api/v1/device/code` | no token | Request a code |
 | `POST` | `/api/v1/device/token` | no token | Exchange the code for a token |
 | `GET` | `/api/v1/me` | read | The account and token in use |
+| `GET` | `/api/v1/keyring` | read | The account's keyring, for end-to-end encrypted resources |
 | `DELETE` | `/api/v1/token` | read | Revoke the token in use |
 | `GET` | `/api/v1/resources` | read | List resources, or resolve a reference |
 | `GET` | `/api/v1/resources/{id}` | read | Resource details |
@@ -140,6 +141,8 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | `remote` | boolean | Whether it is a remote resource |
 | `editable` | boolean | Whether it is text that can be edited |
 | `encrypted` | boolean | Whether the content is end-to-end encrypted; omitted when false |
+| `sealed_key` | string | Present only on a resource encrypted under the master password: its content key wrapped by the account key, Base64URL without padding. Such a resource has an empty `name` and `filename` and the type `application/vnd.plainmote.sealed` |
+| `sealed_meta` | string | Present with `sealed_key`: the encrypted name, filename and content type, Base64URL without padding |
 | `taken_down` | boolean | Whether the operator has taken it down; omitted when false |
 | `expires_at` | time | Present only on a quick share: when it is deleted. A quick share is read only (`editable` is false) until it is converted into a resource on its page |
 | `url` | string | Address of the resource page |
@@ -151,8 +154,22 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 `GET /api/v1/me`
 
 ```json
-{ "login": "mira", "scope": "write", "expires_at": "2026-12-31T08:20:00Z", "device": "mira-mbp", "server_version": "adbcdce8a464" }
+{ "login": "mira", "user_id": "5f0c…", "scope": "write", "expires_at": "2026-12-31T08:20:00Z", "device": "mira-mbp", "server_version": "adbcdce8a464" }
 ```
+
+`user_id` is the account's ID, which the additional data of the account's wrapped keys includes.
+
+### The keyring
+
+`GET /api/v1/keyring`
+
+Returns the keyring the master password unlocks, as it is kept: the account key wrapped by the master key and by the recovery key, and what the master key is derived with. Nothing in it opens without the master password or the recovery key. An account without a master password gets `404`.
+
+```json
+{ "kdf": "pbkdf2-sha256", "iterations": 600000, "salt": "…", "wrapped_by_password": "…", "wrapped_by_recovery": "…", "lock_minutes": 15, "version": 1, "user_id": "5f0c…" }
+```
+
+Formats and additional data are described in [encryption.md](encryption.md).
 
 ### Revoking the token in use
 
@@ -189,7 +206,7 @@ Returns the current content as raw bytes, in the encoding and line endings it wa
 | `X-PlainMote-Resource-Version` | Version number, such as `5` |
 | `X-PlainMote-Encoding` | Text encoding; absent for content that is not text |
 
-A remote resource returns `409` (`reference`).
+A remote resource returns `409` (`reference`). An encrypted resource returns its ciphertext; it is decrypted on the client with its `sealed_key`.
 
 ### Saving a new version
 
@@ -219,6 +236,8 @@ When the resource has since been saved as a newer version, the response is `412`
 
 The size limit is the deployment's `PLAINMOTE_MAX_CONTENT_MIB`. The name and filename are unchanged; the rules for earlier versions, storage and conflicts are the same as for saving in the browser.
 
+For an encrypted resource, the body is the new content encrypted under the resource's content key, and the request also carries `X-PlainMote-Sealed-Meta`: the encrypted metadata to go with it, Base64URL without padding. As encrypting the same content twice gives different bytes, every save creates a version, and a save against any version but the current one is a conflict.
+
 ### Creating a resource
 
 `POST /api/v1/resources`
@@ -233,6 +252,8 @@ The request body is `multipart/form-data`:
 | `encoding` | Optional text encoding; detected by the service when omitted |
 
 Returns `201` with the resource object on success.
+
+An encrypted resource is created with the content encrypted on the client and three more fields instead of `name`, `filename` and `encoding`: `id`, the new resource's ID (a UUID chosen by the client, as its encryption is bound to it); `sealed_key`, its content key wrapped by the account key; and `sealed_meta`, its encrypted metadata, both Base64URL without padding.
 
 ### Making a quick share
 

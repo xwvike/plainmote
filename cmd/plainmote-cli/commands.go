@@ -246,7 +246,10 @@ func (c *cli) serverCommand(args []string) error {
 }
 
 func (c *cli) ls(ctx context.Context, args []string) error {
-	args, server, err := c.flags("ls", args, nil)
+	var decrypt bool
+	args, server, err := c.flags("ls", args, func(set *flag.FlagSet) {
+		set.BoolVar(&decrypt, "decrypt", false, "show encrypted resources' names, asking for the master password")
+	})
 	if err != nil {
 		return err
 	}
@@ -254,9 +257,33 @@ func (c *cli) ls(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	resources, err := api.list(ctx, strings.Join(args, " "))
+	keyword := strings.Join(args, " ")
+	// The service cannot match names it cannot read: decrypting, the whole
+	// list is fetched and the keyword matched here, encrypted names included.
+	query := keyword
+	if decrypt {
+		query = ""
+	}
+	resources, err := api.list(ctx, query)
 	if err != nil {
 		return err
+	}
+	if decrypt {
+		var kept []resource
+		for _, r := range resources {
+			if r.isSealed() {
+				opened, err := c.openSealed(ctx, api, r)
+				if err != nil {
+					return err
+				}
+				r.Name, r.Filename = opened.meta.Name, opened.meta.Filename
+			}
+			lower := strings.ToLower(keyword)
+			if keyword == "" || strings.Contains(strings.ToLower(r.Name), lower) || strings.Contains(strings.ToLower(r.Filename), lower) {
+				kept = append(kept, r)
+			}
+		}
+		resources = kept
 	}
 	if len(resources) == 0 {
 		fmt.Fprintln(c.stdout, msg("ls_empty"))
@@ -266,7 +293,10 @@ func (c *cli) ls(ctx context.Context, args []string) error {
 	fmt.Fprintln(table, msg("ls_header"))
 	for _, r := range resources {
 		name := r.Name
-		if name == "" {
+		switch {
+		case name == "" && r.isSealed() && r.Filename == "":
+			name = msg("encrypted_name")
+		case name == "":
 			name = msg("untitled")
 		}
 		size := sizeText(r.Size)
@@ -326,7 +356,26 @@ func (c *cli) cat(ctx context.Context, args []string) error {
 	if target.Remote {
 		return fmt.Errorf("%s", msg("is_reference", target.label()))
 	}
-	if file, ok := c.stdout.(*os.File); ok && isTerminal(file) && !target.Editable && !force {
+	terminal := false
+	if file, ok := c.stdout.(*os.File); ok && isTerminal(file) {
+		terminal = true
+	}
+	if target.isSealed() {
+		opened, err := c.openSealed(ctx, api, target)
+		if err != nil {
+			return err
+		}
+		if terminal && !textLike(opened.meta.Type) && !force {
+			return fmt.Errorf("%s", msg("cat_binary", sealedLabel(opened.meta, target.ID), args[0]))
+		}
+		body, err := opened.read(ctx, api)
+		if err != nil {
+			return err
+		}
+		_, err = c.stdout.Write(body.Body)
+		return err
+	}
+	if terminal && !target.Editable && !force {
 		return fmt.Errorf("%s", msg("cat_binary", target.label(), args[0]))
 	}
 	body, err := api.read(ctx, target.ID)
@@ -339,10 +388,12 @@ func (c *cli) cat(ctx context.Context, args []string) error {
 
 func (c *cli) push(ctx context.Context, args []string) error {
 	var to, name, filename string
+	var encrypt bool
 	args, server, err := c.flags("push", args, func(set *flag.FlagSet) {
 		set.StringVar(&to, "to", "", "save as a new version of this resource")
 		set.StringVar(&name, "name", "", "name of a new resource")
 		set.StringVar(&filename, "filename", "", "filename of a new resource")
+		set.BoolVar(&encrypt, "encrypt", false, "make the new resource end-to-end encrypted")
 	})
 	if err != nil {
 		return err
@@ -374,8 +425,22 @@ func (c *cli) push(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		result, err := api.write(ctx, target.ID, body, 0, "")
-		if err != nil {
+		var result saveResult
+		if target.isSealed() {
+			// Encrypted here, under the resource's own key, with the name
+			// and filename it has.
+			opened, err := c.openSealed(ctx, api, target)
+			if err != nil {
+				return err
+			}
+			if !textLike(opened.meta.Type) || !textLike(guessType(opened.meta.Filename, body)) {
+				opened.meta.Type = guessType(opened.meta.Filename, body)
+			}
+			result, err = opened.write(ctx, api, body, 0)
+			if err != nil {
+				return err
+			}
+		} else if result, err = api.write(ctx, target.ID, body, 0, ""); err != nil {
 			return err
 		}
 		if result.NewVersion {
@@ -383,6 +448,18 @@ func (c *cli) push(ctx context.Context, args []string) error {
 		} else {
 			fmt.Fprintln(c.stdout, msg("push_same", result.Version, api.host()))
 		}
+		return nil
+	}
+	if encrypt {
+		made, err := c.createSealed(ctx, api, name, filename, body)
+		if err != nil {
+			return err
+		}
+		label := name
+		if label == "" {
+			label = filename
+		}
+		fmt.Fprintln(c.stdout, msg("push_created_sealed", clean(label), api.host(), made.URL))
 		return nil
 	}
 	made, err := api.create(ctx, name, filename, body)
@@ -513,4 +590,15 @@ func (c *cli) configCommand(args []string) error {
 	lang = c.language()
 	fmt.Fprintln(c.stdout, msg("config_saved"))
 	return nil
+}
+
+// sealedLabel names an opened encrypted resource in messages.
+func sealedLabel(meta sealedMeta, id string) string {
+	switch {
+	case meta.Name != "":
+		return clean(meta.Name)
+	case meta.Filename != "":
+		return clean(meta.Filename)
+	}
+	return id[:8]
 }

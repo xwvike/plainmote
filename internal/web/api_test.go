@@ -585,6 +585,11 @@ func TestAPIAuthorizationMatrix(t *testing.T) {
 		t.Fatal("could not revoke")
 	}
 
+	if _, err := db.CreateKeyring(ctx, owner.ID, store.Keyring{KDF: store.KeyringKDF, Iterations: 600000, Salt: bytes.Repeat([]byte{1}, 16),
+		WrappedByPassword: bytes.Repeat([]byte{2}, 60), WrappedByRecovery: bytes.Repeat([]byte{3}, 60)}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
 	type endpoint struct {
 		name, method, path string
 		write              bool
@@ -601,6 +606,7 @@ func TestAPIAuthorizationMatrix(t *testing.T) {
 	base := apiPrefix + "resources/" + resource.ID
 	endpoints := []endpoint{
 		{name: "me", method: http.MethodGet, path: apiPrefix + "me"},
+		{name: "keyring", method: http.MethodGet, path: apiPrefix + "keyring"},
 		{name: "list", method: http.MethodGet, path: apiPrefix + "resources"},
 		{name: "resolve", method: http.MethodGet, path: apiPrefix + "resources?ref=" + resource.ID},
 		{name: "get", method: http.MethodGet, path: base},

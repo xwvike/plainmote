@@ -64,7 +64,11 @@ plainmote cat nginx.conf | grep listen
 tail -n 200 app.log | plainmote push - --name app.log
 plainmote push ./nginx.conf --to nginx.conf
 plainmote share ./app.log --ttl 1d              # 创建快速分享，只输出链接
+plainmote push ./prod.env --encrypt             # 新建端到端加密资源
+plainmote ls --decrypt prod                     # 列出资源，并解密加密资源的名称
 ```
+
+打开加密资源的命令会询问主密码，也可从环境变量 `PLAINMOTE_MASTER_PASSWORD` 读取。
 
 资源可以用 ID、至少 6 位的 ID 前缀，或完整的名称、文件名指定；匹配到多个资源时列出候选，不作选择。
 

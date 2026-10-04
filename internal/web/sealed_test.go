@@ -197,3 +197,120 @@ func TestSealAndUnsealThroughThePage(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// The command line's side of encryption: the keyring as it is kept, and
+// encrypted resources created, listed, read and saved as ciphertext - each
+// account's own, and only with a write token for what writes.
+func TestSealedResourcesThroughTheAPI(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	app := newVersionClient(t, db, user).app
+	ctx := context.Background()
+	reader := issueToken(t, db, user, store.TokenScopeRead)
+	writer := issueToken(t, db, user, store.TokenScopeWrite)
+	other, _ := db.UpsertUser(ctx, "200", "bob", "Bob", "")
+	foreign := issueToken(t, db, other, store.TokenScopeWrite)
+
+	if got := callAPI(t, app, apiCall{method: http.MethodGet, path: apiPrefix + "keyring", token: reader}); got.Code != http.StatusNotFound {
+		t.Fatalf("no keyring yet: %d", got.Code)
+	}
+	salt, wrapped := bytes.Repeat([]byte{1}, 16), bytes.Repeat([]byte{2}, 60)
+	if _, err := db.CreateKeyring(ctx, user.ID, store.Keyring{KDF: store.KeyringKDF, Iterations: 600000, Salt: salt,
+		WrappedByPassword: wrapped, WrappedByRecovery: bytes.Repeat([]byte{3}, 60)}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	ring := callAPI(t, app, apiCall{method: http.MethodGet, path: apiPrefix + "keyring", token: reader})
+	var view struct {
+		UserID            string `json:"user_id"`
+		Salt              string `json:"salt"`
+		WrappedByPassword string `json:"wrapped_by_password"`
+	}
+	_ = json.Unmarshal(ring.Body.Bytes(), &view)
+	if ring.Code != http.StatusOK || view.UserID != user.ID || view.Salt != b64(salt) || view.WrappedByPassword != b64(wrapped) ||
+		ring.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("keyring: %d %s", ring.Code, ring.Body.String())
+	}
+	if got := callAPI(t, app, apiCall{method: http.MethodGet, path: apiPrefix + "keyring", token: foreign}); got.Code != http.StatusNotFound || strings.Contains(got.Body.String(), b64(salt)) {
+		t.Fatalf("another account's keyring: %d %s", got.Code, got.Body.String())
+	}
+
+	create := func(token string, values map[string]string, content []byte) *httptest.ResponseRecorder {
+		var form bytes.Buffer
+		w := multipart.NewWriter(&form)
+		for k, v := range values {
+			_ = w.WriteField(k, v)
+		}
+		part, _ := w.CreateFormFile("content", "blob")
+		_, _ = part.Write(content)
+		_ = w.Close()
+		return callAPI(t, app, apiCall{method: http.MethodPost, path: apiPrefix + "resources", token: token, body: &form,
+			header: map[string]string{"Content-Type": w.FormDataContentType()}})
+	}
+	id := uuid.NewString()
+	content, meta := fakeSealed("PMr1", 1, 64), fakeSealed("PMm1", 1, 40)
+	values := map[string]string{"id": id, "sealed_key": b64(bytes.Repeat([]byte{4}, 60)), "sealed_meta": b64(meta)}
+	if got := create(reader, values, content); got.Code != http.StatusForbidden {
+		t.Fatalf("create with a read token: %d", got.Code)
+	}
+	if got := create(writer, map[string]string{"id": "not-an-id", "sealed_key": values["sealed_key"], "sealed_meta": values["sealed_meta"]}, content); got.Code != http.StatusNotFound {
+		t.Fatalf("create under a malformed id: %d %s", got.Code, got.Body.String())
+	}
+	if got := create(writer, values, []byte("plain text\n")); got.Code != http.StatusBadRequest {
+		t.Fatalf("create with content that is not ciphertext: %d", got.Code)
+	}
+	created := create(writer, values, content)
+	var resource apiResource
+	if err := json.Unmarshal(created.Body.Bytes(), &resource); err != nil || created.Code != http.StatusCreated || resource.ID != id ||
+		resource.Name != "" || !resource.Encrypted || resource.SealedMeta != b64(meta) || resource.Editable {
+		t.Fatalf("create: %d %s", created.Code, created.Body.String())
+	}
+	if got := create(foreign, values, content); got.Code != http.StatusBadRequest {
+		t.Fatalf("another account creating under the same id: %d", got.Code)
+	}
+
+	// Listed with what opens it, read as ciphertext.
+	list := callAPI(t, app, apiCall{method: http.MethodGet, path: apiPrefix + "resources", token: reader})
+	if !strings.Contains(list.Body.String(), `"sealed_key":"`+values["sealed_key"]+`"`) {
+		t.Fatalf("list: %s", list.Body.String())
+	}
+	body := apiPrefix + "resources/" + id + "/content"
+	if got := callAPI(t, app, apiCall{method: http.MethodGet, path: body, token: reader}); got.Code != http.StatusOK || !bytes.Equal(got.Body.Bytes(), content) {
+		t.Fatalf("read: %d", got.Code)
+	}
+	if got := callAPI(t, app, apiCall{method: http.MethodGet, path: body, token: foreign}); got.Code != http.StatusNotFound {
+		t.Fatalf("another account's read: %d", got.Code)
+	}
+
+	save := func(token, match, metaHeader string, content []byte) *httptest.ResponseRecorder {
+		header := map[string]string{"If-Match": match}
+		if metaHeader != "" {
+			header["X-PlainMote-Sealed-Meta"] = metaHeader
+		}
+		return callAPI(t, app, apiCall{method: http.MethodPut, path: body, token: token, body: bytes.NewReader(content), header: header})
+	}
+	next, nextMeta := fakeSealed("PMr1", 5, 64), b64(fakeSealed("PMm1", 5, 40))
+	for label, got := range map[string]*httptest.ResponseRecorder{
+		"without its metadata":  save(writer, `"v1"`, "", next),
+		"with plaintext":        save(writer, `"v1"`, nextMeta, []byte("SECRET=1\n")),
+		"with metadata garbled": save(writer, `"v1"`, "!!", next),
+	} {
+		if got.Code != http.StatusBadRequest {
+			t.Errorf("a save %s: %d %s", label, got.Code, got.Body.String())
+		}
+	}
+	if got := save(reader, `"v1"`, nextMeta, next); got.Code != http.StatusForbidden {
+		t.Fatalf("a save with a read token: %d", got.Code)
+	}
+	if got := save(foreign, "*", nextMeta, next); got.Code != http.StatusNotFound {
+		t.Fatalf("another account's save: %d", got.Code)
+	}
+	if got := save(writer, `"v1"`, nextMeta, next); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"version":2`) {
+		t.Fatalf("save: %d %s", got.Code, got.Body.String())
+	}
+	if got := save(writer, `"v1"`, nextMeta, next); got.Code != http.StatusPreconditionFailed || !strings.Contains(got.Body.String(), `"current_version":2`) {
+		t.Fatalf("a stale save: %d %s", got.Code, got.Body.String())
+	}
+	stored, _ := db.ResourceForOwner(ctx, user.ID, id)
+	if got, _ := db.ReadContent(ctx, stored); !bytes.Equal(got, next) || b64(stored.SealedMeta) != nextMeta || stored.Version != 2 {
+		t.Fatalf("stored: v%d %q", stored.Version, got)
+	}
+}
