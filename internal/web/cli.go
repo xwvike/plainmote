@@ -483,3 +483,24 @@ if (-not (($path -split ';') -contains $dir)) {
 Write-Host "Installed $target"
 Write-Host 'Next: plainmote login'
 `))
+
+// cliDefaultServer is the server the command line uses until it is told
+// another (defaultServer in cmd/plainmote-cli).
+const cliDefaultServer = "https://plainmote.link"
+
+// cliEditCommand opens a resource in the command line's editor. Eight
+// characters of the id pick it out among one account's resources, and if
+// they ever did not the command line would list the matches rather than
+// guess. Any other deployment is named, since the installer only points the
+// command line at a server when it has none yet.
+func cliEditCommand(baseURL, id string) string {
+	ref := id
+	if len(ref) > 8 {
+		ref = ref[:8]
+	}
+	command := "plainmote edit " + ref
+	if baseURL != "" && baseURL != cliDefaultServer {
+		command += " --server " + baseURL
+	}
+	return command
+}

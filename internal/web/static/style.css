@@ -921,6 +921,11 @@ a.who:hover, a.who[aria-current] { color: var(--ink); }
 .dev-list .nm b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dev-list .nm span, .dev-list .tm { min-width: 0; font: 400 10.5px var(--mono); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dev-list .act { text-align: right; }
+.cli-edit { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 0 2px; }
+/* The terminal of the home page, at the height of the small button beside it. */
+.cli-edit code { min-width: 0; box-sizing: border-box; height: 24px; padding: 0 9px; overflow-x: auto; border: 1px solid var(--term-line); border-radius: var(--r); background: var(--term); color: var(--term-ink); font: 400 11px/22px var(--mono); white-space: nowrap; }
+.cli-edit code b { font-weight: 400; color: var(--sand-l); }
+.cli-edit .txt { margin-left: auto; }
 .dev-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 9px 12px; }
 .dev-list + .dev-foot { border-top: 1px dashed var(--line2); background: var(--head); border-radius: 0 0 var(--r) var(--r); }
 .dev-foot code { min-width: 0; overflow-wrap: anywhere; font: 400 11px var(--mono); color: var(--ink); background: var(--sunk); padding: 1px 6px; border-radius: 2px; }

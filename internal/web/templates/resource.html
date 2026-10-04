@@ -152,6 +152,18 @@
       </div>
     </form>
 
+    {{if and (not .IsNew) .Resource.Editable (not .Resource.Remote) (not .Resource.TakenDown)}}
+    {{/* The same edit from a terminal, saved the same way: as a new version,
+         refused if this one moved on meanwhile. */}}
+    {{$command := cliEdit .BaseURL .Resource.ID}}
+    <div class="cli-edit">
+      <span class="hint">{{tr .Locale "cli_edit_hint"}}</span>
+      <code><b>$</b> {{$command}}</code>
+      <button type="button" class="sm" data-copy="{{$command}}">{{template "copy-label" .}}</button>
+      <a class="txt" href="/cli">{{tr .Locale "cli_about_link"}} →</a>
+    </div>
+    {{end}}
+
     {{if not .IsNew}}
     {{/* Below the content, not behind a button. The addresses are what this
          resource is for, so they are on the page whenever it is open; the

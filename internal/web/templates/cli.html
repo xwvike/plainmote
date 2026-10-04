@@ -57,7 +57,18 @@
           <dt>plainmote config</dt><dd>{{tr .Locale "cli_cmd_config"}}</dd>
           <dt>plainmote logout</dt><dd>{{tr .Locale "cli_cmd_logout"}}</dd>
         </dl>
-        <p class="hint">{{tr .Locale "cli_editor_note"}}</p>
+      </div>
+    </section>
+    {{/* Choosing the editor is the one setting worth knowing ahead: the rest
+         the command line asks for when it needs it. */}}
+    <section class="panel ruled">
+      <div class="pt"><span class="sec">{{tr .Locale "cli_tips"}}</span></div>
+      <div class="pb inst">
+        {{if ne .CLIPlatform "windows"}}<p>{{tr .Locale "cli_tip_editor_unix"}}</p>
+        <code class="term-block"><b>$</b> export EDITOR="code"</code>{{end}}
+        {{if or (eq .CLIPlatform "windows") (not .CLIPlatform)}}<p>{{tr .Locale "cli_tip_editor_windows"}}</p>
+        <code class="term-block"><b>&gt;</b> [Environment]::SetEnvironmentVariable("EDITOR", "code", "User")</code>{{end}}
+        <p class="hint">{{tr .Locale "cli_tip_editor_more"}}</p>
       </div>
     </section>
   </main>

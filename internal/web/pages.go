@@ -81,6 +81,7 @@ func (a *App) templateSet() *template.Template {
 				value.Format(time.RFC3339), value.Format("01-02")))
 		},
 		"cliLang":   cliLanguage,
+		"cliEdit":   cliEditCommand,
 		"bytesText": bytesText,
 		"hasPrefix": strings.HasPrefix,
 		"originHost": func(value string) string {
