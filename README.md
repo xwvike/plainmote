@@ -17,14 +17,14 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 
 ## Features
 
-- **Quick share**: no account is required. Text or a file of up to 10 MiB submitted on the home page receives a share link valid for 10 minutes, 1 hour, 1 day, 7 days or 30 days; the default is 1 hour. Content can also be submitted from the command line with curl.
+- **Quick share**: no account is required. Text or a file of up to 10 MiB submitted on the home page receives a share link valid for 10 minutes, 1 hour, 1 day, 7 days or 30 days; the default is 1 hour. Content can also be submitted from the command line with curl. A quick share created while signed in appears, marked, under My resources and its access history belongs to its creator; it is read only until its link expires and can be converted into an ordinary resource to keep it, otherwise its content is deleted at expiry while its access history is kept.
 - **Resources and share links**: signed-in users can store files (100 MiB per account by default) and issue any number of share links for each resource. Each link has its own expiry and use limit; revoking one leaves the others in effect. When a resource is updated, every link keeps its address and serves the new content immediately.
 - **Access history**: every access through a link is recorded with its time, result, source IP address and client details, visible only to the owner of the resource. Records are kept for 30 days by default.
 - **Version history**: each save that changes a resource's content retains the version it replaces, up to 10 per resource, each for 30 days after it was replaced. Earlier versions can be viewed, compared with any other version, restored as a new version, copied into a new resource or deleted individually. Text is compared line by line; images, audio, video and other files are shown side by side with their size, SHA-256 digest and, for images, dimensions. Earlier versions count towards storage but occupy only the space not used by current content; when a save requires that space, the versions replaced longest ago are removed first. The access history records which version each access received. A save based on an outdated version is not applied; the conflict is reported instead, so that newer content is not overwritten.
 - **Remote resources**: a resource may consist of a public URL only, in which case the service fetches the content from the origin on each access.
 - **Conditional requests**: share links answer `HEAD`, and responses carry an `ETag` (and, for stored content, `Last-Modified`). A request with `If-None-Match` or `If-Modified-Since` receives `304` with no body while the content is unchanged. Every response counts as one use and is recorded.
 - **Editor**: built on CodeMirror 6, with syntax highlighting for YAML, JSON, TOML, XML, INI and `.env`, shell, nginx, Dockerfile, SQL, diffs and logs; the quick share box uses the same editor. UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings are detected, and files are saved in their original encoding and line endings.
-- **Command line**: `plainmote` views, edits and uploads resources from a terminal, editing in the machine's own editor and saving a new version when it is closed; signing in is confirmed in a browser.
+- **Command line**: `plainmote` views, edits and uploads resources and makes quick shares from a terminal, editing in the machine's own editor and saving a new version when it is closed; signing in is confirmed in a browser.
 - **End-to-end encryption (optional)**: signed-in users can enable it in their account settings. Quick shares created on the home page, whether text or files, are then encrypted in the browser before upload, and the service stores only ciphertext.
 - **Media preview**: when a share link is opened in a browser, images are displayed and audio and video are played; other clients receive the original bytes.
 - **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, selected from the browser's language. The home page and legal pages also have a separate address per language (such as `/zh-cn/` or `/ja/`) for search engines. Light and dark themes are available.
@@ -63,6 +63,7 @@ plainmote edit nginx.conf
 plainmote cat nginx.conf | grep listen
 tail -n 200 app.log | plainmote push - --name app.log
 plainmote push ./nginx.conf --to nginx.conf
+plainmote share ./app.log --ttl 1d              # make a quick share; prints only its link
 ```
 
 A resource is named by its ID, an ID prefix of at least six characters, or its exact name or filename; when several resources match, the candidates are listed instead of one being chosen.

@@ -2,12 +2,16 @@ package web
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"plainmote/internal/store"
 )
 
 func postPaste(t *testing.T, app *App, form url.Values, headers map[string]string) *httptest.ResponseRecorder {
@@ -166,7 +170,10 @@ func TestPasteRefusesADrivenCrossSitePost(t *testing.T) {
 	}
 }
 
-func TestSignedInVisitorCanSaveAPasteAsAResource(t *testing.T) {
+// A quick share made while signed in is its creator's own from the start:
+// listed with their resources, its visits in their access history, read
+// only until kept, and seen by nobody else.
+func TestSignedInQuickShareIsTheCreatorsOwn(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
 	app := newTestApp(db, user.GitHubID)
@@ -174,38 +181,57 @@ func TestSignedInVisitorCanSaveAPasteAsAResource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	owner := []*http.Cookie{{Name: sessionCookie, Value: session}, {Name: csrfCookie, Value: csrf}}
 	const content = "名称: 临时节点\nport: 7890\n"
 	pasteRequest := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste", strings.NewReader(url.Values{
 		"content": {content}, "filename": {"节点.yaml"}, "ttl": {"5"},
 	}.Encode()))
 	pasteRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	pasteRequest.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
-	pasteRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
-	pasteRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+	for _, cookie := range owner {
+		pasteRequest.AddCookie(cookie)
+	}
 	posted := httptest.NewRecorder()
 	app.handler.ServeHTTP(posted, pasteRequest)
-	paste := getPasteResult(t, app, posted,
-		&http.Cookie{Name: sessionCookie, Value: session},
-		&http.Cookie{Name: csrfCookie, Value: csrf},
-	)
+	resourceID := strings.TrimPrefix(posted.Header().Get("Location"), pasteResultPrefix)
+	paste := getPasteResult(t, app, posted, owner...)
 	if paste.Code != http.StatusOK {
 		t.Fatalf("paste result: %d %s", paste.Code, paste.Body.String())
 	}
 	page := paste.Body.String()
-	if !strings.Contains(page, "Save to my resources") || !strings.Contains(page, `action="/paste/save"`) {
-		t.Fatal("a signed-in paste result must offer an explicit save action")
+	if !strings.Contains(page, `<a href="/resources/`+resourceID+`">My resources</a>`) || strings.Contains(page, `action="/paste/save"`) {
+		t.Fatal("the result must say the quick share is already in the account, with nothing to save")
 	}
 	address := findDeliveryAddress(t, page)
-	resourceID := findPasteResourceID(t, page)
 
-	// The visit happens while the paste is still anonymous. Saving must move
-	// this history into the account together with the resource and link.
+	resource, err := db.ResourceForOwner(ctx, user.ID, resourceID)
+	if err != nil || !resource.QuickShare() || resource.ExpiresAt.Sub(resource.CreatedAt) != 5*time.Minute {
+		t.Fatalf("stored as %+v %v", resource, err)
+	}
+	quick, _, err := db.ListResourcesOfKind(ctx, user.ID, "", store.KindQuickShare, 10, 0)
+	if err != nil || len(quick) != 1 || quick[0].ID != resourceID {
+		t.Fatalf("quick share list: %+v %v", quick, err)
+	}
+	kept, _, err := db.ListResourcesOfKind(ctx, user.ID, "", store.KindResource, 10, 0)
+	if err != nil || len(kept) != 1 || kept[0].QuickShare() {
+		t.Fatalf("resource list: %+v %v", kept, err)
+	}
+	quota, err := db.QuotaForUser(ctx, user.ID, time.Now().UTC())
+	if err != nil || quota.Usage.StorageBytes != resource.ContentSize+kept[0].ContentSize {
+		t.Fatalf("the quick share must count toward the account: %+v %v", quota.Usage, err)
+	}
+
 	delivery := httptest.NewRecorder()
 	app.handler.ServeHTTP(delivery, httptest.NewRequest(http.MethodGet, "https://cfg.test"+address, nil))
 	if delivery.Code != http.StatusOK || delivery.Body.String() != content {
-		t.Fatalf("temporary delivery before save: %d %q", delivery.Code, delivery.Body.String())
+		t.Fatalf("delivery: %d %q", delivery.Code, delivery.Body.String())
+	}
+	if logs, err := db.ListAccess(ctx, user.ID, resourceID, "", 10); err != nil || len(logs) != 1 || !logs[0].QuickShare {
+		t.Fatalf("the visit belongs to the creator: %+v %v", logs, err)
 	}
 
+	// Somebody else sees none of it: not the result, not the resource, not
+	// the visit.
 	other, err := db.UpsertUser(ctx, "999999", "other", "Other", "")
 	if err != nil {
 		t.Fatal(err)
@@ -214,60 +240,105 @@ func TestSignedInVisitorCanSaveAPasteAsAResource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreignRequest := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste/save", strings.NewReader(url.Values{
-		"csrf": {otherCSRF}, "resource_id": {resourceID},
-	}.Encode()))
-	foreignRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	foreignRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: otherSession})
-	foreignRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: otherCSRF})
-	foreign := httptest.NewRecorder()
-	app.handler.ServeHTTP(foreign, foreignRequest)
-	if foreign.Code != http.StatusGone {
-		t.Fatalf("another account claimed the quick share: %d", foreign.Code)
+	stranger := []*http.Cookie{{Name: sessionCookie, Value: otherSession}, {Name: csrfCookie, Value: otherCSRF}}
+	if got := getPasteResult(t, app, posted, stranger...); got.Code != http.StatusGone {
+		t.Fatalf("another account opened the result: %d", got.Code)
+	}
+	if got := getPasteResult(t, app, posted); got.Code != http.StatusGone {
+		t.Fatalf("a signed-out visitor opened the result: %d", got.Code)
+	}
+	if _, err := db.ResourceForOwner(ctx, other.ID, resourceID); err == nil {
+		t.Fatal("another account reached the quick share")
+	}
+	if logs, _ := db.ListAccess(ctx, other.ID, "", "", 10); len(logs) != 0 {
+		t.Fatal("another account sees the visit")
+	}
+	if logs, _ := db.ListAccess(ctx, store.AnonymousUserID, "", "", 10); len(logs) != 0 {
+		t.Fatal("the visit went to the anonymous account")
 	}
 
-	saveRequest := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste/save", strings.NewReader(url.Values{
-		"csrf": {csrf}, "resource_id": {resourceID},
-	}.Encode()))
-	saveRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	saveRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
-	saveRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
-	saved := httptest.NewRecorder()
-	app.handler.ServeHTTP(saved, saveRequest)
-	if saved.Code != http.StatusSeeOther || !strings.HasPrefix(saved.Header().Get("Location"), "/resources/") {
-		t.Fatalf("save: status %d location %q body %q", saved.Code, saved.Header().Get("Location"), saved.Body.String())
+	request := func(method, path string, form url.Values) *httptest.ResponseRecorder {
+		var body io.Reader
+		if form != nil {
+			form.Set("csrf", csrf)
+			body = strings.NewReader(form.Encode())
+		}
+		r := httptest.NewRequest(method, "https://cfg.test"+path, body)
+		if form != nil {
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+		for _, cookie := range owner {
+			r.AddCookie(cookie)
+		}
+		w := httptest.NewRecorder()
+		app.handler.ServeHTTP(w, r)
+		return w
 	}
-	if got := strings.TrimPrefix(saved.Header().Get("Location"), "/resources/"); got != resourceID {
-		t.Fatalf("save redirected to resource %q, want original %q", got, resourceID)
+
+	// Read only: the page offers keeping, not editing, and an edit sent
+	// anyway changes nothing.
+	resourcePage := request(http.MethodGet, "/resources/"+resourceID, nil).Body.String()
+	if !strings.Contains(resourcePage, `name="action" value="keep"`) || strings.Contains(resourcePage, `name="content"`) || strings.Contains(resourcePage, `data-share-panel`) {
+		t.Fatal("a quick share's page must be read only, with keeping offered")
 	}
-	resource, err := db.ResourceForOwner(ctx, user.ID, resourceID)
+	if got := request(http.MethodPost, "/resources/"+resourceID, url.Values{"name": {"x"}, "content": {"changed"}}); got.Code != http.StatusBadRequest {
+		t.Fatalf("an edit to a quick share: %d", got.Code)
+	}
+	if body, _ := db.ReadContent(ctx, resource); string(body) != content {
+		t.Fatalf("the quick share changed: %q", body)
+	}
+	if _, err := db.CreateShare(ctx, user.ID, resourceID, "", time.Hour, 0); err == nil {
+		t.Fatal("a quick share took a second link")
+	}
+
+	// Kept, it is an ordinary resource; its link keeps its term and its use.
+	keep := request(http.MethodPost, "/resources/"+resourceID, url.Values{"action": {"keep"}})
+	if keep.Code != http.StatusSeeOther || keep.Header().Get("Location") != "/resources/"+resourceID+"?kept=1" {
+		t.Fatalf("keep: %d %q", keep.Code, keep.Header().Get("Location"))
+	}
+	resource, err = db.ResourceForOwner(ctx, user.ID, resourceID)
+	if err != nil || resource.QuickShare() {
+		t.Fatalf("kept as %+v %v", resource, err)
+	}
+	shares, err := db.ListShares(ctx, user.ID, resourceID, time.Now().UTC())
+	token, ok := splitDeliveryPath(address)
+	if err != nil || len(shares) != 1 || !ok || shares[0].Token != token || shares[0].UsedCount != 1 || shares[0].ExpiresAt == nil {
+		t.Fatalf("the link after keeping: %+v %v", shares, err)
+	}
+	keptPage := request(http.MethodGet, "/resources/"+resourceID+"?kept=1", nil).Body.String()
+	if !strings.Contains(keptPage, "Kept as a resource.") || !strings.Contains(keptPage, `name="content"`) {
+		t.Fatal("a kept quick share must be editable and say it was kept")
+	}
+}
+
+// At its end a quick share goes, the way its owner deleting it would; its
+// access history stays with its owner.
+func TestEndedQuickShareIsDeletedAndItsHistoryKept(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	app := newTestApp(db, user.GitHubID)
+	now := time.Now().UTC()
+	resource, link, err := db.CreateQuickShare(ctx, user.ID, "app.log", []byte("line\n"), time.Minute, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := db.ReadContent(ctx, resource)
-	if err != nil || string(body) != content {
-		t.Fatalf("saved resource: body %q error %v", body, err)
+	delivery := httptest.NewRecorder()
+	app.handler.ServeHTTP(delivery, httptest.NewRequest(http.MethodGet, "https://cfg.test"+shareAddress(link.Token, "app.log"), nil))
+	if delivery.Code != http.StatusOK {
+		t.Fatalf("delivery: %d", delivery.Code)
 	}
-	shares, err := db.ListShares(ctx, user.ID, resourceID, time.Now().UTC())
-	if err != nil || len(shares) != 1 {
-		t.Fatalf("inherited shares: %d %v", len(shares), err)
+	if removed, err := db.PruneQuickShares(ctx, now.Add(30*time.Second)); err != nil || removed != 0 {
+		t.Fatalf("swept before its end: %d %v", removed, err)
 	}
-	token, ok := splitDeliveryPath(address)
-	if !ok || shares[0].Token != token || shares[0].UsedCount != 1 {
-		t.Fatalf("share was replaced while saving: %+v", shares[0])
+	if removed, err := db.PruneQuickShares(ctx, now.Add(2*time.Minute)); err != nil || removed != 1 {
+		t.Fatalf("sweep: %d %v", removed, err)
 	}
-	settingsRequest := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+resourceID+"?share="+shares[0].ID, nil)
-	settingsRequest.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
-	settingsRequest.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
-	settings := httptest.NewRecorder()
-	app.handler.ServeHTTP(settings, settingsRequest)
-	settingsPage := settings.Body.String()
-	if settings.Code != http.StatusOK || !strings.Contains(settingsPage, `value="custom" checked`) || !strings.Contains(settingsPage, `name="ttl_custom" value="5m"`) {
-		t.Fatalf("inherited minute lifetime must be shown as custom: %d %s", settings.Code, settingsPage)
+	if _, err := db.ResourceForOwner(ctx, user.ID, resource.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("the ended quick share is still there: %v", err)
 	}
-	logs, err := db.ListAccess(ctx, user.ID, resourceID, "", 10)
-	if err != nil || len(logs) != 1 {
-		t.Fatalf("inherited access history: %d %v", len(logs), err)
+	logs, err := db.ListAccess(ctx, user.ID, "", "", 10)
+	if err != nil || len(logs) != 1 || logs[0].ResourceName != "app.log" || logs[0].QuickShare {
+		t.Fatalf("history after the end: %+v %v", logs, err)
 	}
 }
 
@@ -402,5 +473,57 @@ func TestHomePreselectsTheDefaultLifetime(t *testing.T) {
 	}
 	if ttl, value := parsePasteTTL(""); ttl != time.Hour || value != "1h" {
 		t.Fatalf("a missing lifetime falls back to %s (%s)", ttl, value)
+	}
+}
+
+// The list marks a quick share and narrows to it; an encrypted one is named
+// as encrypted, and its page neither offers keeping nor shows a link that
+// could not open it.
+func TestQuickSharesInTheResourceList(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	app := newTestApp(db, user.GitHubID)
+	now := time.Now().UTC()
+	plain, _, err := db.CreateQuickShare(ctx, user.ID, "app.log", []byte("x\n"), time.Hour, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, _, err := db.CreateEncryptedPaste(ctx, user.ID, sampleEnvelope(), time.Hour, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := func(path string) string {
+		r := httptest.NewRequest(http.MethodGet, "https://cfg.test"+path, nil)
+		r.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
+		r.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
+		w := httptest.NewRecorder()
+		app.handler.ServeHTTP(w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: %d", path, w.Code)
+		}
+		return w.Body.String()
+	}
+	all := page("/resources/")
+	if strings.Count(all, `<span class="tag qs">Quick share</span>`) != 2 || !strings.Contains(all, "Encrypted content") || !strings.Contains(all, `<span class="st qs-left">`) {
+		t.Fatal("the list does not mark its quick shares")
+	}
+	quick := page("/resources/?kind=quick")
+	if !strings.Contains(quick, plain.ID) || !strings.Contains(quick, sealed.ID) || strings.Contains(quick, resource.ID) || !strings.Contains(quick, `value="quick" selected`) {
+		t.Fatal("the quick share filter")
+	}
+	if kept := page("/resources/?kind=resource"); strings.Contains(kept, plain.ID) || !strings.Contains(kept, resource.ID) {
+		t.Fatal("the resource filter")
+	}
+	encrypted := page("/resources/" + sealed.ID)
+	if !strings.Contains(encrypted, "The content is end-to-end encrypted; the service cannot read it.") ||
+		strings.Contains(encrypted, `value="keep"`) || strings.Contains(encrypted, `data-copy=`) {
+		t.Fatal("an encrypted quick share's page")
+	}
+	if !strings.Contains(page("/resources/"+plain.ID), `data-copy="https://cfg.test/d/`) {
+		t.Fatal("a quick share's page must offer its link")
 	}
 }

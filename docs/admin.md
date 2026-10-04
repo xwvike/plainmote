@@ -29,7 +29,7 @@ The interface has the following limits:
 | --- | --- |
 | Suspend an account | All of the account's sign-in sessions and command line sign-ins end immediately, and the sign-in page shows the reason on the next attempt; all of its share links stop delivering. No data is deleted |
 | Unsuspend an account | The account can sign in again; share links resume with their original expiry and use limits; command lines must sign in again |
-| Take down a resource | All of the resource's share links stop delivering; the owner sees the reason on the resource page, the resource list shows it as taken down, and the owner can no longer create share links for it or copy its earlier versions into new resources, but can still edit or delete it. A quick share has no owner to notify and is deleted instead |
+| Take down a resource | All of the resource's share links stop delivering; the owner sees the reason on the resource page, the resource list shows it as taken down, and the owner can no longer create share links for it or copy its earlier versions into new resources, but can still edit or delete it. A quick share made without signing in has no owner to notify and is deleted instead; a signed-in user's quick share is treated as a resource |
 | Restore a resource | Share links resume with their original expiry and use limits |
 | Delete a resource | The same as deletion by the owner: content, earlier versions and share links are deleted; access history is kept |
 | Revoke a link | The same as revocation by the owner |
@@ -209,7 +209,7 @@ An authenticated request that fails receives `{"error": "<code>", "message": "<d
 | Field | Type | Description |
 | --- | --- | --- |
 | `id` | string | Resource ID |
-| `owner.id`, `owner.login` | string | Owner; `owner.login` is `anonymous` for quick shares |
+| `owner.id`, `owner.login` | string | Owner; `owner.login` is `anonymous` for quick shares made without signing in |
 | `name` | string | Name |
 | `filename` | string | Filename |
 | `kind` | string | `stored` (content kept by the service) or `remote` (remote resource) |
@@ -260,7 +260,7 @@ No endpoint returns a share link's token or address.
 | `user.plan.grant` | `{"plan_id", "plan_name", "expires_at"}` |
 | `user.plan.revoke` | `{"plan_id", "plan_name"}` |
 | `plan.create`, `plan.delete` | `{"max_resources", "max_storage"}` |
-| `resource.takedown` | `null`; `{"deleted": true}` when a quick share was deleted by the takedown |
+| `resource.takedown` | `null`; `{"deleted": true}` when a quick share made without signing in was deleted by the takedown |
 | `resource.restore`, `resource.delete` | `null` |
 | `link.revoke` | `{"resource_id"}` |
 
@@ -297,7 +297,7 @@ No endpoint returns a share link's token or address.
 
 - `health`: the status of the database and object storage, `ok` or `error`; `unknown` when the object storage cannot be checked. Object storage is checked with a single metadata request on the bucket, without reading any object.
 - `access`: accesses through share links in the last 24 hours and 7 days, by result. Repeated refusals that were merged into one record are counted individually.
-- `anonymous`: the number of live quick shares, the storage they use and the anonymous allowance.
+- `anonymous`: the number of live quick shares made without signing in, the storage they use and the anonymous allowance. Signed-in users' quick shares count toward their own accounts.
 - `prune`: the result of the most recent scheduled cleanup since the process started; `null` before the first one.
 
 ### Accounts
@@ -364,7 +364,7 @@ Returns every share link of the resource, including ended ones, newest first.
 
 `POST /_admin/v1/resources/{id}/takedown`
 
-Body: `{"reason": "…"}`. Takes the resource down and returns the updated resource object; returns `{"id": "…", "deleted": true}` when a quick share was deleted instead. Error code: `already_taken_down`.
+Body: `{"reason": "…"}`. Takes the resource down and returns the updated resource object; returns `{"id": "…", "deleted": true}` when a quick share made without signing in was deleted instead. Error code: `already_taken_down`.
 
 `POST /_admin/v1/resources/{id}/restore`
 

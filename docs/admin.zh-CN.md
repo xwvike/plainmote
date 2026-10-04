@@ -29,7 +29,7 @@ PlainMote 不包含管理页面。运营者通过一组以 Ed25519 签名保护�
 | --- | --- |
 | 停用账号 | 该账号的全部登录会话与命令行登录立即失效，再次登录时登录页显示停用原因；其全部分享链接停止交付。数据不删除 |
 | 恢复账号 | 账号可以再次登录；分享链接按各自原有的有效期与次数继续生效；命令行需要重新登录 |
-| 下架资源 | 该资源的全部分享链接停止交付；所有者在资源页看到下架原因，资源列表中显示为“已下架”，不能为其新建分享链接，也不能将其历史版本另存为新资源，但可以编辑或删除该资源。快速分享没有可通知的所有者，下架即删除 |
+| 下架资源 | 该资源的全部分享链接停止交付；所有者在资源页看到下架原因，资源列表中显示为“已下架”，不能为其新建分享链接，也不能将其历史版本另存为新资源，但可以编辑或删除该资源。未登录创建的快速分享没有可通知的所有者，下架即删除；登录用户的快速分享与资源相同 |
 | 撤销下架 | 分享链接按各自原有的有效期与次数继续生效 |
 | 删除资源 | 与所有者自行删除效果相同：正文、历史版本与分享链接一并删除，访问记录保留 |
 | 撤销链接 | 与所有者撤销效果相同 |
@@ -209,7 +209,7 @@ PLAINMOTE-ADMIN-V1
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | string | 资源 ID |
-| `owner.id`、`owner.login` | string | 所有者；快速分享的 `owner.login` 为 `anonymous` |
+| `owner.id`、`owner.login` | string | 所有者；未登录创建的快速分享 `owner.login` 为 `anonymous` |
 | `name` | string | 名称 |
 | `filename` | string | 文件名 |
 | `kind` | string | `stored`（保存在本服务的内容）或 `remote`（远程资源） |
@@ -260,7 +260,7 @@ PLAINMOTE-ADMIN-V1
 | `user.plan.grant` | `{"plan_id", "plan_name", "expires_at"}` |
 | `user.plan.revoke` | `{"plan_id", "plan_name"}` |
 | `plan.create`、`plan.delete` | `{"max_resources", "max_storage"}` |
-| `resource.takedown` | `null`；快速分享因下架而被删除时为 `{"deleted": true}` |
+| `resource.takedown` | `null`；未登录创建的快速分享因下架而被删除时为 `{"deleted": true}` |
 | `resource.restore`、`resource.delete` | `null` |
 | `link.revoke` | `{"resource_id"}` |
 
@@ -297,7 +297,7 @@ PLAINMOTE-ADMIN-V1
 
 - `health`：数据库与对象存储的状态，取值为 `ok` 或 `error`；对象存储不支持检测时为 `unknown`。对象存储通过对存储桶的一次元数据请求判断，不读取任何对象。
 - `access`：最近 24 小时与 7 天内经分享链接的访问次数，按结果分类。合并记录的重复拒绝按实际次数计。
-- `anonymous`：有效的快速分享数量、其占用的容量与匿名额度上限。
+- `anonymous`：未登录创建的有效快速分享数量、其占用的容量与匿名额度上限。登录用户的快速分享计入各自账号。
 - `prune`：本进程启动后最近一次定时清理的结果，尚未清理时为 `null`。
 
 ### 账号
@@ -364,7 +364,7 @@ PLAINMOTE-ADMIN-V1
 
 `POST /_admin/v1/resources/{id}/takedown`
 
-请求体：`{"reason": "…"}`。下架资源，返回更新后的资源对象；快速分享因下架而被删除时返回 `{"id": "…", "deleted": true}`。错误代码：`already_taken_down`。
+请求体：`{"reason": "…"}`。下架资源，返回更新后的资源对象；未登录创建的快速分享因下架而被删除时返回 `{"id": "…", "deleted": true}`。错误代码：`already_taken_down`。
 
 `POST /_admin/v1/resources/{id}/restore`
 

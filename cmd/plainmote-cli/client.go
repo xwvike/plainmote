@@ -86,7 +86,9 @@ type resource struct {
 	Editable  bool      `json:"editable"`
 	Encrypted bool      `json:"encrypted"`
 	TakenDown bool      `json:"taken_down"`
-	URL       string    `json:"url"`
+	// ExpiresAt marks a quick share: read only until kept as a resource.
+	ExpiresAt *time.Time `json:"expires_at"`
+	URL       string     `json:"url"`
 }
 
 // label is how a resource is named in messages.
@@ -269,6 +271,42 @@ func (c *client) create(ctx context.Context, name, filename string, body []byte)
 	}
 	defer response.Body.Close()
 	var made resource
+	return made, json.NewDecoder(response.Body).Decode(&made)
+}
+
+// quickShare is a quick share just made: the resource it is kept as, and
+// the one link to it.
+type quickShare struct {
+	resource
+	ShareURL string `json:"share_url"`
+}
+
+func (c *client) share(ctx context.Context, filename, ttl string, body []byte) (quickShare, error) {
+	var form bytes.Buffer
+	writer := multipart.NewWriter(&form)
+	_ = writer.WriteField("filename", filename)
+	if ttl != "" {
+		_ = writer.WriteField("ttl", ttl)
+	}
+	part, err := writer.CreateFormFile("content", "content")
+	if err != nil {
+		return quickShare{}, err
+	}
+	if _, err := part.Write(body); err != nil {
+		return quickShare{}, err
+	}
+	if err := writer.Close(); err != nil {
+		return quickShare{}, err
+	}
+	response, err := c.do(ctx, http.MethodPost, "/api/v1/quick-shares", &form, map[string]string{"Content-Type": writer.FormDataContentType()})
+	if err != nil {
+		return quickShare{}, err
+	}
+	if response.StatusCode != http.StatusCreated {
+		return quickShare{}, readError(response)
+	}
+	defer response.Body.Close()
+	var made quickShare
 	return made, json.NewDecoder(response.Body).Decode(&made)
 }
 

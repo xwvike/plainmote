@@ -4,7 +4,7 @@
 
 `/api/v1/` 下的接口供 `plainmote` 命令行使用，也可以由脚本直接调用。调用者使用个人访问令牌认证，令牌通过设备授权获得：命令行或脚本申请验证码，账号所有者在已登录的浏览器中输入并允许。
 
-接口可以列出、读取、保存和新建资源，不能删除资源、管理分享链接或修改账号。
+接口可以列出、读取、保存和新建资源，以及创建快速分享，不能删除资源、管理分享链接或修改账号。
 
 ## 获取令牌
 
@@ -96,7 +96,8 @@
 | --- | --- | --- |
 | `400` | `bad_request` | 请求格式不正确 |
 | `400` | `invalid_scope` | `scope` 不是 `read` 或 `write` |
-| `400` | `refused` | 请求被拒绝，原因见 `message`，例如文件名不合法 |
+| `400` | `invalid_ttl` | `ttl` 不是快速分享可选的有效期 |
+| `400` | `refused` | 请求被拒绝，原因见 `message`，例如文件名不合法或保存到快速分享 |
 | `401` | `unauthorized` | 缺少令牌，或令牌无效、已过期、已撤销；响应带有 `WWW-Authenticate: Bearer` |
 | `403` | `read_only` | 只读令牌不能进行写入 |
 | `404` | `not_found` | 资源或接口不存在，包括属于其他账号的资源 |
@@ -122,6 +123,7 @@
 | `GET` | `/api/v1/resources/{id}/content` | 只读 | 读取内容 |
 | `PUT` | `/api/v1/resources/{id}/content` | 读写 | 保存为新版本 |
 | `POST` | `/api/v1/resources` | 读写 | 新建资源 |
+| `POST` | `/api/v1/quick-shares` | 读写 | 创建快速分享 |
 
 ## 资源对象
 
@@ -139,6 +141,7 @@
 | `editable` | boolean | 是否为可以编辑的文本内容 |
 | `encrypted` | boolean | 是否为端到端加密的内容；否时省略 |
 | `taken_down` | boolean | 是否已被运营者下架；否时省略 |
+| `expires_at` | time | 仅快速分享有此字段，为其删除时间。快速分享在资源页转为资源之前为只读（`editable` 为 false） |
 | `url` | string | 资源页地址 |
 
 ## 接口
@@ -231,6 +234,22 @@
 
 成功时返回 `201` 与资源对象。
 
+### 创建快速分享
+
+`POST /api/v1/quick-shares`
+
+与登录用户在首页输入框中的操作相同：保存内容并生成一条随其失效的分享链接，失效前保存在账号的资源中。仅在部署开放快速分享时可用，否则返回 `404`。
+
+请求体为 `multipart/form-data`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `content` | 必填，文件形式的内容，最大 10 MiB |
+| `filename` | 可选，链接末尾的文件名 |
+| `ttl` | 可选，`10m`、`1h`、`1d`、`7d` 或 `30d`，默认 `1h` |
+
+成功时返回 `201`、资源对象与分享链接 `share_url`。文本以纯文本交付，图片和音视频按其类型交付，其他内容作为下载，与首页创建的快速分享相同。快速分享计入账号的存储容量，到期后内容被删除，访问记录保留。
+
 ## 示例
 
 ```bash
@@ -246,6 +265,9 @@ curl -fsS -X PUT -H "Authorization: Bearer $TOKEN" -H 'If-Match: "v5"' \
 
 curl -fsS -H "Authorization: Bearer $TOKEN" \
   -F name=app.log -F filename=app.log -F content=@app.log "$API/resources"
+
+curl -fsS -H "Authorization: Bearer $TOKEN" \
+  -F filename=app.log -F ttl=1d -F content=@app.log "$API/quick-shares"
 ```
 
 在命令行参数中写入令牌会让同一台机器上的其他用户通过进程列表看到它。脚本中应从文件读取令牌，例如使用 curl 的 `-H @文件`，或直接使用 `plainmote` 命令行。

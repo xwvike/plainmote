@@ -108,6 +108,7 @@ func (a *App) templateSet() *template.Template {
 		"outcomeText":        accessOutcomeText,
 		"asset":              assetPath,
 		"locationText":       locationText,
+		"resourceLabel":      resourceLabel,
 		"locationShort":      locationShort,
 		"outcomeDescription": accessOutcomeDescription,
 		"remainText":         remainText,
@@ -564,4 +565,16 @@ func (a *App) basePageWithError(r *http.Request, user User, message string) page
 	data := a.basePage(r, user)
 	data.Error = message
 	return data
+}
+
+// resourceLabel is what a resource is called in a list: its name, or for
+// encrypted content - whose name is inside it - that it is encrypted.
+func resourceLabel(locale string, resource Resource) string {
+	switch {
+	case resource.Name != "":
+		return resource.Name
+	case resource.Encrypted():
+		return translate(locale, "encrypted_content")
+	}
+	return translate(locale, "untitled_resource")
 }

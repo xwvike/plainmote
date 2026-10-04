@@ -106,9 +106,10 @@ func TestEncryptedPasteEndpoint(t *testing.T) {
 		t.Fatalf("answer %q %v", created.Body.String(), err)
 	}
 
-	// The result page marks it and offers no save.
+	// The result page marks it and says where it is kept; there is nothing
+	// to save.
 	result := client.do(http.MethodGet, answer.Result, nil).Body.String()
-	for _, want := range []string{"data-e2ee-result", "data-e2ee-lost", assetPath("e2ee-share.js"), "Encrypted shares cannot be saved as resources"} {
+	for _, want := range []string{"data-e2ee-result", "data-e2ee-lost", assetPath("e2ee-share.js"), "where its access history is kept"} {
 		if !strings.Contains(result, want) {
 			t.Errorf("the result page is missing %q", want)
 		}
@@ -177,7 +178,7 @@ func TestEncryptedLinkOpensTheDecryptionPage(t *testing.T) {
 	if raw.Code != http.StatusOK || !bytes.Equal(got, sampleEnvelope()) || raw.Header().Get("Content-Type") != store.EncryptedContentType {
 		t.Fatalf("raw: %d %q", raw.Code, raw.Header().Get("Content-Type"))
 	}
-	logs, _ := db.ListAccess(ctx, store.AnonymousUserID, "", "", 10)
+	logs, _ := db.ListAccess(ctx, user.ID, "", "", 10)
 	if len(logs) != 1 {
 		t.Fatalf("only the fetch for the bytes is a use, found %d log rows", len(logs))
 	}

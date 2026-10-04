@@ -35,7 +35,7 @@
         <summary>
           <span class="tm">{{formatTime .OccurredAt}}</span>
           <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{outcomeText $.Locale .Outcome}}</span></span>
-          <span class="trunc" title="{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}">{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}</span>
+          <span class="trunc" title="{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}">{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}{{if .QuickShare}} <span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}</span>
           <span class="trunc" title="{{or .LinkName (tr $.Locale "untitled_share")}}">{{or .LinkName (tr $.Locale "untitled_share")}}</span>
           {{/* Sand when the content has moved on since: this caller is behind. */}}
           <span class="vc{{if and .Version (ne .Version .CurrentVersion)}} old{{end}}">{{if .Version}}v{{.Version}}{{else}}<span class="mut">—</span>{{end}}</span>

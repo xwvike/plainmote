@@ -17,17 +17,22 @@
     <div class="ph"><h1>{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}</h1></div>
     {{else}}
     <div class="ph">
-      <h1 data-part="title">{{or .Resource.Name (tr .Locale "untitled_resource")}}</h1>
+      <h1 data-part="title">{{resourceLabel .Locale .Resource}}</h1>
+      {{if .Resource.QuickShare}}<span class="tag qs">{{tr .Locale "quick_share"}}</span>{{end}}
       <span class="sp">
         {{/* Beside the one other thing done to the resource as a whole. Shown
              with nothing in it too: the page behind it says how it fills. */}}
-        {{if not .Resource.Remote}}{{template "resource-hist" .}}{{end}}
+        {{if not (or .Resource.Remote .Resource.QuickShare)}}{{template "resource-hist" .}}{{end}}
         <a class="txt danger" href="/resources/{{.Resource.ID}}?delete=1" data-dialog>{{tr .Locale "delete"}}</a>
       </span>
     </div>
     {{end}}
     {{template "resource-notices" .}}
     {{$remote := or .Resource.Remote (eq .NewKind "remote")}}
+
+    {{if and (not .IsNew) .Resource.QuickShare}}
+    {{template "quick-share" .}}
+    {{else}}
 
     {{/* An edit is saved in place, the editor left as it is, unless it
          carries a chosen file or the resource is a reference: what comes
@@ -169,9 +174,10 @@
          resource is for, so they are on the page whenever it is open; the
          dialog is left for changing one's terms, which is rare. */}}
     {{template "share-panel" .}}
-
-    {{template "resource-meta" .}}
     {{end}}
+    {{end}}
+
+    {{if not .IsNew}}{{template "resource-meta" .}}{{end}}
 
   </main>
 
@@ -189,9 +195,9 @@
 </html>{{end}}
 
 
-{{define "resource-doc-title"}}<title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{or .Resource.Name (tr .Locale "untitled_resource")}}{{end}} · PlainMote</title>{{end}}
+{{define "resource-doc-title"}}<title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{resourceLabel .Locale .Resource}}{{end}} · PlainMote</title>{{end}}
 
-{{define "resource-crumb"}}<div class="crumb" data-part="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}{{else}}{{or .Resource.Name (tr .Locale "untitled_resource")}}{{end}}</span></div>{{end}}
+{{define "resource-crumb"}}<div class="crumb" data-part="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}{{else}}{{resourceLabel .Locale .Resource}}{{end}}</span></div>{{end}}
 
 {{define "resource-hist"}}<a class="hist" href="/resources/{{.Resource.ID}}/versions" data-part="hist">{{tr .Locale "history"}}<b>{{.HistoryCount}}</b></a>{{end}}
 
@@ -201,7 +207,7 @@
 
 {{define "resource-submit"}}<button type="submit" class="pri" data-part="submit">{{if .IsNew}}{{tr .Locale "create_resource"}}{{else if .Conflict}}{{printf (tr .Locale "save_anyway") (inc .Conflict.Current)}}{{else}}{{tr .Locale "save"}}{{end}}</button>{{end}}
 
-{{define "resource-meta"}}<p class="meta" data-part="meta">{{.Resource.ID}} · {{if .Resource.Remote}}{{tr .Locale "reference"}} · {{originHost .Resource.OriginURL}}{{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}} · v{{.Resource.Version}}{{end}} · {{tr .Locale "created"}} {{formatTime .Resource.CreatedAt}} · {{tr .Locale "updated"}} {{formatTime .Resource.UpdatedAt}}</p>{{end}}
+{{define "resource-meta"}}<p class="meta" data-part="meta">{{.Resource.ID}} · {{if .Resource.Remote}}{{tr .Locale "reference"}} · {{originHost .Resource.OriginURL}}{{else}}{{if .Resource.Encrypted}}{{tr .Locale "encrypted"}}{{else}}{{.Resource.ContentType}}{{end}} · {{bytesText .Resource.ContentSize}} · v{{.Resource.Version}}{{end}} · {{tr .Locale "created"}} {{formatTime .Resource.CreatedAt}} · {{tr .Locale "updated"}} {{formatTime .Resource.UpdatedAt}}</p>{{end}}
 
 {{/* Everything said about the last action, in one slot. A refused share
      action reopens the share it was about, and its message goes in that
@@ -215,6 +221,8 @@
       <a class="txt" href="/resources/new{{if .Resource.Remote}}?kind=remote{{end}}">{{tr .Locale "create_another"}}</a>
       <a class="txt" href="/resources/">{{tr .Locale "back_to_resources"}}</a>
     </div>
+    {{else if .Kept}}
+    <p class="notice" role="status">{{tr .Locale "quick_share_kept"}}</p>
     {{else if .Saved}}
     <p class="notice" role="status">{{if .SavedVersion}}{{printf (tr .Locale "notice_saved_version") .SavedVersion}}{{else}}{{tr .Locale "notice_saved"}}{{end}}</p>
     {{end}}
@@ -335,3 +343,75 @@
 {{template "resource-meta" .}}
 {{template "share-panel" .}}
 {{template "resource-dialogs" .}}{{end}}
+
+{{/* A quick share not yet kept: what was handed out, how long it lasts and
+     what it holds, read only. Keeping it as a resource is the way to
+     anything more, and is offered beside the time it would otherwise end. */}}
+{{define "quick-share"}}
+    <div class="notice notice-row">
+      <span>{{tr .Locale "quick_share_notice_prefix"}}{{formatTime .Resource.ExpiresAt}}{{tr .Locale "quick_share_notice_suffix"}}{{if .Resource.Encrypted}}{{tr .Locale "quick_share_encrypted_keep"}}{{else}}{{tr .Locale "quick_share_notice_keep"}}{{end}}</span>
+      {{if .Resource.Encrypted}}
+      {{else}}<form method="post" action="/resources/{{.Resource.ID}}" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="keep">
+        <button type="submit" class="pri sm">{{tr .Locale "quick_share_keep"}}</button>
+      </form>{{end}}
+    </div>
+    <section class="ruled paste-result" style="{{endStyle .Resource.ExpiresAt}}">
+      <div class="pt">
+        <span class="sec">{{tr .Locale "share_link"}}</span>
+        <span class="sp">{{with .Shares}}{{with index . 0}}<span class="counts">{{tr $.Locale "used_count"}} <b>{{.Link.UsedCount}}</b></span>{{end}}{{end}}<a class="txt" href="/logs?resource={{.Resource.ID}}">{{tr .Locale "access_logs"}}</a></span>
+      </div>
+      {{with .Shares}}{{with index . 0}}
+      {{if $.Resource.Encrypted}}
+      <p class="hint">{{tr $.Locale "quick_share_encrypted_link"}}</p>
+      {{else if .Link.Unreadable}}
+      <p class="hint">{{tr $.Locale "share_link_unreadable"}}</p>
+      {{else}}
+      <div class="ticket">
+        <code class="addr ends" tabindex="0" aria-label="{{tr $.Locale "share_link"}}">{{template "address" .URL}}</code>
+        <span class="stub until"><button type="button" class="pri sm" data-copy="{{.URL}}">{{template "copy-label" $}}</button></span>
+      </div>
+      {{end}}
+      <div class="left wide">
+        <span class="gauge" style="{{gaugeStyle .Link.TermsAt .Link.ExpiresAt}}" aria-hidden="true"></span>
+        <span class="swap">
+          <span class="st on until"><i></i><span>{{tr $.Locale "valid_until"}} {{formatTime .Link.ExpiresAt}} ({{untilText $.Locale .Link.ExpiresAt}})</span></span>
+          <span class="st off after"><i></i><span>{{tr $.Locale "share_ended_expired"}} {{formatTime .Link.ExpiresAt}}</span></span>
+        </span>
+      </div>
+      {{end}}{{else}}
+      <p class="hint">{{tr .Locale "quick_share_link_ended"}}</p>
+      {{end}}
+    </section>
+    {{/* As tall as the editor's sheet only when there is something to show
+         in it; encrypted content is one sentence. */}}
+    <div class="panel ruled{{if not .Resource.Encrypted}} panel-ed{{end}}">
+      <div class="pt">
+        <span class="sec">{{tr .Locale "content"}}</span>
+        <span class="tag">{{tr .Locale "read_only"}}</span>
+        <span class="sp"><em class="content-meta">{{if not .Resource.Encrypted}}{{.Resource.ContentType}} · {{end}}{{bytesText .Resource.ContentSize}}</em></span>
+      </div>
+      <div class="pb">
+        {{if .Resource.Encrypted}}
+        <p class="ro">{{tr .Locale "quick_share_encrypted_body"}}</p>
+        {{else if .ContentText}}
+        <textarea rows="18" spellcheck="false" disabled aria-label="{{tr .Locale "resource_content"}}" data-preview data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}">{{.ContentText}}</textarea>
+        {{else if hasPrefix .Resource.ContentType "image/"}}
+        <div class="media-stage"><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{resourceLabel .Locale .Resource}}"></div>
+        {{else if hasPrefix .Resource.ContentType "audio/"}}
+        <div class="media-stage"><audio class="resource-media resource-audio" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw"></audio></div>
+        {{else if hasPrefix .Resource.ContentType "video/"}}
+        <div class="media-stage"><video class="resource-media resource-video" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" data-prime-video></video></div>
+        {{else}}
+        <div class="media-stage">
+          <div class="file-card">
+            <strong>{{or .Resource.Filename (resourceLabel .Locale .Resource)}}</strong>
+            <span>{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}</span>
+            <a class="btn sm" href="/resources/{{.Resource.ID}}/raw" target="_blank" rel="noopener">{{tr .Locale "open_file"}}</a>
+          </div>
+        </div>
+        {{end}}
+      </div>
+    </div>
+{{end}}

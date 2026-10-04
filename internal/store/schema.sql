@@ -114,6 +114,11 @@ UPDATE resources SET version_at = updated_at WHERE version_at IS NULL;
 -- new ones can be made; its owner sees the reason and may delete it.
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS taken_down_at TIMESTAMPTZ;
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS takedown_reason TEXT NOT NULL DEFAULT '';
+-- A quick share made while signed in: the creator's own, listed with their
+-- resources and read only, until expires_at, when it is deleted - its access
+-- log stays. NULL for everything else, which is what keeping one sets it to.
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS resources_expiry_idx ON resources(expires_at) WHERE expires_at IS NOT NULL;
 
 -- What a resource held before, one row per replaced version. Kept whole rather
 -- than as changes against the next one, so any version can be read, compared
@@ -159,9 +164,11 @@ CREATE TABLE IF NOT EXISTS links (
 ALTER TABLE links ADD COLUMN IF NOT EXISTS terms_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS links_resource_idx ON links(resource_id);
 
--- A signed-in creator may explicitly keep a quick share. The resource remains
--- anonymous until then, and this row binds that one action to the account that
--- created it; possessing the public link alone is not enough to claim it.
+-- A quick share made without signing in may be kept by whoever made it, once
+-- they sign in: the row's user is the anonymous account, and holding the
+-- private result address is the claim. (Rows naming a real account are from
+-- before signed-in quick shares became their creator's own; see the move
+-- after access_logs.)
 CREATE TABLE IF NOT EXISTS paste_claims (
   resource_id UUID PRIMARY KEY REFERENCES resources(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -239,6 +246,23 @@ CREATE INDEX IF NOT EXISTS access_logs_fold_idx ON access_logs(link_id, outcome,
 CREATE INDEX IF NOT EXISTS access_logs_owner_idx ON access_logs(owner_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_resource_idx ON access_logs(resource_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_time_idx ON access_logs(occurred_at DESC);
+
+-- Signed-in quick shares used to stay anonymous, bound to their creator only
+-- for an explicit save. Those still live become the creator's own, with the
+-- visits already recorded; the rest expire as before. Finds nothing after the
+-- first run.
+WITH moved AS (
+  UPDATE resources r SET owner_id = pc.user_id, expires_at = live.until
+  FROM paste_claims pc,
+       LATERAL (SELECT MAX(l.expires_at) AS until FROM links l
+                WHERE l.resource_id = pc.resource_id AND l.revoked_at IS NULL AND l.expires_at > now()) live
+  WHERE pc.resource_id = r.id AND r.owner_id = '00000000-0000-0000-0000-000000000001'
+    AND pc.user_id <> '00000000-0000-0000-0000-000000000001' AND live.until IS NOT NULL
+  RETURNING r.id, r.owner_id
+), logs AS (
+  UPDATE access_logs a SET owner_id = moved.owner_id FROM moved WHERE a.resource_id = moved.id
+)
+DELETE FROM paste_claims pc USING moved WHERE pc.resource_id = moved.id;
 
 -- The access log copied the same placeholders; see the resources update above.
 UPDATE access_logs SET link_name = '' WHERE link_name = '未命名分享';

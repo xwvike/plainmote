@@ -81,6 +81,10 @@ func Run() error {
 
 const pruneInterval = time.Hour
 
+// quickShareSweep is how soon after its end a signed-in quick share is
+// deleted. Its link stops working at the end itself; this is the content.
+const quickShareSweep = time.Minute
+
 // prune runs on the server's context, so shutdown stops it. A failed pass is
 // logged and not retried.
 func prune(ctx context.Context, db *store.Store, retention time.Duration) {
@@ -99,15 +103,35 @@ func prune(ctx context.Context, db *store.Store, retention time.Duration) {
 		}
 	}
 
+	// A quick share is gone when its time is up, not within the hour: its
+	// own sweep runs every minute and touches only what has ended.
+	sweep := func() {
+		removed, err := db.PruneQuickShares(ctx, time.Now().UTC())
+		if err != nil {
+			if ctx.Err() == nil {
+				fmt.Fprintf(os.Stderr, "prune quick shares: %v\n", err)
+			}
+			return
+		}
+		if removed > 0 {
+			fmt.Fprintf(os.Stderr, "prune: removed %d ended quick shares\n", removed)
+		}
+	}
+
 	pass()
+	sweep()
 	ticker := time.NewTicker(pruneInterval)
 	defer ticker.Stop()
+	quick := time.NewTicker(quickShareSweep)
+	defer quick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			pass()
+		case <-quick.C:
+			sweep()
 		}
 	}
 }

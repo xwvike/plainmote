@@ -170,12 +170,17 @@ func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name strin
 	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {
 		return Link{}, err
 	}
-	var takenDown bool
-	if err := d.db.QueryRow(ctx, `SELECT taken_down_at IS NOT NULL FROM resources WHERE id = $1`, resourceID).Scan(&takenDown); err != nil {
+	var takenDown, quick bool
+	if err := d.db.QueryRow(ctx, `SELECT taken_down_at IS NOT NULL, expires_at IS NOT NULL FROM resources WHERE id = $1`, resourceID).Scan(&takenDown, &quick); err != nil {
 		return Link{}, translateNotFound(err)
 	}
 	if takenDown {
 		return Link{}, ErrTakenDown
+	}
+	// A quick share has the one link it was made with; another would outlive
+	// what it points at.
+	if quick {
+		return Link{}, errQuickShareReadOnly
 	}
 	if err := validateShareTerms(ttl, maxUses); err != nil {
 		return Link{}, err
@@ -189,6 +194,13 @@ func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name strin
 func (d *Store) UpdateShare(ctx context.Context, ownerID, resourceID, linkID, name string, ttl time.Duration, maxUses int) error {
 	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {
 		return err
+	}
+	var quick bool
+	if err := d.db.QueryRow(ctx, `SELECT expires_at IS NOT NULL FROM resources WHERE id = $1`, resourceID).Scan(&quick); err != nil {
+		return translateNotFound(err)
+	}
+	if quick {
+		return errQuickShareReadOnly
 	}
 	if err := validateShareTerms(ttl, maxUses); err != nil {
 		return err

@@ -274,6 +274,9 @@ func (d *Store) RestoreVersion(ctx context.Context, ownerID, resourceID string, 
 	if err != nil {
 		return SaveResult{}, err
 	}
+	if err := refuseQuickShare(resource); err != nil {
+		return SaveResult{}, err
+	}
 	// The name stays unless it would misname what comes back, and the type is
 	// read from the bytes under that name, the way a save reads it - not taken
 	// from the row, which may predate what detection knows now.

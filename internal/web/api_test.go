@@ -264,6 +264,60 @@ func TestTheResourceAPI(t *testing.T) {
 
 // TestTheAPIOnlyTakesBearerTokens: a session cookie, a token in the address
 // and a token without its scheme all open nothing.
+// A quick share made through the API is the one the home page makes: the
+// link back, kept in the account, read only, and refused where quick sharing
+// is not offered.
+func TestQuickSharesThroughTheAPI(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	app := newTestApp(db, user.GitHubID)
+	token := issueToken(t, db, user, store.TokenScopeWrite)
+	share := func(ttl string, content string) *httptest.ResponseRecorder {
+		var form bytes.Buffer
+		writer := multipart.NewWriter(&form)
+		_ = writer.WriteField("filename", "app.log")
+		if ttl != "" {
+			_ = writer.WriteField("ttl", ttl)
+		}
+		part, _ := writer.CreateFormFile("content", "content")
+		_, _ = part.Write([]byte(content))
+		_ = writer.Close()
+		return callAPI(t, app, apiCall{method: http.MethodPost, path: apiPrefix + "quick-shares", token: token, body: &form,
+			header: map[string]string{"Content-Type": writer.FormDataContentType()}})
+	}
+	if got := share("2h", "x\n"); got.Code != http.StatusBadRequest || !strings.Contains(got.Body.String(), "invalid_ttl") {
+		t.Fatalf("an unknown lifetime: %d %s", got.Code, got.Body.String())
+	}
+	created := share("1d", "line one\n")
+	var made struct {
+		apiResource
+		ShareURL string `json:"share_url"`
+	}
+	decodeJSON(t, created, &made)
+	if created.Code != http.StatusCreated || made.ExpiresAt == nil || made.Editable || !strings.HasPrefix(made.ShareURL, "https://cfg.test/d/") ||
+		made.ExpiresAt.Sub(time.Now()) < 23*time.Hour {
+		t.Fatalf("created: %d %+v", created.Code, made)
+	}
+	delivered := httptest.NewRecorder()
+	app.handler.ServeHTTP(delivered, httptest.NewRequest(http.MethodGet, made.ShareURL, nil))
+	if delivered.Code != http.StatusOK || delivered.Body.String() != "line one\n" {
+		t.Fatalf("the link: %d %q", delivered.Code, delivered.Body.String())
+	}
+	base := apiPrefix + "resources/" + made.ID
+	if got := callAPI(t, app, apiCall{method: http.MethodGet, path: base + "/content", token: token}); got.Code != http.StatusOK || got.Body.String() != "line one\n" {
+		t.Fatalf("read: %d", got.Code)
+	}
+	saved := callAPI(t, app, apiCall{method: http.MethodPut, path: base + "/content", token: token,
+		body: strings.NewReader("changed\n"), header: map[string]string{"If-Match": "*"}})
+	if saved.Code != http.StatusBadRequest || !strings.Contains(saved.Body.String(), "refused") {
+		t.Fatalf("a save to a quick share: %d %s", saved.Code, saved.Body.String())
+	}
+
+	app.cfg.AnonymousEnabled = false
+	if got := share("", "x\n"); got.Code != http.StatusNotFound {
+		t.Fatalf("quick shares where they are not offered: %d", got.Code)
+	}
+}
+
 func TestTheAPIOnlyTakesBearerTokens(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	client := newVersionClient(t, db, user)
@@ -555,6 +609,7 @@ func TestAPIAuthorizationMatrix(t *testing.T) {
 			return strings.NewReader("saved " + time.Now().String() + "\n"), map[string]string{"If-Match": "*"}
 		}},
 		{name: "create", method: http.MethodPost, path: apiPrefix + "resources", write: true, body: multipartBody},
+		{name: "quick-share", method: http.MethodPost, path: apiPrefix + "quick-shares", write: true, body: multipartBody},
 	}
 	call := func(e endpoint, token string, cookie bool) *httptest.ResponseRecorder {
 		var body io.Reader
@@ -601,7 +656,7 @@ func TestAPIAuthorizationMatrix(t *testing.T) {
 		// Another account's token: its own data only.
 		got = call(e, foreign, false)
 		switch e.name {
-		case "me", "create":
+		case "me", "create", "quick-share":
 			if got.Code != http.StatusOK && got.Code != http.StatusCreated || strings.Contains(got.Body.String(), "alice") {
 				t.Errorf("%s with another account's token: %d %s", e.name, got.Code, got.Body.String())
 			}
@@ -617,8 +672,8 @@ func TestAPIAuthorizationMatrix(t *testing.T) {
 	}
 
 	// What other accounts' tokens created stays theirs.
-	if theirs, _ := db.APIResources(ctx, owner.ID, ""); len(theirs) != 2 {
-		t.Fatalf("the owner has %d resources, want their own two", len(theirs))
+	if theirs, _ := db.APIResources(ctx, owner.ID, ""); len(theirs) != 3 {
+		t.Fatalf("the owner has %d resources, want their own three", len(theirs))
 	}
 
 	// A token opens no web page and changes nothing through a form.

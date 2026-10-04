@@ -23,9 +23,16 @@
          place on every list page, and no box of their own. */}}
     <form class="filters" method="get" action="/resources/">
       <input type="search" name="q" value="{{.Pager.Query}}" placeholder="{{tr .Locale "search_name_filename"}}" aria-label="{{tr .Locale "search_name_filename"}}">
+      <label class="pick"><span>{{tr .Locale "type"}}</span>
+        <select name="kind">
+          <option value="">{{tr .Locale "kind_all"}}</option>
+          <option value="resource"{{if eq .Pager.Kind "resource"}} selected{{end}}>{{tr .Locale "kind_resource"}}</option>
+          <option value="quick"{{if eq .Pager.Kind "quick"}} selected{{end}}>{{tr .Locale "quick_share"}}</option>
+        </select>
+      </label>
       <input type="hidden" name="size" value="{{.Pager.Size}}">
       <button type="submit">{{tr .Locale "search"}}</button>
-      {{if .Pager.Query}}<a class="txt" href="/resources/">{{tr .Locale "clear"}}</a>{{end}}
+      {{if or .Pager.Query .Pager.Kind}}<a class="txt" href="/resources/">{{tr .Locale "clear"}}</a>{{end}}
     </form>
     <div class="panel">
       {{if .Resources}}
@@ -36,14 +43,16 @@
           <tbody>
             {{range .Resources}}
             <tr>
-              <td class="trunc"><a href="/resources/{{.ID}}">{{or .Name (tr $.Locale "untitled_resource")}}</a></td>
-              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}">{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">{{tr $.Locale "remote"}}</span>{{end}}</span></td>
+              <td class="trunc"><a href="/resources/{{.ID}}">{{resourceLabel $.Locale .}}</a></td>
+              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}">{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">{{tr $.Locale "remote"}}</span>{{end}}{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{end}}</span></td>
               <td>
                 {{if .Remote}}<span class="fl"><span class="tag">{{tr $.Locale "upstream"}}</span><span class="mono trunc" title="{{.OriginURL}}">{{originHost .OriginURL}}</span></span>
+                {{else if .Encrypted}}<span class="mut">—</span>
                 {{else}}<span class="mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
               </td>
               <td>
                 {{if .TakenDown}}<span class="st no"><i></i><span>{{tr $.Locale "taken_down"}}</span></span>
+                {{else if .QuickShare}}<span class="st qs-left"><i></i><span>{{remainText $.Locale .ExpiresAt}}</span></span>
                 {{else if .LiveShares}}<span class="st on"><i></i><span>{{countText $.Locale .LiveShares "shares"}}</span></span>
                 {{else}}<span class="st off"><i></i><span>{{tr $.Locale "not_shared"}}</span></span>{{end}}
               </td>
@@ -58,6 +67,7 @@
           <span class="hint">{{pageSummary .Locale .Pager.From .Pager.To .Pager.Total "items"}}</span>
           <form class="psize" method="get" action="/resources/">
             <input type="hidden" name="q" value="{{.Pager.Query}}">
+            <input type="hidden" name="kind" value="{{.Pager.Kind}}">
             <label>{{tr .Locale "per_page"}} <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
             <button type="submit" class="sm">{{tr .Locale "apply"}}</button>
           </form>

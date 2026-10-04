@@ -150,12 +150,15 @@ type pageData struct {
 	PasteURL        string
 	PasteResourceID string
 	PasteClaimable  bool
-	PasteExpires    time.Time
-	PasteEncrypted  bool
-	PasteGauge      template.CSS
-	PasteEnd        template.CSS
-	PasteSize       int64
-	MaxPaste        int64
+	// PasteOwned is a signed-in quick share, already in its creator's
+	// resources.
+	PasteOwned     bool
+	PasteExpires   time.Time
+	PasteEncrypted bool
+	PasteGauge     template.CSS
+	PasteEnd       template.CSS
+	PasteSize      int64
+	MaxPaste       int64
 
 	// ContentText is the body loaded for the editor. It is only filled in for
 	// a resource small and textual enough to show, so a large or non-text one is
@@ -222,12 +225,15 @@ type pageData struct {
 	RestoredFrom int
 	UndoVersion  int
 	Trimmed      int
+	// Kept confirms a quick share just kept as a resource.
+	Kept bool
 }
 
 // pager carries everything the dashboard footer needs; every link is a plain
 // href so the list stays usable without JavaScript.
 type pager struct {
 	Query   string
+	Kind    string
 	Size    int
 	Sizes   []int
 	Total   int

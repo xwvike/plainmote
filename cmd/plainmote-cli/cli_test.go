@@ -104,6 +104,7 @@ func newHarness(t *testing.T) *harness {
 	app := web.New(web.Config{
 		PublicURL: server.URL, MaxContent: 4 << 20, SessionTTL: time.Hour,
 		AllowedIDs: map[string]bool{"100": true}, RegistrationMode: auth.RegistrationAllowlist, Version: "test",
+		AnonymousEnabled: true,
 	}, db, upstream.New(4<<20), nil)
 	handler = app.Handler()
 	return &harness{t: t, db: db, user: user, server: server, config: t.TempDir()}
@@ -401,6 +402,43 @@ func TestEdit(t *testing.T) {
 	h.signIn("read")
 	if exit, _, errOut := h.run(editor(appendLine("x\n")), "edit", "nginx.conf"); exit != 1 || !strings.Contains(errOut, "read-only") {
 		t.Fatalf("a read-only edit: %d %s", exit, errOut)
+	}
+}
+
+// share prints the link alone on stdout, so it can be captured, and the
+// quick share it made is listed as one and refused by edit.
+func TestShare(t *testing.T) {
+	h := newHarness(t)
+	h.signIn("write")
+	exit, out, errOut := h.run(&cli{stdin: strings.NewReader("boot ok\n")}, "share", "-", "--filename", "app.log", "--ttl", "1d")
+	if exit != 0 || !strings.HasPrefix(out, h.server.URL+"/d/") || !strings.HasSuffix(out, "/app.log\n") || strings.Count(out, "\n") != 1 ||
+		!strings.Contains(errOut, "Shared on "+strings.TrimPrefix(h.server.URL, "http://")) {
+		t.Fatalf("share: %d %q %q", exit, out, errOut)
+	}
+	response, err := http.Get(strings.TrimSpace(out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if string(body) != "boot ok\n" {
+		t.Fatalf("the link delivers %q", body)
+	}
+	if exit, out, _ := h.run(nil, "ls"); exit != 0 || !strings.Contains(out, "quick share") {
+		t.Fatalf("ls: %d %s", exit, out)
+	}
+	if exit, out, _ := h.run(nil, "cat", "app.log"); exit != 0 || out != "boot ok\n" {
+		t.Fatalf("cat: %d %q", exit, out)
+	}
+	if exit, _, errOut := h.run(nil, "edit", "app.log"); exit != 1 || !strings.Contains(errOut, "quick share and read only") {
+		t.Fatalf("edit: %d %s", exit, errOut)
+	}
+	if exit, _, errOut := h.run(&cli{stdin: strings.NewReader("x")}, "share", "-", "--ttl", "2h"); exit != 1 || !strings.Contains(errOut, "10m, 1h, 1d, 7d or 30d") {
+		t.Fatalf("an unknown lifetime: %d %s", exit, errOut)
+	}
+	h.signIn("read")
+	if exit, _, errOut := h.run(&cli{stdin: strings.NewReader("x")}, "share", "-"); exit != 1 || errOut == "" {
+		t.Fatalf("share with a read-only sign-in: %d %s", exit, errOut)
 	}
 }
 

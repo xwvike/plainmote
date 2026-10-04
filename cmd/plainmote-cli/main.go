@@ -85,6 +85,8 @@ func (c *cli) run(ctx context.Context, args []string) int {
 		err = c.cat(ctx, rest)
 	case "edit":
 		err = c.edit(ctx, rest)
+	case "share":
+		err = c.share(ctx, rest)
 	case "push":
 		err = c.push(ctx, rest)
 	default:

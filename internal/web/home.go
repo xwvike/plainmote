@@ -187,18 +187,22 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		boxContent = ""
 	}
 
-	creatorID := ""
+	// Signed in, the quick share is the account's own: listed with its
+	// resources and its visits in its access history. A terminal carries no
+	// session, so what it sends here is anonymous.
+	var resource Resource
+	var link Link
 	if user, _, ok := a.currentUser(r); ok {
-		creatorID = user.ID
 		// An account that turned encryption on never has its box's text
-		// stored in the clear because a script did not run. A terminal
-		// carries no session and is not what this refuses.
+		// stored in the clear because a script did not run.
 		if wantsHTML(r) && a.e2eeEnabled(r, user.ID) {
 			a.refusePasteWith(w, r, boxContent, filename, ttlValue, translate(requestLanguage(r).Locale, "e2ee_plaintext_refused"), http.StatusBadRequest)
 			return
 		}
+		resource, link, err = a.db.CreateQuickShare(r.Context(), user.ID, filename, []byte(content), ttl, time.Now().UTC())
+	} else {
+		resource, link, err = a.db.CreateAnonymousPaste(r.Context(), filename, []byte(content), ttl, time.Now().UTC())
 	}
-	resource, link, err := a.db.CreateAnonymousPasteFor(r.Context(), creatorID, filename, []byte(content), ttl, time.Now().UTC())
 	if err != nil {
 		if !store.IsRefusal(err) {
 			fmt.Fprintf(os.Stderr, "create paste: %v\n", err)
@@ -344,6 +348,22 @@ func (a *App) handlePasteResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
+	// A signed-in quick share's result is its creator's alone; an anonymous
+	// one's is whoever holds this address.
+	user, _, signedIn := a.currentUser(r)
+	if signedIn {
+		resource, link, err := a.db.QuickShareLink(r.Context(), user.ID, resourceID, now)
+		if err == nil {
+			data := a.pasteResultPage(r, resource, link)
+			data.PasteOwned = true
+			a.renderHome(w, r, data, http.StatusOK)
+			return
+		}
+		if !errors.Is(err, store.ErrNotFound) {
+			a.serverError(w, "read quick share", err)
+			return
+		}
+	}
 	resource, link, err := a.db.AnonymousPasteResult(r.Context(), resourceID, now)
 	if errors.Is(err, store.ErrNotFound) {
 		writeLocalizedError(w, r, http.StatusGone, "error_paste_expired")
@@ -355,7 +375,7 @@ func (a *App) handlePasteResult(w http.ResponseWriter, r *http.Request) {
 	}
 	data := a.pasteResultPage(r, resource, link)
 	data.SignInURL = "/login?next=" + url.QueryEscape(r.URL.RequestURI())
-	if user, _, ok := a.currentUser(r); ok {
+	if signedIn {
 		if _, _, err := a.db.ClaimableAnonymousPaste(r.Context(), user.ID, resourceID, now); err == nil {
 			data.PasteClaimable = true
 		} else if !errors.Is(err, store.ErrNotFound) {

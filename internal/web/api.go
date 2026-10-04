@@ -122,6 +122,10 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if a.apiWritable(w, token) {
 			a.apiCreateResource(w, r, user)
 		}
+	case path == "quick-shares" && r.Method == http.MethodPost:
+		if a.apiWritable(w, token) {
+			a.apiCreateQuickShare(w, r, user)
+		}
 	case strings.HasPrefix(path, "resources/"):
 		rest := strings.Split(strings.TrimPrefix(path, "resources/"), "/")
 		switch {
@@ -195,7 +199,10 @@ type apiResource struct {
 	Editable  bool      `json:"editable"`
 	Encrypted bool      `json:"encrypted,omitempty"`
 	TakenDown bool      `json:"taken_down,omitempty"`
-	URL       string    `json:"url"`
+	// ExpiresAt is set on a quick share not yet kept: read only, and
+	// deleted at that time.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	URL       string     `json:"url"`
 }
 
 func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
@@ -204,8 +211,8 @@ func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
 		ID: resource.ID, Name: resource.Name, Filename: resource.Filename, Size: resource.ContentSize,
 		Type: resource.ContentType, Encoding: resource.ContentEncoding, Version: resource.Version,
 		UpdatedAt: resource.UpdatedAt, Remote: resource.Remote(), Encrypted: encrypted,
-		Editable:  resource.Editable() && !encrypted && !resource.Remote(),
-		TakenDown: resource.TakenDown, URL: a.baseURL(r) + "/resources/" + resource.ID,
+		Editable:  resource.Editable() && !encrypted && !resource.Remote() && !resource.QuickShare(),
+		TakenDown: resource.TakenDown, ExpiresAt: resource.ExpiresAt, URL: a.baseURL(r) + "/resources/" + resource.ID,
 	}
 }
 
@@ -377,6 +384,60 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	a.writeAPI(w, http.StatusCreated, a.apiResourceView(r, resource))
+}
+
+// apiCreateQuickShare is the home page's box for a signed-in account: the
+// content and one link that ends with it, kept in the account's resources.
+// It exists where quick sharing does.
+func (a *App) apiCreateQuickShare(w http.ResponseWriter, r *http.Request, user User) {
+	if !a.cfg.AnonymousEnabled {
+		a.apiFail(w, http.StatusNotFound, "not_found", "this server does not offer quick shares")
+		return
+	}
+	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "multipart/form-data" {
+		a.apiFail(w, http.StatusUnsupportedMediaType, "bad_request", "send a multipart form with a content file")
+		return
+	}
+	limit := int64(store.AnonymousMaxBytes) + 64<<10
+	if r.ContentLength > limit {
+		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	if err := r.ParseMultipartForm(store.AnonymousMaxBytes + 1); err != nil {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", "could not read the form")
+		return
+	}
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
+	ttl := store.AnonymousDefaultTTL
+	if value := strings.TrimSpace(r.FormValue("ttl")); value != "" {
+		choice, ok := lifetimeChoice(value)
+		if !ok {
+			a.apiFail(w, http.StatusBadRequest, "invalid_ttl", "ttl must be one of 10m, 1h, 1d, 7d or 30d")
+			return
+		}
+		ttl = choice.Duration
+	}
+	file, _, err := r.FormFile("content")
+	if err != nil {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", "the form has no content file")
+		return
+	}
+	defer file.Close()
+	content, err := io.ReadAll(io.LimitReader(file, store.AnonymousMaxBytes+1))
+	if err != nil || len(content) > store.AnonymousMaxBytes {
+		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+		return
+	}
+	resource, link, err := a.db.CreateQuickShare(r.Context(), user.ID, strings.TrimSpace(r.FormValue("filename")), content, ttl, time.Now().UTC())
+	if err != nil {
+		a.apiRefused(w, "create quick share", err)
+		return
+	}
+	a.writeAPI(w, http.StatusCreated, struct {
+		apiResource
+		ShareURL string `json:"share_url"`
+	}{a.apiResourceView(r, resource), a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))})
 }
 
 // handleDeviceCode starts a command line's sign-in. It needs no account - it

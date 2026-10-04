@@ -46,7 +46,17 @@ type Resource struct {
 	// reason its owner is shown.
 	TakenDown      bool
 	TakedownReason string
+	// ExpiresAt is set on a quick share made while signed in: it is read
+	// only and is deleted at that time, unless kept as a resource first.
+	ExpiresAt *time.Time
 }
+
+// QuickShare reports a quick share that is not yet kept as a resource.
+func (r Resource) QuickShare() bool { return r.ExpiresAt != nil }
+
+// Encrypted reports content encrypted in the browser, which the service
+// can store and deliver but not read.
+func (r Resource) Encrypted() bool { return r.ContentType == EncryptedContentType }
 
 // Version is content a resource held before its current one. It is read,
 // compared and restored as a whole; nothing about it depends on the versions
@@ -98,11 +108,13 @@ type AccessLog struct {
 	Method         string
 	Path           string
 	Location       Location
-	Status         int
-	Detail         string
-	Hits           int
-	FirstAt        time.Time
-	OccurredAt     time.Time
+	// QuickShare is a visit to a quick share that is still one.
+	QuickShare bool
+	Status     int
+	Detail     string
+	Hits       int
+	FirstAt    time.Time
+	OccurredAt time.Time
 	// Version is the content version delivered, 0 when nothing was. The
 	// resource's current version and whether this one can still be opened
 	// come from the resource as it is now; both are 0/false once it is gone.

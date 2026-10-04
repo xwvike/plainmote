@@ -181,7 +181,11 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 1, $10, $11)
 const resourceColumns = `r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size, r.content_type,
        r.content_encoding, r.origin_url, r.created_at, r.updated_at,
        r.version, COALESCE(r.version_at, r.updated_at), COALESCE(r.restored_from, 0), r.content_sha256,
-       r.taken_down_at IS NOT NULL, r.takedown_reason`
+       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at`
+
+// liveResource leaves out a quick share whose time is up but which the
+// sweep has not reached yet: it is gone as far as its owner is concerned.
+const liveResource = `(r.expires_at IS NULL OR r.expires_at > now())`
 
 // scanResource reads resourceColumns, then whatever the query selected after
 // them into extra.
@@ -191,7 +195,7 @@ func scanResource(row rowScanner, extra ...any) (Resource, error) {
 		&r.ID, &r.OwnerID, &r.Name, &r.Filename, &r.ContentKey, &r.ContentSize, &r.ContentType,
 		&r.ContentEncoding, &r.OriginURL, &r.CreatedAt, &r.UpdatedAt,
 		&r.Version, &r.VersionAt, &r.RestoredFrom, &r.ContentSHA256,
-		&r.TakenDown, &r.TakedownReason,
+		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt,
 	}, extra...)...)
 	return r, err
 }
@@ -207,7 +211,7 @@ func (d *Store) resourceForOwner(ctx context.Context, q storeQuerier, ownerID, i
 	resource, err := scanResource(q.QueryRow(ctx, `
 SELECT `+resourceColumns+`
 FROM resources r
-WHERE r.id = $1 AND r.owner_id = $2
+WHERE r.id = $1 AND r.owner_id = $2 AND `+liveResource+`
 `, id, ownerID))
 	if err != nil {
 		return Resource{}, translateNotFound(err)
@@ -215,15 +219,32 @@ WHERE r.id = $1 AND r.owner_id = $2
 	return resource, nil
 }
 
+// What the resource list can be narrowed to: everything, resources, or quick
+// shares not yet kept.
+const (
+	KindResource   = "resource"
+	KindQuickShare = "quick"
+)
+
 func (d *Store) ListResources(ctx context.Context, ownerID, query string, limit, offset int) ([]Resource, int, error) {
+	return d.ListResourcesOfKind(ctx, ownerID, query, "", limit, offset)
+}
+
+func (d *Store) ListResourcesOfKind(ctx context.Context, ownerID, query, kind string, limit, offset int) ([]Resource, int, error) {
 	query = strings.TrimSpace(query)
 	pattern := "%" + escapeLikePattern(query) + "%"
+	switch kind {
+	case KindResource, KindQuickShare:
+	default:
+		kind = ""
+	}
 	var total int
 	if err := d.db.QueryRow(ctx, `
 SELECT COUNT(*)
-FROM resources
-WHERE owner_id = $1 AND ($2 = '' OR name ILIKE $3 ESCAPE '\' OR filename ILIKE $3 ESCAPE '\')
-`, ownerID, query, pattern).Scan(&total); err != nil {
+FROM resources r
+WHERE r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename ILIKE $3 ESCAPE '\')
+  AND `+liveResource+` AND ($4 = '' OR ($4 = 'quick') = (r.expires_at IS NOT NULL))
+`, ownerID, query, pattern, kind).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count resources: %w: %w", ErrInternal, err)
 	}
 	if limit <= 0 {
@@ -239,9 +260,10 @@ SELECT `+resourceColumns+`,
           AND (l.max_uses = 0 OR l.used_count < l.max_uses))
 FROM resources r
 WHERE r.owner_id = $2 AND ($3 = '' OR r.name ILIKE $4 ESCAPE '\' OR r.filename ILIKE $4 ESCAPE '\')
+  AND `+liveResource+` AND ($7 = '' OR ($7 = 'quick') = (r.expires_at IS NOT NULL))
 ORDER BY r.updated_at DESC, r.id
 LIMIT $5 OFFSET $6
-`, time.Now().UTC(), ownerID, query, pattern, limit, offset)
+`, time.Now().UTC(), ownerID, query, pattern, limit, offset, kind)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -290,6 +312,9 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit ResourceEdit) (SaveResult, error) {
 	current, err := d.ResourceForOwner(ctx, ownerID, id)
 	if err != nil {
+		return SaveResult{}, err
+	}
+	if err := refuseQuickShare(current); err != nil {
 		return SaveResult{}, err
 	}
 	content, contentEncoding := edit.Content, edit.ContentEncoding

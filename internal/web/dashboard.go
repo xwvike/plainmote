@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"plainmote/internal/store"
 )
 
 // dashboardPath is where an account's own resources live now that the root is
@@ -38,14 +40,18 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	if err != nil || page < 1 {
 		page = 1
 	}
+	kind := query.Get("kind")
+	if kind != store.KindResource && kind != store.KindQuickShare {
+		kind = ""
+	}
 
-	resources, total, err := a.db.ListResources(r.Context(), user.ID, search, size, (page-1)*size)
+	resources, total, err := a.db.ListResourcesOfKind(r.Context(), user.ID, search, kind, size, (page-1)*size)
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if last := lastPage(total, size); page > last {
-		http.Redirect(w, r, dashboardURL(search, size, last), http.StatusSeeOther)
+		http.Redirect(w, r, dashboardURL(search, kind, size, last), http.StatusSeeOther)
 		return
 	}
 
@@ -58,9 +64,10 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	}
 
 	pager := buildPager(page, size, total, pageSizes, func(number int) string {
-		return dashboardURL(search, size, number)
+		return dashboardURL(search, kind, size, number)
 	})
 	pager.Query = search
+	pager.Kind = kind
 	a.renderTemplate(w, r, http.StatusOK, "dashboard.html", pageData{
 		User:      user,
 		CSRF:      csrfValue(r),
@@ -106,10 +113,13 @@ func lastPage(total, size int) int {
 	return (total + size - 1) / size
 }
 
-func dashboardURL(search string, size, page int) string {
+func dashboardURL(search, kind string, size, page int) string {
 	values := url.Values{}
 	if search != "" {
 		values.Set("q", search)
+	}
+	if kind != "" {
+		values.Set("kind", kind)
 	}
 	if size != defaultPageSize {
 		values.Set("size", strconv.Itoa(size))

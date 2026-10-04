@@ -4,7 +4,7 @@ English | [简体中文](api.zh-CN.md)
 
 The endpoints under `/api/v1/` serve the `plainmote` command line and can also be called directly from scripts. Callers authenticate with a personal access token obtained through device authorization: the command line or script requests a code, and the account owner enters and approves it in a signed-in browser.
 
-The API can list, read, save and create resources. It cannot delete resources, manage share links or change the account.
+The API can list, read, save and create resources, and make quick shares. It cannot delete resources, manage share links or change the account.
 
 ## Obtaining a token
 
@@ -96,7 +96,8 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | --- | --- | --- |
 | `400` | `bad_request` | Malformed request |
 | `400` | `invalid_scope` | `scope` is not `read` or `write` |
-| `400` | `refused` | The request was refused for the reason in `message`, such as an invalid filename |
+| `400` | `invalid_ttl` | `ttl` is not one of the lifetimes a quick share takes |
+| `400` | `refused` | The request was refused for the reason in `message`, such as an invalid filename or a save to a quick share |
 | `401` | `unauthorized` | Missing token, or an invalid, expired or revoked one; the response carries `WWW-Authenticate: Bearer` |
 | `403` | `read_only` | A read-only token cannot write |
 | `404` | `not_found` | The resource or endpoint does not exist, including resources of other accounts |
@@ -122,6 +123,7 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | `GET` | `/api/v1/resources/{id}/content` | read | Read the content |
 | `PUT` | `/api/v1/resources/{id}/content` | write | Save as a new version |
 | `POST` | `/api/v1/resources` | write | Create a resource |
+| `POST` | `/api/v1/quick-shares` | write | Make a quick share |
 
 ## Resource object
 
@@ -139,6 +141,7 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | `editable` | boolean | Whether it is text that can be edited |
 | `encrypted` | boolean | Whether the content is end-to-end encrypted; omitted when false |
 | `taken_down` | boolean | Whether the operator has taken it down; omitted when false |
+| `expires_at` | time | Present only on a quick share: when it is deleted. A quick share is read only (`editable` is false) until it is converted into a resource on its page |
 | `url` | string | Address of the resource page |
 
 ## Reference
@@ -231,6 +234,22 @@ The request body is `multipart/form-data`:
 
 Returns `201` with the resource object on success.
 
+### Making a quick share
+
+`POST /api/v1/quick-shares`
+
+Does what the home page's box does for a signed-in account: stores the content with one share link that ends with it, and keeps it in the account's resources until then. Available only where the deployment offers quick shares; elsewhere the response is `404`.
+
+The request body is `multipart/form-data`:
+
+| Field | Description |
+| --- | --- |
+| `content` | Required; the content, as a file, at most 10 MiB |
+| `filename` | Optional; the name at the end of the link |
+| `ttl` | Optional; `10m`, `1h`, `1d`, `7d` or `30d`, default `1h` |
+
+Returns `201` with the resource object and `share_url`, the link. Text is delivered as plain text, images, audio and video as themselves, and anything else as a download, as for quick shares made on the home page. The quick share counts toward the account's storage. Its content is deleted when it expires; its access history is kept.
+
 ## Examples
 
 ```bash
@@ -246,6 +265,9 @@ curl -fsS -X PUT -H "Authorization: Bearer $TOKEN" -H 'If-Match: "v5"' \
 
 curl -fsS -H "Authorization: Bearer $TOKEN" \
   -F name=app.log -F filename=app.log -F content=@app.log "$API/resources"
+
+curl -fsS -H "Authorization: Bearer $TOKEN" \
+  -F filename=app.log -F ttl=1d -F content=@app.log "$API/quick-shares"
 ```
 
 A token written on the command line is visible to other users of the same machine in the process list. Scripts should read the token from a file, for example with curl's `-H @file`, or use the `plainmote` command line itself.

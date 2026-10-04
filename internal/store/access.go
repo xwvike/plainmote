@@ -247,6 +247,7 @@ SELECT
   a.host, a.query, a.proto, a.user_agent, a.referer, a.forwarded, a.x_forwarded_for,
   a.cf_connecting_ip, a.cf_ray, a.content_length, a.tls, a.method, a.path, a.status,
   a.detail, a.hits, a.first_at, a.occurred_at, a.country, a.region, a.city,
+  COALESCE(r.expires_at IS NOT NULL, FALSE),
   COALESCE(a.resource_version, 0), COALESCE(r.version, 0),
   COALESCE(a.resource_version = r.version OR EXISTS (
     SELECT 1 FROM resource_versions v WHERE v.resource_id = a.resource_id AND v.version = a.resource_version
@@ -274,6 +275,7 @@ LIMIT $4 OFFSET $5
 			&item.ContentLength, &item.TLS, &item.Method, &item.Path, &item.Status,
 			&item.Detail, &item.Hits, &item.FirstAt, &item.OccurredAt,
 			&item.Location.Country, &item.Location.Region, &item.Location.City,
+			&item.QuickShare,
 			&item.Version, &item.CurrentVersion, &item.VersionAvailable,
 		); err != nil {
 			return nil, 0, err

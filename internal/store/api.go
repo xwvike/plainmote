@@ -19,7 +19,7 @@ func (d *Store) APIResources(ctx context.Context, ownerID, query string) ([]Reso
 	query = strings.TrimSpace(query)
 	pattern := "%" + escapeLikePattern(query) + "%"
 	return d.apiResources(ctx, `
-WHERE r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename ILIKE $3 ESCAPE '\')
+WHERE r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename ILIKE $3 ESCAPE '\') AND `+liveResource+`
 ORDER BY r.updated_at DESC, r.id
 LIMIT $4`, ownerID, query, pattern, APIListLimit)
 }
@@ -42,6 +42,7 @@ func (d *Store) ResolveResources(ctx context.Context, ownerID, ref string) ([]Re
 	}
 	return d.apiResources(ctx, `
 WHERE r.owner_id = $1 AND (r.id::text = lower($2) OR ($3 <> '' AND r.id::text LIKE $3 ESCAPE '\') OR r.name = $2 OR r.filename = $2)
+  AND `+liveResource+`
 ORDER BY r.updated_at DESC, r.id
 LIMIT 20`, ownerID, ref, prefix)
 }

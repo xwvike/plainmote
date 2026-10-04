@@ -78,7 +78,9 @@
     </section>
     <div class="savebar paste-result-actions" style="{{.PasteEnd}}">
       <a class="btn pri" href="/">{{tr .Locale "paste_another"}}</a>
-      {{if .PasteClaimable}}
+      {{if .PasteOwned}}
+      <span class="hint live">{{tr .Locale "paste_owned_prefix"}}<a href="/resources/{{.PasteResourceID}}">{{tr .Locale "nav_resources"}}</a>{{tr .Locale "paste_owned_suffix"}}</span>
+      {{else if .PasteClaimable}}
       <form class="inline until" method="post" action="/paste/save">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="resource_id" value="{{.PasteResourceID}}">

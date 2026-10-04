@@ -149,6 +149,8 @@ func (c *cli) edit(ctx context.Context, args []string) error {
 		return fmt.Errorf("%s", msg("is_reference", target.label()))
 	case target.Encrypted:
 		return fmt.Errorf("%s", msg("encrypted", target.label()))
+	case target.ExpiresAt != nil:
+		return fmt.Errorf("%s", msg("quick_share_read_only", target.label()))
 	case !target.Editable:
 		return fmt.Errorf("%s", msg("not_editable", target.label()))
 	}

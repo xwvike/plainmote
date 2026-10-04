@@ -273,7 +273,11 @@ func (c *cli) ls(ctx context.Context, args []string) error {
 		if r.Remote {
 			size = msg("remote_mark")
 		}
-		fmt.Fprintf(table, "%s\t%s\t%s\tv%d\t%s\t%s\n", clean(name), clean(r.Filename), size, r.Version,
+		version := fmt.Sprintf("v%d", r.Version)
+		if r.ExpiresAt != nil {
+			version = msg("quick_mark")
+		}
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n", clean(name), clean(r.Filename), size, version,
 			r.UpdatedAt.Local().Format("2006-01-02 15:04"), r.ID[:8])
 	}
 	return table.Flush()
@@ -386,6 +390,47 @@ func (c *cli) push(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Fprintln(c.stdout, msg("push_created", made.label(), api.host(), made.URL))
+	return nil
+}
+
+// share makes a quick share: the link goes to stdout on its own, so it can
+// be piped or captured, and what it is and how long it lasts to stderr.
+func (c *cli) share(ctx context.Context, args []string) error {
+	var ttl, filename string
+	args, server, err := c.flags("share", args, func(set *flag.FlagSet) {
+		set.StringVar(&ttl, "ttl", "", "how long the link works: 10m, 1h, 1d, 7d or 30d")
+		set.StringVar(&filename, "filename", "", "name at the end of the link")
+	})
+	if err != nil {
+		return err
+	}
+	if err := c.needArgs(args, 1, "share", "<file|->"); err != nil {
+		return err
+	}
+	var body []byte
+	if args[0] == "-" {
+		body, err = io.ReadAll(c.stdin)
+	} else {
+		body, err = os.ReadFile(args[0])
+		if filename == "" {
+			filename = filepath.Base(args[0])
+		}
+	}
+	if err != nil {
+		return err
+	}
+	_, api, err := c.signedIn(server)
+	if err != nil {
+		return err
+	}
+	made, err := api.share(ctx, filename, ttl, body)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(c.stdout, made.ShareURL)
+	if made.ExpiresAt != nil {
+		fmt.Fprintln(c.stderr, msg("share_created", api.host(), made.ExpiresAt.Local().Format("2006-01-02 15:04")))
+	}
 	return nil
 }
 

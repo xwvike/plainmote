@@ -70,7 +70,10 @@ func TestEncryptedPaste(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resource.ContentType != EncryptedContentType || resource.Name != "" || resource.Filename != "" || resource.OwnerID != AnonymousUserID {
+	// Only a signed-in account encrypts, so it is that account's own quick
+	// share, ending with its link.
+	if resource.ContentType != EncryptedContentType || resource.Name != "" || resource.Filename != "" || resource.OwnerID != user.ID ||
+		resource.ExpiresAt == nil || !resource.ExpiresAt.Equal(*link.ExpiresAt) {
 		t.Fatalf("stored as %+v", resource)
 	}
 	if got := link.ExpiresAt.Sub(now); got != 5*time.Minute {
@@ -93,13 +96,18 @@ func TestEncryptedPaste(t *testing.T) {
 	if shell, err := db.ShareShell(ctx, link.Token); err != nil || shell != ShellEncrypted {
 		t.Fatalf("shell %q %v", shell, err)
 	}
-	if _, _, err := db.AnonymousPasteResult(ctx, resource.ID, now); err != nil {
+	// Its result is its creator's, not the anonymous one anybody with the
+	// address could open.
+	if _, _, err := db.QuickShareLink(ctx, user.ID, resource.ID, now); err != nil {
 		t.Fatalf("the result page must still open: %v", err)
 	}
-	if _, _, err := db.ClaimableAnonymousPaste(ctx, user.ID, resource.ID, now); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("an encrypted paste must not be offered as a resource: %v", err)
+	if _, _, err := db.AnonymousPasteResult(ctx, resource.ID, now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an encrypted quick share opened as an anonymous result: %v", err)
+	}
+	if err := db.KeepQuickShare(ctx, user.ID, resource.ID, now); err == nil || !IsRefusal(err) {
+		t.Fatalf("an encrypted paste must not become a resource: %v", err)
 	}
 	if _, err := db.ClaimAnonymousPaste(ctx, user.ID, resource.ID, now); err == nil {
-		t.Fatal("an encrypted paste must not become a resource")
+		t.Fatal("an encrypted paste must not be claimed")
 	}
 }

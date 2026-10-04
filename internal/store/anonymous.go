@@ -140,7 +140,9 @@ func (d *Store) CreateEncryptedPaste(ctx context.Context, creatorID string, enve
 	if !ValidEnvelope(envelope) {
 		return Resource{}, Link{}, refusal("加密内容格式无法识别")
 	}
-	return d.insertPaste(ctx, creatorID, "", envelope, EncryptedContentType, "", now, ttl)
+	// Only a signed-in account encrypts, so this is always its own quick
+	// share, listed with its resources like any other.
+	return d.insertQuickShare(ctx, creatorID, "", envelope, EncryptedContentType, "", ttl, now)
 }
 
 // insertPaste writes a checked paste body and its one link.

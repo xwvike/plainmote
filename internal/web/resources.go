@@ -83,6 +83,9 @@ const actionPreview = "preview"
 // dialog rather than the save bar, because nothing here undoes it.
 const actionDelete = "delete"
 
+// actionKeep makes a quick share an ordinary resource.
+const actionKeep = "keep"
+
 func newResourceKind(value string) string {
 	if value == kindRemote {
 		return kindRemote
@@ -291,6 +294,25 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
 			return
 		}
+		if r.FormValue("action") == actionKeep {
+			if err := a.db.KeepQuickShare(r.Context(), user.ID, resourceID, time.Now().UTC()); err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					writePlainError(w, http.StatusNotFound, "resource not found")
+					return
+				}
+				text, status := a.writeErrorText("keep quick share", err)
+				a.renderResourcePage(w, r, user, resource, text, status, nil, nil)
+				return
+			}
+			http.Redirect(w, r, "/resources/"+resourceID+"?kept=1", http.StatusSeeOther)
+			return
+		}
+		// Deleting and keeping are all a quick share takes. The store refuses
+		// the rest too; this keeps a stale form from reaching it.
+		if resource.QuickShare() {
+			a.renderResourcePage(w, r, user, resource, translate(requestLanguage(r).Locale, "quick_share_read_only"), http.StatusBadRequest, nil, nil)
+			return
+		}
 		form, err := readResourceForm(w, r, a.cfg.MaxContent)
 		if err != nil {
 			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest, nil, nil)
@@ -430,6 +452,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 		}
 	}
 	data.Trimmed = versionNumber(query.Get("trimmed"))
+	data.Kept = query.Get("kept") == "1" && !resource.QuickShare()
 	// Reconsider only old opaque local rows with an explicitly textual name.
 	// A known image whose filename happens to end in .txt, and remote resources
 	// with no stored body, must keep their existing handling.
