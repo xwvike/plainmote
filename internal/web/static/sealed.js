@@ -9,7 +9,7 @@ import {
 } from "./seal.js";
 import { toBase64URL, fromBase64URL } from "./e2ee.js";
 import { accountKey, unlock, WrongPassword, NoStorage } from "./unlock.js";
-import { classifyUpload, uploadController } from "./upload.js";
+import { classifyUpload } from "./upload.js";
 
 const csrf = document.querySelector('input[name="csrf"]')?.value || "";
 const encoder = new TextEncoder();
@@ -117,10 +117,12 @@ function showOpened(meta, content) {
     textarea.value = opened.text;
     textarea.dataset.filename = meta.filename;
     textarea.dataset.contentType = meta.type;
+    textarea.dataset.encoding = "utf-8";
+    textarea.dataset.eol = content.includes(13) ? "crlf" : "lf";
+    textarea.removeAttribute("data-lazy-editor");
     textarea.setAttribute("data-editor", "");
     textarea.hidden = false;
     form.querySelector("[data-sealed-text-tags]").hidden = false;
-    say(form.querySelector("[data-sealed-eol]"), content.includes(13) ? "CRLF" : "LF");
     import("./editor.js");
   } else {
     const url = URL.createObjectURL(new Blob([content], { type: meta.type }));
@@ -160,33 +162,6 @@ function showOpened(meta, content) {
   form.hidden = false;
 }
 
-// A non-text resource given a text file becomes text on the spot: the file
-// goes into the editor, as it would on a text resource, and saving it saves
-// a text resource.
-function watchChosenText(form) {
-  const input = form.querySelector("[data-sealed-file]");
-  input.addEventListener("change", async () => {
-    const file = input.files[0];
-    if (!file || opened.text !== null || !(await readsAsText(file))) return;
-    const media = form.querySelector("[data-sealed-media]");
-    media.hidden = true;
-    delete media.dataset.currentContent;
-    const textarea = form.querySelector("[data-sealed-text]");
-    textarea.value = new TextDecoder().decode(new Uint8Array(await file.arrayBuffer()));
-    // The whole content is replaced, so is the name it goes by.
-    form.querySelector("[data-sealed-filename]").value = file.name;
-    textarea.dataset.filename = file.name;
-    textarea.dataset.contentType = textType(file.name);
-    textarea.setAttribute("data-editor", "");
-    textarea.hidden = false;
-    form.querySelector("[data-sealed-text-tags]").hidden = false;
-    // The text is the editor's now: the file and its card are let go.
-    uploadController(input)?.useEditor();
-    opened.text = "";
-    import("./editor.js");
-  });
-}
-
 async function openSealed(key) {
   const id = sealedRoot.dataset.resource;
   opened.key = key;
@@ -194,7 +169,6 @@ async function openSealed(key) {
   opened.meta = await decryptMeta(opened.contentKey, id, fromBase64URL(sealedRoot.dataset.sealedMeta));
   const content = await decryptContent(opened.contentKey, id, await bytesOf(`/resources/${id}/raw`));
   showOpened(opened.meta, content);
-  watchChosenText(sealedRoot.querySelector("[data-sealed-form]"));
   await fillLinks(key);
   for (const button of document.querySelectorAll("[data-sealed-share]")) button.disabled = false;
 }
@@ -276,6 +250,11 @@ async function startSealed() {
   const status = sealedRoot.querySelector("[data-sealed-status]");
   sealedRoot.querySelector("[data-sealed-form]").addEventListener("submit", saveSealed);
   for (const button of document.querySelectorAll("[data-sealed-share]")) button.addEventListener("click", () => newSealedShare(button));
+  // A non-text resource given a text file: upload.js has made the editor,
+  // which now holds what will be saved.
+  sealedRoot.querySelector("[data-sealed-form]").addEventListener("plainmote:text-editor", () => {
+    opened.text = "";
+  });
   document.addEventListener("plainmote:parts", () => {
     if (!opened.key) return;
     nameTitles(opened.meta);

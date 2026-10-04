@@ -51,10 +51,11 @@ func TestResourcePageStaysPostable(t *testing.T) {
 		t.Error("the editor source must provide an accessible name")
 	}
 	// The encoding and line ending are shown, and carried into the form so a
-	// save writes the bytes back the same way - but they are not a choice.
+	// save writes the bytes back the same way. The encoding is detected; its
+	// list is shown only when a chosen file's encoding was a guess.
 	if !strings.Contains(page, `<span class="tag" data-encoding-label>UTF-8</span>`) ||
 		!strings.Contains(page, `<span class="tag" data-eol-label>LF</span>`) ||
-		!strings.Contains(page, `<select name="content_encoding" data-encoding-select hidden>`) ||
+		!strings.Contains(page, `<select name="content_encoding" class="sm" data-encoding-select aria-label="Encoding" hidden>`) ||
 		!strings.Contains(page, `<select name="content_eol" data-eol-select hidden>`) {
 		t.Error("the editor must show its encoding and line ending and carry them into the form")
 	}

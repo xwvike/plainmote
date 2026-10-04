@@ -5,6 +5,8 @@
   {{template "resource-doc-title" .}}
 </head>
 <body data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
+      data-msg-encoding-guess="{{tr .Locale "encoding_guess"}}"
+      data-msg-encoding-choose="{{tr .Locale "encoding_choose"}}"
       data-msg-editor-detect-failed="{{tr .Locale "editor_detect_failed"}}"
       data-msg-editor-file-reopen-failed="{{tr .Locale "editor_file_reopen_failed"}}"
       data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}"
@@ -67,16 +69,16 @@
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             {{end}}
             <span class="sp">
-              {{if and (not $remote) (or .Resource.Editable .IsNew)}}
+              {{if not $remote}}
               {{/* How the text is stored, shown and kept: the encoding and line
                    endings are detected from the bytes, and a save writes them
                    back the same way. Not a choice - this is not an editor for
                    converting files. The selects are hidden and only carry the
                    detected values into the form. */}}
-              <span class="tags" data-text-controls>
+              <span class="tags" data-text-controls{{if not (or .Resource.Editable .IsNew)}} hidden{{end}}>
                 <span class="tag" data-encoding-label>{{range .TextEncodings}}{{if eq .Value $.ContentEncoding}}{{.Label}}{{end}}{{end}}</span>
                 <span class="tag" data-eol-label>{{if eq .ContentEOL "crlf"}}CRLF{{else}}LF{{end}}</span>
-                <select name="content_encoding" data-encoding-select hidden>{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+                <select name="content_encoding" class="sm" data-encoding-select aria-label="{{tr .Locale "encoding"}}" hidden>{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select>
                 <select name="content_eol" data-eol-select hidden>
                   <option value="lf"{{if eq .ContentEOL "lf"}} selected{{end}}>LF</option>
                   <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>
@@ -130,6 +132,10 @@
                  stored yet to re-read. */}}
             <textarea name="content" rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}">{{.ContentText}}</textarea>
             {{else}}
+              {{/* Waiting for a text file chosen to replace this content:
+                   upload.js makes it the editor then (see becomeText). No
+                   name until then, so it never posts empty content. */}}
+              <textarea rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-lazy-editor="content" data-filename="{{.Resource.Filename}}" hidden></textarea>
               {{if hasPrefix .Resource.ContentType "image/"}}
               <div class="media-stage" data-current-content><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{or .Resource.Name (tr .Locale "untitled_resource")}}"></div>
               {{else if hasPrefix .Resource.ContentType "audio/"}}
@@ -479,7 +485,15 @@
             <span class="sec">{{tr .Locale "content"}}</span>
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             <span class="sp">
-              <span class="tags" data-sealed-text-tags hidden><span class="tag">UTF-8</span><span class="tag" data-sealed-eol>LF</span></span>
+              {{/* The editor's own controls, as on a plain resource: what a
+                   chosen file was read as, and a choice of another reading.
+                   Saved, it is UTF-8. */}}
+              <span class="tags" data-text-controls data-sealed-text-tags hidden>
+                <span class="tag" data-encoding-label>UTF-8</span>
+                <span class="tag" data-eol-label>LF</span>
+                <select class="sm" data-encoding-select aria-label="{{tr .Locale "encoding"}}" hidden>{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value "utf-8"}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+                <select data-eol-select hidden><option value="lf" selected>LF</option><option value="crlf">CRLF</option></select>
+              </span>
               <em class="content-meta" data-sealed-meta-line></em>
               {{/* The same key and the same preview as a plain resource's:
                    upload.js shows what was chosen, and for text the editor
@@ -492,7 +506,7 @@
           </div>
           <div class="pb" data-content-body>
             <div class="media-stage upload-preview" data-upload-preview hidden></div>
-            <textarea rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-sealed-text hidden></textarea>
+            <textarea rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-sealed-text data-lazy-editor="" hidden></textarea>
             <div class="media-stage" data-sealed-media hidden></div>
           </div>
         </div>

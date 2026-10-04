@@ -124,9 +124,10 @@ function enhanceUpload(input) {
   const setTextControlsVisible = (visible) => {
     if (textControls) textControls.hidden = !visible;
   };
-  const updateMeta = (file) => {
+  const updateMeta = (file, text = false) => {
     if (!contentMeta || !file) return;
-    const type = file.type || "application/octet-stream";
+    // A file the browser cannot type is text/plain once read as text.
+    const type = file.type || (text ? "text/plain" : "application/octet-stream");
     contentMeta.textContent = `${type} · ${sizeText(file.size)}`;
   };
   const clearPreview = () => {
@@ -213,7 +214,7 @@ function enhanceUpload(input) {
     clearPreview();
     setCurrentVisible(true);
     setTextControlsVisible(true);
-    if (file) updateMeta(file);
+    if (file) updateMeta(file, true);
     else if (contentMeta) contentMeta.textContent = initialMeta;
     setStatus(message);
   };
@@ -222,9 +223,42 @@ function enhanceUpload(input) {
     for (const listener of listeners) listener(selection);
   };
 
+  // A page with no editor - a picture, a download - can still be given a
+  // text file. Its waiting textarea becomes an editor on the spot, the old
+  // content steps aside, the filename follows the file, and the file is
+  // offered again to the editor that now reads it: the same detection of
+  // encoding and line ending as on any text resource.
+  const lazyEditor = body ? body.querySelector("textarea[data-lazy-editor]") : null;
+  const becomeText = async () => {
+    for (const element of currentContent()) {
+      if (element === lazyEditor) continue;
+      element.hidden = true;
+      delete element.dataset.currentContent;
+    }
+    if (lazyEditor.dataset.lazyEditor) lazyEditor.name = lazyEditor.dataset.lazyEditor;
+    lazyEditor.removeAttribute("data-lazy-editor");
+    lazyEditor.setAttribute("data-editor", "");
+    lazyEditor.hidden = false;
+    const file = input.files && input.files[0];
+    if (filename && file) {
+      filename.value = file.name;
+      suggestedFilename = file.name;
+    }
+    form.dispatchEvent(new CustomEvent("plainmote:text-editor", { bubbles: true }));
+    await import("./editor.js");
+    input.dispatchEvent(new Event("change"));
+  };
+
   const select = () => {
     const currentVersion = ++version;
     const file = input.files && input.files[0];
+    if (file && lazyEditor && lazyEditor.hasAttribute("data-lazy-editor") && listeners.size === 0) {
+      const kind = classifyUpload(file);
+      if (kind === "text" || kind === "unknown") {
+        becomeText();
+        return;
+      }
+    }
     if (!file) {
       if (filename && suggestedFilename && filename.value === suggestedFilename) {
         filename.value = "";

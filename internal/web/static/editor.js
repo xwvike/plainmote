@@ -282,6 +282,13 @@ function decodeBytes(bytes, encoding) {
   return new TextDecoder(decoderName, { fatal: true }).decode(content);
 }
 
+// Whether an encoding was guessed rather than known: a byte order mark and
+// valid UTF-8 (which plain ASCII also is) settle it; every other detection
+// is the most likely reading among several.
+function guessedEncoding(encoding) {
+  return !["utf-8", "utf-8bom", "utf-16le-bom", "utf-16be-bom", "utf-32le-bom", "utf-32be-bom"].includes(normalizeEncoding(encoding));
+}
+
 function likelyText(content) {
   if (content.length === 0) return true;
   let controls = 0;
@@ -503,6 +510,33 @@ function enhance(textarea) {
     setEncoding(initialEncoding);
   }
 
+  // The bytes of the file last read in, kept until it is saved or let go,
+  // so that reading it as another encoding starts from what was chosen and
+  // not from a decoding of it.
+  let uploadedSource = null;
+  let reopen = null;
+  const offerEncodings = (open) => {
+    if (!encodingSelect) return;
+    encodingSelect.hidden = !open;
+    if (encodingLabel) encodingLabel.hidden = open;
+  };
+  if (encodingSelect) {
+    encodingSelect.addEventListener("change", () => {
+      const chosen = uploadedSource;
+      if (!chosen || !uploads || !uploads.current(chosen.version, chosen.file)) return;
+      if (!reopen) return;
+      try {
+        reopen(chosen.source, encodingSelect.value);
+        uploads.showText(chosen.file, message("msgEncodingGuess", {
+          encoding: encodingSelect.options[encodingSelect.selectedIndex].textContent,
+        }));
+      } catch (error) {
+        encodingSelect.dataset.valid = "false";
+        uploads.setStatus(message("msgEditorFileReopenFailed", { name: chosen.file.name, encoding: encodingSelect.value }));
+      }
+    });
+  }
+
   // The server detects the ending from the stored bytes and sends it here,
   // because by the time the body reaches this script it cannot be recovered:
   // the HTML parser turns every CRLF in the document into a bare LF.
@@ -659,6 +693,7 @@ function enhance(textarea) {
       setEncoding(encoding);
       return content;
     };
+    reopen = openBytes;
 
     if (uploads) {
       uploads.subscribe(async ({ file, kind, version, oversize }) => {
@@ -667,6 +702,8 @@ function enhance(textarea) {
         if (!file) {
           if (documentBeforeUpload !== null) replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           documentBeforeUpload = null;
+          uploadedSource = null;
+          offerEncodings(false);
           setUploadStatus("");
           return;
         }
@@ -707,6 +744,7 @@ function enhance(textarea) {
         if (!uploads.current(version, file)) return;
 
         const source = new Uint8Array(bytes);
+        uploadedSource = { source, version, file };
         const encoding = detectFileEncoding(source);
         if (!encoding) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
@@ -714,7 +752,10 @@ function enhance(textarea) {
           documentEdited = false;
           if (encodingSelect) encodingSelect.dataset.valid = "false";
           if (kind === "text") {
-            uploads.showText(file, message("msgEditorDetectFailed", { name: file.name }));
+            // Text by its name, but no encoding fits: the choice is the
+            // person's, from the same list a guess would come from.
+            offerEncodings(true);
+            uploads.showText(file, message("msgEncodingChoose", { name: file.name }));
           } else {
             uploads.showFile(file);
           }
@@ -723,6 +764,14 @@ function enhance(textarea) {
 
         try {
           openBytes(source, encoding);
+          // A byte order mark or valid UTF-8 says what the text is; anything
+          // else is a guess, and the guess is shown with the way to change it.
+          if (guessedEncoding(encoding)) {
+            offerEncodings(true);
+            uploads.showText(file, message("msgEncodingGuess", { encoding: encodingLabel ? encodingLabel.textContent : encoding }));
+            return;
+          }
+          offerEncodings(false);
         } catch (error) {
           replaceDocument(documentBeforeUpload, dirtyBeforeUpload, editedBeforeUpload);
           editorDirty = false;
