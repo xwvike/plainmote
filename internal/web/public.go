@@ -186,6 +186,23 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// An encrypted resource goes out with what the address's key needs to
+	// open it: the content key wrapped for this link, and the encrypted
+	// metadata, ahead of the encrypted content. Ciphertext to every client;
+	// a browser was given the decryption page first.
+	if resource.Sealed() {
+		prefix, err := store.SealedBundle(resource.ID, result.LinkSealedKey, resource.SealedMeta)
+		if err != nil {
+			a.amendAccess(r, result, store.OutcomeSuccess, http.StatusInternalServerError, "sealed bundle", false)
+			a.serverError(w, "sealed bundle", err)
+			return
+		}
+		body = struct {
+			io.Reader
+			io.Closer
+		}{io.MultiReader(bytes.NewReader(prefix), body), body}
+		size += int64(len(prefix))
+	}
 	defer body.Close()
 	w.Header().Set("Content-Type", contentType)
 	disposition := contentDisposition(deliveryFilename(resource, filenameType))

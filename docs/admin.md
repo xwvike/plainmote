@@ -213,7 +213,7 @@ An authenticated request that fails receives `{"error": "<code>", "message": "<d
 | `name` | string | Name |
 | `filename` | string | Filename |
 | `kind` | string | `stored` (content kept by the service) or `remote` (remote resource) |
-| `content_type` | string | Content type |
+| `content_type` | string | Content type; `application/vnd.plainmote.sealed` for an end-to-end encrypted resource, whose `name` and `filename` are empty |
 | `size` | integer | Size of the current content |
 | `origin_host` | string | Host name of a remote resource's origin; the full address is never returned |
 | `version` | integer | Current version number |

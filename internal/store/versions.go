@@ -68,6 +68,7 @@ type currentContent struct {
 	RestoredFrom int
 	Remote       bool
 	Filename     string
+	SealedMeta   []byte
 }
 
 // lockContentTx locks the resource row and reads its content. Everything that
@@ -77,11 +78,11 @@ func lockContentTx(ctx context.Context, tx pgx.Tx, ownerID, id string) (currentC
 	var current currentContent
 	err := tx.QueryRow(ctx, `
 SELECT content_key, content_size, content_type, content_encoding, content_sha256,
-       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), origin_url <> '', filename
+       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), origin_url <> '', filename, sealed_meta
 FROM resources WHERE id = $1 AND owner_id = $2
 FOR UPDATE
 `, id, ownerID).Scan(&current.Key, &current.Size, &current.Type, &current.Encoding, &current.SHA256,
-		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Remote, &current.Filename)
+		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Remote, &current.Filename, &current.SealedMeta)
 	if err != nil {
 		return currentContent{}, translateNotFound(err)
 	}
@@ -98,11 +99,11 @@ func retireTx(ctx context.Context, tx pgx.Tx, id string, current currentContent,
 	_, err := tx.Exec(ctx, `
 INSERT INTO resource_versions(
   resource_id, version, content_key, content_size, content_type, content_encoding,
-  content_sha256, restored_from, saved_at, replaced_at, filename
+  content_sha256, restored_from, saved_at, replaced_at, filename, sealed_meta
 )
-VALUES($1, $2, $3, $4, $5, $6, $7, NULLIF($8, 0), $9, $10, $11)
+VALUES($1, $2, $3, $4, $5, $6, $7, NULLIF($8, 0), $9, $10, $11, $12)
 `, id, current.Version, current.Key, current.Size, current.Type, current.Encoding,
-		current.SHA256, current.RestoredFrom, current.VersionAt, now, current.Filename)
+		current.SHA256, current.RestoredFrom, current.VersionAt, now, current.Filename, current.SealedMeta)
 	if err != nil {
 		return fmt.Errorf("keep version %d: %w: %w", current.Version, ErrInternal, err)
 	}
@@ -177,12 +178,12 @@ func (d *Store) dropObjects(ctx context.Context, keys []string) {
 }
 
 const versionColumns = `v.resource_id, v.version, v.content_key, v.content_size, v.content_type, v.content_encoding,
-       v.content_sha256, COALESCE(v.restored_from, 0), v.saved_at, v.replaced_at, v.filename`
+       v.content_sha256, COALESCE(v.restored_from, 0), v.saved_at, v.replaced_at, v.filename, v.sealed_meta`
 
 func scanVersion(row rowScanner) (Version, error) {
 	var v Version
 	err := row.Scan(&v.ResourceID, &v.Number, &v.ContentKey, &v.ContentSize, &v.ContentType, &v.ContentEncoding,
-		&v.ContentSHA256, &v.RestoredFrom, &v.SavedAt, &v.ReplacedAt, &v.Filename)
+		&v.ContentSHA256, &v.RestoredFrom, &v.SavedAt, &v.ReplacedAt, &v.Filename, &v.SealedMeta)
 	return v, err
 }
 
@@ -282,6 +283,11 @@ func (d *Store) RestoreVersion(ctx context.Context, ownerID, resourceID string, 
 	// from the row, which may predate what detection knows now.
 	filename := RefitFilename(resource.Filename, source.Filename, body)
 	contentType, encoding := DetectContent(filename, body, source.ContentEncoding)
+	// An encrypted version comes back as it is, with the name it had: the
+	// service cannot read either, and needs to read neither.
+	if resource.Sealed() {
+		filename, contentType, encoding = "", SealedContentType, ""
+	}
 	// A copy, not the same key: the history row keeps its own object, and one
 	// object shared by two rows would need counting before either could go.
 	key := contentKey(resourceID)
@@ -325,10 +331,11 @@ func (d *Store) RestoreVersion(ctx context.Context, ownerID, resourceID string, 
 		if _, err := tx.Exec(ctx, `
 UPDATE resources
 SET content_key = $1, content_size = $2, content_type = $3, content_encoding = $4, content_sha256 = $5,
-    version = $6, version_at = $7, restored_from = $8, updated_at = $7, filename = $9
+    version = $6, version_at = $7, restored_from = $8, updated_at = $7, filename = $9,
+    sealed_meta = COALESCE($12, sealed_meta)
 WHERE id = $10 AND owner_id = $11
 `, key, source.ContentSize, contentType, encoding, sha,
-			result.Version, now, number, filename, resourceID, ownerID); err != nil {
+			result.Version, now, number, filename, resourceID, ownerID, source.SealedMeta); err != nil {
 			return fmt.Errorf("restore version: %w: %w", ErrInternal, err)
 		}
 		dropped, err = trimHistoryTx(ctx, tx, ownerID, resourceID, limit.StorageBytes)
@@ -359,6 +366,11 @@ func (d *Store) CopyVersion(ctx context.Context, ownerID, resourceID string, num
 	// it. The owner can still edit or delete what was taken down.
 	if resource.TakenDown {
 		return Resource{}, ErrCopyTakenDown
+	}
+	// Its encryption is bound to this resource; a copy is a new resource,
+	// encrypted anew in the browser.
+	if resource.Sealed() {
+		return Resource{}, errSealedCopy
 	}
 	body, err := d.ReadVersion(ctx, source)
 	if err != nil {

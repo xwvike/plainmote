@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/base64"
 	"fmt"
 	"html/template"
 	"io"
@@ -110,6 +111,7 @@ func (a *App) templateSet() *template.Template {
 		"locationText":       locationText,
 		"resourceLabel":      resourceLabel,
 		"lockText":           lockText,
+		"b64":                func(value []byte) string { return base64.RawURLEncoding.EncodeToString(value) },
 		"locationShort":      locationShort,
 		"outcomeDescription": accessOutcomeDescription,
 		"remainText":         remainText,
@@ -574,7 +576,7 @@ func resourceLabel(locale string, resource Resource) string {
 	switch {
 	case resource.Name != "":
 		return resource.Name
-	case resource.Encrypted():
+	case resource.Encrypted() || resource.Sealed():
 		return translate(locale, "encrypted_content")
 	}
 	return translate(locale, "untitled_resource")

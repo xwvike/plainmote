@@ -213,7 +213,7 @@ PLAINMOTE-ADMIN-V1
 | `name` | string | 名称 |
 | `filename` | string | 文件名 |
 | `kind` | string | `stored`（保存在本服务的内容）或 `remote`（远程资源） |
-| `content_type` | string | 内容类型 |
+| `content_type` | string | 内容类型；端到端加密的资源为 `application/vnd.plainmote.sealed`，其 `name` 与 `filename` 为空 |
 | `size` | integer | 当前内容的大小 |
 | `origin_host` | string | 远程资源源地址的主机名；不返回完整地址 |
 | `version` | integer | 当前版本号 |

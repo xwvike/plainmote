@@ -206,7 +206,7 @@ type apiResource struct {
 }
 
 func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
-	encrypted := resource.ContentType == store.EncryptedContentType
+	encrypted := resource.ContentType == store.EncryptedContentType || resource.Sealed()
 	return apiResource{
 		ID: resource.ID, Name: resource.Name, Filename: resource.Filename, Size: resource.ContentSize,
 		Type: resource.ContentType, Encoding: resource.ContentEncoding, Version: resource.Version,
@@ -259,6 +259,10 @@ func (a *App) apiReadContent(w http.ResponseWriter, r *http.Request, user User, 
 	}
 	if resource.Remote() {
 		a.apiFail(w, http.StatusConflict, "reference", "this resource points at a remote address and has no stored content")
+		return
+	}
+	if resource.Sealed() {
+		a.apiFail(w, http.StatusConflict, "encrypted", "this resource is end-to-end encrypted; this version of the command line cannot open it")
 		return
 	}
 	body, size, err := a.db.OpenContent(r.Context(), resource)

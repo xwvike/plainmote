@@ -2,13 +2,14 @@
 <html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
-  <title>v{{.DiffFrom.Number}} → v{{.DiffTo.Number}} · {{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}} · PlainMote</title>
+  <title>v{{.DiffFrom.Number}} → v{{.DiffTo.Number}} · {{template "resource-title-text" .}} · PlainMote</title>
 </head>
 <body>
   {{template "topbar" .}}
+  {{template "sealed-page" .}}
   {{$base := printf "/resources/%s/versions" .Resource.ID}}
   <main class="page">
-    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}</a><span>/</span><a href="{{$base}}">{{tr .Locale "history"}}</a><span>/</span><span>{{tr .Locale "compare"}}</span></div>
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{template "resource-title" .}}</a><span>/</span><a href="{{$base}}">{{tr .Locale "history"}}</a><span>/</span><span>{{tr .Locale "compare"}}</span></div>
     <div class="ph">
       <h1>{{tr .Locale "compare"}}</h1>
       <span class="sp">
@@ -32,13 +33,24 @@
       <div class="pt">
         <span class="sec">v{{.DiffFrom.Number}} → v{{.DiffTo.Number}}</span>
         <span class="sp">
-          {{if not .DiffNote}}<span class="stat"><span class="a">+{{.Diff.Added}}</span> <span class="d">−{{.Diff.Removed}}</span></span>{{end}}
+          {{if .SealedCompare}}<span class="stat" data-sealed-stat hidden><span class="a"></span> <span class="d"></span></span>
+          {{else if not .DiffNote}}<span class="stat"><span class="a">+{{.Diff.Added}}</span> <span class="d">−{{.Diff.Removed}}</span></span>{{end}}
           <em class="content-meta">{{bytesText .DiffFrom.Size}} → {{bytesText .DiffTo.Size}}</em>
-          {{if and (not .DiffNote) (not .DiffFull)}}<a class="txt" href="{{$base}}/compare?from={{.DiffFrom.Number}}&amp;to={{.DiffTo.Number}}&amp;full=1">{{tr .Locale "compare_show_all"}}</a>{{end}}
+          {{if and (not .DiffNote) (not .DiffFull)}}<a class="txt"{{if .SealedCompare}} data-sealed-full hidden{{end}} href="{{$base}}/compare?from={{.DiffFrom.Number}}&amp;to={{.DiffTo.Number}}&amp;full=1">{{tr .Locale "compare_show_all"}}</a>{{end}}
         </span>
       </div>
       <div class="pb{{if not .DiffNote}} diff-sheet{{end}}">
-        {{if .DiffNote}}
+        {{if .SealedCompare}}
+        <div data-sealed-compare data-full="{{if .DiffFull}}1{{end}}" data-current-label="{{tr .Locale "version_current"}}" data-open-label="{{tr .Locale "open_file"}}"
+             data-from-number="{{.DiffFrom.Number}}" data-from-page="{{.DiffFrom.PageURL}}"{{if .DiffFrom.Current}} data-from-current{{end}}
+             data-to-number="{{.DiffTo.Number}}" data-to-page="{{.DiffTo.PageURL}}"{{if .DiffTo.Current}} data-to-current{{end}}
+             data-from-raw="{{.DiffFrom.RawURL}}" data-from-meta="{{b64 .DiffFrom.Meta}}" data-to-raw="{{.DiffTo.RawURL}}" data-to-meta="{{b64 .DiffTo.Meta}}">
+          {{template "sealed-unlock" .}}
+          <p class="ro" data-sealed-status>{{tr .Locale "sealed_needs_js"}}</p>
+          <div class="diff" data-sealed-diff hidden></div>
+          <div class="cmp-sides" data-sealed-sides hidden></div>
+        </div>
+        {{else if .DiffNote}}
         <p class="ro">{{tr .Locale .DiffNote}}</p>
         {{if .DiffSides}}
         {{/* Anything that is not text is looked at rather than read: both
@@ -75,5 +87,6 @@
   </main>
   {{template "footer" .}}
   <script type="module" src="{{asset "parts.js"}}"></script>
+  {{if .Resource.Sealed}}<script type="module" src="{{asset "sealed-view.js"}}"></script>{{end}}
 </body>
 </html>{{end}}

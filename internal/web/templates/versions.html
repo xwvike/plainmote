@@ -2,12 +2,13 @@
 <html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
-  <title>{{tr .Locale "history"}} · {{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}} · PlainMote</title>
+  <title>{{tr .Locale "history"}} · {{template "resource-title-text" .}} · PlainMote</title>
 </head>
 <body>
   {{template "topbar" .}}
+  {{template "sealed-page" .}}
   <main class="page">
-    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}</a><span>/</span><span>{{tr .Locale "history"}}</span></div>
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{template "resource-title" .}}</a><span>/</span><span>{{tr .Locale "history"}}</span></div>
     <div class="ph">
       <h1>{{tr .Locale "history"}}</h1>
       <span class="cnt">v{{.Resource.Version}} · {{countText .Locale .HistoryCount "versions"}}</span>
@@ -57,6 +58,7 @@
   {{template "versions-dialog" .}}
   {{template "footer" .}}
   <script type="module" src="{{asset "parts.js"}}"></script>
+  {{if .Resource.Sealed}}<script type="module" src="{{asset "sealed-view.js"}}"></script>{{end}}
 </body>
 </html>{{end}}
 

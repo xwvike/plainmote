@@ -181,7 +181,7 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 1, $10, $11)
 const resourceColumns = `r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size, r.content_type,
        r.content_encoding, r.origin_url, r.created_at, r.updated_at,
        r.version, COALESCE(r.version_at, r.updated_at), COALESCE(r.restored_from, 0), r.content_sha256,
-       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at`
+       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key, r.sealed_meta`
 
 // liveResource leaves out a quick share whose time is up but which the
 // sweep has not reached yet: it is gone as far as its owner is concerned.
@@ -195,7 +195,7 @@ func scanResource(row rowScanner, extra ...any) (Resource, error) {
 		&r.ID, &r.OwnerID, &r.Name, &r.Filename, &r.ContentKey, &r.ContentSize, &r.ContentType,
 		&r.ContentEncoding, &r.OriginURL, &r.CreatedAt, &r.UpdatedAt,
 		&r.Version, &r.VersionAt, &r.RestoredFrom, &r.ContentSHA256,
-		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt,
+		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt, &r.SealedKey, &r.SealedMeta,
 	}, extra...)...)
 	return r, err
 }
@@ -316,6 +316,9 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 	}
 	if err := refuseQuickShare(current); err != nil {
 		return SaveResult{}, err
+	}
+	if current.Sealed() {
+		return SaveResult{}, errSealedInBrowser
 	}
 	content, contentEncoding := edit.Content, edit.ContentEncoding
 	replaceContent := content != nil

@@ -38,6 +38,10 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 		a.handleNewResource(w, r, user, sessionID)
 		return
 	}
+	if path == sealedPath {
+		a.handleSealedIndex(w, r, user, sessionID)
+		return
+	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
 		a.handleDashboard(w, r, user)
@@ -51,6 +55,8 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 		a.handleRawPreview(w, r, user, resourceID)
 	case len(parts) == 2 && parts[1] == "share":
 		a.handleShare(w, r, user, sessionID, resourceID)
+	case len(parts) == 2 && parts[1] == sealedPath:
+		a.handleSealedAction(w, r, user, sessionID, resourceID)
 	case len(parts) >= 2 && parts[1] == "versions":
 		a.handleVersions(w, r, user, sessionID, resourceID, parts[2:])
 	default:
@@ -98,6 +104,11 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		data := a.basePage(r, user)
 		data.IsNew = true
 		data.NewKind = newResourceKind(r.URL.Query().Get("kind"))
+		var err error
+		if data.HasKeyring, err = a.hasKeyring(r, user.ID); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
 		a.renderTemplate(w, r, http.StatusOK, "resource.html", data)
 		return
 	}
@@ -453,6 +464,20 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 	data.Trimmed = versionNumber(query.Get("trimmed"))
 	data.Kept = query.Get("kept") == "1" && !resource.QuickShare()
+	data.Sealed = query.Get("sealed") == "1" && resource.Sealed()
+	data.Unsealed = query.Get("unsealed") == "1" && !resource.Sealed()
+	if !parts {
+		if data.HasKeyring, err = a.hasKeyring(r, user.ID); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if !resource.Remote() && !resource.QuickShare() {
+			if data.HistoryJSON, err = a.historyJSON(r, user.ID, resource.ID); err != nil {
+				a.renderError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
+	}
 	// Reconsider only old opaque local rows with an explicitly textual name.
 	// A known image whose filename happens to end in .txt, and remote resources
 	// with no stored body, must keep their existing handling.
@@ -730,6 +755,16 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 
 	switch r.FormValue("action") {
 	case "", "create":
+		// A link to an encrypted resource arrives with the keys the browser
+		// made for it, under the id they are bound to.
+		if r.FormValue("link_id") != "" {
+			if err := a.createSealedShare(r, user, resourceID); err != nil {
+				refused("create sealed share", err)
+				return
+			}
+			back("")
+			return
+		}
 		// Pressing 分享 mints the link straight away: the dialog it opens is
 		// meant to already hold something you can send.
 		if _, err := a.db.CreateShare(r.Context(), user.ID, resourceID, strings.TrimSpace(r.FormValue("name")), defaultShareTTL, defaultShareUses); err != nil {

@@ -15,7 +15,7 @@ import (
 // webAssets contains the templates and browser assets shipped with the Web
 // service. The explicit staticTypes list below remains the public boundary.
 //
-//go:embed templates/*.html static/style.css static/noscript.css static/media.css static/media.js static/logo.png static/favicon.ico static/icon-192.png static/apple-touch-icon.png static/editor.js static/upload.js static/resource.js static/parts.js static/copy.js static/time.js static/e2ee.js static/e2ee-share.js static/e2ee-open.js static/keys.js static/vault.js static/lock.js static/keyring.js static/vendor/codemirror.js
+//go:embed templates/*.html static/style.css static/noscript.css static/media.css static/media.js static/logo.png static/favicon.ico static/icon-192.png static/apple-touch-icon.png static/editor.js static/upload.js static/resource.js static/parts.js static/copy.js static/time.js static/e2ee.js static/e2ee-share.js static/e2ee-open.js static/keys.js static/vault.js static/lock.js static/keyring.js static/seal.js static/unlock.js static/sealed.js static/sealed-view.js static/diff.js static/sealed-names.js static/zip.js static/export.js static/vendor/codemirror.js
 var webAssets embed.FS
 
 var staticTypes = map[string]string{
@@ -40,6 +40,14 @@ var staticTypes = map[string]string{
 	"vault.js":             "text/javascript; charset=utf-8",
 	"lock.js":              "text/javascript; charset=utf-8",
 	"keyring.js":           "text/javascript; charset=utf-8",
+	"seal.js":              "text/javascript; charset=utf-8",
+	"unlock.js":            "text/javascript; charset=utf-8",
+	"sealed.js":            "text/javascript; charset=utf-8",
+	"sealed-view.js":       "text/javascript; charset=utf-8",
+	"diff.js":              "text/javascript; charset=utf-8",
+	"sealed-names.js":      "text/javascript; charset=utf-8",
+	"zip.js":               "text/javascript; charset=utf-8",
+	"export.js":            "text/javascript; charset=utf-8",
 	"vendor/codemirror.js": "text/javascript; charset=utf-8",
 }
 

@@ -119,6 +119,12 @@ ALTER TABLE resources ADD COLUMN IF NOT EXISTS takedown_reason TEXT NOT NULL DEF
 -- log stays. NULL for everything else, which is what keeping one sets it to.
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS resources_expiry_idx ON resources(expires_at) WHERE expires_at IS NOT NULL;
+-- An end-to-end encrypted resource (docs/encryption.md): sealed_key is its
+-- content key wrapped by the account key, sealed_meta its name, filename and
+-- type encrypted with the content key. Its name and filename columns stay
+-- empty and its content is ciphertext the service cannot read.
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_key BYTEA;
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_meta BYTEA;
 
 -- What a resource held before, one row per replaced version. Kept whole rather
 -- than as changes against the next one, so any version can be read, compared
@@ -143,6 +149,8 @@ CREATE TABLE IF NOT EXISTS resource_versions (
   PRIMARY KEY (resource_id, version)
 );
 ALTER TABLE resource_versions ADD COLUMN IF NOT EXISTS filename TEXT NOT NULL DEFAULT '';
+-- An encrypted version keeps the encrypted name, filename and type it had.
+ALTER TABLE resource_versions ADD COLUMN IF NOT EXISTS sealed_meta BYTEA;
 CREATE INDEX IF NOT EXISTS resource_versions_replaced_idx ON resource_versions(replaced_at);
 
 CREATE TABLE IF NOT EXISTS links (
@@ -162,6 +170,11 @@ CREATE TABLE IF NOT EXISTS links (
   terms_at TIMESTAMPTZ
 );
 ALTER TABLE links ADD COLUMN IF NOT EXISTS terms_at TIMESTAMPTZ;
+-- A link to an encrypted resource: sealed_key is the content key wrapped by
+-- the link key, which only the address after # carries; owner_key is that
+-- link key wrapped by the account key, so its owner can show it again.
+ALTER TABLE links ADD COLUMN IF NOT EXISTS sealed_key BYTEA;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS owner_key BYTEA;
 CREATE INDEX IF NOT EXISTS links_resource_idx ON links(resource_id);
 
 -- A quick share made without signing in may be kept by whoever made it, once

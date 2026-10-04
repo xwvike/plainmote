@@ -14,12 +14,15 @@
   <main class="page{{if not .IsNew}} resource-detail{{end}}">
     {{template "resource-crumb" .}}
     {{if .IsNew}}
-    <div class="ph"><h1>{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}</h1></div>
+    <div class="ph"><h1>{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}</h1>
+      {{if ne .NewKind "remote"}}<span class="sp">{{template "seal-switch" .}}</span>{{end}}</div>
     {{else}}
     <div class="ph">
-      <h1 data-part="title">{{resourceLabel .Locale .Resource}}</h1>
+      <h1 data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{resourceLabel .Locale .Resource}}</h1>
       {{if .Resource.QuickShare}}<span class="tag qs">{{tr .Locale "quick_share"}}</span>{{end}}
+      {{if .Resource.Sealed}}<span class="tag enc">{{tr .Locale "encrypted"}}</span>{{end}}
       <span class="sp">
+        {{if not (or .Resource.Remote .Resource.QuickShare .Resource.TakenDown)}}{{template "seal-switch" .}}{{end}}
         {{/* Beside the one other thing done to the resource as a whole. Shown
              with nothing in it too: the page behind it says how it fills. */}}
         {{if not (or .Resource.Remote .Resource.QuickShare)}}{{template "resource-hist" .}}{{end}}
@@ -29,9 +32,21 @@
     {{end}}
     {{template "resource-notices" .}}
     {{$remote := or .Resource.Remote (eq .NewKind "remote")}}
+    {{if and .IsNew (not $remote) .HasKeyring}}
+    <form class="unlock-bar" data-new-unlock hidden>
+      <span class="lock-ic" aria-hidden="true"></span>
+      <span class="msg">{{tr .Locale "seal_unlock_first"}}</span>
+      <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+      <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+      <span class="err" data-new-unlock-error role="alert"></span>
+    </form>
+    {{end}}
 
     {{if and (not .IsNew) .Resource.QuickShare}}
     {{template "quick-share" .}}
+    {{else if and (not .IsNew) .Resource.Sealed}}
+    {{template "sealed-resource" .}}
+    {{template "share-panel" .}}
     {{else}}
 
     {{/* An edit is saved in place, the editor left as it is, unless it
@@ -183,6 +198,7 @@
 
   {{if or .ShareOpen .DeleteOpen}}<div class="scrim"></div>{{end}}
   {{template "resource-dialogs" .}}
+  {{if not .IsNew}}{{template "seal-dialogs" .}}{{end}}
 
   {{if not $remote}}<script type="module" src="{{asset "upload.js"}}"></script>{{end}}
   {{if not .IsNew}}<script type="module" src="{{asset "resource.js"}}"></script>
@@ -190,6 +206,7 @@
   {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
   <script type="module" src="{{asset "editor.js"}}"></script>
   {{end}}
+  {{if not (or .Resource.Remote .Resource.QuickShare (eq .NewKind "remote"))}}<script type="module" src="{{asset "sealed.js"}}"></script>{{end}}
   {{template "copy-status" .}}
 </body>
 </html>{{end}}
@@ -221,6 +238,10 @@
       <a class="txt" href="/resources/new{{if .Resource.Remote}}?kind=remote{{end}}">{{tr .Locale "create_another"}}</a>
       <a class="txt" href="/resources/">{{tr .Locale "back_to_resources"}}</a>
     </div>
+    {{else if .Sealed}}
+    <p class="notice" role="status">{{tr .Locale "seal_done"}}</p>
+    {{else if .Unsealed}}
+    <p class="notice" role="status">{{tr .Locale "unseal_done"}}</p>
     {{else if .Kept}}
     <p class="notice" role="status">{{tr .Locale "quick_share_kept"}}</p>
     {{else if .Saved}}
@@ -266,8 +287,13 @@
         <label class="f">
           <span class="lr"><span>{{tr .Locale "share_link"}}</span><em>{{tr .Locale "address_unchanged"}}</em></span>
           <span class="fl">
+            {{if .Resource.Sealed}}
+            <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}" data-sealed-link="{{.FocusShare.Link.ID}}" data-owner-key="{{b64 .FocusShare.Link.OwnerKey}}" data-url="{{.FocusShare.URL}}"><span class="mut">{{tr .Locale "sealed_link_locked"}}</span></code>
+            <button type="button" class="pri" data-sealed-copy="{{.FocusShare.Link.ID}}" disabled>{{template "copy-label" .}}</button>
+            {{else}}
             <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{template "address" .FocusShare.URL}}</code>
             <button type="button" class="pri" data-copy="{{.FocusShare.URL}}">{{template "copy-label" .}}</button>
+            {{end}}
           </span>
         </label>
         <dl class="fg">
@@ -414,4 +440,106 @@
         {{end}}
       </div>
     </div>
+{{end}}
+
+{{/* The switch that turns a resource's encryption on or off. Without a
+     master password it is shown disabled with the reason; with one, sealed.js
+     enables it and asks for confirmation before doing anything. */}}
+{{define "seal-switch"}}<label class="sw" data-seal-switch{{if .HasKeyring}} data-ready{{else}} title="{{tr .Locale "seal_needs_keyring"}}"{{end}}{{if not .IsNew}}
+  data-resource="{{.Resource.ID}}" data-version="{{.Resource.Version}}" data-history="{{.HistoryJSON}}"
+  data-name="{{.Resource.Name}}" data-filename="{{.Resource.Filename}}" data-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}"{{end}}
+  data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-unlock="{{tr .Locale "seal_unlock_first"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-progress="{{tr .Locale "seal_progress"}}">
+  <input type="checkbox" role="switch"{{if .Resource.Sealed}} checked{{end}} disabled aria-describedby="seal-switch-hint">
+  <span class="sw-track" aria-hidden="true"><span class="sw-knob"></span></span><span>{{tr .Locale "e2ee_title"}}</span>
+</label>{{if not .HasKeyring}}<a class="txt" id="seal-switch-hint" href="/account#keyring">{{tr .Locale "seal_set_keyring"}}</a>{{end}}{{end}}
+
+{{/* An encrypted resource. The service sends nothing it could read: the
+     page says the resource is encrypted, and sealed.js - once unlocked -
+     decrypts the name, the filename and the content into the form below and
+     encrypts them again on the way out. */}}
+{{define "sealed-resource"}}
+    <div data-sealed data-resource="{{.Resource.ID}}" data-version="{{.Resource.Version}}" data-sealed-key="{{b64 .Resource.SealedKey}}" data-sealed-meta="{{b64 .Resource.SealedMeta}}" data-size="{{.Resource.ContentSize}}"
+         data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}"
+         data-msg-decrypting="{{tr .Locale "sealed_decrypting"}}" data-msg-download="{{tr .Locale "sealed_download"}}">
+      <form class="unlock-bar" data-sealed-unlock hidden>
+        <span class="lock-ic" aria-hidden="true"></span>
+        <span class="msg">{{tr .Locale "sealed_locked"}}</span>
+        <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+        <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+        <a class="txt" href="/account#keyring">{{tr .Locale "keyring_forgot"}}</a>
+        <span class="err" data-sealed-error role="alert"></span>
+      </form>
+      <div class="panel ruled" data-sealed-placeholder>
+        <div class="pt"><span class="sec">{{tr .Locale "content"}}</span><span class="sp"><em class="content-meta">{{bytesText .Resource.ContentSize}}</em></span></div>
+        <div class="pb"><p class="ro" data-sealed-status>{{tr .Locale "sealed_needs_js"}}</p></div>
+      </div>
+      <form class="rform" data-sealed-form hidden>
+        <div class="panel ruled panel-ed">
+          <div class="pt">
+            <span class="sec">{{tr .Locale "content"}}</span>
+            <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
+            <span class="sp">
+              <span class="tags" data-sealed-text-tags hidden><span class="tag">UTF-8</span><span class="tag" data-sealed-eol>LF</span></span>
+              <em class="content-meta" data-sealed-meta-line></em>
+              {{/* The same key and the same preview as a plain resource's:
+                   upload.js shows what was chosen, and for text the editor
+                   reads it in. Nothing here is ever posted as it is. */}}
+              <label class="btn sm upload-key" data-upload-key>
+                <input type="file" class="sr" data-upload data-sealed-file data-max-bytes="{{.MaxContent}}">
+                {{tr .Locale "replace_file"}}
+              </label>
+            </span>
+          </div>
+          <div class="pb" data-content-body>
+            <div class="media-stage upload-preview" data-upload-preview hidden></div>
+            <textarea rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-sealed-text hidden></textarea>
+            <div class="media-stage" data-sealed-media hidden></div>
+          </div>
+        </div>
+        <div class="savebar">
+          <button type="submit" class="pri">{{tr .Locale "save"}}</button>
+          <a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "discard_changes"}}</a>
+          <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" data-sealed-name placeholder="{{tr .Locale "name_filename_fallback"}}" style="width:140px"></label>
+          <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" data-sealed-filename class="mpath" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
+          <span class="hint">{{tr .Locale "sealed_saves_encrypted"}}</span>
+          <span class="err" data-sealed-save-error role="alert"></span>
+        </div>
+      </form>
+    </div>
+{{end}}
+
+{{/* What turning encryption on or off does, said before it is done. Both
+     are confirmed by ticking the box; sealed.js does the work. */}}
+{{define "seal-dialogs"}}
+<dialog class="dlg" data-seal-dialog="on" aria-labelledby="seal-on-title">
+  <form>
+    <header><b id="seal-on-title">{{printf (tr .Locale "seal_on_title") (resourceLabel .Locale .Resource)}}</b></header>
+    <div class="body">
+      <p class="hint">{{tr .Locale "seal_on_intro"}}</p>
+      <ul class="impact">
+        <li>{{printf (tr .Locale "seal_on_history") .HistoryCount}}</li>
+        <li>{{printf (tr .Locale "seal_on_links") (len .Shares)}}</li>
+        <li>{{tr .Locale "seal_on_programs"}}</li>
+      </ul>
+      <label class="check"><input type="checkbox" name="ack" required> <span>{{tr .Locale "seal_ack"}}</span></label>
+      <label class="field" data-seal-password hidden><span>{{tr .Locale "keyring_password"}}</span><input type="password" name="password" autocomplete="current-password"></label>
+      <p class="hint" data-seal-progress></p>
+      <p class="err" data-seal-error role="alert"></p>
+    </div>
+    <footer><button type="button" class="txt" data-seal-close>{{tr .Locale "cancel"}}</button><button type="submit" class="pri">{{tr .Locale "seal_on_confirm"}}</button></footer>
+  </form>
+</dialog>
+<dialog class="dlg" data-seal-dialog="off" aria-labelledby="seal-off-title">
+  <form>
+    <header><b id="seal-off-title">{{printf (tr .Locale "seal_off_title") (resourceLabel .Locale .Resource)}}</b></header>
+    <div class="body">
+      <p class="hint">{{printf (tr .Locale "seal_off_intro") .HistoryCount}}</p>
+      <label class="check"><input type="checkbox" name="ack" required> <span>{{tr .Locale "seal_ack"}}</span></label>
+      <label class="field" data-seal-password hidden><span>{{tr .Locale "keyring_password"}}</span><input type="password" name="password" autocomplete="current-password"></label>
+      <p class="hint" data-seal-progress></p>
+      <p class="err" data-seal-error role="alert"></p>
+    </div>
+    <footer><button type="button" class="txt" data-seal-close>{{tr .Locale "cancel"}}</button><button type="submit">{{tr .Locale "seal_off_confirm"}}</button></footer>
+  </form>
+</dialog>
 {{end}}

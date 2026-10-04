@@ -49,7 +49,15 @@ type Resource struct {
 	// ExpiresAt is set on a quick share made while signed in: it is read
 	// only and is deleted at that time, unless kept as a resource first.
 	ExpiresAt *time.Time
+	// SealedKey and SealedMeta are set on an end-to-end encrypted resource:
+	// its content key wrapped by the account key, and its name, filename and
+	// type encrypted with the content key.
+	SealedKey  []byte
+	SealedMeta []byte
 }
+
+// Sealed reports an end-to-end encrypted resource.
+func (r Resource) Sealed() bool { return len(r.SealedKey) > 0 }
 
 // QuickShare reports a quick share that is not yet kept as a resource.
 func (r Resource) QuickShare() bool { return r.ExpiresAt != nil }
@@ -73,6 +81,8 @@ type Version struct {
 	SavedAt         time.Time
 	ReplacedAt      time.Time
 	Filename        string
+	// SealedMeta is an encrypted version's encrypted name, filename and type.
+	SealedMeta []byte
 }
 
 func (r Resource) Remote() bool { return r.OriginURL != "" }
@@ -160,6 +170,9 @@ type ConsumeResult struct {
 	// AccessID is the log row an allowed use was recorded under, for the
 	// delivery to correct once it knows how it ended.
 	AccessID string
+	// LinkSealedKey is, for an encrypted resource, the content key wrapped
+	// by the key in the link's address.
+	LinkSealedKey []byte
 }
 
 type QuotaLimit struct {

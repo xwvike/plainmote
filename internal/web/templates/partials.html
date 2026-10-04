@@ -67,3 +67,25 @@
   </div></div>{{end}}
 
 {{define "chev"}}<svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>{{end}}
+
+{{/* What a resource is called on its own pages; an encrypted one is named
+     by sealed-view.js once unlocked. */}}
+{{define "resource-title-text"}}{{if .Resource.Sealed}}{{tr .Locale "encrypted_content"}}{{else}}{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}{{end}}{{end}}
+{{define "resource-title"}}{{if .Resource.Sealed}}<span data-sealed-title>{{tr .Locale "encrypted_content"}}</span>{{else}}{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}{{end}}{{end}}
+
+{{/* An encrypted resource's history pages carry what sealed-view.js needs
+     to name it and open its versions: its wrapped key and its metadata,
+     still encrypted. */}}
+{{define "sealed-page"}}{{if .Resource.Sealed}}<div hidden data-sealed-page data-resource="{{.Resource.ID}}" data-sealed-key="{{b64 .Resource.SealedKey}}" data-sealed-meta="{{b64 .Resource.SealedMeta}}"
+     data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}"
+     data-msg-download="{{tr .Locale "sealed_download"}}" data-msg-same="{{tr .Locale "compare_same"}}" data-msg-differ="{{tr .Locale "compare_files_differ"}}"
+     data-msg-too-large="{{tr .Locale "compare_too_large"}}" data-msg-fold="{{tr .Locale "compare_fold"}}" data-msg-fold-one="{{tr .Locale "compare_fold_one"}}"></div>{{end}}{{end}}
+
+{{define "sealed-unlock"}}<form class="unlock-bar" data-sealed-unlock hidden>
+  <span class="lock-ic" aria-hidden="true"></span>
+  <span class="msg">{{tr .Locale "sealed_locked"}}</span>
+  <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+  <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+  <a class="txt" href="/account#keyring">{{tr .Locale "keyring_forgot"}}</a>
+  <span class="err" data-sealed-error role="alert"></span>
+</form>{{end}}

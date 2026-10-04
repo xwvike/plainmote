@@ -145,7 +145,9 @@
       <div class="pb account-action">
         <p class="hint">{{tr .Locale "export_body"}}</p>
         <p class="hint">{{printf (tr .Locale "export_limit") .ExportWindow .ExportLimit}}{{if .Export.Remaining}}{{printf (tr .Locale "export_remaining") .Export.Remaining}}{{end}}</p>
-        <form method="post" action="/account/export" class="inline">
+        {{if .SealedCount}}<p class="hint" data-export-note>{{tr .Locale "export_sealed_locked"}}</p>{{end}}
+        <form method="post" action="/account/export" class="inline"{{if .SealedCount}} data-sealed="{{.SealedCount}}"
+              data-msg-locked="{{tr .Locale "export_sealed_locked"}}" data-msg-unlocked="{{tr .Locale "export_sealed_unlocked"}}" data-msg-failed="{{tr .Locale "export_sealed_failed"}}"{{end}}>
           <input type="hidden" name="csrf" value="{{.CSRF}}">
           <button type="submit"{{if not .Export.Remaining}} disabled{{end}}>{{tr .Locale "export_download"}}</button>
         </form>
@@ -174,6 +176,7 @@
   {{template "footer" .}}
   <script type="module" src="{{asset "parts.js"}}"></script>
   <script type="module" src="{{asset "keyring.js"}}"></script>
+  {{if .SealedCount}}<script type="module" src="{{asset "export.js"}}"></script>{{end}}
 </body>
 </html>{{end}}
 

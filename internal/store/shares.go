@@ -33,6 +33,11 @@ type Link struct {
 	// the link still works for whoever holds the address; only its owner can
 	// no longer see what that address is.
 	Unreadable bool
+	// SealedKey and OwnerKey are set on a link to an encrypted resource: the
+	// content key wrapped by the link key, and the link key wrapped by the
+	// account key.
+	SealedKey []byte
+	OwnerKey  []byte
 }
 
 // errTokenUnreadable is a stored token that the configured key cannot open -
@@ -79,24 +84,28 @@ func (d *Store) insertLink(ctx context.Context, q storeQuerier, link *Link, now 
 	if err != nil {
 		return err
 	}
-	link.ID = uuid.NewString()
+	// A link to an encrypted resource comes with the id its keys were
+	// bound to; every other link is given one here.
+	if link.ID == "" {
+		link.ID = uuid.NewString()
+	}
 	link.Token = token
 	link.CreatedAt = now
 	link.TermsAt = now
 	_, err = q.Exec(ctx, `
 INSERT INTO links(
   id, resource_id, name, token_ciphertext, token_hash, max_uses, used_count,
-  expires_at, revoked_at, last_used_at, created_at
+  expires_at, revoked_at, last_used_at, created_at, sealed_key, owner_key
 )
-VALUES($1, $2, $3, $4, $5, $6, 0, $7, NULL, NULL, $8)
-`, link.ID, link.ResourceID, link.Name, ciphertext, hashToken(token), link.MaxUses, link.ExpiresAt, now)
+VALUES($1, $2, $3, $4, $5, $6, 0, $7, NULL, NULL, $8, $9, $10)
+`, link.ID, link.ResourceID, link.Name, ciphertext, hashToken(token), link.MaxUses, link.ExpiresAt, now, link.SealedKey, link.OwnerKey)
 	if err != nil {
 		return fmt.Errorf("create link: %w", err)
 	}
 	return nil
 }
 
-const linkColumns = `id, resource_id, name, token_ciphertext, max_uses, used_count, expires_at, revoked_at, last_used_at, created_at, COALESCE(terms_at, created_at)`
+const linkColumns = `id, resource_id, name, token_ciphertext, max_uses, used_count, expires_at, revoked_at, last_used_at, created_at, COALESCE(terms_at, created_at), sealed_key, owner_key`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -114,7 +123,7 @@ func (d *Store) scanLink(row rowScanner) (Link, error) {
 	var expires, revoked, lastUsed pgtype.Timestamptz
 	if err := row.Scan(
 		&link.ID, &link.ResourceID, &link.Name, &ciphertext, &link.MaxUses,
-		&link.UsedCount, &expires, &revoked, &lastUsed, &link.CreatedAt, &link.TermsAt,
+		&link.UsedCount, &expires, &revoked, &lastUsed, &link.CreatedAt, &link.TermsAt, &link.SealedKey, &link.OwnerKey,
 	); err != nil {
 		return Link{}, err
 	}
@@ -170,9 +179,13 @@ func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name strin
 	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {
 		return Link{}, err
 	}
-	var takenDown, quick bool
-	if err := d.db.QueryRow(ctx, `SELECT taken_down_at IS NOT NULL, expires_at IS NOT NULL FROM resources WHERE id = $1`, resourceID).Scan(&takenDown, &quick); err != nil {
+	var takenDown, quick, sealed bool
+	if err := d.db.QueryRow(ctx, `SELECT taken_down_at IS NOT NULL, expires_at IS NOT NULL, sealed_key IS NOT NULL FROM resources WHERE id = $1`, resourceID).Scan(&takenDown, &quick, &sealed); err != nil {
 		return Link{}, translateNotFound(err)
+	}
+	// Its link needs a key only the browser can make.
+	if sealed {
+		return Link{}, errSealedNeedsKey
 	}
 	if takenDown {
 		return Link{}, ErrTakenDown
@@ -363,8 +376,8 @@ WHERE l.token_hash = $2
   AND l.revoked_at IS NULL
   AND (l.expires_at IS NULL OR l.expires_at > $1)
   AND (l.max_uses = 0 OR l.used_count < l.max_uses)
-RETURNING l.id, l.resource_id, l.name
-`, now, hash).Scan(&linkID, &resourceID, &linkName)
+RETURNING l.id, l.resource_id, l.name, l.sealed_key
+`, now, hash).Scan(&linkID, &resourceID, &linkName, &result.LinkSealedKey)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return d.recordRefusalTx(ctx, tx, hash, meta, now, &result)
 		}
@@ -471,7 +484,7 @@ func (d *Store) ShareShell(ctx context.Context, token string) (string, error) {
 	var shell string
 	err := d.db.QueryRow(ctx, `
 SELECT CASE
-  WHEN r.content_type = $2 THEN 'encrypted'
+  WHEN r.content_type = $2 OR r.sealed_key IS NOT NULL THEN 'encrypted'
   WHEN r.content_type LIKE 'audio/%' OR r.content_type LIKE 'video/%' THEN 'media'
   ELSE '' END
 FROM links l JOIN resources r ON r.id = l.resource_id JOIN users u ON u.id = r.owner_id

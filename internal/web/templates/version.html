@@ -2,19 +2,21 @@
 <html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
-  <title>v{{.Viewed.Number}} · {{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}} · PlainMote</title>
+  <title>v{{.Viewed.Number}} · {{template "resource-title-text" .}} · PlainMote</title>
 </head>
 <body>
   {{template "topbar" .}}
+  {{template "sealed-page" .}}
   {{$base := printf "/resources/%s/versions" .Resource.ID}}
   <main class="page">
-    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}</a><span>/</span><a href="{{$base}}">{{tr .Locale "history"}}</a><span>/</span><span>v{{.Viewed.Number}}</span></div>
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{template "resource-title" .}}</a><span>/</span><a href="{{$base}}">{{tr .Locale "history"}}</a><span>/</span><span>v{{.Viewed.Number}}</span></div>
     <div class="ph">
-      <h1>{{or .Resource.Name .Resource.Filename (tr .Locale "untitled_resource")}}</h1>
+      <h1>{{template "resource-title" .}}</h1>
       <span class="vtag">v{{.Viewed.Number}}</span>
       <span class="sp">
         <a class="txt" href="{{$base}}/compare?from={{.Viewed.Number}}&amp;to={{.Resource.Version}}">{{tr .Locale "compare_current"}}</a>
-        {{if not .Resource.TakenDown}}<form method="post" action="{{$base}}/{{.Viewed.Number}}" class="inline">
+        {{if .Resource.Sealed}}{{if not .Resource.TakenDown}}<button type="button" class="txt" data-sealed-copy-version disabled>{{tr .Locale "copy_version"}}</button>{{end}}
+        {{else if not .Resource.TakenDown}}<form method="post" action="{{$base}}/{{.Viewed.Number}}" class="inline">
           <input type="hidden" name="csrf" value="{{.CSRF}}">
           <input type="hidden" name="action" value="copy">
           <button type="submit" class="txt">{{tr .Locale "copy_version"}}</button>
@@ -42,7 +44,16 @@
         </span>
       </div>
       <div class="pb">
-        {{if .ViewedText}}
+        {{if .Resource.Sealed}}
+        {{/* Opened in the browser: the version's bytes and its metadata are
+             ciphertext, decrypted by sealed-view.js once unlocked. */}}
+        <div data-sealed-version data-number="{{.Viewed.Number}}" data-raw="{{$base}}/{{.Viewed.Number}}/raw" data-meta="{{b64 .Viewed.SealedMeta}}">
+          {{template "sealed-unlock" .}}
+          <p class="ro" data-sealed-status>{{tr .Locale "sealed_needs_js"}}</p>
+          <textarea rows="18" spellcheck="false" disabled aria-label="{{tr .Locale "resource_content"}}" data-sealed-text hidden></textarea>
+          <div class="media-stage" data-sealed-media hidden></div>
+        </div>
+        {{else if .ViewedText}}
         <textarea rows="18" spellcheck="false" disabled aria-label="{{tr .Locale "resource_content"}}" data-preview data-filename="{{or .Viewed.Filename .Resource.Filename}}" data-content-type="{{.Viewed.ContentType}}">{{.ContentText}}</textarea>
         {{else if hasPrefix .Viewed.ContentType "image/"}}
         <div class="media-stage"><img class="resource-media resource-image" src="{{$base}}/{{.Viewed.Number}}/raw" alt="v{{.Viewed.Number}}"></div>
@@ -67,6 +78,7 @@
   {{template "version-dialog" .}}
   {{if .ViewedText}}<script type="module" src="{{asset "editor.js"}}"></script>{{end}}
   <script type="module" src="{{asset "parts.js"}}"></script>
+  {{if .Resource.Sealed}}<script type="module" src="{{asset "sealed-view.js"}}"></script>{{end}}
 </body>
 </html>{{end}}
 

@@ -7,7 +7,7 @@ PlainMote can encrypt content in the browser so that the service stores only cip
 - **Encrypted quick shares**: each quick share gets a random key that travels in the link after `#`, or is derived from a four-character code. This is described in the privacy policy and the account page.
 - **Master password**: a password only the account owner knows. It protects an account key, which in turn protects the keys of encrypted resources. This document describes it.
 
-The master password and its keyring are available now. Encrypting resources with it is being built; the sections marked *planned* describe the format it will use.
+Encrypted resources can be viewed, edited, shared and exported in the browser. The command line does not open them yet.
 
 ## Goals
 
@@ -23,11 +23,11 @@ master password (typed on the device, never sent)
                └─ wraps ─▶ account key AK (random; the service keeps it only wrapped)
 recovery key RK ─ wraps ─▶ the same AK
 
-AK ─ wraps ─▶ content key CK (one per encrypted resource, random)           planned
+AK ─ wraps ─▶ content key CK (one per encrypted resource, random)
                ├─ encrypts ─▶ the content, name, filename and content type
                └─ wrapped by each link's link key LK
-link key LK (one per share link, random, after # in the link)               planned
-AK ─ wraps ─▶ LK (so the owner can show the full link again)                 planned
+link key LK (one per share link, random, after # in the link)
+AK ─ wraps ─▶ LK (so the owner can show the full link again)
 ```
 
 | Key | Made | Kept | Visible to the service |
@@ -36,8 +36,8 @@ AK ─ wraps ─▶ LK (so the owner can show the full link again)              
 | Master key MK | PBKDF2 of the master password and a salt | Nowhere; derived when needed | No |
 | Account key AK | Random, generated in the browser when the master password is set | Service: wrapped by MK and wrapped by RK. Browser: after unlocking, as a non-extractable key | Only wrapped |
 | Recovery key RK | Random, shown once when the master password is set | By the owner | No |
-| Content key CK | Random, when a resource is encrypted (*planned*) | Service: wrapped by AK, and by each link's LK | Only wrapped |
-| Link key LK | Random, when a share link is made (*planned*) | In the link after `#`; service: wrapped by AK | Only wrapped |
+| Content key CK | Random, when a resource is encrypted | Service: wrapped by AK, and by each link's LK | Only wrapped |
+| Link key LK | Random, when a share link is made | In the link after `#`; service: wrapped by AK | Only wrapped |
 
 ## Algorithms
 
@@ -51,9 +51,11 @@ All cryptography is done by WebCrypto in the browser, with no third-party librar
   | --- | --- |
   | AK by MK | `pm/ak/password/v1:<user ID>` |
   | AK by RK | `pm/ak/recovery/v1:<user ID>` |
-  | CK by AK (*planned*) | `pm/ck/resource/v1:<resource ID>` |
-  | CK by LK (*planned*) | `pm/ck/link/v1:<link ID>` |
-  | LK by AK (*planned*) | `pm/lk/v1:<link ID>` |
+  | CK by AK | `pm/ck/resource/v1:<resource ID>` |
+  | CK by LK | `pm/ck/link/v1` |
+  | LK by AK | `pm/lk/v1:<link ID>` |
+  | Content, encrypted with CK | `PMr1` + `pm/content/v1:<resource ID>` |
+  | Metadata, encrypted with CK | `PMm1` + `pm/meta/v1:<resource ID>` |
 
 - **Checking the password**: the service does not check the master password. Unwrapping AK is the check: a wrong password fails AES-GCM authentication.
 - **Recovery key**: 256 random bits written in Crockford's base32 (no I, L, O or U), 52 characters in 13 groups of four. Input is case-insensitive; `O` is read as `0`, `I` and `L` as `1`.
@@ -69,19 +71,26 @@ All cryptography is done by WebCrypto in the browser, with no third-party librar
 - **Forgotten master password**: the owner enters the recovery key and a new password; the browser unwraps AK with RK and wraps it with the new MK. If both the master password and the recovery key are lost, encrypted content cannot be recovered.
 - Every change carries the keyring's version number; a change made against an older version is refused, so two devices cannot overwrite each other.
 
-### Encrypted resources (*planned*)
+### Encrypted resources
 
-- Turning encryption on for a resource generates CK, encrypts the content and its name, filename and type, sends the ciphertext, and deletes the resource's plaintext earlier versions. Edits are decrypted, changed and encrypted again in the browser. Turning it off decrypts in the browser and saves plaintext.
+- **Formats**: content is `PMr1 | IV (12) | ciphertext and tag`; the metadata - `{"n": name, "f": filename, "t": type}` as JSON - is the same with `PMm1`. Each version keeps its own encrypted metadata. Encrypted text is UTF-8. A new encrypted resource's ID, and a link's, is generated in the browser, since the additional data is bound to it; the service checks that it is a fresh UUID.
+- **Turning encryption on** (unlocked): the browser generates CK, encrypts the current content and every earlier version one by one, with their metadata, and sends them together with CK wrapped by AK. In one transaction the service replaces the plaintext, empties the name and filename, and revokes every existing share link, as their addresses carry no key; the plaintext objects are then deleted. The versions sent must be exactly the versions there are.
+- **Turning encryption off**: the browser decrypts the current content and every earlier version and sends them as plaintext, stored and typed as any save would be. Share links stay and deliver plaintext from then on.
+- **Editing**: the browser decrypts into the editor and encrypts again on saving, against the version it started from; any save against an older version is a conflict, as encrypting the same text twice never gives the same bytes. Restoring an earlier version copies its ciphertext and metadata. Copying a version into a new resource decrypts it and encrypts it again under the new resource's own CK.
+- **Searching**: the service cannot match encrypted names; once unlocked, the browser decrypts them from a list of the account's encrypted resources and matches them locally.
 - A new share link gets a random LK; CK wrapped by LK is stored with the link, and LK wrapped by AK lets the owner show the full link again. A recipient's browser uses the LK after `#` to unwrap CK and then decrypt the content. Links serve the current version as before.
 - Revoking a link deletes it together with its wrapped CK. Anyone who already opened the link may have kept the content.
+- **What a link delivers**: `PMs1`, then the resource ID, CK wrapped by the link's LK and the encrypted metadata, each after a two-byte big-endian length, then the encrypted content. A browser opening the link first receives the decryption page, which costs no use; the page fetches this, which counts as one. Programs receive it as it is.
+- **Export**: the service's archive holds each encrypted content as `content.sealed`, with `sealed.json` listing every encrypted resource's wrapped CK and encrypted metadata and the account's keyring. On the account page, once unlocked, the browser decrypts that archive and saves it with the plaintext under the names it really has; locked, the archive is saved as it is.
 
 ## What the service stores
 
 | Where | What |
 | --- | --- |
 | `keyrings` (one row per account) | Algorithm and iteration count, salt, AK wrapped by MK, AK wrapped by RK, idle lock time, version, times |
-| `resources` (*planned*) | CK wrapped by AK; the encrypted name, filename and type |
-| `links` (*planned*) | CK wrapped by LK; LK wrapped by AK |
+| `resources` | CK wrapped by AK; the encrypted name, filename and type. The name and filename columns stay empty and the content type is `application/vnd.plainmote.sealed` |
+| `resource_versions` | Each encrypted version's encrypted metadata |
+| `links` | CK wrapped by LK; LK wrapped by AK |
 
 The service still sees resource IDs, owners, ciphertext sizes, creation and update times, the number of versions, share links' terms and use counts, and access history (time, IP address, approximate location, browser).
 
@@ -106,4 +115,4 @@ Not protected against:
 - Remote resources cannot be encrypted.
 - Encrypted text is stored as UTF-8.
 - The operator cannot see encrypted content; abuse reports can be handled only from metadata or by taking content down.
-- Turning encryption on deletes a resource's plaintext earlier versions, but plaintext in database backups remains until those backups expire.
+- Turning encryption on replaces a resource's plaintext, earlier versions included, but plaintext in database and storage backups remains until those backups expire.

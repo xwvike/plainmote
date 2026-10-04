@@ -34,6 +34,23 @@
       <button type="submit">{{tr .Locale "search"}}</button>
       {{if or .Pager.Query .Pager.Kind}}<a class="txt" href="/resources/">{{tr .Locale "clear"}}</a>{{end}}
     </form>
+    {{/* Encrypted names are not the service's to search: once unlocked,
+         sealed-names.js matches them here, in a block of their own. */}}
+    <div data-sealed-search data-query="{{.Pager.Query}}" hidden
+         data-msg-locked="{{tr .Locale "sealed_search_locked"}}" data-msg-matches="{{tr .Locale "sealed_search_matches"}}" data-msg-tag="{{tr .Locale "encrypted"}}"
+         data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}">
+      <form class="unlock-bar" data-sealed-unlock hidden>
+        <span class="lock-ic" aria-hidden="true"></span>
+        <span class="msg" data-sealed-search-note></span>
+        <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+        <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+        <span class="err" data-sealed-error role="alert"></span>
+      </form>
+      <div class="panel" data-sealed-matches hidden>
+        <div class="pt"><span class="sec">{{tr .Locale "sealed_search_title"}}</span><span class="sp"><span class="hint" data-sealed-matches-count></span></span></div>
+        <div class="table-scroll"><table class="fx"><colgroup><col style="width:240px"><col></colgroup><tbody data-sealed-matches-body></tbody></table></div>
+      </div>
+    </div>
     <div class="panel">
       {{if .Resources}}
       <div class="table-scroll">
@@ -43,11 +60,11 @@
           <tbody>
             {{range .Resources}}
             <tr>
-              <td class="trunc"><a href="/resources/{{.ID}}">{{resourceLabel $.Locale .}}</a></td>
-              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}">{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">{{tr $.Locale "remote"}}</span>{{end}}{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{end}}</span></td>
+              <td class="trunc"><a href="/resources/{{.ID}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</a></td>
+              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">{{tr $.Locale "remote"}}</span>{{end}}{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}</span></td>
               <td>
                 {{if .Remote}}<span class="fl"><span class="tag">{{tr $.Locale "upstream"}}</span><span class="mono trunc" title="{{.OriginURL}}">{{originHost .OriginURL}}</span></span>
-                {{else if .Encrypted}}<span class="mut">—</span>
+                {{else if or .Encrypted .Sealed}}<span class="mut">—</span>
                 {{else}}<span class="mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
               </td>
               <td>
@@ -84,5 +101,6 @@
     </div>
   </main>
   {{template "footer" .}}
+  <script type="module" src="{{asset "sealed-names.js"}}"></script>
 </body>
 </html>{{end}}

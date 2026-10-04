@@ -287,6 +287,8 @@ type versionBody struct {
 	// shown on its own.
 	RawURL  string
 	PageURL string
+	// Meta is an encrypted side's encrypted metadata, for the browser.
+	Meta []byte
 }
 
 func (a *App) versionBody(r *http.Request, user User, resource Resource, number int) (versionBody, error) {
@@ -299,6 +301,7 @@ func (a *App) versionBody(r *http.Request, user User, resource Resource, number 
 		side.Current, side.Bytes, side.Filename = true, body, resource.Filename
 		side.Size, side.Type, side.Encoding, side.SHA256 = resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.ContentSHA256
 		side.RawURL, side.PageURL = "/resources/"+resource.ID+"/raw", "/resources/"+resource.ID
+		side.Meta = resource.SealedMeta
 	} else {
 		version, err := a.db.VersionForOwner(r.Context(), user.ID, resource.ID, number)
 		if err != nil {
@@ -314,6 +317,7 @@ func (a *App) versionBody(r *http.Request, user User, resource Resource, number 
 		}
 		side.Size, side.Type, side.Encoding, side.SHA256 = version.ContentSize, version.ContentType, version.ContentEncoding, version.ContentSHA256
 		side.RawURL, side.PageURL = versionPath(resource.ID, number)+"/raw", versionPath(resource.ID, number)
+		side.Meta = version.SealedMeta
 	}
 	// A file is shown as what its bytes are, whatever its row says: a row
 	// written before detection read the bytes may name a PNG as a video.
@@ -409,7 +413,13 @@ func (a *App) handleCompare(w http.ResponseWriter, r *http.Request, user User, r
 			data.DiffChoices = choices
 			data.DiffFrom, data.DiffTo = before, after
 			data.DiffFull = query.Get("full") != ""
-			data.DiffNote = compareVersions(&data, before, after)
+			// Encrypted sides are compared in the browser, which alone can
+			// read them.
+			if resource.Sealed() {
+				data.SealedCompare = true
+			} else {
+				data.DiffNote = compareVersions(&data, before, after)
+			}
 			a.renderTemplate(w, r, http.StatusOK, "compare.html", data)
 			return
 		}

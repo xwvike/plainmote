@@ -2,7 +2,8 @@
 // ciphertext once - that request is the one that counts as a use - and
 // decrypts it here with the key after # in the address, or with the
 // four-character code the recipient types.
-import { inspect, open } from "./e2ee.js";
+import { inspect, open, fromBase64URL } from "./e2ee.js";
+import { isBundle, openBundle } from "./seal.js";
 import { sizeText } from "./upload.js";
 
 const page = document.querySelector("[data-decrypt]");
@@ -244,9 +245,22 @@ async function start() {
     if (response.status === 401 || response.status === 404) return say(msg("msgExpired"), true);
     if (!response.ok) throw new Error(String(response.status));
     envelope = new Uint8Array(await response.arrayBuffer());
-    inspect(envelope);
+    if (!isBundle(envelope)) inspect(envelope);
   } catch (_) {
     return say(msg("msgFailed"), true);
+  }
+
+  // An encrypted resource: what came back carries the content key wrapped
+  // for this link, which the key after # opens.
+  if (isBundle(envelope)) {
+    const hash = window.location.hash;
+    if (!hash.startsWith("#k=") || hash.length <= 3) return say(msg("msgNoKey"), true);
+    try {
+      const opened = await openBundle(envelope, fromBase64URL(hash.slice(3)));
+      return show({ name: opened.filename || opened.name, content: opened.content });
+    } catch (_) {
+      return say(msg("msgWrong"), true);
+    }
   }
 
   if (inspect(envelope).passphrase) {

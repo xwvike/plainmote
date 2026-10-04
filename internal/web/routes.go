@@ -118,13 +118,15 @@ type pageData struct {
 	// KeyringLockChoices the idle times it may be kept unlocked.
 	Keyring            *store.Keyring
 	KeyringLockChoices []int
-	RegistrationMode   auth.RegistrationMode
-	Resources          []Resource
-	Quota              store.UserQuota
-	Pager              pager
-	IsNew              bool
-	NewKind            string
-	SignedIn           bool
+	// SealedCount is how many encrypted resources the account has.
+	SealedCount      int
+	RegistrationMode auth.RegistrationMode
+	Resources        []Resource
+	Quota            store.UserQuota
+	Pager            pager
+	IsNew            bool
+	NewKind          string
+	SignedIn         bool
 	// Indexable is set by the one page that is meant to be found. The response
 	// header carries the same exception; both have to agree or the meta tag
 	// quietly undoes it.
@@ -231,6 +233,17 @@ type pageData struct {
 	Trimmed      int
 	// Kept confirms a quick share just kept as a resource.
 	Kept bool
+	// HasKeyring is whether the account has a master password, which
+	// encrypting a resource needs; HistoryJSON lists the resource's earlier
+	// versions for turning encryption on or off in the browser, which has to
+	// carry every one of them across.
+	HasKeyring bool
+	// SealedCompare is a comparison of encrypted versions, made in the browser.
+	SealedCompare bool
+	HistoryJSON   string
+	// Sealed and Unsealed confirm encryption just turned on or off.
+	Sealed   bool
+	Unsealed bool
 }
 
 // pager carries everything the dashboard footer needs; every link is a plain

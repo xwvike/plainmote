@@ -2,6 +2,7 @@ package web
 
 import (
 	"archive/zip"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,6 +70,12 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, p
 	data.DeleteOpen = deleteOpen
 	data.E2EE = a.e2eeEnabled(r, user.ID)
 	data.KeyringLockChoices = store.KeyringLockChoices
+	if sealed, err := a.db.SealedIndex(r.Context(), user.ID); err == nil {
+		data.SealedCount = len(sealed)
+	} else {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
 	if keyring, err := a.db.Keyring(r.Context(), user.ID); err == nil {
 		data.Keyring = &keyring
 	} else if !errors.Is(err, store.ErrNotFound) {
@@ -298,6 +305,10 @@ func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Ac
 		return err
 	}
 
+	if err := a.writeExportSealed(r, archive, account.User.ID, resources, versions, now); err != nil {
+		return err
+	}
+
 	// Remote resources become small .url files. The export preserves the saved
 	// address without fetching an upstream on the owner's behalf.
 	for _, resource := range resources {
@@ -342,6 +353,9 @@ func (a *App) writeExportVersion(r *http.Request, archive *zip.Writer, resource 
 	resource.ContentType = version.ContentType
 	if version.Filename != "" {
 		resource.Filename = version.Filename
+	}
+	if resource.Sealed() {
+		resource.ContentType = store.SealedContentType
 	}
 	name := path.Base(exportBodyPath(resource))
 	entry, err := archive.CreateHeader(&zip.FileHeader{
@@ -401,6 +415,11 @@ func writeExportRemote(archive *zip.Writer, resource Resource) error {
 // is kept to one path segment, since the archive is unpacked by tools this
 // service does not control.
 func exportBodyPath(resource Resource) string {
+	// Encrypted content keeps a fixed name: its own is inside it, and the
+	// browser renames it once decrypted (see sealedExportName).
+	if resource.Sealed() {
+		return "files/" + resource.ID + "/" + sealedExportName
+	}
 	name := exportSegment(resource.Filename)
 	if name == "" {
 		name = strings.Trim(exportSegment(resource.Name), " .")
@@ -481,4 +500,56 @@ func exportFilePart(value string) string {
 		}
 		return '_'
 	}, value)
+}
+
+// sealedExportName is what an encrypted content is called in an export.
+const sealedExportName = "content.sealed"
+
+// writeExportSealed adds what an account's encrypted resources need to be
+// opened away from this service: its keyring, still wrapped, and for each
+// encrypted resource its wrapped content key and the encrypted metadata of
+// it and of each earlier version. Nothing here opens without the master
+// password or the recovery key. The account page decrypts the archive in the
+// browser when it can; this is what remains when it cannot.
+func (a *App) writeExportSealed(r *http.Request, archive *zip.Writer, userID string, resources []Resource, versions []store.Version, now time.Time) error {
+	type sealedVersion struct {
+		Number int    `json:"n"`
+		Meta   string `json:"sealed_meta"`
+	}
+	type sealedResource struct {
+		ID        string          `json:"id"`
+		SealedKey string          `json:"sealed_key"`
+		Meta      string          `json:"sealed_meta"`
+		Versions  []sealedVersion `json:"versions"`
+	}
+	encode := base64.RawURLEncoding.EncodeToString
+	var sealed []sealedResource
+	index := map[string]int{}
+	for _, resource := range resources {
+		if resource.Sealed() {
+			index[resource.ID] = len(sealed)
+			sealed = append(sealed, sealedResource{ID: resource.ID, SealedKey: encode(resource.SealedKey), Meta: encode(resource.SealedMeta), Versions: []sealedVersion{}})
+		}
+	}
+	if len(sealed) == 0 {
+		return nil
+	}
+	for _, version := range versions {
+		if i, ok := index[version.ResourceID]; ok && len(version.SealedMeta) > 0 {
+			sealed[i].Versions = append(sealed[i].Versions, sealedVersion{Number: version.Number, Meta: encode(version.SealedMeta)})
+		}
+	}
+	manifest := map[string]any{"format": "https://github.com/xwvike/plainmote/blob/main/docs/encryption.md", "resources": sealed}
+	if keyring, err := a.db.Keyring(r.Context(), userID); err == nil {
+		manifest["keyring"] = keyringJSON(keyring)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
+	entry, err := archive.CreateHeader(&zip.FileHeader{Name: "sealed.json", Method: zip.Deflate, Modified: now})
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(entry)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(manifest)
 }

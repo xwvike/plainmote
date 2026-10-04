@@ -183,3 +183,24 @@ func httptestRequest(app *App, method, target string, form url.Values, cookies [
 	app.handler.ServeHTTP(response, request)
 	return response
 }
+
+// seal.js, as shipped, against itself and against the bundle the service
+// builds.
+func TestSealModule(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not installed")
+	}
+	script, err := os.ReadFile(filepath.Join("testdata", "seal_test.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := filepath.Abs(filepath.Join("static", "keys.js"))
+	seal, _ := filepath.Abs(filepath.Join("static", "seal.js"))
+	command := exec.Command(node, "--input-type=module", "-e", string(script))
+	command.Env = append(os.Environ(), "KEYS_MODULE=file://"+keys, "SEAL_MODULE=file://"+seal)
+	out, err := command.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "ok") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}

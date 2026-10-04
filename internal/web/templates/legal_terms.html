@@ -18,6 +18,7 @@
 <p>每个账号的资源数量与存储空间受所属套餐限制，单份内容不得超过 {{legalBytes .Legal.MaxContent}}；当前用量与上限显示于资源列表页面。资源的历史版本计入存储空间，但仅占用剩余空间，空间不足或超过保留期限时自动删除；本服务不保证保留任何历史版本。</p>
 {{if .Legal.Anonymous}}<p>首页临时分享（界面中称“快速分享”）面向所有访问者开放：链接最长在 {{legalDuration true .Legal.AnonymousTTL}}后失效，内容不得超过 {{legalBytes .Legal.AnonymousSize}}；文本以纯文本形式交付，图片和音视频可在浏览器中查看或播放，其他文件仅以附件形式提供下载；开启端到端加密的，依下款处理。</p>
 <p>已登录用户在账号设置中开启端到端加密后，其在首页创建的临时分享以密文形式存储和交付，由接收者的浏览器解密。本服务不掌握解密此类内容所需的密钥或口令，但此类内容同样须遵守本条款第五条的使用规范；收到举报或发现违规时，本服务可删除相应分享或限制相关账号。链接或口令遗失的，内容无法恢复。</p>{{end}}
+<p>已登录用户设置主密码后，可以为资源开启端到端加密，此类资源以密文形式存储和交付，由用户本人或分享链接的接收者在浏览器或本服务的命令行工具中解密。本服务不掌握解密所需的密钥，但此类内容同样须遵守本条款第五条的使用规范；收到举报或发现违规时，本服务可下架、删除相应资源或限制相关账号。主密码与恢复密钥均遗失的，内容无法恢复。</p>
 
 <h2>五、使用规范</h2>
 <p>您在使用本服务时不得从事下列行为：</p>
@@ -73,6 +74,7 @@
 <p>The number of resources and the storage available to each account are limited by its plan, and a single item may not exceed {{legalBytes .Legal.MaxContent}}. Current usage and limits are shown on the resource list page. Earlier versions of resources count towards storage but occupy only unused space, and are deleted automatically when space runs short or their retention period ends; the Service does not guarantee that any earlier version is kept.</p>
 {{if .Legal.Anonymous}}<p>Quick shares on the home page are available to all visitors. Links expire after at most {{legalDuration false .Legal.AnonymousTTL}}, the content may not exceed {{legalBytes .Legal.AnonymousSize}}, text is delivered as plain text, images, audio and video can be viewed or played in the browser, and any other file is delivered only as a download, except as provided in the next paragraph for end-to-end encryption.</p>
 <p>When a signed-in user turns on end-to-end encryption in the account settings, the quick shares they create on the home page are stored and delivered as ciphertext and decrypted in the recipient’s browser. The Service does not hold the key or code needed to decrypt such content, but it remains subject to the acceptable use rules in section 5; upon a report or a violation, the Service may delete the share or restrict the account concerned. If the link or code is lost, the content cannot be recovered.</p>{{end}}
+<p>A signed-in user who sets a master password can turn on end-to-end encryption for a resource. Such a resource is stored and delivered as ciphertext and decrypted by the user, or by the recipient of a share link, in a browser or the Service’s command line tool. The Service does not hold the keys needed to decrypt it, but such content is equally subject to the rules of use in section 5; on receiving a report or finding a violation, the Service may take down or delete the resource or restrict the account. If both the master password and the recovery key are lost, the content cannot be recovered.</p>
 
 <h2>5. Acceptable use</h2>
 <p>When using the Service, you must not:</p>
