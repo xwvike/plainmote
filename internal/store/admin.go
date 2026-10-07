@@ -66,6 +66,8 @@ type AdminOverview struct {
 		Total          int64 `json:"total"`
 		Suspended      int64 `json:"suspended"`
 		SignedInLast30 int64 `json:"signed_in_last_30d"`
+		// MasterPassword counts the accounts that have set one.
+		MasterPassword int64 `json:"master_password"`
 	} `json:"users"`
 	Resources struct {
 		Total           int64 `json:"total"`
@@ -74,6 +76,10 @@ type AdminOverview struct {
 		CurrentBytes    int64 `json:"current_bytes"`
 		HistoryBytes    int64 `json:"history_bytes"`
 		HistoryVersions int64 `json:"history_versions"`
+		// QuickShares are signed-in quick shares not yet kept; Encrypted are
+		// end-to-end encrypted resources, quick shares among them.
+		QuickShares int64 `json:"quick_shares"`
+		Encrypted   int64 `json:"encrypted"`
 	} `json:"resources"`
 	Links struct {
 		Live        int64 `json:"live"`
@@ -94,19 +100,22 @@ func (d *Store) AdminOverview(ctx context.Context, now time.Time) (AdminOverview
 	var o AdminOverview
 	wrap := func(err error) error { return fmt.Errorf("admin overview: %w: %w", ErrInternal, err) }
 	if err := d.db.QueryRow(ctx, `
-SELECT COUNT(*), COUNT(*) FILTER (WHERE suspended_at IS NOT NULL), COUNT(*) FILTER (WHERE last_signed_in_at > $2)
+SELECT COUNT(*), COUNT(*) FILTER (WHERE suspended_at IS NOT NULL), COUNT(*) FILTER (WHERE last_signed_in_at > $2),
+       (SELECT COUNT(*) FROM keyrings)
 FROM users WHERE id <> $1
-`, AnonymousUserID, now.Add(-30*24*time.Hour)).Scan(&o.Users.Total, &o.Users.Suspended, &o.Users.SignedInLast30); err != nil {
+`, AnonymousUserID, now.Add(-30*24*time.Hour)).Scan(&o.Users.Total, &o.Users.Suspended, &o.Users.SignedInLast30, &o.Users.MasterPassword); err != nil {
 		return o, wrap(err)
 	}
 	if err := d.db.QueryRow(ctx, `
 SELECT COUNT(*), COUNT(*) FILTER (WHERE origin_url <> ''), COUNT(*) FILTER (WHERE taken_down_at IS NOT NULL),
        COALESCE(SUM(content_size), 0),
        (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v),
-       (SELECT COUNT(*) FROM resource_versions)
+       (SELECT COUNT(*) FROM resource_versions),
+       COUNT(*) FILTER (WHERE expires_at IS NOT NULL),
+       COUNT(*) FILTER (WHERE sealed_key IS NOT NULL OR content_type = $2)
 FROM resources WHERE owner_id <> $1
-`, AnonymousUserID).Scan(&o.Resources.Total, &o.Resources.Remote, &o.Resources.TakenDown,
-		&o.Resources.CurrentBytes, &o.Resources.HistoryBytes, &o.Resources.HistoryVersions); err != nil {
+`, AnonymousUserID, EncryptedContentType).Scan(&o.Resources.Total, &o.Resources.Remote, &o.Resources.TakenDown,
+		&o.Resources.CurrentBytes, &o.Resources.HistoryBytes, &o.Resources.HistoryVersions, &o.Resources.QuickShares, &o.Resources.Encrypted); err != nil {
 		return o, wrap(err)
 	}
 	if err := d.db.QueryRow(ctx, `
@@ -203,6 +212,10 @@ type AdminUser struct {
 		LimitBytes   int64 `json:"limit_bytes"`
 	} `json:"storage"`
 	Plans []AdminGrant `json:"plans,omitempty"`
+	// MasterPasswordAt is when the account set its master password, or nil
+	// if it has none. Nothing of the keys themselves is ever given.
+	MasterPassword   bool       `json:"master_password"`
+	MasterPasswordAt *time.Time `json:"master_password_at"`
 }
 
 type AdminGrant struct {
@@ -221,7 +234,8 @@ const adminUserColumns = `
        AND (l.max_uses = 0 OR l.used_count < l.max_uses)),
   (SELECT COALESCE(SUM(r.content_size), 0) FROM resources r WHERE r.owner_id = u.id),
   (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v JOIN resources r ON r.id = v.resource_id WHERE r.owner_id = u.id),
-  limits.storage, limits.resources`
+  limits.storage, limits.resources,
+  (SELECT k.created_at FROM keyrings k WHERE k.user_id = u.id)`
 
 // adminUserLimits sums the plans in force at $1, the same way the quota does.
 const adminUserLimits = `
@@ -234,11 +248,13 @@ CROSS JOIN LATERAL (
 
 func scanAdminUser(row rowScanner) (AdminUser, error) {
 	var u AdminUser
-	var lastSignedIn pgtype.Timestamptz
+	var lastSignedIn, keyring pgtype.Timestamptz
 	var suspended bool
 	err := row.Scan(&u.ID, &u.GitHubID, &u.Login, &u.Name, &u.CreatedAt, &lastSignedIn, &suspended, &u.SuspendedReason,
-		&u.Resources, &u.LiveLinks, &u.Storage.CurrentBytes, &u.Storage.HistoryBytes, &u.Storage.LimitBytes, &u.ResourcesLimit)
+		&u.Resources, &u.LiveLinks, &u.Storage.CurrentBytes, &u.Storage.HistoryBytes, &u.Storage.LimitBytes, &u.ResourcesLimit, &keyring)
 	u.LastSignedInAt = timePointer(lastSignedIn)
+	u.MasterPasswordAt = timePointer(keyring)
+	u.MasterPassword = u.MasterPasswordAt != nil
 	u.Status = "active"
 	if suspended {
 		u.Status = "suspended"
@@ -519,7 +535,21 @@ type AdminResource struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 	Status          string    `json:"status"`
 	TakedownReason  string    `json:"takedown_reason"`
+	// ExpiresAt is set on a signed-in quick share not yet kept: when it is
+	// deleted.
+	ExpiresAt *time.Time `json:"expires_at"`
+	// Encrypted says how the content is end-to-end encrypted, if it is:
+	// "master_password", under its owner's master password - the name and
+	// filename are then empty, being encrypted too - or "link_key", a quick
+	// share made the earlier way, whose key is only in its link.
+	Encrypted string `json:"encrypted"`
 }
+
+// The values of AdminResource.Encrypted.
+const (
+	AdminEncryptedMasterPassword = "master_password"
+	AdminEncryptedLinkKey        = "link_key"
+)
 
 const adminResourceColumns = `
   r.id, r.owner_id, u.login, r.name, r.filename, r.origin_url, r.content_type, r.content_size, r.version,
@@ -527,14 +557,22 @@ const adminResourceColumns = `
   (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v WHERE v.resource_id = r.id),
   (SELECT COUNT(*) FROM links l WHERE l.resource_id = r.id AND l.revoked_at IS NULL
      AND (l.expires_at IS NULL OR l.expires_at > $1) AND (l.max_uses = 0 OR l.used_count < l.max_uses)),
-  r.created_at, r.updated_at, r.taken_down_at IS NOT NULL, r.takedown_reason`
+  r.created_at, r.updated_at, r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key IS NOT NULL`
 
 func scanAdminResource(row rowScanner) (AdminResource, error) {
 	var r AdminResource
 	var origin string
-	var takenDown bool
+	var takenDown, sealed bool
+	var expires pgtype.Timestamptz
 	err := row.Scan(&r.ID, &r.Owner.ID, &r.Owner.Login, &r.Name, &r.Filename, &origin, &r.ContentType, &r.Size, &r.Version,
-		&r.HistoryVersions, &r.HistoryBytes, &r.LiveLinks, &r.CreatedAt, &r.UpdatedAt, &takenDown, &r.TakedownReason)
+		&r.HistoryVersions, &r.HistoryBytes, &r.LiveLinks, &r.CreatedAt, &r.UpdatedAt, &takenDown, &r.TakedownReason, &expires, &sealed)
+	r.ExpiresAt = timePointer(expires)
+	switch {
+	case sealed:
+		r.Encrypted = AdminEncryptedMasterPassword
+	case r.ContentType == EncryptedContentType:
+		r.Encrypted = AdminEncryptedLinkKey
+	}
 	// A reference is named by its host alone: the full address is the owner's
 	// and may carry a path or query that says more than the operator needs.
 	r.Kind = "stored"
@@ -551,26 +589,36 @@ func scanAdminResource(row rowScanner) (AdminResource, error) {
 	return r, err
 }
 
-// AdminListResources lists resources, newest first. owner narrows to one
-// account; query matches the name or filename; status is "active",
-// "taken_down" or empty for both.
-func (d *Store) AdminListResources(ctx context.Context, owner, query, status string, limit, offset int, now time.Time) ([]AdminResource, int, error) {
-	if owner != "" && !validUUIDs(owner) {
+// AdminResourceFilter narrows the resource list. Owner is one account;
+// Query matches the name or filename, which an encrypted resource does not
+// have; Status is "active" or "taken_down"; Kind is "quick_share" or
+// "resource" (anything kept); Encrypted keeps only encrypted ones. Empty
+// means any.
+type AdminResourceFilter struct {
+	Owner, Query, Status, Kind string
+	Encrypted                  bool
+}
+
+// AdminListResources lists resources, newest first.
+func (d *Store) AdminListResources(ctx context.Context, f AdminResourceFilter, limit, offset int, now time.Time) ([]AdminResource, int, error) {
+	if f.Owner != "" && !validUUIDs(f.Owner) {
 		return []AdminResource{}, 0, nil
 	}
-	query = strings.TrimSpace(query)
+	query := strings.TrimSpace(f.Query)
 	pattern := "%" + escapeLikePattern(query) + "%"
 	where := `($2 = '' OR r.owner_id = NULLIF($2, '')::uuid)
   AND ($3 = '' OR r.name ILIKE $4 ESCAPE '\' OR r.filename ILIKE $4 ESCAPE '\')
-  AND ($5 = '' OR ($5 = 'taken_down') = (r.taken_down_at IS NOT NULL))`
+  AND ($5 = '' OR ($5 = 'taken_down') = (r.taken_down_at IS NOT NULL))
+  AND ($6 = '' OR ($6 = 'quick_share') = (r.expires_at IS NOT NULL))
+  AND (NOT $7 OR r.sealed_key IS NOT NULL OR r.content_type = $8)`
+	args := []any{now, f.Owner, query, pattern, f.Status, f.Kind, f.Encrypted, EncryptedContentType}
 	var total int
-	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM resources r WHERE $1::timestamptz IS NOT NULL AND `+where,
-		now, owner, query, pattern, status).Scan(&total); err != nil {
+	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM resources r WHERE $1::timestamptz IS NOT NULL AND `+where, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("admin resources: %w: %w", ErrInternal, err)
 	}
 	rows, err := d.db.Query(ctx, `SELECT `+adminResourceColumns+`
 FROM resources r JOIN users u ON u.id = r.owner_id WHERE `+where+`
-ORDER BY r.created_at DESC, r.id LIMIT $6 OFFSET $7`, now, owner, query, pattern, status, limit, offset)
+ORDER BY r.created_at DESC, r.id LIMIT $9 OFFSET $10`, append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("admin resources: %w: %w", ErrInternal, err)
 	}

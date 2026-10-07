@@ -451,12 +451,24 @@ func (q adminRequest) revokePlan(userID, planID string) {
 func (q adminRequest) resources() {
 	limit, offset := q.page()
 	query := q.r.URL.Query()
-	status := query.Get("status")
-	if status != "" && status != "active" && status != "taken_down" {
+	filter := store.AdminResourceFilter{Owner: query.Get("owner"), Query: query.Get("q"), Status: query.Get("status"), Kind: query.Get("kind")}
+	if filter.Status != "" && filter.Status != "active" && filter.Status != "taken_down" {
 		q.fail(http.StatusBadRequest, "bad_request", "status must be active or taken_down")
 		return
 	}
-	resources, total, err := q.app.db.AdminListResources(q.r.Context(), query.Get("owner"), query.Get("q"), status, limit, offset, q.now)
+	if filter.Kind != "" && filter.Kind != "quick_share" && filter.Kind != "resource" {
+		q.fail(http.StatusBadRequest, "bad_request", "kind must be quick_share or resource")
+		return
+	}
+	switch query.Get("encrypted") {
+	case "", "0":
+	case "1":
+		filter.Encrypted = true
+	default:
+		q.fail(http.StatusBadRequest, "bad_request", "encrypted must be 1 or 0")
+		return
+	}
+	resources, total, err := q.app.db.AdminListResources(q.r.Context(), filter, limit, offset, q.now)
 	if err != nil {
 		q.failWith(err)
 		return
@@ -547,6 +559,11 @@ func (q adminRequest) lookup() {
 		return
 	}
 	token := strings.TrimSpace(fields.Link)
+	// What follows # is a key the link's recipient decrypts with; it is
+	// never used here. The admin page is to cut it off before sending.
+	if at := strings.IndexByte(token, '#'); at >= 0 {
+		token = token[:at]
+	}
 	if at := strings.Index(token, deliveryPrefix); at >= 0 {
 		token, _ = splitDeliveryPath(token[at:])
 	}

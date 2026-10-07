@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"plainmote/internal/store"
 )
 
@@ -396,5 +398,88 @@ func TestAdminPlans(t *testing.T) {
 	removal := planAudit["items"].([]any)[0].(map[string]any)
 	if removal["action"] != "plan.delete" || removal["target_label"] != "friends" || removal["detail"].(map[string]any)["max_storage"].(float64) != float64(1<<30) {
 		t.Fatalf("the deletion is recorded with what was deleted: %v", removal)
+	}
+}
+
+// Encrypted resources and quick shares, as the operator sees them: marked
+// as what they are, counted, filtered - and still nothing that opens them.
+// A link looked up with its key never has the key used, and an account
+// says whether it has a master password and nothing of its keys.
+func TestAdminSeesEncryptionWithoutKeys(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+	client := newAdminClient(t, db)
+	now := time.Now().UTC()
+
+	if status, detail, _ := client.call(http.MethodGet, "/_admin/v1/users/"+user.ID, nil); status != http.StatusOK || detail["master_password"] != false || detail["master_password_at"] != nil {
+		t.Fatalf("an account without a master password: %v", detail)
+	}
+	giveKeyring(t, db, user.ID)
+	salt := b64(bytes.Repeat([]byte{1}, 16))
+	status, detail, body := client.call(http.MethodGet, "/_admin/v1/users/"+user.ID, nil)
+	if status != http.StatusOK || detail["master_password"] != true || detail["master_password_at"] == nil ||
+		strings.Contains(body, salt) || strings.Contains(body, b64(bytes.Repeat([]byte{2}, 60))) {
+		t.Fatalf("an account with a master password, and none of its keys: %s", body)
+	}
+
+	sealed, sealedLink, err := db.CreateSealedQuickShare(ctx, user.ID, uuid.NewString(), uuid.NewString(), store.SealedPart{
+		Content: fakeSealed("PMr1", 1, 64), Meta: fakeSealed("PMm1", 1, 40),
+	}, bytes.Repeat([]byte{4}, 60), bytes.Repeat([]byte{5}, 60), bytes.Repeat([]byte{6}, 60), time.Hour, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, _, err := db.CreateEncryptedPaste(ctx, user.ID, sampleEnvelope(), time.Hour, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, item, body := client.call(http.MethodGet, "/_admin/v1/resources/"+sealed.ID, nil)
+	if item["encrypted"] != store.AdminEncryptedMasterPassword || item["expires_at"] == nil || item["name"] != "" ||
+		strings.Contains(body, b64(fakeSealed("PMm1", 1, 40))) || strings.Contains(body, b64(bytes.Repeat([]byte{4}, 60))) {
+		t.Fatalf("an encrypted quick share: %s", body)
+	}
+	if _, item, _ := client.call(http.MethodGet, "/_admin/v1/resources/"+legacy.ID, nil); item["encrypted"] != store.AdminEncryptedLinkKey {
+		t.Fatalf("a quick share encrypted the earlier way: %v", item)
+	}
+	if _, item, _ := client.call(http.MethodGet, "/_admin/v1/resources/"+resource.ID, nil); item["encrypted"] != "" || item["expires_at"] != nil {
+		t.Fatalf("a plain resource: %v", item)
+	}
+
+	ids := func(target string) []string {
+		status, list, body := client.call(http.MethodGet, target, nil)
+		if status != http.StatusOK {
+			t.Fatalf("%s: %d %s", target, status, body)
+		}
+		var out []string
+		for _, entry := range list["items"].([]any) {
+			out = append(out, entry.(map[string]any)["id"].(string))
+		}
+		return out
+	}
+	if got := ids("/_admin/v1/resources?kind=quick_share"); len(got) != 2 {
+		t.Fatalf("quick shares: %v", got)
+	}
+	if got := ids("/_admin/v1/resources?kind=resource"); len(got) != 1 || got[0] != resource.ID {
+		t.Fatalf("kept resources: %v", got)
+	}
+	if got := ids("/_admin/v1/resources?encrypted=1&kind=quick_share"); len(got) != 2 {
+		t.Fatalf("encrypted quick shares: %v", got)
+	}
+	if status, _, _ := client.call(http.MethodGet, "/_admin/v1/resources?kind=secret", nil); status != http.StatusBadRequest {
+		t.Fatalf("an unknown kind: %d", status)
+	}
+
+	_, overview, _ := client.call(http.MethodGet, "/_admin/v1/overview", nil)
+	counts := overview["resources"].(map[string]any)
+	if counts["quick_shares"].(float64) != 2 || counts["encrypted"].(float64) != 2 || overview["users"].(map[string]any)["master_password"].(float64) != 1 {
+		t.Fatalf("overview: %v", overview)
+	}
+
+	// A reported link pasted whole, key and all: found by its token.
+	status, found, body := client.call(http.MethodPost, "/_admin/v1/lookup", map[string]string{
+		"link": "https://plainmote.link/d/" + sealedLink.Token + "/file#k=" + b64(bytes.Repeat([]byte{9}, 32)),
+	})
+	if status != http.StatusOK || found["resource"].(map[string]any)["id"] != sealed.ID || strings.Contains(body, sealedLink.Token) {
+		t.Fatalf("lookup with a key after #: %d %s", status, body)
 	}
 }

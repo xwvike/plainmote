@@ -182,6 +182,8 @@ An authenticated request that fails receives `{"error": "<code>", "message": "<d
 | `storage.history_bytes` | integer | Storage used by earlier versions |
 | `storage.limit_bytes` | integer | Storage limit |
 | `plans` | array | Account details only: active plans, described below |
+| `master_password` | boolean | Whether the account has set a master password for end-to-end encryption |
+| `master_password_at` | time \| null | When it was set; `null` without one. Nothing of the keys is ever returned, and a forgotten master password cannot be recovered by the operator |
 
 `resources_limit` and `storage.limit_bytes` are the sums over all plans currently in effect, taking grant and expiry times into account. Each item of `plans`:
 
@@ -223,6 +225,8 @@ An authenticated request that fails receives `{"error": "<code>", "message": "<d
 | `created_at`, `updated_at` | time | Creation and update times |
 | `status` | string | `active` or `taken_down` |
 | `takedown_reason` | string | Reason for the takedown; empty when not taken down |
+| `expires_at` | time \| null | Set on a signed-in quick share not yet kept as a resource: when it is deleted |
+| `encrypted` | string | How the content is end-to-end encrypted: `master_password` (under the owner's master password; `name` and `filename` are empty, being encrypted too), `link_key` (a quick share encrypted the earlier way, its key only in its link), or empty when it is not encrypted |
 
 #### Share link
 
@@ -283,8 +287,8 @@ No endpoint returns a share link's token or address.
     "history_retention_days": 30
   },
   "health": { "database": "ok", "object_storage": "ok" },
-  "users": { "total": 12, "suspended": 0, "signed_in_last_30d": 7 },
-  "resources": { "total": 84, "remote": 3, "taken_down": 0, "current_bytes": 5996544, "history_bytes": 8540160, "history_versions": 41 },
+  "users": { "total": 12, "suspended": 0, "signed_in_last_30d": 7, "master_password": 3 },
+  "resources": { "total": 84, "remote": 3, "taken_down": 0, "current_bytes": 5996544, "history_bytes": 8540160, "history_versions": 41, "quick_shares": 5, "encrypted": 9 },
   "links": { "live": 51, "ended_last_7d": 9 },
   "access": {
     "last_24h": { "success": 120, "expired": 3, "exhausted": 1, "revoked": 0, "upstream_error": 0, "taken_down": 0, "suspended": 0 },
@@ -297,6 +301,7 @@ No endpoint returns a share link's token or address.
 
 - `health`: the status of the database and object storage, `ok` or `error`; `unknown` when the object storage cannot be checked. Object storage is checked with a single metadata request on the bucket, without reading any object.
 - `access`: accesses through share links in the last 24 hours and 7 days, by result. Repeated refusals that were merged into one record are counted individually.
+- `users.master_password`: accounts that have set a master password. `resources.quick_shares`: signed-in quick shares not yet kept, which `resources.total` includes; `resources.encrypted`: end-to-end encrypted resources, quick shares among them.
 - `anonymous`: the number of live quick shares made without signing in, the storage they use and the anonymous allowance. Signed-in users' quick shares count toward their own accounts.
 - `prune`: the result of the most recent scheduled cleanup since the process started; `null` before the first one.
 
@@ -350,9 +355,9 @@ Body: `{"reason": "…"}`. Revokes a granted plan and returns the updated accoun
 
 ### Resources
 
-`GET /_admin/v1/resources?owner=&q=&status=&page=&size=`
+`GET /_admin/v1/resources?owner=&q=&status=&kind=&encrypted=&page=&size=`
 
-`owner` is an account ID; `q` matches part of the name or filename, case-insensitively; `status` is `active` or `taken_down`. Returns a list of resource objects, newest first.
+`owner` is an account ID; `q` matches part of the name or filename, case-insensitively - an encrypted resource has neither, and is found by its owner or its ID instead; `status` is `active` or `taken_down`; `kind` is `quick_share` (signed-in quick shares not yet kept) or `resource` (everything else); `encrypted=1` keeps only end-to-end encrypted ones. Returns a list of resource objects, newest first.
 
 `GET /_admin/v1/resources/{id}`
 
@@ -386,7 +391,7 @@ Body: `{"reason": "…"}`. Revokes the link and returns `{"id": "…", "revoked"
 { "link": "https://plainmote.link/d/…" }
 ```
 
-`link` may be the full share address, its path or the token alone. Returns the resource the link belongs to and the link's own state:
+`link` may be the full share address, its path or the token alone. An address with a key after `#` - an encrypted share's - must be sent without it: the key opens the content and is never to leave the operator's browser. The service ignores anything after `#` all the same. Returns the resource the link belongs to and the link's own state:
 
 ```json
 { "resource": { "id": "…", "name": "checkout-api", "…": "…" }, "link": { "id": "…", "name": "web-01", "live": true, "…": "…" } }

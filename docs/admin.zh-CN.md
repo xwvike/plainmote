@@ -182,6 +182,8 @@ PLAINMOTE-ADMIN-V1
 | `storage.history_bytes` | integer | 历史版本占用的容量 |
 | `storage.limit_bytes` | integer | 容量上限 |
 | `plans` | array | 仅账号详情返回：生效中的套餐，见下表 |
+| `master_password` | boolean | 账号是否已设置用于端到端加密的主密码 |
+| `master_password_at` | time \| null | 主密码的设置时间；未设置时为 `null`。接口不返回任何密钥材料，运营者亦无法找回用户遗忘的主密码 |
 
 `resources_limit` 与 `storage.limit_bytes` 为当前生效的全部套餐之和，已计入授予时间与到期时间。`plans` 的每一项：
 
@@ -223,6 +225,8 @@ PLAINMOTE-ADMIN-V1
 | `created_at`、`updated_at` | time | 创建与更新时间 |
 | `status` | string | `active` 或 `taken_down` |
 | `takedown_reason` | string | 下架原因，未下架时为空 |
+| `expires_at` | time \| null | 仅尚未转为资源的登录用户快速分享有值，为其删除时间 |
+| `encrypted` | string | 端到端加密方式：`master_password`（以所有者的主密码加密，此时 `name` 与 `filename` 同样加密，返回为空）、`link_key`（以旧方式加密的快速分享，密钥仅在链接中），未加密时为空 |
 
 #### 分享链接
 
@@ -283,8 +287,8 @@ PLAINMOTE-ADMIN-V1
     "history_retention_days": 30
   },
   "health": { "database": "ok", "object_storage": "ok" },
-  "users": { "total": 12, "suspended": 0, "signed_in_last_30d": 7 },
-  "resources": { "total": 84, "remote": 3, "taken_down": 0, "current_bytes": 5996544, "history_bytes": 8540160, "history_versions": 41 },
+  "users": { "total": 12, "suspended": 0, "signed_in_last_30d": 7, "master_password": 3 },
+  "resources": { "total": 84, "remote": 3, "taken_down": 0, "current_bytes": 5996544, "history_bytes": 8540160, "history_versions": 41, "quick_shares": 5, "encrypted": 9 },
   "links": { "live": 51, "ended_last_7d": 9 },
   "access": {
     "last_24h": { "success": 120, "expired": 3, "exhausted": 1, "revoked": 0, "upstream_error": 0, "taken_down": 0, "suspended": 0 },
@@ -297,6 +301,7 @@ PLAINMOTE-ADMIN-V1
 
 - `health`：数据库与对象存储的状态，取值为 `ok` 或 `error`；对象存储不支持检测时为 `unknown`。对象存储通过对存储桶的一次元数据请求判断，不读取任何对象。
 - `access`：最近 24 小时与 7 天内经分享链接的访问次数，按结果分类。合并记录的重复拒绝按实际次数计。
+- `users.master_password`：已设置主密码的账号数量。`resources.quick_shares`：尚未转为资源的登录用户快速分享数量，已计入 `resources.total`；`resources.encrypted`：端到端加密的资源数量，含快速分享。
 - `anonymous`：未登录创建的有效快速分享数量、其占用的容量与匿名额度上限。登录用户的快速分享计入各自账号。
 - `prune`：本进程启动后最近一次定时清理的结果，尚未清理时为 `null`。
 
@@ -350,9 +355,9 @@ PLAINMOTE-ADMIN-V1
 
 ### 资源
 
-`GET /_admin/v1/resources?owner=&q=&status=&page=&size=`
+`GET /_admin/v1/resources?owner=&q=&status=&kind=&encrypted=&page=&size=`
 
-`owner` 为账号 ID；`q` 部分匹配名称或文件名（不区分大小写）；`status` 为 `active` 或 `taken_down`。按创建时间倒序返回资源对象的列表。
+`owner` 为账号 ID；`q` 部分匹配名称或文件名（不区分大小写），加密资源没有名称与文件名，须按所有者或 ID 查找；`status` 为 `active` 或 `taken_down`；`kind` 为 `quick_share`（尚未转为资源的登录用户快速分享）或 `resource`（其余资源）；`encrypted=1` 时仅返回端到端加密的资源。按创建时间倒序返回资源对象的列表。
 
 `GET /_admin/v1/resources/{id}`
 
@@ -386,7 +391,7 @@ PLAINMOTE-ADMIN-V1
 { "link": "https://plainmote.link/d/…" }
 ```
 
-`link` 可以是完整的分享地址、地址中的路径或 token 本身。返回该链接所属的资源与链接自身的状态：
+`link` 可以是完整的分享地址、地址中的路径或 token 本身。加密分享的地址在 `#` 之后带有密钥，发送前须去掉 `#` 及其后的内容：该密钥可解密内容，不应离开运营者的浏览器。服务端同样忽略 `#` 之后的部分。返回该链接所属的资源与链接自身的状态：
 
 ```json
 { "resource": { "id": "…", "name": "checkout-api", "…": "…" }, "link": { "id": "…", "name": "web-01", "live": true, "…": "…" } }
