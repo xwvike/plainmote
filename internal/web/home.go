@@ -193,11 +193,16 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	var resource Resource
 	var link Link
 	if user, _, ok := a.currentUser(r); ok {
-		// An account that turned encryption on never has its box's text
-		// stored in the clear because a script did not run.
-		if wantsHTML(r) && a.e2eeEnabled(r, user.ID) {
+		// The box's text is never stored in the clear because the script
+		// that was to encrypt it did not run.
+		if form.encrypt {
 			a.refusePasteWith(w, r, boxContent, filename, ttlValue, translate(requestLanguage(r).Locale, "e2ee_plaintext_refused"), http.StatusBadRequest)
 			return
+		}
+		// Sent from the box with its switch off: the box starts that way
+		// next time.
+		if wantsHTML(r) {
+			a.rememberE2EE(r, user.ID, false)
 		}
 		resource, link, err = a.db.CreateQuickShare(r.Context(), user.ID, filename, []byte(content), ttl, time.Now().UTC())
 	} else {
@@ -233,6 +238,9 @@ type pasteForm struct {
 	// uploaded is content that arrived as a file part. A file's bytes are
 	// kept exactly; only what came from the box has its line endings undone.
 	uploaded bool
+	// encrypt is the box's encryption switch, on: the page's script was to
+	// encrypt this and send it elsewhere, and did not.
+	encrypt bool
 }
 
 // readPasteForm reads the box's own form and what curl sends:
@@ -260,7 +268,7 @@ func readPasteForm(r *http.Request) (pasteForm, error) {
 			return pasteForm{}, err
 		}
 		defer r.MultipartForm.RemoveAll()
-		form := pasteForm{content: []byte(r.FormValue("content")), filename: strings.TrimSpace(r.FormValue("filename")), ttl: r.FormValue("ttl")}
+		form := pasteForm{content: []byte(r.FormValue("content")), filename: strings.TrimSpace(r.FormValue("filename")), ttl: r.FormValue("ttl"), encrypt: r.FormValue("encrypt") != ""}
 		// A page with no file chosen still sends the field, empty.
 		for _, field := range []string{"file", "content"} {
 			files := r.MultipartForm.File[field]
@@ -285,7 +293,7 @@ func readPasteForm(r *http.Request) (pasteForm, error) {
 		return form, nil
 	case "application/x-www-form-urlencoded":
 		if form, err := url.ParseQuery(string(body)); err == nil && form.Has("content") {
-			return pasteForm{content: []byte(form.Get("content")), filename: strings.TrimSpace(form.Get("filename")), ttl: form.Get("ttl")}, nil
+			return pasteForm{content: []byte(form.Get("content")), filename: strings.TrimSpace(form.Get("filename")), ttl: form.Get("ttl"), encrypt: form.Get("encrypt") != ""}, nil
 		}
 	}
 	query := r.URL.Query()
@@ -392,7 +400,8 @@ func (a *App) pasteResultPage(r *http.Request, resource Resource, link Link) pag
 	data.PasteURL = a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))
 	data.PasteResourceID = resource.ID
 	data.PasteExpires = *link.ExpiresAt
-	data.PasteEncrypted = resource.ContentType == store.EncryptedContentType
+	data.PasteEncrypted = resource.Encrypted() || resource.Sealed()
+	data.PasteSealed = resource.Sealed()
 	data.PasteGauge = gaugeStyle(link.TermsAt, link.ExpiresAt)
 	data.PasteEnd = endStyle(link.ExpiresAt)
 	data.PasteFilename = resource.Filename

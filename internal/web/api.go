@@ -453,12 +453,25 @@ func (a *App) apiCreateQuickShare(w http.ResponseWriter, r *http.Request, user U
 		return
 	}
 	defer file.Close()
-	content, err := io.ReadAll(io.LimitReader(file, store.AnonymousMaxBytes+1))
-	if err != nil || len(content) > store.AnonymousMaxBytes {
+	content, err := io.ReadAll(io.LimitReader(file, store.AnonymousMaxBytes+sealedOverhead+1))
+	if err != nil || len(content) > store.AnonymousMaxBytes+sealedOverhead {
 		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
 		return
 	}
-	resource, link, err := a.db.CreateQuickShare(r.Context(), user.ID, strings.TrimSpace(r.FormValue("filename")), content, ttl, time.Now().UTC())
+	var resource Resource
+	var link Link
+	if r.FormValue("sealed_key") != "" {
+		// Encrypted on the client under the master password, as the home
+		// page's box does: an encrypted resource with its one link.
+		resource, link, err = a.db.CreateSealedQuickShare(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"),
+			store.SealedPart{Content: content, Meta: base64Field(r, "sealed_meta")},
+			base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"), ttl, time.Now().UTC())
+	} else if len(content) > store.AnonymousMaxBytes {
+		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+		return
+	} else {
+		resource, link, err = a.db.CreateQuickShare(r.Context(), user.ID, strings.TrimSpace(r.FormValue("filename")), content, ttl, time.Now().UTC())
+	}
 	if err != nil {
 		a.apiRefused(w, "create quick share", err)
 		return

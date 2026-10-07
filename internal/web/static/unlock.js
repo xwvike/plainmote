@@ -1,5 +1,7 @@
 // Unlocking from any page that needs the account key: read the keyring,
-// open it with the master password, keep the key in this browser.
+// open it with the master password, keep the key in this browser - and tell
+// the page, plainmote:unlocked with the key, so that the top bar and whatever
+// the page shows encrypted all open at once, wherever it was unlocked from.
 import { openWithPassword } from "./keys.js";
 import { put, get } from "./vault.js";
 
@@ -22,5 +24,6 @@ export async function unlock(password, user = currentUser()) {
     throw new WrongPassword();
   }
   if (!(await put(user, key, ring.lock_minutes))) throw new NoStorage();
+  document.dispatchEvent(new CustomEvent("plainmote:unlocked", { detail: { key } }));
   return key;
 }

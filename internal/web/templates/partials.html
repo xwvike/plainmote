@@ -58,6 +58,7 @@
       {{template "theme-switch" .}}
       {{template "language-switch" .}}
       {{if .SignedIn}}
+      {{if .HasKeyring}}{{template "keylock" .}}{{end}}
       <a class="who" href="/account"{{if eq .Active "account"}} aria-current="page"{{end}}>{{.User.Login}}</a>
       <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="sm">{{tr .Locale "logout"}}</button></form>
       {{else}}
@@ -65,6 +66,28 @@
       {{end}}
     </div>
   </div></div>{{end}}
+
+{{/* The master password's lock, on every page of an account that has one:
+     its state at a glance, and unlocking or locking in place. lock.js shows
+     the state and does both; the password never leaves the browser. */}}
+{{define "keylock"}}<details class="keylock" data-keylock
+    data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}" data-msg-failed="{{tr .Locale "keyring_failed"}}"
+    data-msg-locked="{{tr .Locale "keyring_locked"}}" data-msg-unlocked="{{tr .Locale "keylock_unlocked"}}">
+  <summary title="{{tr .Locale "e2ee_title"}}"><svg class="lk-shut" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg><svg class="lk-open" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"></path></svg><span class="sr" data-keylock-state>{{tr .Locale "keyring_locked"}}</span></summary>
+  <div class="keylock-pop">
+    <b>{{tr .Locale "e2ee_title"}}</b>
+    <form data-keylock-unlock>
+      <p class="hint">{{tr .Locale "keylock_locked_hint"}}</p>
+      <span class="row"><input type="password" class="sm" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required><button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button></span>
+      <span class="err" data-keylock-error role="alert"></span>
+      <a class="txt" href="/account#keyring">{{tr .Locale "keyring_forgot"}}</a>
+    </form>
+    <div data-keylock-open hidden>
+      <p class="hint">{{tr .Locale "keylock_unlocked_hint"}}</p>
+      <span class="row"><button type="button" class="sm" data-keylock-lock>{{tr .Locale "keyring_lock_now"}}</button><a class="txt" href="/account#keyring">{{tr .Locale "keylock_settings"}}</a></span>
+    </div>
+  </div>
+</details>{{end}}
 
 {{define "chev"}}<svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>{{end}}
 

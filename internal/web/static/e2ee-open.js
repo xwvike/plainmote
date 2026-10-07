@@ -3,7 +3,7 @@
 // decrypts it here with the key after # in the address, or with the
 // four-character code the recipient types.
 import { inspect, open, fromBase64URL } from "./e2ee.js";
-import { isBundle, openBundle } from "./seal.js";
+import { isBundle, bundleWantsCode, openBundle } from "./seal.js";
 import { sizeText } from "./upload.js";
 
 const page = document.querySelector("[data-decrypt]");
@@ -250,29 +250,16 @@ async function start() {
     return say(msg("msgFailed"), true);
   }
 
-  // An encrypted resource: what came back carries the content key wrapped
-  // for this link, which the key after # opens.
-  if (isBundle(envelope)) {
-    const hash = window.location.hash;
-    if (!hash.startsWith("#k=") || hash.length <= 3) return say(msg("msgNoKey"), true);
-    try {
-      const opened = await openBundle(envelope, fromBase64URL(hash.slice(3)));
-      return show({ name: opened.filename || opened.name, content: opened.content });
-    } catch (_) {
-      return say(msg("msgWrong"), true);
-    }
-  }
-
-  if (inspect(envelope).passphrase) {
-    // A wrong code is tried again against the bytes already fetched, never
-    // by fetching again: only opening the link counts as a use.
+  // A wrong code is tried again against the bytes already fetched, never by
+  // fetching again: only opening the link counts as a use.
+  const askCode = (tryCode) => {
     say(msg("msgPin"));
     const pin = pinCells(async (code) => {
       box.classList.remove("wrong");
       box.classList.add("busy");
       pin.disable(true);
       try {
-        await show(await open(envelope, { passphrase: code }));
+        await show(await tryCode(code));
       } catch (_) {
         box.classList.remove("busy");
         pin.disable(false);
@@ -284,8 +271,35 @@ async function start() {
     });
     box.prepend(pin.row);
     pin.focus();
-    return;
+  };
+
+  // An encrypted resource or quick share: what came back carries the
+  // content key wrapped for this link, which the key after # opens - or the
+  // code its recipient was told.
+  if (isBundle(envelope)) {
+    let wantsCode = false;
+    try {
+      wantsCode = bundleWantsCode(envelope);
+    } catch (_) {
+      return say(msg("msgFailed"), true);
+    }
+    if (wantsCode) {
+      return askCode(async (code) => {
+        const opened = await openBundle(envelope, { code });
+        return { name: opened.filename || opened.name, content: opened.content };
+      });
+    }
+    const hash = window.location.hash;
+    if (!hash.startsWith("#k=") || hash.length <= 3) return say(msg("msgNoKey"), true);
+    try {
+      const opened = await openBundle(envelope, { key: fromBase64URL(hash.slice(3)) });
+      return show({ name: opened.filename || opened.name, content: opened.content });
+    } catch (_) {
+      return say(msg("msgWrong"), true);
+    }
   }
+
+  if (inspect(envelope).passphrase) return askCode((code) => open(envelope, { passphrase: code }));
 
   const hash = window.location.hash;
   if (!hash.startsWith("#k=") || hash.length <= 3) return say(msg("msgNoKey"), true);

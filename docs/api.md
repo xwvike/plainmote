@@ -269,7 +269,9 @@ The request body is `multipart/form-data`:
 | `filename` | Optional; the name at the end of the link |
 | `ttl` | Optional; `10m`, `1h`, `1d`, `7d` or `30d`, default `1h` |
 
-Returns `201` with the resource object and `share_url`, the link. Text is delivered as plain text, images, audio and video as themselves, and anything else as a download, as for quick shares made on the home page. The quick share counts toward the account's storage. Its content is deleted when it expires; its access history is kept.
+Returns `201` with the resource object and `share_url`, the link.
+
+An encrypted quick share, as `plainmote share --encrypt` makes, is sent with the content encrypted on the client and these fields instead of `filename`, all Base64URL without padding except the IDs: `id` and `link_id`, UUIDs chosen by the client; `sealed_key`, the content key wrapped by the account key; `sealed_meta`, the encrypted metadata; `link_key`, the content key wrapped by the link's key; and `owner_key`, the link's key wrapped by the account key. `share_url` then lacks the key, which the client adds after `#`. The formats are described in [encryption.md](encryption.md). Text is delivered as plain text, images, audio and video as themselves, and anything else as a download, as for quick shares made on the home page. The quick share counts toward the account's storage. Its content is deleted when it expires; its access history is kept.
 
 ## Examples
 

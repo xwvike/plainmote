@@ -320,11 +320,18 @@ type quickShare struct {
 }
 
 func (c *client) share(ctx context.Context, filename, ttl string, body []byte) (quickShare, error) {
+	return c.shareWith(ctx, map[string]string{"filename": filename, "ttl": ttl}, body)
+}
+
+// shareWith makes a quick share from a multipart form of the given fields,
+// those left empty omitted, and a content file.
+func (c *client) shareWith(ctx context.Context, fields map[string]string, body []byte) (quickShare, error) {
 	var form bytes.Buffer
 	writer := multipart.NewWriter(&form)
-	_ = writer.WriteField("filename", filename)
-	if ttl != "" {
-		_ = writer.WriteField("ttl", ttl)
+	for key, value := range fields {
+		if value != "" {
+			_ = writer.WriteField(key, value)
+		}
 	}
 	part, err := writer.CreateFormFile("content", "content")
 	if err != nil {

@@ -59,10 +59,23 @@ async function start() {
   const form = document.querySelector('form[action="/account/export"][data-sealed]');
   if (!form || !globalThis.crypto?.subtle || typeof DecompressionStream !== "function") return;
   const note = form.parentElement.querySelector("[data-export-note]");
-  const key = await accountKey();
-  if (note) note.textContent = key ? form.dataset.msgUnlocked : form.dataset.msgLocked;
-  if (!key) return;
+  // Follows the lock as it changes, here or from the top bar: locked, the
+  // service's archive downloads as it is.
+  let key = await accountKey();
+  const say = () => {
+    if (note) note.textContent = key ? form.dataset.msgUnlocked : form.dataset.msgLocked;
+  };
+  say();
+  document.addEventListener("plainmote:unlocked", (event) => {
+    key = event.detail.key;
+    say();
+  });
+  document.addEventListener("plainmote:locked", () => {
+    key = null;
+    say();
+  });
   form.addEventListener("submit", async (event) => {
+    if (!key) return;
     event.preventDefault();
     const button = form.querySelector("button");
     button.disabled = true;

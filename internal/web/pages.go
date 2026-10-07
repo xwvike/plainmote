@@ -106,12 +106,16 @@ func (a *App) templateSet() *template.Template {
 				return "off"
 			}
 		},
-		"outcomeText":        accessOutcomeText,
-		"asset":              assetPath,
-		"locationText":       locationText,
-		"resourceLabel":      resourceLabel,
-		"lockText":           lockText,
-		"b64":                func(value []byte) string { return base64.RawURLEncoding.EncodeToString(value) },
+		"outcomeText":   accessOutcomeText,
+		"asset":         assetPath,
+		"locationText":  locationText,
+		"resourceLabel": resourceLabel,
+		"lockText":      lockText,
+		"b64":           func(value []byte) string { return base64.RawURLEncoding.EncodeToString(value) },
+		"sub":           func(a, b int) int { return a - b },
+		"sealedLink": func(data pageData, entry linkView, class string) sealedLinkView {
+			return sealedLinkView{Locale: data.Locale, Entry: entry, Class: class}
+		},
 		"locationShort":      locationShort,
 		"outcomeDescription": accessOutcomeDescription,
 		"remainText":         remainText,
@@ -448,6 +452,15 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	// names the home page after it, and getting that from only some of them
 	// would leave the navigation disagreeing with itself.
 	data.Anonymous = a.cfg.AnonymousEnabled
+	// The top bar's lock is on every page of an account with a master
+	// password; a failure to tell only leaves it off.
+	if data.SignedIn && !data.HasKeyring && data.User.ID != "" {
+		has, err := a.hasKeyring(r, data.User.ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "read keyring: %v\n", err)
+		}
+		data.HasKeyring = has
+	}
 	data.LegalLinks = a.cfg.ContactEmail != ""
 	data.SourceURL = a.cfg.SourceURL
 	data.Language = requestLanguage(r)
@@ -591,4 +604,13 @@ func lockText(locale string, minutes int) string {
 		return fmt.Sprintf(translate(locale, "keyring_hours"), minutes/60)
 	}
 	return fmt.Sprintf(translate(locale, "keyring_minutes"), minutes)
+}
+
+// sealedLinkView is one link to an encrypted resource, with the page's
+// language for what is said about it.
+type sealedLinkView struct {
+	Locale string
+	Entry  linkView
+	// Class is the address's own, as each place shows it.
+	Class string
 }

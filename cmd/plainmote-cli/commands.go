@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -474,9 +475,11 @@ func (c *cli) push(ctx context.Context, args []string) error {
 // be piped or captured, and what it is and how long it lasts to stderr.
 func (c *cli) share(ctx context.Context, args []string) error {
 	var ttl, filename string
+	var encrypt bool
 	args, server, err := c.flags("share", args, func(set *flag.FlagSet) {
 		set.StringVar(&ttl, "ttl", "", "how long the link works: 10m, 1h, 1d, 7d or 30d")
 		set.StringVar(&filename, "filename", "", "name at the end of the link")
+		set.BoolVar(&encrypt, "encrypt", false, "end-to-end encrypt it under the master password")
 	})
 	if err != nil {
 		return err
@@ -500,11 +503,22 @@ func (c *cli) share(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	made, err := api.share(ctx, filename, ttl, body)
+	var made quickShare
+	address := ""
+	if encrypt {
+		// The key goes after #, which is never sent to the server: the
+		// link opens in a browser, which decrypts it.
+		var linkKey []byte
+		made, linkKey, err = c.shareSealed(ctx, api, filename, ttl, body)
+		address = made.ShareURL + "#k=" + base64.RawURLEncoding.EncodeToString(linkKey)
+	} else {
+		made, err = api.share(ctx, filename, ttl, body)
+		address = made.ShareURL
+	}
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(c.stdout, made.ShareURL)
+	fmt.Fprintln(c.stdout, address)
 	if made.ExpiresAt != nil {
 		fmt.Fprintln(c.stderr, msg("share_created", api.host(), made.ExpiresAt.Local().Format("2006-01-02 15:04")))
 	}

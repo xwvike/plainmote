@@ -79,7 +79,10 @@ function showMatches(names) {
   search.hidden = false;
 }
 
+let shown = false;
+
 async function show(key, entries) {
+  shown = true;
   const names = await openNames(key, entries);
   fill(names);
   if (search && query) showMatches(names);
@@ -89,11 +92,20 @@ async function start() {
   if (named.length === 0 && !query) return;
   const entries = await readIndex();
   if (entries.length === 0) return;
+  // Locked from the top bar: the names go with the page. Unlocked there:
+  // they are filled in where they are.
+  document.addEventListener("plainmote:locked", () => {
+    if (shown) location.reload();
+  });
   const key = await accountKey();
   if (key) return show(key, entries);
+  const form = search?.querySelector("[data-sealed-unlock]");
+  document.addEventListener("plainmote:unlocked", (event) => {
+    if (form) form.hidden = true;
+    if (!shown) show(event.detail.key, entries);
+  });
   // Locked while searching: say what was left out, and offer to unlock.
   if (!search || !query) return;
-  const form = search.querySelector("[data-sealed-unlock]");
   search.querySelector("[data-sealed-search-note]").textContent = msg("msgLocked").replace("%d", entries.length);
   form.hidden = false;
   search.hidden = false;
@@ -102,9 +114,8 @@ async function start() {
     const problem = form.querySelector("[data-sealed-error]");
     problem.textContent = "";
     try {
-      const unlocked = await unlock(form.elements.password.value);
-      form.hidden = true;
-      await show(unlocked, entries);
+      // What fills the names is the listener above, as from the top bar.
+      await unlock(form.elements.password.value);
     } catch (error) {
       problem.textContent = error instanceof WrongPassword ? msg("msgWrong") : error instanceof NoStorage ? msg("msgNoStorage") : msg("msgFailed");
     }

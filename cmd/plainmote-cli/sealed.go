@@ -359,6 +359,58 @@ func (c *cli) createSealed(ctx context.Context, api *client, name, filename stri
 	}, blob)
 }
 
+// shareSealed makes an encrypted quick share as the home page's box does:
+// an encrypted resource whose content key is wrapped by the account key and
+// by a new link key, that link key wrapped by the account key for its owner
+// to show the link again. The link key comes back for the address after #.
+func (c *cli) shareSealed(ctx context.Context, api *client, filename, ttl string, body []byte) (quickShare, []byte, error) {
+	account, err := c.unlock(ctx, api)
+	if err != nil {
+		return quickShare{}, nil, err
+	}
+	id, err := newUUID()
+	if err != nil {
+		return quickShare{}, nil, err
+	}
+	linkID, err := newUUID()
+	if err != nil {
+		return quickShare{}, nil, err
+	}
+	key, linkKey := make([]byte, keyBytes), make([]byte, keyBytes)
+	if _, err := rand.Read(key); err != nil {
+		return quickShare{}, nil, err
+	}
+	if _, err := rand.Read(linkKey); err != nil {
+		return quickShare{}, nil, err
+	}
+	wrapped, err := wrapKey(key, account, "pm/ck/resource/v1:"+id)
+	if err != nil {
+		return quickShare{}, nil, err
+	}
+	forLink, err := wrapKey(key, linkKey, "pm/ck/link/v1")
+	if err != nil {
+		return quickShare{}, nil, err
+	}
+	forOwner, err := wrapKey(linkKey, account, "pm/lk/v1:"+linkID)
+	if err != nil {
+		return quickShare{}, nil, err
+	}
+	blob, err := sealContent(key, id, body)
+	if err != nil {
+		return quickShare{}, nil, err
+	}
+	meta, err := sealMetadata(key, id, sealedMeta{Filename: filename, Type: guessType(filename, body)})
+	if err != nil {
+		return quickShare{}, nil, err
+	}
+	encode := base64.RawURLEncoding.EncodeToString
+	made, err := api.shareWith(ctx, map[string]string{
+		"ttl": ttl, "id": id, "link_id": linkID, "sealed_key": encode(wrapped), "sealed_meta": encode(meta),
+		"link_key": encode(forLink), "owner_key": encode(forOwner),
+	}, blob)
+	return made, linkKey, err
+}
+
 // newUUID is a random (version 4) UUID, as the browser's randomUUID makes.
 func newUUID() (string, error) {
 	b := make([]byte, 16)

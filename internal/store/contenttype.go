@@ -313,6 +313,7 @@ var fallbackNames = map[string]string{
 	// Neutral on purpose: the name at the end of an encrypted share's address
 	// says nothing about it, not even that it is encrypted.
 	EncryptedContentType: "file",
+	SealedContentType:    "file",
 	typeJSON:             "file.json",
 	typeYAML:             "file.yaml",
 	typeTOML:             "file.toml",

@@ -1,3 +1,16 @@
+{{/* A link to an encrypted resource, as its owner sees it: the address
+     without its key until sealed.js - once unlocked - unwraps the key and
+     adds it, or, for a link opened by a code, unwraps the code and shows it
+     ahead of the address, with a new one a click away. */}}
+{{define "sealed-addr"}}<span class="addr-cell">
+  {{if .Entry.Link.CodeLink}}<span class="code-chip" data-code-chip="{{.Entry.Link.ID}}" hidden><span>{{tr .Locale "share_code"}}</span><b data-code-value></b><button type="button" class="ic" data-sealed-recode="{{.Entry.Link.ID}}" title="{{tr .Locale "share_code_renew"}}" aria-label="{{tr .Locale "share_code_renew"}}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6"></path><path d="M13 2.5V5h-2.5"></path></svg></button></span>{{end}}
+  <code class="{{.Class}}" tabindex="0" aria-label="{{tr .Locale "share_link"}}" data-sealed-link="{{.Entry.Link.ID}}" data-owner-key="{{b64 .Entry.Link.OwnerKey}}" data-url="{{.Entry.URL}}"{{if .Entry.Link.CodeLink}} data-code-link{{end}}><span class="mut">{{tr .Locale "sealed_link_locked"}}</span></code>
+</span>{{end}}
+
+{{/* Opened by a code or by the key in its address: switched on the link
+     itself, which gives it new keys. */}}
+{{define "sealed-code-switch"}}<label class="sw sw-sm" title="{{tr .Locale "share_code_hint"}}"><input type="checkbox" role="switch" data-sealed-code-toggle="{{.Entry.Link.ID}}"{{if .Entry.Link.CodeLink}} checked{{end}} disabled><span class="sw-track" aria-hidden="true"><span class="sw-knob"></span></span><span>{{tr .Locale "share_code"}}</span></label>{{end}}
+
 {{define "share-panel"}}<div class="panel ruled" data-share-panel data-part="shares">
   <div class="pt">
     <span class="sec">{{tr .Locale "share_links"}}</span>
@@ -43,7 +56,7 @@
         {{else if $.Resource.Sealed}}
         {{/* The address is only whole with its key, which only the owner's
              browser can unwrap; until then it says so. */}}
-        <code class="addr sm ends" tabindex="0" aria-label="{{tr $.Locale "share_link"}}" data-sealed-link="{{.Link.ID}}" data-owner-key="{{b64 .Link.OwnerKey}}" data-url="{{.URL}}"><span class="mut">{{tr $.Locale "sealed_link_locked"}}</span></code>
+        {{template "sealed-addr" (sealedLink $ . "addr sm ends")}}
         {{else}}
         <code class="addr sm ends" tabindex="0" aria-label="{{tr $.Locale "share_link"}}">{{template "address" .URL}}</code>
         {{end}}
@@ -59,6 +72,7 @@
         <span class="swap">
         <span class="acts until">
           {{if $.Resource.Sealed}}
+          {{template "sealed-code-switch" (sealedLink $ . "")}}
           <button type="button" class="sm" data-sealed-copy="{{.Link.ID}}" disabled>{{template "copy-label" $}}</button>
           <a class="txt" href="/resources/{{$.Resource.ID}}?share={{.Link.ID}}" data-dialog>{{tr $.Locale "settings"}}</a>
           {{else if not .Link.Unreadable}}

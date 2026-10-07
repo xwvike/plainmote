@@ -119,11 +119,12 @@ func anonymousType(content []byte) (string, string) {
 	return anonymousFileType, ""
 }
 
-// CreateEncryptedPaste stores a quick share its signed-in creator encrypted in
-// the browser. The service holds the ciphertext and nothing else: no name, no
-// filename - both are inside it - and a type that says only that it is
-// encrypted. The envelope's shape is checked so this cannot be used to store
-// arbitrary files; what is inside it cannot be checked, by design.
+// CreateEncryptedPaste stores a quick share encrypted the earlier way, with
+// its key only in its link. The service holds the ciphertext and nothing
+// else: no name, no filename - both are inside it - and a type that says only
+// that it is encrypted. No page makes these any more - an encrypted quick
+// share is now an encrypted resource (CreateSealedQuickShare) - but those
+// made before are delivered until they end, and tests make them with this.
 func (d *Store) CreateEncryptedPaste(ctx context.Context, creatorID string, envelope []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
 	if !validUUIDs(creatorID) || creatorID == AnonymousUserID {
 		return Resource{}, Link{}, ErrNotFound
@@ -142,7 +143,8 @@ func (d *Store) CreateEncryptedPaste(ctx context.Context, creatorID string, enve
 	}
 	// Only a signed-in account encrypts, so this is always its own quick
 	// share, listed with its resources like any other.
-	return d.insertQuickShare(ctx, creatorID, "", envelope, EncryptedContentType, "", ttl, now)
+	resource := Resource{ID: uuid.NewString(), ContentType: EncryptedContentType, ContentSHA256: contentSHA256(envelope)}
+	return d.insertQuickShare(ctx, creatorID, resource, Link{}, envelope, ttl, now)
 }
 
 // insertPaste writes a checked paste body and its one link.

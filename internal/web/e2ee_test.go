@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"plainmote/internal/store"
 )
 
@@ -22,18 +24,40 @@ func sampleEnvelope() []byte {
 	return append(envelope, bytes.Repeat([]byte{3}, 48)...)
 }
 
-func (c accountClient) postEnvelope(csrf string, envelope []byte) *httptest.ResponseRecorder {
+// giveKeyring sets a master password on the account, as keyring.js would:
+// the service only ever sees it wrapped.
+func giveKeyring(t *testing.T, db *store.Store, userID string) {
+	t.Helper()
+	if _, err := db.CreateKeyring(context.Background(), userID, store.Keyring{KDF: store.KeyringKDF, Iterations: 600000,
+		Salt: bytes.Repeat([]byte{1}, 16), WrappedByPassword: bytes.Repeat([]byte{2}, 60), WrappedByRecovery: bytes.Repeat([]byte{3}, 60)}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// sealedPasteFields is a quick share as e2ee-share.js posts it, with stand-in
+// ciphertext of the right shape.
+func sealedPasteFields() map[string]string {
+	return map[string]string{
+		"ttl": "1h", "id": uuid.NewString(), "link_id": uuid.NewString(), "meta": b64(fakeSealed("PMm1", 1, 40)),
+		"sealed_key": b64(bytes.Repeat([]byte{4}, 60)), "link_key": b64(bytes.Repeat([]byte{5}, 60)), "owner_key": b64(bytes.Repeat([]byte{6}, 60)),
+	}
+}
+
+func (c accountClient) postSealedPaste(csrf string, fields map[string]string, content []byte) *httptest.ResponseRecorder {
 	c.t.Helper()
 	body := new(bytes.Buffer)
 	form := multipart.NewWriter(body)
 	_ = form.WriteField("csrf", csrf)
-	_ = form.WriteField("ttl", "5")
-	part, _ := form.CreateFormFile("envelope", "envelope")
-	_, _ = part.Write(envelope)
+	for key, value := range fields {
+		_ = form.WriteField(key, value)
+	}
+	part, _ := form.CreateFormFile("content", "blob")
+	_, _ = part.Write(content)
 	_ = form.Close()
-	request := httptest.NewRequest(http.MethodPost, "https://cfg.test"+pasteEncryptedPath, body)
+	request := httptest.NewRequest(http.MethodPost, "https://cfg.test"+pasteSealedPath, body)
 	request.Header.Set("Content-Type", form.FormDataContentType())
 	request.Header.Set("Origin", "https://cfg.test")
+	request.Header.Set("Accept-Language", "en")
 	if c.session != "" {
 		request.AddCookie(&http.Cookie{Name: sessionCookie, Value: c.session})
 		request.AddCookie(&http.Cookie{Name: csrfCookie, Value: c.csrf})
@@ -43,79 +67,161 @@ func (c accountClient) postEnvelope(csrf string, envelope []byte) *httptest.Resp
 	return response
 }
 
-// The setting is off until the account turns it on, and only then does the
-// home page encrypt - with the button disabled until the script runs.
-func TestE2EESettingChangesTheHomePage(t *testing.T) {
+// The home box's encryption switch: offered only with a master password,
+// off until a quick share has been sent encrypted, and from then on starting
+// the way the last one was sent. The account page has no setting for it.
+func TestE2EESwitchInTheHomeBox(t *testing.T) {
 	db, user, _ := testDatabase(t)
+	ctx := context.Background()
 	client := signedIn(t, db, user)
 
-	if page := client.do(http.MethodGet, "/", nil).Body.String(); strings.Contains(page, "data-e2ee") {
-		t.Fatal("encryption must be off by default")
-	}
-	account := client.do(http.MethodGet, accountPath, nil).Body.String()
-	for _, want := range []string{`action="/account/e2ee"`, `name="e2ee" value="on"`, "curl"} {
-		if !strings.Contains(account, want) {
-			t.Errorf("the account page is missing %q", want)
-		}
-	}
-	if got := client.do(http.MethodPost, accountE2EEPath, url.Values{"csrf": {"wrong"}, "e2ee": {"on"}}); got.Code != http.StatusForbidden {
-		t.Fatalf("a toggle without the CSRF token must be refused, got %d", got.Code)
-	}
-	if got := client.do(http.MethodPost, accountE2EEPath, url.Values{"csrf": {client.csrf}, "e2ee": {"on"}}); got.Code != http.StatusSeeOther {
-		t.Fatalf("toggle: %d", got.Code)
-	}
 	page := client.do(http.MethodGet, "/", nil).Body.String()
-	for _, want := range []string{"data-e2ee", `data-endpoint="/paste/encrypted"`, `data-pin-add`, `class="pri end" disabled`, assetPath("e2ee-share.js")} {
+	if strings.Contains(page, "data-e2ee") || strings.Contains(page, "data-keylock") || !strings.Contains(page, `class="sw-off"`) || !strings.Contains(page, "/account#keyring") {
+		t.Fatal("without a master password the switch is offered disabled, pointing to where one is set")
+	}
+	if account := client.do(http.MethodGet, accountPath, nil).Body.String(); strings.Contains(account, "/account/e2ee") || !strings.Contains(account, `data-keyring-open="setup"`) {
+		t.Fatal("the account page offers a master password and no quick share setting")
+	}
+
+	giveKeyring(t, db, user.ID)
+	page = client.do(http.MethodGet, "/", nil).Body.String()
+	for _, want := range []string{"data-e2ee", `data-endpoint="/paste/sealed"`, `name="encrypt" value="on">`, `data-pin-pick hidden`, "data-e2ee-unlock", assetPath("e2ee-share.js"), "data-keylock"} {
 		if !strings.Contains(page, want) {
-			t.Errorf("the encrypting home page is missing %q", want)
+			t.Errorf("the home page with a master password is missing %q", want)
 		}
 	}
-	if strings.Contains(page, `name="passphrase"`) || strings.Contains(page, `name="pin"`) {
-		t.Error("the code must never be a form field")
+	if strings.Contains(page, `name="passphrase"`) || strings.Contains(page, `name="pin"`) || strings.Contains(page, `name="password"`) {
+		t.Error("neither the code nor the master password may ever be a form field")
+	}
+
+	// Sent encrypted: the box starts encrypted.
+	if got := client.postSealedPaste(client.csrf, sealedPasteFields(), fakeSealed("PMr1", 1, 64)); got.Code != http.StatusCreated {
+		t.Fatalf("sealed paste: %d %s", got.Code, got.Body.String())
+	}
+	if page := client.do(http.MethodGet, "/", nil).Body.String(); !strings.Contains(page, `name="encrypt" value="on" checked>`) || strings.Contains(page, "data-pin-pick hidden") {
+		t.Fatal("the switch does not start where it was left")
+	}
+	// Sent in the clear from the box: it starts off again.
+	request := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste", strings.NewReader(url.Values{"content": {"hello"}}.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Accept", "text/html")
+	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: client.session})
+	response := httptest.NewRecorder()
+	client.app.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("plain paste: %d", response.Code)
+	}
+	if on, _ := db.E2EEEnabled(ctx, user.ID); on {
+		t.Fatal("a quick share sent in the clear leaves the switch on")
 	}
 }
 
-// Only a signed-in account with the setting on, with its CSRF token, can post
-// ciphertext - and only ciphertext.
-func TestEncryptedPasteEndpoint(t *testing.T) {
+// Only a signed-in account with a master password and the setting on, with
+// its CSRF token, can post an encrypted quick share - and only one of the
+// expected shape. Its owner then finds it with its link to show again, and
+// can keep it as an encrypted resource.
+func TestSealedPasteEndpoint(t *testing.T) {
 	db, user, _ := testDatabase(t)
+	ctx := context.Background()
 	client := signedIn(t, db, user)
+	content := fakeSealed("PMr1", 1, 64)
 
 	anonymous := accountClient{t: t, app: client.app}
-	if got := anonymous.postEnvelope("", sampleEnvelope()); got.Code != http.StatusUnauthorized {
+	if got := anonymous.postSealedPaste("", sealedPasteFields(), content); got.Code != http.StatusUnauthorized {
 		t.Fatalf("signed out: %d", got.Code)
 	}
-	if got := client.postEnvelope(client.csrf, sampleEnvelope()); got.Code != http.StatusForbidden {
-		t.Fatalf("setting off: %d", got.Code)
-	}
-	if err := db.SetE2EE(context.Background(), user.ID, true); err != nil {
+	if err := db.SetE2EE(ctx, user.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if got := client.postEnvelope("wrong", sampleEnvelope()); got.Code != http.StatusForbidden {
+	if got := client.postSealedPaste(client.csrf, sealedPasteFields(), content); got.Code != http.StatusForbidden {
+		t.Fatalf("no master password: %d", got.Code)
+	}
+	giveKeyring(t, db, user.ID)
+	if got := client.postSealedPaste("wrong", sealedPasteFields(), content); got.Code != http.StatusForbidden {
 		t.Fatalf("bad csrf: %d", got.Code)
 	}
-	if got := client.postEnvelope(client.csrf, []byte("port: 7890\n")); got.Code != http.StatusBadRequest {
-		t.Fatalf("plain text posted as an envelope: %d", got.Code)
+	if got := client.postSealedPaste(client.csrf, sealedPasteFields(), []byte("port: 7890\n")); got.Code != http.StatusBadRequest {
+		t.Fatalf("plain text: %d", got.Code)
 	}
-	created := client.postEnvelope(client.csrf, sampleEnvelope())
+	short := sealedPasteFields()
+	short["link_key"] = b64(bytes.Repeat([]byte{5}, 59))
+	if got := client.postSealedPaste(client.csrf, short, content); got.Code != http.StatusBadRequest {
+		t.Fatalf("a malformed link key: %d", got.Code)
+	}
+
+	fields := sealedPasteFields()
+	created := client.postSealedPaste(client.csrf, fields, content)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", created.Code, created.Body.String())
 	}
 	var answer struct{ Result string }
-	if err := json.Unmarshal(created.Body.Bytes(), &answer); err != nil || !strings.HasPrefix(answer.Result, pasteResultPrefix) {
+	if err := json.Unmarshal(created.Body.Bytes(), &answer); err != nil || answer.Result != pasteResultPrefix+fields["id"] {
 		t.Fatalf("answer %q %v", created.Body.String(), err)
 	}
+	if again := client.postSealedPaste(client.csrf, fields, content); again.Code != http.StatusBadRequest {
+		t.Fatalf("the same ids again: %d", again.Code)
+	}
 
-	// The result page marks it and says where it is kept; there is nothing
-	// to save.
+	// The result page marks it and says the link can be shown again.
 	result := client.do(http.MethodGet, answer.Result, nil).Body.String()
-	for _, want := range []string{"data-e2ee-result", "data-e2ee-lost", assetPath("e2ee-share.js"), "where its access history is kept"} {
+	for _, want := range []string{"data-e2ee-result", "data-e2ee-lost", "unlock on the resource page", assetPath("e2ee-share.js"), "/resources/" + fields["id"]} {
 		if !strings.Contains(result, want) {
 			t.Errorf("the result page is missing %q", want)
 		}
 	}
-	if strings.Contains(result, `action="/paste/save"`) {
-		t.Error("an encrypted share must not be offered as a resource")
+
+	// Its page: read only until kept, its link made whole in the browser,
+	// its content opened there.
+	page := client.do(http.MethodGet, "/resources/"+fields["id"], nil).Body.String()
+	for _, want := range []string{"data-sealed data-read-only", `data-sealed-link="` + fields["link_id"] + `"`, `data-owner-key="` + fields["owner_key"] + `"`,
+		`name="action" value="keep"`, assetPath("sealed.js")} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the quick share's page is missing %q", want)
+		}
+	}
+	if strings.Contains(page, "data-sealed-file") || strings.Contains(page, `class="savebar"`) {
+		t.Error("a quick share not yet kept cannot be edited")
+	}
+
+	// Delivered as a bundle under its link's own key.
+	links, _ := db.ListShares(ctx, user.ID, fields["id"], time.Now().UTC())
+	if len(links) != 1 || links[0].ID != fields["link_id"] {
+		t.Fatalf("links: %+v", links)
+	}
+	raw := httptest.NewRecorder()
+	client.app.handler.ServeHTTP(raw, httptest.NewRequest(http.MethodGet, "https://cfg.test"+shareAddress(links[0].Token, "file"), nil))
+	want, _ := store.SealedBundle(fields["id"], bytes.Repeat([]byte{5}, 60), fakeSealed("PMm1", 1, 40))
+	if got, _ := io.ReadAll(raw.Body); raw.Code != http.StatusOK || !bytes.Equal(got, append(want, content...)) {
+		t.Fatalf("delivered: %d %q", raw.Code, got)
+	}
+
+	// Another account sees none of it.
+	other, _ := db.UpsertUser(ctx, "200", "bob", "Bob", "")
+	stranger := signedIn(t, db, other)
+	if got := stranger.do(http.MethodGet, "/resources/"+fields["id"], nil); got.Code != http.StatusNotFound {
+		t.Fatalf("another account's view: %d", got.Code)
+	}
+	if got := stranger.do(http.MethodGet, answer.Result, nil).Body.String(); strings.Contains(got, fields["link_id"]) || strings.Contains(got, "/resources/"+fields["id"]) {
+		t.Fatal("another account's view of the result page")
+	}
+
+	// Kept: an encrypted resource, its link among its links.
+	if got := client.do(http.MethodPost, "/resources/"+fields["id"], url.Values{"csrf": {client.csrf}, "action": {"keep"}}); got.Code != http.StatusSeeOther {
+		t.Fatalf("keep: %d", got.Code)
+	}
+	kept := client.do(http.MethodGet, "/resources/"+fields["id"], nil).Body.String()
+	if strings.Contains(kept, "data-read-only") || !strings.Contains(kept, "data-sealed-file") || !strings.Contains(kept, `data-sealed-link="`+fields["link_id"]+`"`) {
+		t.Fatal("the kept quick share is not an encrypted resource with its link")
+	}
+
+	// One opened by a code says so to its owner's page.
+	coded := sealedPasteFields()
+	coded["link_key"], coded["owner_key"] = b64(bytes.Repeat([]byte{5}, 76)), b64(bytes.Repeat([]byte{6}, 32))
+	if got := client.postSealedPaste(client.csrf, coded, content); got.Code != http.StatusCreated {
+		t.Fatalf("a code link: %d %s", got.Code, got.Body.String())
+	}
+	if page := client.do(http.MethodGet, "/resources/"+coded["id"], nil).Body.String(); !strings.Contains(page, "data-code-link") {
+		t.Fatal("a code link is not marked")
 	}
 }
 
@@ -124,10 +230,8 @@ func TestEncryptedPasteEndpoint(t *testing.T) {
 func TestE2EEAccountRefusesPlaintextFromTheBox(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	client := signedIn(t, db, user)
-	if err := db.SetE2EE(context.Background(), user.ID, true); err != nil {
-		t.Fatal(err)
-	}
-	request := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste", strings.NewReader(url.Values{"content": {"secret"}}.Encode()))
+	giveKeyring(t, db, user.ID)
+	request := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste", strings.NewReader(url.Values{"content": {"secret"}, "encrypt": {"on"}}.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Accept", "text/html")
 	request.Header.Set("Accept-Language", "en")
@@ -181,5 +285,15 @@ func TestEncryptedLinkOpensTheDecryptionPage(t *testing.T) {
 	logs, _ := db.ListAccess(ctx, user.ID, "", "", 10)
 	if len(logs) != 1 {
 		t.Fatalf("only the fetch for the bytes is a use, found %d log rows", len(logs))
+	}
+}
+
+// The name at the end of an encrypted link says nothing, not even that it is
+// encrypted - one encrypted the earlier way or under the master password.
+func TestEncryptedLinksEndNeutrally(t *testing.T) {
+	for _, contentType := range []string{store.EncryptedContentType, store.SealedContentType} {
+		if got := deliveryFilename(store.Resource{ContentType: contentType}, contentType); got != "file" {
+			t.Errorf("%s: %q", contentType, got)
+		}
 	}
 }

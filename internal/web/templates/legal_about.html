@@ -10,7 +10,7 @@
   <li><strong>历史版本：</strong>修改资源内容后，被替换的版本会保留一段时间，可查看、对比和恢复；访问记录注明每次获取的是哪个版本。</li>
   <li><strong>远程资源：</strong>可仅保存公网地址，每次访问时由服务器实时从源站获取内容。</li>
   {{if .Legal.Anonymous}}<li><strong>临时分享：</strong>无需登录，在首页粘贴文本或上传文件即可生成有效期最长 {{legalDuration true .Legal.AnonymousTTL}}的链接。</li>
-  <li><strong>端到端加密（可选）：</strong>登录用户可在账号设置中开启，开启后临时分享在浏览器中加密，本服务仅保存密文；密钥随链接传递的，本服务无法读取其内容，以 4 位口令代替密钥的，保护程度较低。</li>{{end}}
+  <li><strong>端到端加密（可选）：</strong>登录用户设置主密码后，可为资源和临时分享开启端到端加密，内容在浏览器中加密，本服务仅保存密文；密钥随链接传递的，本服务无法读取其内容，以 4 位口令代替密钥的，保护程度较低。</li>{{end}}
 </ul>
 
 <h2>隐私与安全</h2>
@@ -33,7 +33,7 @@
   <li><strong>Version history:</strong> when the content of a resource changes, the version it replaces is kept for a period and can be viewed, compared and restored; access records state which version each access received.</li>
   <li><strong>Remote resources:</strong> a resource can consist of a public URL only, with the content fetched live from the origin server by the Service on each access.</li>
   {{if .Legal.Anonymous}}<li><strong>Quick shares:</strong> paste text or upload a file on the home page, without signing in, to generate a link valid for up to {{legalDuration false .Legal.AnonymousTTL}}.</li>
-  <li><strong>End-to-end encryption (optional):</strong> signed-in users can turn it on in their account settings; quick shares are then encrypted in the browser and the Service stores only the ciphertext; where the key travels in the link, the Service cannot read the content, and a four-character code used in place of the key offers weaker protection.</li>{{end}}
+  <li><strong>End-to-end encryption (optional):</strong> signed-in users who set a master password can turn it on for resources and quick shares; content is encrypted in the browser and the Service stores only the ciphertext; where the key travels in the link, the Service cannot read the content, and a four-character code used in place of the key offers weaker protection.</li>{{end}}
 </ul>
 
 <h2>Privacy and security</h2>

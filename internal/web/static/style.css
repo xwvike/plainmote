@@ -148,8 +148,8 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .top .rt { margin-left: auto; display: flex; flex: none; min-width: 0; align-items: center; gap: 14px; }
 .who { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11.5px var(--mono); color: var(--ink2); }
 /* Signing out is a word in the bar, not a button beside the name. */
-.top .rt form button { height: auto; padding: 0; border: 0; background: none; box-shadow: none; font: 500 12px var(--sans); color: var(--ink3); }
-.top .rt form button:hover { background: none; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.top .rt > form button { height: auto; padding: 0; border: 0; background: none; box-shadow: none; font: 500 12px var(--sans); color: var(--ink3); }
+.top .rt > form button:hover { background: none; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .lang-switch { display: inline-flex; align-items: center; }
 .lang-cell { padding: 0 7px; font: 500 12px/1 var(--sans); color: var(--ink3); }
 .lang-cell + .lang-cell { border-left: 1px solid var(--line2); }
@@ -161,6 +161,23 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .theme-switch a { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r); color: var(--ink3); }
 .theme-switch a:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
 .theme-switch svg { width: 15px; height: 15px; }
+/* The master password's lock: an icon that shows its state, opening onto a
+   small panel to unlock or lock in place. */
+.sw-off { display: inline-flex; align-items: center; gap: 8px; }
+.keylock { position: relative; }
+.keylock > summary { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r); color: var(--ink3); cursor: pointer; list-style: none; }
+.keylock > summary::-webkit-details-marker { display: none; }
+.keylock > summary:hover, .keylock[open] > summary { background: var(--zebra); color: var(--ink); }
+.keylock svg { width: 15px; height: 15px; }
+.keylock .lk-open, .keylock.unlocked .lk-shut { display: none; }
+.keylock.unlocked .lk-open { display: block; }
+.keylock.unlocked > summary { color: var(--accent); }
+.keylock-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; gap: 8px; width: 260px; max-width: calc(100vw - 32px); padding: 12px; border: 1px solid var(--line2); border-radius: var(--r); background: var(--panel); box-shadow: 0 6px 20px rgb(0 0 0 / .12); font-size: 12.5px; }
+.keylock-pop form, .keylock-pop > div { display: grid; gap: 8px; }
+.keylock-pop p { margin: 0; }
+.keylock-pop .row { display: flex; align-items: center; gap: 8px; }
+.keylock-pop input { flex: 1 1 auto; min-width: 0; }
+.keylock-pop .err:empty { display: none; }
 .theme-to-light { display: none !important; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .theme-to-dark { display: none !important; }
@@ -510,7 +527,7 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .shl > li:hover { background: var(--zebra); }
 .shl > li > .lbl { grid-column: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; }
 .shl > li > .lbl.mut { font-weight: 400; }
-.shl > li > .addr, .shl > li > .unreadable { grid-column: 2; width: 100%; }
+.shl > li > .addr, .shl > li > .unreadable, .shl > li > .addr-cell { grid-column: 2; width: 100%; }
 .shl > li > .left { grid-column: 3; }
 .shl > li > .uses { grid-column: 4; }
 .shl > li > .acts, .shl > li > .swap { grid-column: 5; }
@@ -562,8 +579,10 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
    it. The notches are the page showing through, so they take its colour. */
 .paste-result { gap: 10px; }
 .ticket { display: flex; min-width: 0; background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r); overflow: hidden; }
-.ticket > .addr { flex: 1; height: 42px; padding: 0 14px; border: 0; border-radius: 0; background: none; font-size: 13px; line-height: 42px; color: var(--ink2); }
-.ticket > .addr:focus { box-shadow: inset 0 -2px 0 var(--accent); }
+.ticket > .addr-cell { flex: 1; padding-left: 14px; }
+.ticket > .addr-cell > .addr { padding-left: 0; }
+.ticket > .addr, .ticket > .addr-cell > .addr { flex: 1; height: 42px; padding: 0 14px; border: 0; border-radius: 0; background: none; font-size: 13px; line-height: 42px; color: var(--ink2); }
+.ticket > .addr-cell > .addr:focus, .ticket > .addr:focus { box-shadow: inset 0 -2px 0 var(--accent); }
 .stub { position: relative; display: flex; flex: none; align-items: center; padding: 0 9px 0 11px; border-left: 1px dashed var(--line2); background: var(--head); }
 .stub::before, .stub::after { content: ""; position: absolute; left: -6px; width: 11px; height: 11px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line2); }
 .stub::before { top: -7px; }
@@ -579,22 +598,23 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .copied .flip > svg { transform: none; }
 /* The page that opens an encrypted share: the passphrase on one line, then
    the text as it was sent, in the address face. */
-.e2ee-set { display: grid; gap: 10px; justify-items: start; }
-.e2ee-set ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
-/* The master password. Rows of what is set and what can be done to it, the
-   unlock form above them while locked, and the quick share switch below. */
-.keyring-unlock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; width: 100%; }
-.keyring-unlock input { width: 200px; max-width: 100%; }
-.keyring-unlock .err:empty { display: none; }
+/* End-to-end encryption on the account page: the state and what to do in
+   it in the header, the master password's parts in rows below, and how it
+   works folded away under them. */
+.enc-body { display: grid; gap: 10px; justify-items: start; }
+.enc-body > p { margin: 0; }
+.enc-body ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.enc-unlock { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.enc-unlock input { width: 180px; max-width: 100%; }
+.enc-unlock .err:empty { display: none; }
+.enc-unlock .err { flex-basis: 100%; text-align: right; }
 .kv-rows { display: grid; width: 100%; }
 .kv-rows > div { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 32px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
 .kv-rows > div:last-child { border-bottom: 0; }
 .kv-rows .k { color: var(--ink2); font-size: 12px; }
-.kv-rows .v { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.kv-rows .v { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; }
 .kv-rows .v select { width: auto; }
-.e2ee-set .sep { width: 100%; margin: 2px 0; border: 0; border-top: 1px solid var(--line2); }
-.qs-enc { display: grid; gap: 8px; justify-items: start; width: 100%; }
-.qs-head { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.kv-rows .mut { font-size: 12px; }
 .dlg header .steps { margin-left: auto; font: 400 11px var(--mono); color: var(--ink3); }
 .dlg .field { display: grid; gap: 4px; font-size: 12px; color: var(--ink2); }
 .dlg .field input { width: 100%; box-sizing: border-box; }
@@ -614,6 +634,20 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .sw input:checked + .sw-track .sw-knob { transform: translateX(14px); box-shadow: inset 0 -1.5px 0 var(--key); }
 .sw input:focus-visible + .sw-track { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sw input:disabled + .sw-track { opacity: .5; }
+.sw-sm { gap: 5px; font-size: 12px; }
+.sw-sm .sw-track { width: 24px; height: 13px; }
+.sw-sm .sw-knob { top: 2px; left: 2px; width: 9px; height: 9px; }
+.sw-sm input:checked + .sw-track .sw-knob { transform: translateX(11px); }
+/* A link to an encrypted resource: its address, and - opened by a code - the
+   code ahead of it, with a new one a click away. */
+.ticket-code { margin-left: auto; }
+.addr-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.addr-cell > .addr { flex: 1 1 auto; min-width: 0; }
+.code-chip { display: inline-flex; flex: none; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ink2); }
+.code-chip b { padding: 1px 6px; border: 1px dashed var(--line2); border-radius: var(--r); background: var(--field); font: 600 12px/1.4 var(--mono); letter-spacing: .15em; color: var(--ink); }
+.code-chip .ic { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; background: none; box-shadow: none; color: var(--ink3); }
+.code-chip .ic:hover { color: var(--ink); background: var(--zebra); }
+.code-chip .ic svg { width: 13px; height: 13px; }
 .sw:has(input:disabled) { cursor: default; color: var(--ink3); }
 @media (prefers-reduced-motion: reduce) { .sw-track, .sw-knob { transition: none; } }
 .tag.enc { background: color-mix(in oklab, var(--accent) 14%, var(--panel)); color: var(--accent); }
@@ -935,7 +969,7 @@ a.who:hover, a.who[aria-current] { color: var(--ink); }
      a line of its own, then its name, time, uses and actions as they fit. */
   .shl, .shl > li { display: flex; flex-wrap: wrap; gap: 6px 14px; }
   .shl { display: block; }
-  .shl > li > .addr, .shl > li > .unreadable { order: -1; flex: 1 1 100%; }
+  .shl > li > .addr, .shl > li > .unreadable, .shl > li > .addr-cell { order: -1; flex: 1 1 100%; }
   .shl > li > .acts, .shl > li > .swap { margin-left: auto; }
   .ticket { flex-wrap: wrap; }
 }

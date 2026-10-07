@@ -64,6 +64,46 @@ export function sizeText(size) {
   return `${size} B`;
 }
 
+// What a resource's bytes are, from its type: text goes in the editor.
+export function textLike(type) {
+  return /^text\//.test(type) || /(json|xml|yaml|toml|javascript|x-sh|sql|x-ndjson)/.test(type);
+}
+
+// A type for content encrypted here, from its filename - the service cannot
+// look at encrypted bytes, so what it is is decided before encrypting.
+const extensionTypes = {
+  json: "application/json", yaml: "text/yaml", yml: "text/yaml", toml: "application/toml", xml: "application/xml",
+  sh: "text/x-sh", sql: "text/x-sql", md: "text/markdown", csv: "text/csv", html: "text/plain", htm: "text/plain",
+};
+export function textType(filename) {
+  const extension = (filename.split(".").pop() || "").toLowerCase();
+  return `${extensionTypes[extension] || "text/plain"}; charset=utf-8`;
+}
+
+function isUTF8(bytes) {
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// What a chosen file is, by the same reading classifyUpload gives it: text by
+// its name or type, or - for a file of no telling type - by whether it reads
+// as UTF-8; media as the browser types it; anything else a download.
+export async function readsAsText(file) {
+  const kind = classifyUpload(file);
+  return kind === "text" || (kind === "unknown" && isUTF8(new Uint8Array(await file.arrayBuffer())));
+}
+
+export async function fileType(file) {
+  if (await readsAsText(file)) return textType(file.name);
+  const kind = classifyUpload(file);
+  if ((kind === "image" || kind === "audio" || kind === "video") && file.type) return file.type;
+  return "application/octet-stream";
+}
+
 const controllers = new WeakMap();
 
 function message(name, values = {}) {

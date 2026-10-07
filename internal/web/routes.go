@@ -118,15 +118,17 @@ type pageData struct {
 	// KeyringLockChoices the idle times it may be kept unlocked.
 	Keyring            *store.Keyring
 	KeyringLockChoices []int
-	// SealedCount is how many encrypted resources the account has.
-	SealedCount      int
-	RegistrationMode auth.RegistrationMode
-	Resources        []Resource
-	Quota            store.UserQuota
-	Pager            pager
-	IsNew            bool
-	NewKind          string
-	SignedIn         bool
+	// SealedCount is how many encrypted resources the account has, of which
+	// SealedQuickShares are quick shares not yet kept.
+	SealedCount       int
+	SealedQuickShares int
+	RegistrationMode  auth.RegistrationMode
+	Resources         []Resource
+	Quota             store.UserQuota
+	Pager             pager
+	IsNew             bool
+	NewKind           string
+	SignedIn          bool
 	// Indexable is set by the one page that is meant to be found. The response
 	// header carries the same exception; both have to agree or the meta tag
 	// quietly undoes it.
@@ -161,10 +163,13 @@ type pageData struct {
 	PasteOwned     bool
 	PasteExpires   time.Time
 	PasteEncrypted bool
-	PasteGauge     template.CSS
-	PasteEnd       template.CSS
-	PasteSize      int64
-	MaxPaste       int64
+	// PasteSealed is a quick share encrypted under the master password, whose
+	// owner can show its link again.
+	PasteSealed bool
+	PasteGauge  template.CSS
+	PasteEnd    template.CSS
+	PasteSize   int64
+	MaxPaste    int64
 
 	// ContentText is the body loaded for the editor. It is only filled in for
 	// a resource small and textual enough to show, so a large or non-text one is
@@ -342,8 +347,7 @@ func (a *App) routes() http.Handler {
 		mux.HandleFunc(pastePath, a.handlePaste)
 		mux.HandleFunc(pasteResultPrefix, a.handlePasteResult)
 		mux.HandleFunc(pasteSavePath, a.handleSavePaste)
-		mux.HandleFunc(pasteEncryptedPath, a.handleEncryptedPaste)
-		mux.HandleFunc(accountE2EEPath, a.handleAccountE2EE)
+		mux.HandleFunc(pasteSealedPath, a.handleSealedPaste)
 	}
 	if a.cfg.ContactEmail != "" {
 		for _, page := range legalPages {

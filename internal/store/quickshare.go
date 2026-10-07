@@ -51,7 +51,36 @@ func (d *Store) CreateQuickShare(ctx context.Context, ownerID, filename string, 
 		return Resource{}, Link{}, err
 	}
 	contentType, encoding := anonymousType(content)
-	return d.insertQuickShare(ctx, ownerID, filename, content, contentType, encoding, ttl, now)
+	resource := Resource{
+		ID: uuid.NewString(), Name: filename, Filename: filename, ContentType: contentType, ContentEncoding: encoding,
+		ContentSHA256: contentSHA256(content),
+	}
+	return d.insertQuickShare(ctx, ownerID, resource, Link{}, content, ttl, now)
+}
+
+// CreateSealedQuickShare stores a quick share encrypted in the browser - or
+// the command line - under the master password: an encrypted resource, under
+// the id its encryption is bound to, with its one link under the id that
+// link's keys are bound to. Its owner can open it, show its link again and
+// keep it, as with any encrypted resource; the service reads none of it.
+func (d *Store) CreateSealedQuickShare(ctx context.Context, ownerID, id, linkID string, part SealedPart, sealedKey, linkKey, ownerKey []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	if !validUUIDs(ownerID, id) || ownerID == AnonymousUserID {
+		return Resource{}, Link{}, ErrNotFound
+	}
+	if !validUUIDs(linkID) || !part.valid() || len(sealedKey) != sealedKeyBytes || !validLinkKeys(linkKey, ownerKey) {
+		return Resource{}, Link{}, errSealedShape
+	}
+	ttl, err := quickShareTTL(ttl)
+	if err != nil {
+		return Resource{}, Link{}, err
+	}
+	if len(part.Content) > AnonymousMaxBytes+sealedHeaderBytes {
+		return Resource{}, Link{}, refusalf("内容最大 %s", BytesText(AnonymousMaxBytes))
+	}
+	resource := Resource{
+		ID: id, ContentType: SealedContentType, ContentSHA256: contentSHA256(part.Content), SealedKey: sealedKey, SealedMeta: part.Meta,
+	}
+	return d.insertQuickShare(ctx, ownerID, resource, Link{ID: linkID, SealedKey: linkKey, OwnerKey: ownerKey}, part.Content, ttl, now)
 }
 
 func quickShareTTL(ttl time.Duration) (time.Duration, error) {
@@ -64,14 +93,13 @@ func quickShareTTL(ttl time.Duration) (time.Duration, error) {
 	return ttl, nil
 }
 
-func (d *Store) insertQuickShare(ctx context.Context, ownerID, filename string, content []byte, contentType, encoding string, ttl time.Duration, now time.Time) (Resource, Link, error) {
-	link := Link{ExpiresAt: shareExpiry(now, ttl)}
-	resource := Resource{
-		ID: uuid.NewString(), OwnerID: ownerID, Name: filename, Filename: filename,
-		ContentType: contentType, ContentEncoding: encoding,
-		ContentSize: int64(len(content)), CreatedAt: now, UpdatedAt: now,
-		Version: 1, VersionAt: now, ContentSHA256: contentSHA256(content), ExpiresAt: link.ExpiresAt,
-	}
+// insertQuickShare stores what the two kinds of quick share have in common:
+// the resource, given its id, names, type and digest, and its link, given
+// its keys if it has any.
+func (d *Store) insertQuickShare(ctx context.Context, ownerID string, resource Resource, link Link, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	link.ExpiresAt = shareExpiry(now, ttl)
+	resource.OwnerID, resource.ContentSize, resource.ExpiresAt = ownerID, int64(len(content)), link.ExpiresAt
+	resource.CreatedAt, resource.UpdatedAt, resource.Version, resource.VersionAt = now, now, 1, now
 	resource.ContentKey = contentKey(resource.ID)
 	link.ResourceID = resource.ID
 
@@ -90,15 +118,26 @@ func (d *Store) insertQuickShare(ctx context.Context, ownerID, filename string, 
 		if usage.StorageBytes+resource.ContentSize > limit.StorageBytes {
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
-		if _, err := tx.Exec(ctx, `
+		// An id chosen by the browser that is already taken is refused, as
+		// creating an encrypted resource under it would be.
+		tag, err := tx.Exec(ctx, `
 INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url,
-                      created_at, updated_at, version, version_at, content_sha256, expires_at)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, '', $9, $9, 1, $9, $10, $11)
+                      created_at, updated_at, version, version_at, content_sha256, expires_at, sealed_key, sealed_meta)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, '', $9, $9, 1, $9, $10, $11, $12, $13)
+ON CONFLICT (id) DO NOTHING
 `, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
-			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, resource.ContentSHA256, resource.ExpiresAt); err != nil {
+			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, resource.ContentSHA256, resource.ExpiresAt,
+			resource.SealedKey, resource.SealedMeta)
+		if err != nil {
 			return fmt.Errorf("create quick share: %w: %w", ErrInternal, err)
 		}
+		if tag.RowsAffected() == 0 {
+			return errSealedShape
+		}
 		if err := d.insertLink(ctx, tx, &link, now); err != nil {
+			if isUniqueViolation(err) {
+				return errSealedShape
+			}
 			return err
 		}
 		dropped, err = trimHistoryTx(ctx, tx, ownerID, "", limit.StorageBytes)
@@ -134,8 +173,10 @@ ORDER BY created_at DESC, id DESC LIMIT 1`, resourceID, now))
 
 // KeepQuickShare makes a quick share an ordinary resource: it stops being
 // read only and is no longer deleted when its link ends. The link keeps the
-// term it was given. Encrypted content cannot be kept yet: a resource is
-// edited and served as what it holds, and the service cannot read this.
+// term it was given. One encrypted the earlier way, with only the key in its
+// link, cannot be kept: a resource is edited and served as what it holds,
+// and nothing the service or its owner has opens it. One encrypted under
+// the master password is kept as an encrypted resource.
 func (d *Store) KeepQuickShare(ctx context.Context, ownerID, resourceID string, now time.Time) error {
 	resource, err := d.ResourceForOwner(ctx, ownerID, resourceID)
 	if err != nil {

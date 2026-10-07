@@ -1,24 +1,15 @@
-// The home page for an account with end-to-end encryption on. The box's
-// text, or the file chosen in its place, is encrypted here and only the
-// ciphertext is posted; the key goes into the address of the result page
-// after #, which is never sent to the server, and the result page puts it on
-// the end of the share link.
-import { seal } from "./e2ee.js";
-import { sizeText } from "./upload.js";
-
-// The code a recipient types: four characters from letters and digits that
-// cannot be mistaken for one another - no 0 or O, no 1, I or L - read in
-// either case. Drawn without bias from the browser's own randomness.
-const PIN_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-
-function newPin() {
-  let pin = "";
-  while (pin.length < 4) {
-    const [value] = crypto.getRandomValues(new Uint8Array(1));
-    if (value < 248) pin += PIN_ALPHABET[value % PIN_ALPHABET.length];
-  }
-  return pin;
-}
+// The home page for an account with a master password, its encryption
+// switch on. The box's text, or the file chosen in its place, is encrypted
+// here as an encrypted resource is (docs/encryption.md) and only the
+// ciphertext is posted, with its keys wrapped: the content key by the
+// account key and by the link's key, the link's key - or its code - by the
+// account key, so its owner can show the link again. The link's key goes into the address of the result
+// page after #, which is never sent to the server, and the result page puts
+// it on the end of the share link.
+import { newContentKey, wrapContentKey, encryptContent, encryptMeta, newLinkKeys, newCodeLinkKeys, newCode } from "./seal.js";
+import { toBase64URL } from "./e2ee.js";
+import { accountKey, unlock, WrongPassword, NoStorage } from "./unlock.js";
+import { sizeText, textType, fileType } from "./upload.js";
 
 // Adding a code makes one; the code can be swapped for another or dropped.
 function setupPin(form) {
@@ -38,10 +29,10 @@ function setupPin(form) {
   // The key pressed goes away with the press; focus goes on to the code's
   // own controls rather than being dropped.
   add.addEventListener("click", () => {
-    set(newPin());
+    set(newCode());
     renew.focus();
   });
-  renew.addEventListener("click", () => set(newPin()));
+  renew.addEventListener("click", () => set(newCode()));
   pick.querySelector("[data-pin-drop]").addEventListener("click", () => {
     set("");
     add.focus();
@@ -56,11 +47,22 @@ function setupForm(form) {
   const currentPin = setupPin(form);
   const upload = form.querySelector("input[data-upload]");
   const error = form.querySelector("[data-e2ee-error]");
-  if (!button || !textarea || !error) return;
-  // The button is disabled in the markup, so without this script nothing can
-  // be sent in the clear by pressing it or Enter.
-  button.disabled = false;
+  const unlockRow = form.querySelector("[data-e2ee-unlock]");
+  const toggle = form.querySelector("[data-e2ee-switch] input");
+  if (!button || !textarea || !error || !toggle) return;
   const label = button.textContent;
+  // Off, the box is the plain form it is without this script; on, the code
+  // can be added and the share is encrypted here.
+  const pick = form.querySelector("[data-pin-pick]");
+  toggle.addEventListener("change", () => {
+    if (pick) pick.hidden = !toggle.checked;
+    if (unlockRow && !toggle.checked) unlockRow.hidden = true;
+    error.textContent = "";
+    error.hidden = true;
+  });
+  document.addEventListener("plainmote:unlocked", () => {
+    if (unlockRow) unlockRow.hidden = true;
+  });
   const maxBytes = Number(form.dataset.maxBytes);
 
   const fail = (message) => {
@@ -68,11 +70,37 @@ function setupForm(form) {
     error.hidden = !message;
   };
 
+  // The account key, unlocked in this browser before or with the password
+  // asked for here; null while it is still to be typed.
+  const key = async () => {
+    const kept = await accountKey();
+    if (kept) return kept;
+    const password = unlockRow?.querySelector("input");
+    if (!password || unlockRow.hidden || !password.value) {
+      if (unlockRow) unlockRow.hidden = false;
+      password?.focus();
+      fail(form.dataset.msgUnlock);
+      return null;
+    }
+    try {
+      const unlocked = await unlock(password.value);
+      unlockRow.hidden = true;
+      password.value = "";
+      return unlocked;
+    } catch (failure) {
+      password.select();
+      fail(failure instanceof WrongPassword ? form.dataset.msgWrong : failure instanceof NoStorage ? form.dataset.msgNoStorage : form.dataset.msgFailed);
+      return null;
+    }
+  };
+
   form.addEventListener("submit", async (event) => {
+    if (!toggle.checked) return;
     event.preventDefault();
     fail("");
-    // A chosen file is sealed as it is, under its name; the box's text as the
-    // plain form would have it on the server, where a textarea submits CRLF.
+    // A chosen file is encrypted as it is, under its name; the box's text as
+    // the plain form would have it on the server, where a textarea submits
+    // CRLF.
     const file = upload && upload.files.length > 0 ? upload.files[0] : null;
     const content = file
       ? new Uint8Array(await file.arrayBuffer())
@@ -82,15 +110,30 @@ function setupForm(form) {
     const checked = form.querySelector("input[name='ttl']:checked");
 
     button.disabled = true;
-    button.textContent = form.dataset.msgEncrypting;
     try {
+      const accountKey = await key();
+      if (!accountKey) {
+        button.disabled = false;
+        return;
+      }
+      button.textContent = form.dataset.msgEncrypting;
       const name = (filename ? filename.value.trim() : "") || (file ? file.name : "");
+      const type = file ? await fileType(file) : textType(name);
       const pin = currentPin();
-      const { envelope, key } = await seal(content, name, pin);
+      const id = crypto.randomUUID();
+      const linkID = crypto.randomUUID();
+      const contentKey = await newContentKey();
+      const link = pin ? await newCodeLinkKeys(contentKey, accountKey, linkID, pin) : await newLinkKeys(contentKey, accountKey, linkID);
       const body = new FormData();
       body.set("csrf", form.dataset.csrf);
       body.set("ttl", checked ? checked.value : "");
-      body.set("envelope", new Blob([envelope], { type: "application/octet-stream" }), "envelope");
+      body.set("id", id);
+      body.set("link_id", linkID);
+      body.set("sealed_key", toBase64URL(await wrapContentKey(contentKey, accountKey, id)));
+      body.set("link_key", toBase64URL(link.sealedKey));
+      body.set("owner_key", toBase64URL(link.ownerKey));
+      body.set("meta", toBase64URL(await encryptMeta(contentKey, id, { name: "", filename: name, type })));
+      body.set("content", new Blob([await encryptContent(contentKey, id, content)], { type: "application/octet-stream" }), "blob");
       const response = await fetch(form.dataset.endpoint, {
         method: "POST", body, credentials: "same-origin", headers: { Accept: "application/json" },
       });
@@ -99,7 +142,7 @@ function setupForm(form) {
       // #k= carries the key; #p= carries the code, for this page to show its
       // creator - it goes into no link. Either way the fragment stays in this
       // browser.
-      window.location.assign(result + (key ? `#k=${key}` : `#p=${pin}`));
+      window.location.assign(result + (pin ? `#p=${pin}` : `#k=${toBase64URL(link.bytes)}`));
     } catch (failure) {
       fail(failure instanceof Error && failure.message ? failure.message : form.dataset.msgFailed);
       button.disabled = false;

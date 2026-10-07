@@ -2,8 +2,8 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"time"
@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	pasteEncryptedPath = "/paste/encrypted"
-	accountE2EEPath    = "/account/e2ee"
+	pasteSealedPath = "/paste/sealed"
 )
 
 // decryptPagePolicy is the strictest policy any page here carries. The page
@@ -35,8 +34,10 @@ func (a *App) renderDecryptPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// e2eeEnabled is whether this visitor's quick shares are to be encrypted: a
-// signed-in account that turned it on, on a deployment with quick shares.
+// e2eeEnabled is whether the home box's encryption switch starts on: an
+// account with a master password whose last quick share from the box was
+// encrypted, on a deployment with quick shares. Without a master password
+// there is nothing to encrypt under, and the switch is off.
 func (a *App) e2eeEnabled(r *http.Request, userID string) bool {
 	if !a.cfg.AnonymousEnabled || userID == "" {
 		return false
@@ -46,14 +47,24 @@ func (a *App) e2eeEnabled(r *http.Request, userID string) bool {
 		fmt.Fprintf(os.Stderr, "read e2ee setting: %v\n", err)
 		return false
 	}
-	return enabled
+	if !enabled {
+		return false
+	}
+	keyring, err := a.hasKeyring(r, userID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "read keyring: %v\n", err)
+	}
+	return keyring
 }
 
-// handleEncryptedPaste takes the ciphertext the home page's script produced.
-// It is the browser's endpoint only: a signed-in session, its CSRF token, the
-// account's setting on, and an envelope of the expected shape. The answer is
-// the result page's address; the page adds the key to it on its side.
-func (a *App) handleEncryptedPaste(w http.ResponseWriter, r *http.Request) {
+// handleSealedPaste takes an encrypted quick share the home page's script
+// made under the master password: the content and its metadata encrypted
+// under a new content key, that key wrapped by the account key and by the
+// link's key, and the link's key - or its code - wrapped by the account key
+// for its owner. It is the browser's endpoint only: a signed-in session, its
+// CSRF token and the account's setting on. The answer is the result page's
+// address; the page adds the link's key to it on its side.
+func (a *App) handleSealedPaste(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -71,8 +82,9 @@ func (a *App) handleEncryptedPaste(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusUnauthorized, translate(locale, "e2ee_signed_out"))
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, store.EncryptedMaxBytes+8<<10)
-	if err := r.ParseMultipartForm(store.EncryptedMaxBytes + 8<<10); err != nil {
+	limit := int64(store.AnonymousMaxBytes + 64<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	if err := r.ParseMultipartForm(limit); err != nil {
 		writePlainError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf(translate(locale, "e2ee_too_large"), store.BytesText(store.AnonymousMaxBytes)))
 		return
 	}
@@ -81,62 +93,39 @@ func (a *App) handleEncryptedPaste(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusForbidden, translate(locale, "e2ee_page_stale"))
 		return
 	}
-	if !a.e2eeEnabled(r, user.ID) {
+	if has, err := a.hasKeyring(r, user.ID); err != nil || !has {
 		writePlainError(w, http.StatusForbidden, translate(locale, "e2ee_turned_off"))
 		return
 	}
-	files := r.MultipartForm.File["envelope"]
-	if len(files) != 1 {
-		writePlainError(w, http.StatusBadRequest, translate(locale, "e2ee_bad_envelope"))
-		return
-	}
-	part, err := files[0].Open()
-	if err != nil {
-		writePlainError(w, http.StatusBadRequest, translate(locale, "e2ee_bad_envelope"))
-		return
-	}
-	defer part.Close()
-	envelope, err := io.ReadAll(io.LimitReader(part, store.EncryptedMaxBytes+1))
-	if err != nil {
-		writePlainError(w, http.StatusBadRequest, translate(locale, "e2ee_bad_envelope"))
-		return
-	}
 	ttl, _ := parsePasteTTL(r.FormValue("ttl"))
-	resource, _, err := a.db.CreateEncryptedPaste(r.Context(), user.ID, envelope, ttl, time.Now().UTC())
+	resource, _, err := a.db.CreateSealedQuickShare(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"),
+		store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")},
+		base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"), ttl, time.Now().UTC())
 	if err != nil {
-		if !store.IsRefusal(err) {
-			fmt.Fprintf(os.Stderr, "create encrypted paste: %v\n", err)
+		if !store.IsRefusal(err) && !errors.Is(err, store.ErrNotFound) {
+			fmt.Fprintf(os.Stderr, "create sealed quick share: %v\n", err)
 			writePlainError(w, http.StatusInternalServerError, translate(locale, "e2ee_failed"))
 			return
 		}
 		writePlainError(w, http.StatusBadRequest, localizePageError(locale, err.Error()))
 		return
 	}
+	a.rememberE2EE(r, user.ID, true)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]string{"result": pasteResultPrefix + resource.ID})
 }
 
-// handleAccountE2EE turns encrypted quick shares on or off, from the account
-// page's form.
-func (a *App) handleAccountE2EE(w http.ResponseWriter, r *http.Request) {
-	user, sessionID, ok := a.requireUser(w, r)
-	if !ok {
+// rememberE2EE keeps the choice the box was last sent with, for its switch
+// to start at next time. It is written only when it changes; failing to
+// remember costs nothing but the default.
+func (a *App) rememberE2EE(r *http.Request, userID string, on bool) {
+	current, err := a.db.E2EEEnabled(r.Context(), userID)
+	if err == nil && current == on {
 		return
 	}
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
+	if err := a.db.SetE2EE(r.Context(), userID, on); err != nil {
+		fmt.Fprintf(os.Stderr, "remember e2ee choice: %v\n", err)
 	}
-	if !a.checkCSRF(r, sessionID) {
-		writePlainError(w, http.StatusForbidden, "invalid csrf token")
-		return
-	}
-	if err := a.db.SetE2EE(r.Context(), user.ID, r.FormValue("e2ee") == "on"); err != nil {
-		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
-	http.Redirect(w, r, accountPath, http.StatusSeeOther)
 }

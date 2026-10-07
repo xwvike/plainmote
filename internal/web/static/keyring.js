@@ -223,6 +223,9 @@ const flows = {
 
 async function start() {
   if (!section || !globalThis.crypto?.subtle) return;
+  // The auto-lock time is saved as soon as it is chosen.
+  const autolock = section.querySelector("[data-autolock]");
+  autolock?.querySelector("select").addEventListener("change", () => autolock.submit());
   for (const [name, setup] of Object.entries(flows)) {
     const dialog = document.querySelector(`[data-keyring-dialog="${name}"]`);
     if (!dialog) continue;
@@ -263,6 +266,7 @@ async function start() {
       if (!(await put(user, key, ring.lock_minutes))) throw new Error(message("NoStorage"));
       unlock.reset();
       setStatus(true);
+      document.dispatchEvent(new CustomEvent("plainmote:unlocked", { detail: { key } }));
     } catch (error) {
       showError(unlock, error.message || message("Failed"));
     }
@@ -270,9 +274,11 @@ async function start() {
   });
   section.querySelector("[data-keyring-lock-now]")?.addEventListener("click", async () => {
     await lock(user);
-    setStatus(false);
+    document.dispatchEvent(new CustomEvent("plainmote:locked"));
   });
+  // Unlocked or locked here, from the top bar, or by sitting idle.
   document.addEventListener("plainmote:locked", () => setStatus(false));
+  document.addEventListener("plainmote:unlocked", () => setStatus(true));
 }
 
 start();

@@ -2,12 +2,11 @@
 
 English | [简体中文](encryption.zh-CN.md)
 
-PlainMote can encrypt content in the browser so that the service stores only ciphertext. There are two forms:
+PlainMote can encrypt content in the browser so that the service stores only ciphertext. Everything is encrypted under a **master password**: a password only the account owner knows. It protects an account key, which in turn protects the keys of encrypted resources and encrypted quick shares. This document describes it.
 
-- **Encrypted quick shares**: each quick share gets a random key that travels in the link after `#`, or is derived from a four-character code. This is described in the privacy policy and the account page.
-- **Master password**: a password only the account owner knows. It protects an account key, which in turn protects the keys of encrypted resources. This document describes it.
+Quick shares made before quick-share encryption moved under the master password used the `PMe1` format, with the key only in the link or derived from a code. Those still within their term are delivered until they expire; nothing makes them any more.
 
-Encrypted resources can be viewed, edited, shared and exported in the browser. The command line reads, edits, lists and creates them, asking for the master password each time or reading it from `PLAINMOTE_MASTER_PASSWORD`; it does not keep the account key.
+Encrypted resources can be viewed, edited, shared and exported in the browser. Quick shares made on the home page with its encryption switch on, or with `plainmote share --encrypt`, are encrypted resources too. The command line reads, edits, lists and creates them, asking for the master password each time or reading it from `PLAINMOTE_MASTER_PASSWORD`; it does not keep the account key.
 
 ## Goals
 
@@ -54,6 +53,8 @@ All cryptography is done by WebCrypto in the browser, with no third-party librar
   | CK by AK | `pm/ck/resource/v1:<resource ID>` |
   | CK by LK | `pm/ck/link/v1` |
   | LK by AK | `pm/lk/v1:<link ID>` |
+  | CK by the key a code derives | `pm/ck/code/v1` |
+  | The code, by AK | `pm/code/v1:<link ID>` |
   | Content, encrypted with CK | `PMr1` + `pm/content/v1:<resource ID>` |
   | Metadata, encrypted with CK | `PMm1` + `pm/meta/v1:<resource ID>` |
 
@@ -79,8 +80,10 @@ All cryptography is done by WebCrypto in the browser, with no third-party librar
 - **Editing**: the browser decrypts into the editor and encrypts again on saving, against the version it started from; any save against an older version is a conflict, as encrypting the same text twice never gives the same bytes. Restoring an earlier version copies its ciphertext and metadata. Copying a version into a new resource decrypts it and encrypts it again under the new resource's own CK.
 - **Searching**: the service cannot match encrypted names; once unlocked, the browser decrypts them from a list of the account's encrypted resources and matches them locally.
 - A new share link gets a random LK; CK wrapped by LK is stored with the link, and LK wrapped by AK lets the owner show the full link again. A recipient's browser uses the LK after `#` to unwrap CK and then decrypt the content. Links serve the current version as before.
+- **Links opened by a code**: instead of a key in the address, a link can be opened by a four-character code from 31 letters and digits that cannot be mistaken for one another, read in either case. The browser derives the link's key from the code in upper case with PBKDF2-HMAC-SHA-256, 600,000 iterations and a 16-byte random salt; the link stores the salt followed by CK wrapped by that key - 76 bytes, where CK wrapped by a random LK is 60 - and the code itself wrapped by AK, so the owner can see it again. WebCrypto wraps only keys, so the code is wrapped as raw key material: `IV (12) | the code's bytes encrypted | tag (16)`, 32 bytes. A recipient's page tells the two kinds apart by that length and asks for the code; a wrong code fails as a wrong key does. The owner switches a link between a key and a code, or to a new code, on the link itself: the browser makes the link's keys again and the service replaces them, keeping the address. Whatever opened the link before - the full address or the old code - no longer does.
 - Revoking a link deletes it together with its wrapped CK. Anyone who already opened the link may have kept the content.
 - **What a link delivers**: `PMs1`, then the resource ID, CK wrapped by the link's LK and the encrypted metadata, each after a two-byte big-endian length, then the encrypted content. A browser opening the link first receives the decryption page, which costs no use; the page fetches this, which counts as one. Programs receive it as it is.
+- **Quick shares**: an encrypted quick share is an encrypted resource that ends with its one link. The browser - or the command line - generates the resource's ID, the link's ID, CK and the link's key (or a code), and sends the encrypted content and metadata with CK wrapped by AK and by the link's key, and the link's key or code wrapped by AK, in one request. The service stores them as a quick share: read only until kept, deleted with its link, counting toward the account's storage. Its owner, once unlocked, can open it, show its link or code again, and keep it as an encrypted resource whose link keeps its term. The home page offers the switch only with a master password, and starts it the way the last quick share from it was sent.
 - **Export**: the service's archive holds each encrypted content as `content.sealed`, with `sealed.json` listing every encrypted resource's wrapped CK and encrypted metadata and the account's keyring. On the account page, once unlocked, the browser decrypts that archive and saves it with the plaintext under the names it really has; locked, the archive is saved as it is.
 
 ## What the service stores
@@ -90,7 +93,7 @@ All cryptography is done by WebCrypto in the browser, with no third-party librar
 | `keyrings` (one row per account) | Algorithm and iteration count, salt, AK wrapped by MK, AK wrapped by RK, idle lock time, version, times |
 | `resources` | CK wrapped by AK; the encrypted name, filename and type. The name and filename columns stay empty and the content type is `application/vnd.plainmote.sealed` |
 | `resource_versions` | Each encrypted version's encrypted metadata |
-| `links` | CK wrapped by LK; LK wrapped by AK |
+| `links` | CK wrapped by LK and LK wrapped by AK; or, for a link opened by a code, the salt and CK wrapped by the key derived from the code, and the code wrapped by AK |
 
 The service still sees resource IDs, owners, ciphertext sizes, creation and update times, the number of versions, share links' terms and use counts, and access history (time, IP address, approximate location, browser).
 
@@ -103,6 +106,7 @@ Protected against:
 
 Not protected against:
 
+- Trying every code of a link opened by a code, by someone who has the link or the database: there are about 920,000 codes, each try costing 600,000 PBKDF2 iterations. A code only keeps out someone who glimpses the link; sensitive content should be shared with a key in the address.
 - Offline guessing of a weak master password by someone who has the database. Each guess costs 600,000 PBKDF2 iterations; a longer password, such as a phrase of several words, is the defence. The interface recommends at least 12 characters and requires 8.
 - A tampered server delivering malicious scripts: encryption in a web page depends on the code the server delivers. The source code is public.
 - A script injection on this site while a key is unlocked: it could use the key to decrypt, though not read the key itself. The content security policy allows only the site's own scripts.

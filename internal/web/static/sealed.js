@@ -5,11 +5,11 @@
 // seal.js produced; docs/encryption.md is the design.
 import {
   newContentKey, wrapContentKey, openContentKey, encryptContent, decryptContent,
-  encryptMeta, decryptMeta, newLinkKeys, openLinkKey,
+  encryptMeta, decryptMeta, newLinkKeys, openLinkKey, newCodeLinkKeys, openLinkCode, newCode,
 } from "./seal.js";
 import { toBase64URL, fromBase64URL } from "./e2ee.js";
 import { accountKey, unlock, WrongPassword, NoStorage } from "./unlock.js";
-import { classifyUpload } from "./upload.js";
+import { textLike, textType, readsAsText, fileType } from "./upload.js";
 
 const csrf = document.querySelector('input[name="csrf"]')?.value || "";
 const encoder = new TextEncoder();
@@ -18,46 +18,6 @@ const toggle = document.querySelector("[data-seal-switch]");
 
 function say(element, text) {
   if (element) element.textContent = text || "";
-}
-
-// What a resource's bytes are, from its type: text goes in the editor.
-function textLike(type) {
-  return /^text\//.test(type) || /(json|xml|yaml|toml|javascript|x-sh|sql|x-ndjson)/.test(type);
-}
-
-// A type for content made here, from its filename - the service cannot look
-// at encrypted bytes, so what a resource is is decided before encrypting.
-const extensionTypes = {
-  json: "application/json", yaml: "text/yaml", yml: "text/yaml", toml: "application/toml", xml: "application/xml",
-  sh: "text/x-sh", sql: "text/x-sql", md: "text/markdown", csv: "text/csv", html: "text/plain", htm: "text/plain",
-};
-function textType(filename) {
-  const extension = (filename.split(".").pop() || "").toLowerCase();
-  return `${extensionTypes[extension] || "text/plain"}; charset=utf-8`;
-}
-
-function isUTF8(bytes) {
-  try {
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// What a chosen file is, by the same reading upload.js gives it: text by
-// its name or type, or - for a file of no telling type - by whether it reads
-// as UTF-8; media as the browser types it; anything else a download.
-async function readsAsText(file) {
-  const kind = classifyUpload(file);
-  return kind === "text" || (kind === "unknown" && isUTF8(new Uint8Array(await file.arrayBuffer())));
-}
-
-async function fileType(file) {
-  if (await readsAsText(file)) return textType(file.name);
-  const kind = classifyUpload(file);
-  if ((kind === "image" || kind === "audio" || kind === "video") && file.type) return file.type;
-  return "application/octet-stream";
 }
 
 // Plaintext in another encoding is carried across as UTF-8.
@@ -102,13 +62,19 @@ function nameTitles(meta) {
   document.title = `${label} · PlainMote`;
 }
 
+// A quick share not yet kept is shown, not edited: no name or filename to
+// change, and its text in a preview rather than the editor.
+const readOnly = Boolean(sealedRoot?.hasAttribute("data-read-only"));
+
 function showOpened(meta, content) {
   const id = sealedRoot.dataset.resource;
   const label = meta.name || meta.filename;
   nameTitles(meta);
   const form = sealedRoot.querySelector("[data-sealed-form]");
-  form.querySelector("[data-sealed-name]").value = meta.name;
-  form.querySelector("[data-sealed-filename]").value = meta.filename;
+  for (const [selector, value] of [["[data-sealed-name]", meta.name], ["[data-sealed-filename]", meta.filename]]) {
+    const field = form.querySelector(selector);
+    if (field) field.value = value;
+  }
   say(form.querySelector("[data-sealed-meta-line]"), `${meta.type.split(";")[0]} · ${content.length.toLocaleString()} B`);
   const textarea = form.querySelector("[data-sealed-text]");
   const media = form.querySelector("[data-sealed-media]");
@@ -120,9 +86,14 @@ function showOpened(meta, content) {
     textarea.dataset.encoding = "utf-8";
     textarea.dataset.eol = content.includes(13) ? "crlf" : "lf";
     textarea.removeAttribute("data-lazy-editor");
-    textarea.setAttribute("data-editor", "");
+    if (readOnly) {
+      textarea.disabled = true;
+      textarea.setAttribute("data-preview", "");
+    } else {
+      textarea.setAttribute("data-editor", "");
+      form.querySelector("[data-sealed-text-tags]").hidden = false;
+    }
     textarea.hidden = false;
-    form.querySelector("[data-sealed-text-tags]").hidden = false;
     import("./editor.js");
   } else {
     const url = URL.createObjectURL(new Blob([content], { type: meta.type }));
@@ -170,7 +141,6 @@ async function openSealed(key) {
   const content = await decryptContent(opened.contentKey, id, await bytesOf(`/resources/${id}/raw`));
   showOpened(opened.meta, content);
   await fillLinks(key);
-  for (const button of document.querySelectorAll("[data-sealed-share]")) button.disabled = false;
 }
 
 async function saveSealed(event) {
@@ -207,49 +177,111 @@ async function saveSealed(event) {
   }
 }
 
-// The share list's addresses are completed with their keys, here and in the
-// terms dialog - again whenever parts.js swaps them in.
+// The share list's addresses are completed with their keys - or shown with
+// the code that opens them - in the list, in the terms dialog and on a quick
+// share's page, again whenever parts.js swaps them in.
 async function fillLinks(key) {
   for (const code of document.querySelectorAll("[data-sealed-link]")) {
     if (code.dataset.filled === "true") continue;
+    const linkID = code.dataset.sealedLink;
     try {
-      const linkKey = await openLinkKey(fromBase64URL(code.dataset.ownerKey), key, code.dataset.sealedLink);
-      const full = `${code.dataset.url}#k=${toBase64URL(linkKey)}`;
+      const ownerKey = fromBase64URL(code.dataset.ownerKey);
+      let full = code.dataset.url;
+      if (code.hasAttribute("data-code-link")) {
+        const pin = await openLinkCode(ownerKey, key, linkID);
+        for (const chip of document.querySelectorAll(`[data-code-chip="${linkID}"]`)) {
+          chip.querySelector("[data-code-value]").textContent = pin;
+          chip.hidden = false;
+        }
+      } else {
+        full = `${full}#k=${toBase64URL(await openLinkKey(ownerKey, key, linkID))}`;
+      }
       code.textContent = full;
       code.dataset.filled = "true";
-      for (const button of document.querySelectorAll(`[data-sealed-copy="${code.dataset.sealedLink}"]`)) {
+      for (const button of document.querySelectorAll(`[data-sealed-copy="${linkID}"]`)) {
         button.dataset.copy = full;
         button.disabled = false;
       }
+      for (const toggle of document.querySelectorAll(`[data-sealed-code-toggle="${linkID}"]`)) toggle.disabled = false;
     } catch {
       // A link made before a key could not be read stays as it is.
     }
   }
+  for (const button of document.querySelectorAll("[data-sealed-share]")) button.disabled = false;
+}
+
+// A link action posted the way the page's own forms are: through parts.js
+// where the page has a share list to swap in, so an edit in progress stays
+// as it is; as a plain form where it has not.
+function postShare(fields) {
+  const form = document.createElement("form");
+  form.method = "post";
+  form.action = `/resources/${sealedRoot.dataset.resource}/share`;
+  form.hidden = true;
+  const viaParts = Boolean(document.querySelector("[data-share-panel]"));
+  if (viaParts) form.setAttribute("data-parts", "");
+  for (const [name, value] of Object.entries({ csrf, ...fields })) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.append(input);
+  }
+  document.body.append(form);
+  form.requestSubmit();
+  // parts.js read the form as it was submitted.
+  if (viaParts) form.remove();
+}
+
+// A link's keys: a random key for the address after #, or one derived from
+// a new code. The content key is opened able to be wrapped for it.
+async function linkKeys(linkID, withCode) {
+  const id = sealedRoot.dataset.resource;
+  const contentKey = await openContentKey(fromBase64URL(sealedRoot.dataset.sealedKey), opened.key, id, true);
+  const keys = withCode
+    ? await newCodeLinkKeys(contentKey, opened.key, linkID, newCode())
+    : await newLinkKeys(contentKey, opened.key, linkID);
+  return { sealed_key: toBase64URL(keys.sealedKey), owner_key: toBase64URL(keys.ownerKey) };
 }
 
 async function newSealedShare(button) {
   button.disabled = true;
   try {
-    const id = sealedRoot.dataset.resource;
     const linkID = crypto.randomUUID();
-    const contentKey = await openContentKey(fromBase64URL(sealedRoot.dataset.sealedKey), opened.key, id, true);
-    const keys = await newLinkKeys(contentKey, opened.key, linkID);
-    const response = await fetch(`/resources/${id}/share`, {
-      method: "POST",
-      credentials: "same-origin",
-      body: new URLSearchParams({ csrf, action: "create", link_id: linkID, sealed_key: toBase64URL(keys.sealedKey), owner_key: toBase64URL(keys.ownerKey) }),
-    });
-    location.assign(response.url || location.href);
-  } catch {
+    postShare({ action: "create", link_id: linkID, ...(await linkKeys(linkID, false)) });
+  } finally {
     button.disabled = false;
   }
 }
+
+// A link opened by a code, or by its key again, or with a new code: new
+// keys, the same address.
+async function rekey(linkID, withCode, control) {
+  control.disabled = true;
+  try {
+    postShare({ action: "rekey", share_id: linkID, ...(await linkKeys(linkID, withCode)) });
+  } catch {
+    control.disabled = false;
+    if (control.type === "checkbox") control.checked = !control.checked;
+  }
+}
+
+// The list is swapped in whole by parts.js, so its controls are heard here.
+document.addEventListener("change", (event) => {
+  const toggle = event.target.closest?.("[data-sealed-code-toggle]");
+  if (toggle && opened.key) rekey(toggle.dataset.sealedCodeToggle, toggle.checked, toggle);
+});
+document.addEventListener("click", (event) => {
+  const renew = event.target.closest?.("[data-sealed-recode]");
+  if (renew && opened.key) rekey(renew.dataset.sealedRecode, true, renew);
+  const share = event.target.closest?.("[data-sealed-share]");
+  if (share && opened.key) newSealedShare(share);
+});
 
 async function startSealed() {
   const unlockForm = sealedRoot.querySelector("[data-sealed-unlock]");
   const status = sealedRoot.querySelector("[data-sealed-status]");
   sealedRoot.querySelector("[data-sealed-form]").addEventListener("submit", saveSealed);
-  for (const button of document.querySelectorAll("[data-sealed-share]")) button.addEventListener("click", () => newSealedShare(button));
   // A non-text resource given a text file: upload.js has made the editor,
   // which now holds what will be saved.
   sealedRoot.querySelector("[data-sealed-form]").addEventListener("plainmote:text-editor", () => {
@@ -261,6 +293,12 @@ async function startSealed() {
     fillLinks(opened.key);
   });
   document.addEventListener("plainmote:locked", () => location.reload());
+  // Unlocked from the top bar while this waited for it.
+  document.addEventListener("plainmote:unlocked", (event) => {
+    if (opened.key) return;
+    unlockForm.hidden = true;
+    tryOpen(event.detail.key);
+  });
   const tryOpen = async (key) => {
     say(status, sealedRoot.dataset.msgDecrypting || "");
     try {
@@ -271,15 +309,17 @@ async function startSealed() {
   };
   const key = await accountKey();
   if (key) return tryOpen(key);
+  // The page says the content needs scripts; they are here, and it needs
+  // unlocking.
+  say(status, sealedRoot.dataset.msgLocked);
   unlockForm.hidden = false;
   unlockForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const problem = unlockForm.querySelector("[data-sealed-error]");
     say(problem, "");
     try {
-      const unlocked = await unlock(unlockForm.elements.password.value);
-      unlockForm.hidden = true;
-      await tryOpen(unlocked);
+      // What opens it is the listener above, as from the top bar.
+      await unlock(unlockForm.elements.password.value);
     } catch (error) {
       say(problem, error instanceof WrongPassword ? sealedRoot.dataset.msgWrong
         : error instanceof NoStorage ? sealedRoot.dataset.msgNoStorage : sealedRoot.dataset.msgFailed);
@@ -397,6 +437,10 @@ function startNew(input) {
     if (unlockForm) unlockForm.hidden = Boolean(key) || !input.checked;
   };
   input.addEventListener("change", needKey);
+  document.addEventListener("plainmote:unlocked", (event) => {
+    key = event.detail.key;
+    if (unlockForm) unlockForm.hidden = true;
+  });
   unlockForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const problem = unlockForm.querySelector("[data-new-unlock-error]");

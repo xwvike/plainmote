@@ -212,7 +212,7 @@
   {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
   <script type="module" src="{{asset "editor.js"}}"></script>
   {{end}}
-  {{if not (or .Resource.Remote .Resource.QuickShare (eq .NewKind "remote"))}}<script type="module" src="{{asset "sealed.js"}}"></script>{{end}}
+  {{if or .Resource.Sealed (not (or .Resource.Remote .Resource.QuickShare (eq .NewKind "remote")))}}<script type="module" src="{{asset "sealed.js"}}"></script>{{end}}
   {{template "copy-status" .}}
 </body>
 </html>{{end}}
@@ -294,7 +294,7 @@
           <span class="lr"><span>{{tr .Locale "share_link"}}</span><em>{{tr .Locale "address_unchanged"}}</em></span>
           <span class="fl">
             {{if .Resource.Sealed}}
-            <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}" data-sealed-link="{{.FocusShare.Link.ID}}" data-owner-key="{{b64 .FocusShare.Link.OwnerKey}}" data-url="{{.FocusShare.URL}}"><span class="mut">{{tr .Locale "sealed_link_locked"}}</span></code>
+            {{template "sealed-addr" (sealedLink . .FocusShare "addr")}}
             <button type="button" class="pri" data-sealed-copy="{{.FocusShare.Link.ID}}" disabled>{{template "copy-label" .}}</button>
             {{else}}
             <code class="addr" tabindex="0" aria-label="{{tr .Locale "share_link"}}">{{template "address" .FocusShare.URL}}</code>
@@ -399,6 +399,13 @@
       <p class="hint">{{tr $.Locale "quick_share_encrypted_link"}}</p>
       {{else if .Link.Unreadable}}
       <p class="hint">{{tr $.Locale "share_link_unreadable"}}</p>
+      {{else if $.Resource.Sealed}}
+      {{/* Whole only with its key, or with its code beside it, which only
+           the owner's browser can unwrap. */}}
+      <div class="ticket">
+        {{template "sealed-addr" (sealedLink $ . "addr ends")}}
+        <span class="stub until"><button type="button" class="pri sm" data-sealed-copy="{{.Link.ID}}" disabled>{{template "copy-label" $}}</button></span>
+      </div>
       {{else}}
       <div class="ticket">
         <code class="addr ends" tabindex="0" aria-label="{{tr $.Locale "share_link"}}">{{template "address" .URL}}</code>
@@ -411,11 +418,15 @@
           <span class="st on until"><i></i><span>{{tr $.Locale "valid_until"}} {{formatTime .Link.ExpiresAt}} ({{untilText $.Locale .Link.ExpiresAt}})</span></span>
           <span class="st off after"><i></i><span>{{tr $.Locale "share_ended_expired"}} {{formatTime .Link.ExpiresAt}}</span></span>
         </span>
+        {{if and $.Resource.Sealed (not .Link.Unreadable)}}<span class="until ticket-code">{{template "sealed-code-switch" (sealedLink $ . "")}}</span>{{end}}
       </div>
       {{end}}{{else}}
       <p class="hint">{{tr .Locale "quick_share_link_ended"}}</p>
       {{end}}
     </section>
+    {{if .Resource.Sealed}}
+    {{template "sealed-resource" .}}
+    {{else}}
     {{/* As tall as the editor's sheet only when there is something to show
          in it; encrypted content is one sentence. */}}
     <div class="panel ruled{{if not .Resource.Encrypted}} panel-ed{{end}}">
@@ -446,6 +457,7 @@
         {{end}}
       </div>
     </div>
+    {{end}}
 {{end}}
 
 {{/* The switch that turns a resource's encryption on or off. Without a
@@ -464,9 +476,9 @@
      decrypts the name, the filename and the content into the form below and
      encrypts them again on the way out. */}}
 {{define "sealed-resource"}}
-    <div data-sealed data-resource="{{.Resource.ID}}" data-version="{{.Resource.Version}}" data-sealed-key="{{b64 .Resource.SealedKey}}" data-sealed-meta="{{b64 .Resource.SealedMeta}}" data-size="{{.Resource.ContentSize}}"
+    <div data-sealed{{if .Resource.QuickShare}} data-read-only{{end}} data-resource="{{.Resource.ID}}" data-version="{{.Resource.Version}}" data-sealed-key="{{b64 .Resource.SealedKey}}" data-sealed-meta="{{b64 .Resource.SealedMeta}}" data-size="{{.Resource.ContentSize}}"
          data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}"
-         data-msg-decrypting="{{tr .Locale "sealed_decrypting"}}" data-msg-download="{{tr .Locale "sealed_download"}}">
+         data-msg-decrypting="{{tr .Locale "sealed_decrypting"}}" data-msg-download="{{tr .Locale "sealed_download"}}" data-msg-locked="{{tr .Locale "keylock_locked_hint"}}">
       <form class="unlock-bar" data-sealed-unlock hidden>
         <span class="lock-ic" aria-hidden="true"></span>
         <span class="msg">{{tr .Locale "sealed_locked"}}</span>
@@ -498,10 +510,11 @@
               {{/* The same key and the same preview as a plain resource's:
                    upload.js shows what was chosen, and for text the editor
                    reads it in. Nothing here is ever posted as it is. */}}
-              <label class="btn sm upload-key" data-upload-key>
+              {{if .Resource.QuickShare}}<span class="tag">{{tr .Locale "read_only"}}</span>
+              {{else}}<label class="btn sm upload-key" data-upload-key>
                 <input type="file" class="sr" data-upload data-sealed-file data-max-bytes="{{.MaxContent}}">
                 {{tr .Locale "replace_file"}}
-              </label>
+              </label>{{end}}
             </span>
           </div>
           <div class="pb" data-content-body>
@@ -510,6 +523,7 @@
             <div class="media-stage" data-sealed-media hidden></div>
           </div>
         </div>
+        {{if not .Resource.QuickShare}}
         <div class="savebar">
           <button type="submit" class="pri">{{tr .Locale "save"}}</button>
           <a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "discard_changes"}}</a>
@@ -518,6 +532,7 @@
           <span class="hint">{{tr .Locale "sealed_saves_encrypted"}}</span>
           <span class="err" data-sealed-save-error role="alert"></span>
         </div>
+        {{end}}
       </form>
     </div>
 {{end}}

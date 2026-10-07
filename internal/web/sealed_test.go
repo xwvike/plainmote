@@ -120,6 +120,32 @@ func TestSealedResourceThroughThePage(t *testing.T) {
 	if len(links) != 1 || links[0].ID != linkID {
 		t.Fatalf("links: %+v", links)
 	}
+	// Its row offers a code in place of the key; there is no separate kind
+	// of link for it.
+	if page := client.do(http.MethodGet, "/resources/"+id, nil).Body.String(); !strings.Contains(page, `data-sealed-code-toggle="`+linkID+`"`) || strings.Contains(page, `data-sealed-share="code"`) {
+		t.Fatal("the link's row has no code switch")
+	}
+	// Switched to a code: new keys, the same address - and only by its owner.
+	third, _ := db.UpsertUser(ctx, "201", "carol", "Carol", "")
+	carol := newVersionClient(t, db, third)
+	rekey := map[string][]string{"action": {"rekey"}, "share_id": {linkID}, "sealed_key": {b64(bytes.Repeat([]byte{7}, 76))}, "owner_key": {b64(bytes.Repeat([]byte{8}, 32))}}
+	if got := carol.do(http.MethodPost, "/resources/"+id+"/share", rekey); got.Code == http.StatusSeeOther && !strings.Contains(got.Header().Get("Location"), "error=") {
+		t.Fatal("another account rekeyed the link")
+	}
+	if got := client.do(http.MethodPost, "/resources/"+id+"/share", rekey); got.Code != http.StatusSeeOther || strings.Contains(got.Header().Get("Location"), "error=") {
+		t.Fatalf("rekey: %d %q", got.Code, got.Header().Get("Location"))
+	}
+	if page := client.do(http.MethodGet, "/resources/"+id, nil).Body.String(); !strings.Contains(page, `data-code-chip="`+linkID+`"`) || !strings.Contains(page, `data-sealed-recode="`+linkID+`"`) {
+		t.Fatal("the rekeyed link does not show its code")
+	}
+	rekey["sealed_key"], rekey["owner_key"] = []string{b64(bytes.Repeat([]byte{7}, 60))}, []string{b64(bytes.Repeat([]byte{8}, 60))}
+	if got := client.do(http.MethodPost, "/resources/"+id+"/share", rekey); strings.Contains(got.Header().Get("Location"), "error=") {
+		t.Fatalf("back to a key: %q", got.Header().Get("Location"))
+	}
+	links, _ = db.ListShares(ctx, user.ID, id, time.Now().UTC())
+	if len(links) != 1 || links[0].Token == "" || links[0].CodeLink() || !bytes.Equal(links[0].SealedKey, bytes.Repeat([]byte{7}, 60)) {
+		t.Fatalf("after rekeying: %+v", links)
+	}
 	address := "https://cfg.test" + shareAddress(links[0].Token, "file")
 
 	// A browser gets the decryption page and spends nothing; anything else

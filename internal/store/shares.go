@@ -35,10 +35,16 @@ type Link struct {
 	Unreadable bool
 	// SealedKey and OwnerKey are set on a link to an encrypted resource: the
 	// content key wrapped by the link key, and the link key wrapped by the
-	// account key.
+	// account key - or, on a link opened by a code, the content key wrapped
+	// by the key the code derives, behind its salt, and the code wrapped by
+	// the account key.
 	SealedKey []byte
 	OwnerKey  []byte
 }
+
+// CodeLink reports a link to an encrypted resource that its recipient opens
+// with a code rather than with a key in the address.
+func (l Link) CodeLink() bool { return len(l.SealedKey) == sealedCodeKeyBytes }
 
 // errTokenUnreadable is a stored token that the configured key cannot open -
 // almost always PLAINMOTE_TOKEN_KEY having been changed or restored wrongly.

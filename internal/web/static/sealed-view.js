@@ -248,9 +248,23 @@ async function start() {
     const status = holder?.querySelector("[data-sealed-status]");
     if (status) status.textContent = msg("msgFailed");
   };
+  let ran = false;
+  const open = (key) => {
+    if (ran) return;
+    ran = true;
+    run(key).catch(failed);
+  };
+  document.addEventListener("plainmote:locked", () => {
+    if (ran) location.reload();
+  });
   const key = await accountKey();
-  if (key) return run(key).catch(failed);
+  if (key) return open(key);
   const form = holder?.querySelector("[data-sealed-unlock]");
+  // Unlocked here or from the top bar.
+  document.addEventListener("plainmote:unlocked", (event) => {
+    if (form) form.hidden = true;
+    open(event.detail.key);
+  });
   if (!form) return;
   form.hidden = false;
   form.addEventListener("submit", async (event) => {
@@ -258,9 +272,7 @@ async function start() {
     const problem = form.querySelector("[data-sealed-error]");
     problem.textContent = "";
     try {
-      const unlocked = await unlock(form.elements.password.value);
-      form.hidden = true;
-      await run(unlocked).catch(failed);
+      await unlock(form.elements.password.value);
     } catch (error) {
       problem.textContent = error instanceof WrongPassword ? msg("msgWrong") : error instanceof NoStorage ? msg("msgNoStorage") : msg("msgFailed");
     }

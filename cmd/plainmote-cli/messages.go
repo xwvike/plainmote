@@ -22,8 +22,9 @@ Usage:
   plainmote push <file|-> [--to <resource>] [--name <name>] [--filename <file>] [--encrypt]
                                     upload a new resource, or a new version of one;
                                     --encrypt makes the new one end-to-end encrypted
-  plainmote share <file|-> [--ttl 10m|1h|1d|7d|30d] [--filename <file>]
-                                    make a quick share and print its link
+  plainmote share <file|-> [--ttl 10m|1h|1d|7d|30d] [--filename <file>] [--encrypt]
+                                    make a quick share and print its link;
+                                    --encrypt encrypts it end to end
   plainmote server [<url>]          show or set the server
   plainmote config language zh|en|auto
                                     set the language of these messages
@@ -49,8 +50,9 @@ password, asked for each time or read from PLAINMOTE_MASTER_PASSWORD.
   plainmote push <文件|-> [--to <资源>] [--name <名称>] [--filename <文件名>] [--encrypt]
                                     上传为新资源，或作为已有资源的新版本；
                                     --encrypt 将新资源设为端到端加密
-  plainmote share <文件|-> [--ttl 10m|1h|1d|7d|30d] [--filename <文件名>]
-                                    创建快速分享并输出链接
+  plainmote share <文件|-> [--ttl 10m|1h|1d|7d|30d] [--filename <文件名>] [--encrypt]
+                                    创建快速分享并输出链接；
+                                    --encrypt 将其端到端加密
   plainmote server [<地址>]         查看或设置服务器
   plainmote config language zh|en|auto
                                     设置提示语言

@@ -34,7 +34,19 @@ const (
 	sealedHeaderBytes  = 4 + 12 + 16
 	sealedMetaMaxBytes = 4096
 	sealedKeyBytes     = keyringWrappedBytes
+	// A link opened by a code carries the salt its key is derived with
+	// ahead of the wrapped content key, and keeps its code - four characters
+	// - wrapped by the account key for its owner.
+	sealedCodeKeyBytes = 16 + keyringWrappedBytes
+	ownerCodeBytes     = 12 + 4 + 16
 )
+
+// validLinkKeys is the pair a link to an encrypted resource is made with:
+// a link key's, or a code's.
+func validLinkKeys(sealedKey, ownerKey []byte) bool {
+	return len(sealedKey) == sealedKeyBytes && len(ownerKey) == sealedKeyBytes ||
+		len(sealedKey) == sealedCodeKeyBytes && len(ownerKey) == ownerCodeBytes
+}
 
 var (
 	errSealedShape     = refusal("加密内容格式无法识别")
@@ -440,7 +452,7 @@ func (d *Store) CreateSealedShare(ctx context.Context, ownerID, resourceID, link
 	if err != nil {
 		return Link{}, err
 	}
-	if !resource.Sealed() || len(sealedKey) != sealedKeyBytes || len(ownerKey) != sealedKeyBytes {
+	if !resource.Sealed() || !validLinkKeys(sealedKey, ownerKey) {
 		return Link{}, errSealedShape
 	}
 	if resource.TakenDown {
@@ -467,6 +479,8 @@ type SealedEntry struct {
 	ID         string
 	SealedKey  []byte
 	SealedMeta []byte
+	// QuickShare is an encrypted quick share not yet kept.
+	QuickShare bool
 }
 
 // SealedIndex lists the account's encrypted resources, for its lists and
@@ -476,7 +490,7 @@ func (d *Store) SealedIndex(ctx context.Context, ownerID string) ([]SealedEntry,
 		return nil, ErrNotFound
 	}
 	rows, err := d.db.Query(ctx, `
-SELECT r.id::text, r.sealed_key, r.sealed_meta FROM resources r
+SELECT r.id::text, r.sealed_key, r.sealed_meta, r.expires_at IS NOT NULL FROM resources r
 WHERE r.owner_id = $1 AND r.sealed_key IS NOT NULL AND `+liveResource+`
 ORDER BY r.updated_at DESC
 `, ownerID)
@@ -485,7 +499,7 @@ ORDER BY r.updated_at DESC
 	}
 	entries, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (SealedEntry, error) {
 		var e SealedEntry
-		return e, row.Scan(&e.ID, &e.SealedKey, &e.SealedMeta)
+		return e, row.Scan(&e.ID, &e.SealedKey, &e.SealedMeta, &e.QuickShare)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list sealed resources: %w: %w", ErrInternal, err)
@@ -514,4 +528,36 @@ func SealedBundle(resourceID string, linkKey, meta []byte) ([]byte, error) {
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// RekeySealedShare gives a live link to an encrypted resource new keys: a
+// code in place of the key in its address, a new code, or a key again. Its
+// address stays; whatever opened it before - the full address, the old code
+// - no longer does.
+func (d *Store) RekeySealedShare(ctx context.Context, ownerID, resourceID, linkID string, sealedKey, ownerKey []byte) error {
+	if !validUUIDs(linkID) {
+		return ErrNotFound
+	}
+	resource, err := d.ResourceForOwner(ctx, ownerID, resourceID)
+	if err != nil {
+		return err
+	}
+	if !resource.Sealed() || !validLinkKeys(sealedKey, ownerKey) {
+		return errSealedShape
+	}
+	if resource.TakenDown {
+		return ErrTakenDown
+	}
+	tag, err := d.db.Exec(ctx, `
+UPDATE links SET sealed_key = $3, owner_key = $4
+WHERE id = $1 AND resource_id = $2 AND sealed_key IS NOT NULL AND revoked_at IS NULL
+  AND (expires_at IS NULL OR expires_at > now()) AND (max_uses = 0 OR used_count < max_uses)
+`, linkID, resourceID, sealedKey, ownerKey)
+	if err != nil {
+		return fmt.Errorf("rekey link: %w: %w", ErrInternal, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

@@ -191,3 +191,148 @@ func TestSealAndUnseal(t *testing.T) {
 		t.Fatalf("links after unsealing: %+v", links)
 	}
 }
+
+// An encrypted quick share is an encrypted resource that ends with its one
+// link: made under the ids its keys are bound to, delivered with that link's
+// key, kept as an encrypted resource, and refused in any other shape or
+// under an id already taken - by anyone.
+func TestSealedQuickShare(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	other, err := db.UpsertUser(ctx, "200", "bob", "Bob", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, linkID := uuid.NewString(), uuid.NewString()
+	before, _ := db.UsageForUser(ctx, user.ID)
+	codeKey, ownerCode := bytes.Repeat([]byte{7}, 76), bytes.Repeat([]byte{8}, 32)
+
+	for name, attempt := range map[string]func() error{
+		"plain content": func() error {
+			_, _, err := db.CreateSealedQuickShare(ctx, user.ID, id, linkID, SealedPart{Content: []byte("x=1\n"), Meta: sealedPart(1).Meta}, wrappedKey(1), wrappedKey(2), wrappedKey(3), time.Hour, now)
+			return err
+		},
+		"a short resource key": func() error {
+			_, _, err := db.CreateSealedQuickShare(ctx, user.ID, id, linkID, sealedPart(1), wrappedKey(1)[:59], wrappedKey(2), wrappedKey(3), time.Hour, now)
+			return err
+		},
+		"a code key, link sized": func() error {
+			_, _, err := db.CreateSealedQuickShare(ctx, user.ID, id, linkID, sealedPart(1), wrappedKey(1), codeKey, wrappedKey(3), time.Hour, now)
+			return err
+		},
+		"a malformed link id": func() error {
+			_, _, err := db.CreateSealedQuickShare(ctx, user.ID, id, "link", sealedPart(1), wrappedKey(1), wrappedKey(2), wrappedKey(3), time.Hour, now)
+			return err
+		},
+		"too long a term": func() error {
+			_, _, err := db.CreateSealedQuickShare(ctx, user.ID, id, linkID, sealedPart(1), wrappedKey(1), wrappedKey(2), wrappedKey(3), 90*24*time.Hour, now)
+			return err
+		},
+	} {
+		if err := attempt(); err == nil || !IsRefusal(err) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
+	resource, link, err := db.CreateSealedQuickShare(ctx, user.ID, id, linkID, sealedPart(1), wrappedKey(1), wrappedKey(2), wrappedKey(3), time.Hour, now)
+	if err != nil || !resource.Sealed() || !resource.QuickShare() || resource.Name != "" || link.ID != linkID || link.CodeLink() || link.Token == "" {
+		t.Fatalf("created: %+v %+v %v", resource, link, err)
+	}
+	if usage, _ := db.UsageForUser(ctx, user.ID); usage.StorageBytes-before.StorageBytes != int64(len(sealedPart(1).Content)) {
+		t.Fatalf("it counts toward the quota: %+v", usage)
+	}
+	// The same ids again, from its owner or anyone else: refused, and what
+	// is there stays as it was.
+	for _, owner := range []string{user.ID, other.ID} {
+		if _, _, err := db.CreateSealedQuickShare(ctx, owner, id, uuid.NewString(), sealedPart(9), wrappedKey(9), wrappedKey(9), wrappedKey(9), time.Hour, now); err == nil {
+			t.Fatal("the same resource id again")
+		}
+		if _, _, err := db.CreateSealedQuickShare(ctx, owner, uuid.NewString(), linkID, sealedPart(9), wrappedKey(9), wrappedKey(9), wrappedKey(9), time.Hour, now); err == nil {
+			t.Fatal("the same link id again")
+		}
+	}
+	if _, theirs, _ := db.ListResources(ctx, other.ID, "", 50, 0); theirs != 0 {
+		t.Fatalf("another account was left with %d resources", theirs)
+	}
+	stored, _ := db.ResourceForOwner(ctx, user.ID, id)
+	if body, _ := db.ReadContent(ctx, stored); !bytes.Equal(body, sealedPart(1).Content) || !bytes.Equal(stored.SealedKey, wrappedKey(1)) {
+		t.Fatal("what was there changed")
+	}
+
+	// Delivered with the link's own key; the quick share's link is the one
+	// its page shows.
+	result, err := db.ConsumeToken(ctx, link.Token, RequestMeta{Method: "GET", RemoteIP: "198.51.100.7"}, now)
+	if err != nil || !bytes.Equal(result.LinkSealedKey, wrappedKey(2)) {
+		t.Fatalf("consumed: %v", err)
+	}
+	if _, shown, err := db.QuickShareLink(ctx, user.ID, id, now); err != nil || shown.ID != linkID || !bytes.Equal(shown.OwnerKey, wrappedKey(3)) {
+		t.Fatalf("its link: %+v %v", shown, err)
+	}
+	if err := db.KeepQuickShare(ctx, user.ID, id, now); err != nil {
+		t.Fatal(err)
+	}
+	if kept, _ := db.ResourceForOwner(ctx, user.ID, id); kept.QuickShare() || !kept.Sealed() {
+		t.Fatalf("kept: %+v", kept)
+	}
+
+	// One opened by a code.
+	coded, codeLink, err := db.CreateSealedQuickShare(ctx, user.ID, uuid.NewString(), uuid.NewString(), sealedPart(2), wrappedKey(1), codeKey, ownerCode, time.Hour, now)
+	if err != nil || !codeLink.CodeLink() {
+		t.Fatalf("a code link: %+v %v", codeLink, err)
+	}
+	// And a link opened by a code on an encrypted resource, beside one with
+	// its key in the address.
+	if l, err := db.CreateSealedShare(ctx, user.ID, coded.ID, uuid.NewString(), "", time.Hour, 0, codeKey, ownerCode); err != nil || !l.CodeLink() {
+		t.Fatalf("a code link on a resource: %v", err)
+	}
+	if _, err := db.CreateSealedShare(ctx, user.ID, coded.ID, uuid.NewString(), "", time.Hour, 0, codeKey, wrappedKey(3)); err == nil {
+		t.Fatal("a code key with a link key's owner copy")
+	}
+
+	// A link's keys made again: a key to a code and back, by its owner only,
+	// in a shape that matches, and while it is live.
+	keyed, err := db.CreateSealedShare(ctx, user.ID, coded.ID, uuid.NewString(), "", time.Hour, 0, wrappedKey(2), wrappedKey(3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RekeySealedShare(ctx, other.ID, coded.ID, keyed.ID, codeKey, ownerCode); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("another account's rekey: %v", err)
+	}
+	if err := db.RekeySealedShare(ctx, user.ID, coded.ID, keyed.ID, codeKey, wrappedKey(3)); err == nil || !IsRefusal(err) {
+		t.Fatalf("mismatched keys: %v", err)
+	}
+	if err := db.RekeySealedShare(ctx, user.ID, id, keyed.ID, codeKey, ownerCode); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a link under another resource: %v", err)
+	}
+	if err := db.RekeySealedShare(ctx, user.ID, coded.ID, keyed.ID, codeKey, ownerCode); err != nil {
+		t.Fatal(err)
+	}
+	links, _ := db.ListShares(ctx, user.ID, coded.ID, now)
+	for _, l := range links {
+		if l.ID == keyed.ID && (!l.CodeLink() || !bytes.Equal(l.OwnerKey, ownerCode)) {
+			t.Fatalf("rekeyed: %+v", l)
+		}
+	}
+	if err := db.RevokeLink(ctx, user.ID, coded.ID, keyed.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RekeySealedShare(ctx, user.ID, coded.ID, keyed.ID, wrappedKey(2), wrappedKey(3)); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a revoked link: %v", err)
+	}
+}
+
+// One encrypted the earlier way, with its key only in its link, still
+// cannot be kept: nothing opens it.
+func TestLegacyEncryptedQuickShareIsNotKept(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	envelope := append([]byte("PMe1\x00"), bytes.Repeat([]byte{1}, 40)...)
+	resource, _, err := db.CreateEncryptedPaste(ctx, user.ID, envelope, time.Hour, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.KeepQuickShare(ctx, user.ID, resource.ID, time.Now().UTC()); err == nil || !IsRefusal(err) {
+		t.Fatalf("kept: %v", err)
+	}
+}

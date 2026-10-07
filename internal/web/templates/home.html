@@ -70,7 +70,8 @@
         {{/* Which one applies is known only to the script: it depends on the
              part of this page's address that never reaches the server. */}}
         <p class="hint" data-e2ee-pin data-message="{{tr .Locale "e2ee_result_pin"}}" hidden></p>
-        <p class="err" data-e2ee-lost hidden>{{tr .Locale "e2ee_result_lost"}}</p>
+        {{if .PasteSealed}}<p class="hint" data-e2ee-lost hidden>{{tr .Locale "e2ee_result_reshow"}}</p>
+        {{else}}<p class="err" data-e2ee-lost hidden>{{tr .Locale "e2ee_result_lost"}}</p>{{end}}
         {{end}}
         <p class="hint">{{tr .Locale "paste_result_private"}}</p>
         <p class="hint">{{tr .Locale "paste_expiry_note"}}</p>
@@ -98,12 +99,14 @@
 
     {{else}}
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
-    {{/* With encryption on, the script takes the submission: it encrypts the
-         text and posts only the ciphertext. The button starts disabled so that
-         without the script nothing is sent in the clear. */}}
-    <form method="post" action="/paste" enctype="multipart/form-data"{{if .E2EE}} data-e2ee data-csrf="{{.CSRF}}" data-endpoint="/paste/encrypted"
+    {{/* With its encryption switch on, the script takes the submission: it
+         encrypts the text and posts only the ciphertext. Without the script
+         the switch is posted with the text, which is then refused rather
+         than stored in the clear. */}}
+    <form method="post" action="/paste" enctype="multipart/form-data"{{if .HasKeyring}} data-e2ee data-csrf="{{.CSRF}}" data-endpoint="/paste/sealed"
           data-msg-empty="{{tr .Locale "e2ee_empty"}}" data-msg-too-large="{{tr .Locale "e2ee_too_large"}}"
-          data-msg-encrypting="{{tr .Locale "e2ee_encrypting"}}" data-msg-failed="{{tr .Locale "e2ee_failed"}}" data-max-bytes="{{.MaxPaste}}"{{end}}>
+          data-msg-encrypting="{{tr .Locale "e2ee_encrypting"}}" data-msg-failed="{{tr .Locale "e2ee_failed"}}" data-max-bytes="{{.MaxPaste}}"
+          data-msg-unlock="{{tr .Locale "e2ee_unlock_first"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}"{{end}}>
       {{/* The resource editor's panel, with this page's own height: the same
            editor, the same way of reading a chosen file and showing it. There
            is no stored content and no encoding to keep - a quick share is
@@ -113,7 +116,7 @@
         <div class="pt">
           <span class="sec">{{tr .Locale "content"}}</span>
           <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
-          <span class="sp">{{if .E2EE}}<span class="tag">{{tr .Locale "e2ee_tag"}}</span>{{end}}<span class="hint" data-content-meta>{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
+          <span class="sp"><span class="hint" data-content-meta>{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
             {{/* A file instead of the box, handled as on a resource: text is
                  read into the editor, media is shown, anything else is named.
                  With encryption on, the script seals it in the browser and it
@@ -142,12 +145,18 @@
           <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="notes.txt"
                  aria-label="{{tr .Locale "filename_optional"}}" class="mpath" style="width:150px">
         </label>
-        {{if .E2EE}}
+        {{if .HasKeyring}}
+        {{/* Encrypted or not is chosen here, for each quick share; it starts
+             as the last one was sent. */}}
+        <label class="sw" data-e2ee-switch>
+          <input type="checkbox" role="switch" name="encrypt" value="on"{{if .E2EE}} checked{{end}}>
+          <span class="sw-track" aria-hidden="true"><span class="sw-knob"></span></span><span>{{tr .Locale "e2ee_title"}}</span>
+        </label>
         {{/* A four-character code, made here and never a form field, so no
              path can post it. Made rather than typed, from letters and digits
              that cannot be mistaken for one another, and shown, to be told to
              the recipient. */}}
-        <span class="ttl-picker" data-pin-pick>
+        <span class="ttl-picker" data-pin-pick{{if not .E2EE}} hidden{{end}}>
           <button type="button" data-pin-add>{{tr .Locale "e2ee_pin_add"}}</button>
           <span class="pin-on" data-pin-on hidden>
             <span>{{tr .Locale "e2ee_pin"}}</span>
@@ -156,11 +165,24 @@
             <button type="button" data-pin-drop>{{tr .Locale "e2ee_pin_drop"}}</button>
           </span>
         </span>
+        {{else if .SignedIn}}
+        <span class="sw-off"><label class="sw" title="{{tr .Locale "seal_needs_keyring"}}">
+          <input type="checkbox" role="switch" disabled>
+          <span class="sw-track" aria-hidden="true"><span class="sw-knob"></span></span><span>{{tr .Locale "e2ee_title"}}</span>
+        </label><a class="txt" href="/account#keyring">{{tr .Locale "seal_set_keyring"}}</a></span>
         {{end}}
         {{/* The action ends the row: choose the terms, then send. */}}
-        <button type="submit" class="pri end"{{if .E2EE}} disabled{{end}}>{{tr .Locale "create_share_link"}}</button>
+        <button type="submit" class="pri end">{{tr .Locale "create_share_link"}}</button>
       </div>
-      {{if .E2EE}}
+      {{if .HasKeyring}}
+      {{/* Asked for only when this browser holds no unlocked key: the
+           content is encrypted under the account key, never sent without. */}}
+      <div class="unlock-bar" data-e2ee-unlock hidden>
+        <span class="lock-ic" aria-hidden="true"></span>
+        <span class="msg">{{tr .Locale "e2ee_unlock_first"}}</span>
+        <input type="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}">
+        <a class="txt" href="/account#keyring">{{tr .Locale "keyring_forgot"}}</a>
+      </div>
       <p class="err" data-e2ee-error role="alert" hidden></p>
       <noscript><p class="err">{{tr .Locale "e2ee_needs_js"}}</p></noscript>
       {{end}}
@@ -196,7 +218,7 @@
   </main>
   {{template "footer" .}}
   {{if not .PasteURL}}<script type="module" src="{{asset "editor.js"}}"></script>{{end}}
-  {{if or .E2EE .PasteEncrypted}}<script type="module" src="{{asset "e2ee-share.js"}}"></script>{{end}}
+  {{if or .HasKeyring .PasteEncrypted}}<script type="module" src="{{asset "e2ee-share.js"}}"></script>{{end}}
   {{template "copy-status" .}}
 </body>
 </html>{{end}}

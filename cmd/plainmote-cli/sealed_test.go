@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -175,5 +177,58 @@ func TestEncryptedResourcesFromTheCommandLine(t *testing.T) {
 	}
 	if text, meta := openInBrowser(t, h, keyring, newID); text != "token=abc\n" || meta["name"] != "token" || !strings.HasPrefix(meta["type"], "text/plain") {
 		t.Fatalf("the browser reads the new resource as %q %v", text, meta)
+	}
+}
+
+// An encrypted quick share made here opens in a recipient's browser with
+// the key after # alone, and its owner's browser gets that key back.
+func TestEncryptedQuickShareFromTheCommandLine(t *testing.T) {
+	h, _, keyring := sealedHarness(t)
+	h.env = map[string]string{"PLAINMOTE_MASTER_PASSWORD": "correct horse"}
+	exit, out, errOut := h.run(&cli{stdin: strings.NewReader("boot ok\n")}, "share", "-", "--filename", "app.log", "--ttl", "1h", "--encrypt")
+	if exit != 0 || !strings.Contains(out, "#k=") {
+		t.Fatalf("share --encrypt: %d %q %s", exit, out, errOut)
+	}
+	address := strings.TrimSpace(out)
+	link, key, _ := strings.Cut(address, "#k=")
+	response, err := http.Get(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || bytes.Contains(bundle, []byte("boot ok")) || !bytes.HasPrefix(bundle, []byte("PMs1")) {
+		t.Fatalf("delivered: %d %q", response.StatusCode, bundle)
+	}
+
+	ctx := context.Background()
+	resources, _, _ := h.db.ListResources(ctx, h.user.ID, "", 50, 0)
+	var made store.Resource
+	for _, r := range resources {
+		if r.QuickShare() {
+			made = r
+		}
+	}
+	if !made.Sealed() || made.Filename != "" {
+		t.Fatalf("stored: %+v", made)
+	}
+	shares, _ := h.db.ListShares(ctx, h.user.ID, made.ID, time.Now().UTC())
+	if len(shares) != 1 {
+		t.Fatalf("links: %d", len(shares))
+	}
+	ring, _ := json.Marshal(map[string]any{"kdf": keyring["kdf"], "iterations": 600000, "salt": keyring["salt"], "wrapped_by_password": keyring["wrapped_by_password"]})
+	encode := base64.RawURLEncoding.EncodeToString
+	var opened struct {
+		Meta  map[string]string `json:"meta"`
+		Text  string            `json:"text"`
+		Owner bool              `json:"owner"`
+	}
+	result := node(t, "open_bundle.mjs", "BUNDLE="+encode(bundle), "KEY="+key, "KEYRING="+string(ring), "USER_ID="+h.user.ID,
+		"LINK_ID="+shares[0].ID, "OWNER_KEY="+encode(shares[0].OwnerKey))
+	if err := json.Unmarshal(result, &opened); err != nil {
+		t.Fatalf("%v: %s", err, result)
+	}
+	if opened.Text != "boot ok\n" || opened.Meta["filename"] != "app.log" || !strings.HasPrefix(opened.Meta["type"], "text/") || !opened.Owner {
+		t.Fatalf("the browser opens %+v", opened)
 	}
 }

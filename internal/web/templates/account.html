@@ -45,78 +45,70 @@
       {{end}}
     </section>
 
-    {{/* One section for both: the master password that resources are
-         encrypted with, and below it whether quick shares are. Everything
-         the master password does happens in the browser, so its controls
-         stay disabled until keyring.js has loaded. */}}
-    <section class="panel ruled" id="keyring" data-keyring data-user="{{.User.ID}}"{{with .Keyring}} data-lock="{{.LockMinutes}}"{{end}}>
+    {{/* End-to-end encryption as one panel. Its header says the state the
+         master password is in - not set, locked, unlocked - and offers what
+         comes next in that state; the rows under it are the master password's
+         parts. Everything here happens in the browser, so its controls stay
+         disabled until keyring.js has loaded. */}}
+    <section class="panel ruled enc" id="keyring" data-keyring data-user="{{.User.ID}}"{{with .Keyring}} data-lock="{{.LockMinutes}}"{{end}}>
       <div class="pt">
         <span class="sec">{{tr .Locale "e2ee_title"}}</span>
-        <span class="sp">{{if .Keyring}}<span class="st off" data-keyring-status data-unlocked="{{printf (tr .Locale "keyring_unlocked") (lockText .Locale .Keyring.LockMinutes)}}"><i></i><span>{{tr .Locale "keyring_locked"}}</span></span>{{else}}<span class="st off"><i></i><span>{{tr .Locale "keyring_none"}}</span></span>{{end}}</span>
+        <span class="sp enc-state">
+          {{if .Keyring}}
+          <span class="st off" data-keyring-status data-unlocked="{{printf (tr .Locale "keyring_unlocked") (lockText .Locale .Keyring.LockMinutes)}}"><i></i><span>{{tr .Locale "keyring_locked"}}</span></span>
+          <form class="enc-unlock" data-keyring-unlock hidden>
+            <input type="password" name="password" class="sm" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+            <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+            <button type="button" class="txt" data-keyring-open="recover">{{tr .Locale "keyring_forgot"}}</button>
+            <span class="err" data-keyring-error role="alert"></span>
+          </form>
+          <button type="button" class="sm" data-keyring-lock-now hidden>{{tr .Locale "keyring_lock_now"}}</button>
+          {{else}}
+          <span class="st off"><i></i><span>{{tr .Locale "keyring_none"}}</span></span>
+          {{end}}
+        </span>
       </div>
-      <div class="pb e2ee-set">
+      <div class="pb enc-body">
         <noscript><p class="hint">{{tr .Locale "keyring_needs_js"}}</p></noscript>
         {{if .Keyring}}
-        <form class="keyring-unlock" data-keyring-unlock hidden>
-          <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
-          <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
-          <button type="button" class="txt" data-keyring-open="recover">{{tr .Locale "keyring_forgot"}}</button>
-          <span class="err" data-keyring-error role="alert"></span>
-        </form>
         <div class="kv-rows">
-          <div><span class="k">{{tr .Locale "keyring_password"}}</span><span class="v">{{tr .Locale "keyring_set_on"}} {{formatMinute .Keyring.PasswordAt}}</span><span class="a"><button type="button" class="txt" data-keyring-open="password" disabled>{{tr .Locale "keyring_change"}}</button></span></div>
-          <div><span class="k">{{tr .Locale "keyring_recovery"}}</span><span class="v">{{tr .Locale "keyring_set_on"}} {{formatMinute .Keyring.RecoveryAt}}</span><span class="a"><button type="button" class="txt" data-keyring-open="recovery" disabled>{{tr .Locale "keyring_regenerate"}}</button></span></div>
+          <div><span class="k">{{tr .Locale "keyring_password"}}</span><span class="v">{{tr .Locale "keyring_set_on"}} {{formatMinute .Keyring.PasswordAt}}</span><span class="a"><button type="button" class="txt" data-keyring-open="password" disabled>{{tr .Locale "enc_change"}}</button></span></div>
+          <div><span class="k">{{tr .Locale "keyring_recovery"}}</span><span class="v">{{tr .Locale "keyring_set_on"}} {{formatMinute .Keyring.RecoveryAt}}<span class="mut"> · {{tr .Locale "enc_recovery_use"}}</span></span><span class="a"><button type="button" class="txt" data-keyring-open="recovery" disabled>{{tr .Locale "keyring_regenerate"}}</button></span></div>
           <div><span class="k">{{tr .Locale "keyring_autolock"}}</span>
-            <form class="v inline" method="post" action="/account/keyring">
+            {{/* Saved as soon as it is chosen; without scripts, by the button. */}}
+            <form class="v inline" method="post" action="/account/keyring" data-autolock>
               <input type="hidden" name="csrf" value="{{.CSRF}}">
               <input type="hidden" name="action" value="lock">
               <select name="lock_minutes" class="sm" aria-label="{{tr .Locale "keyring_autolock"}}">{{range .KeyringLockChoices}}<option value="{{.}}"{{if eq . $.Keyring.LockMinutes}} selected{{end}}>{{lockText $.Locale .}}</option>{{end}}</select>
-              <button type="submit" class="sm">{{tr .Locale "apply"}}</button>
+              <noscript><button type="submit" class="sm">{{tr .Locale "apply"}}</button></noscript>
+              <span class="mut">{{tr .Locale "enc_autolock_hint"}}</span>
             </form>
-            <span class="a"><button type="button" class="sm" data-keyring-lock-now hidden>{{tr .Locale "keyring_lock_now"}}</button></span></div>
+            <span class="a"></span></div>
+          <div><span class="k">{{tr .Locale "enc_encrypted"}}</span><span class="v">{{if .SealedCount}}{{printf (tr .Locale "enc_encrypted_count") (sub .SealedCount .SealedQuickShares) .SealedQuickShares}}{{else}}<span class="mut">{{tr .Locale "enc_encrypted_none"}}</span>{{end}}</span><span class="a"></span></div>
         </div>
         {{else}}
-        <p class="hint">{{tr .Locale "keyring_summary"}}</p>
+        <p class="hint">{{tr .Locale "enc_intro"}}</p>
+        <ul class="hint enc-points">
+          <li>{{tr .Locale "enc_point_scope"}}</li>
+          <li>{{tr .Locale "keyring_cost_where"}}</li>
+          <li>{{tr .Locale "keyring_cost_lost"}}</li>
+        </ul>
+        <p><button type="button" class="pri" data-keyring-open="setup" disabled>{{tr .Locale "keyring_setup"}}</button></p>
+        {{end}}
         <details class="more">
-          <summary>{{tr .Locale "e2ee_details"}}</summary>
+          <summary>{{tr .Locale "enc_details"}}</summary>
           <div class="more-body">
             <ul class="hint">
+              {{if .Keyring}}<li>{{tr .Locale "enc_point_scope"}}</li>
               <li>{{tr .Locale "keyring_cost_where"}}</li>
-              <li>{{tr .Locale "keyring_cost_lost"}}</li>
-              <li>{{tr .Locale "keyring_cost_code"}}</li>
+              <li>{{tr .Locale "keyring_cost_lost"}}</li>{{end}}
+              {{if .Anonymous}}<li>{{tr .Locale "e2ee_cost_pin"}}</li>{{end}}
               <li>{{tr .Locale "e2ee_cost_meta"}}</li>
               <li>{{tr .Locale "keyring_cost_storage"}}</li>
+              <li>{{tr .Locale "keyring_cost_code"}}</li>
             </ul>
           </div>
         </details>
-        <button type="button" class="pri" data-keyring-open="setup" disabled>{{tr .Locale "keyring_setup"}}</button>
-        {{end}}
-        {{if .Anonymous}}
-        <hr class="sep">
-        <div class="qs-enc">
-          <div class="qs-head"><b>{{tr .Locale "e2ee_quick_title"}}</b><span class="st {{if .E2EE}}on{{else}}off{{end}}"><i></i><span>{{if .E2EE}}{{tr .Locale "e2ee_status_on"}}{{else}}{{tr .Locale "e2ee_status_off"}}{{end}}</span></span></div>
-          <p class="hint">{{tr .Locale "e2ee_summary"}}</p>
-          <details class="more">
-          <summary>{{tr .Locale "e2ee_details"}}</summary>
-          <div class="more-body">
-            <p class="hint">{{tr .Locale "e2ee_account_body"}}</p>
-            <ul class="hint">
-              <li>{{tr .Locale "e2ee_cost_js"}}</li>
-              <li>{{tr .Locale "e2ee_cost_lost"}}</li>
-              <li>{{tr .Locale "e2ee_cost_pin"}}</li>
-              <li>{{tr .Locale "e2ee_cost_resource"}}</li>
-              <li>{{tr .Locale "e2ee_cost_code"}}</li>
-              <li>{{tr .Locale "e2ee_cost_meta"}}</li>
-            </ul>
-          </div>
-          </details>
-          <form method="post" action="/account/e2ee" class="inline">
-          <input type="hidden" name="csrf" value="{{.CSRF}}">
-          <input type="hidden" name="e2ee" value="{{if .E2EE}}off{{else}}on{{end}}">
-          <button type="submit"{{if not .E2EE}} class="pri"{{end}}>{{if .E2EE}}{{tr .Locale "e2ee_disable"}}{{else}}{{tr .Locale "e2ee_enable"}}{{end}}</button>
-          </form>
-        </div>
-        {{end}}
       </div>
     </section>
     {{if .Keyring}}{{template "keyring-dialogs-set" .}}{{else}}{{template "keyring-dialogs-new" .}}{{end}}

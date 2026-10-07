@@ -68,10 +68,14 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, p
 	data.ExportWindow = int(store.ExportWindow / time.Hour)
 	data.Error = pageError
 	data.DeleteOpen = deleteOpen
-	data.E2EE = a.e2eeEnabled(r, user.ID)
 	data.KeyringLockChoices = store.KeyringLockChoices
 	if sealed, err := a.db.SealedIndex(r.Context(), user.ID); err == nil {
 		data.SealedCount = len(sealed)
+		for _, entry := range sealed {
+			if entry.QuickShare {
+				data.SealedQuickShares++
+			}
+		}
 	} else {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return

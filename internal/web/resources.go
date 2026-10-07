@@ -790,6 +790,15 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 			return
 		}
 		back("")
+	case "rekey":
+		// A link's keys made again in the browser: a code instead of the
+		// key in its address, a new code, or a key again.
+		if err := a.db.RekeySealedShare(r.Context(), user.ID, resourceID, r.FormValue("share_id"),
+			base64Field(r, "sealed_key"), base64Field(r, "owner_key")); err != nil {
+			refused("rekey share", err)
+			return
+		}
+		back("")
 	case "revoke":
 		if err := a.db.RevokeLink(r.Context(), user.ID, resourceID, r.FormValue("share_id")); err != nil {
 			refused("revoke share", err)
