@@ -95,7 +95,7 @@ password, asked for each time or read from PLAINMOTE_MASTER_PASSWORD.
 	"untitled":               {"(untitled)", "（未命名）"},
 	"encrypted_name":         {"(encrypted)", "（已加密）"},
 	"master_password_prompt": {"Master password: ", "主密码："},
-	"needs_master_password":  {"this resource is end-to-end encrypted: run this in a terminal to enter the master password, or set PLAINMOTE_MASTER_PASSWORD", "此资源已端到端加密：请在终端中运行以输入主密码，或设置 PLAINMOTE_MASTER_PASSWORD"},
+	"needs_master_password":  {"end-to-end encryption needs the master password: run this in a terminal to enter it, or set PLAINMOTE_MASTER_PASSWORD", "端到端加密需要主密码：请在终端中运行以输入主密码，或设置 PLAINMOTE_MASTER_PASSWORD"},
 	"no_master_password":     {"this account has no master password; set one on the account page", "此账号尚未设置主密码，请在账号页设置"},
 	"wrong_master_password":  {"the master password is incorrect", "主密码不正确"},
 	"sealed_unreadable":      {"resource %s could not be decrypted with this account's key", "资源 %s 无法用此账号的密钥解密"},

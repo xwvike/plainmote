@@ -6,11 +6,12 @@
 <ul>
   <li><strong>独立的分享链接：</strong>同一资源可创建多条链接，分别设置有效期和使用次数，撤销其中一条不影响其他链接。</li>
   <li><strong>免登录访问：</strong>接收者打开链接即可获取内容，无需注册或登录。</li>
-  <li><strong>访问记录：</strong>每次通过链接的访问均记录时间、来源 IP 和客户端信息，仅资源所有者可见。</li>
+  <li><strong>访问记录：</strong>每次通过链接的访问均记录时间、来源 IP{{if .Legal.Location}}、大致地理位置{{end}}和客户端信息，仅资源所有者可见。</li>
   <li><strong>历史版本：</strong>修改资源内容后，被替换的版本会保留一段时间，可查看、对比和恢复；访问记录注明每次获取的是哪个版本。</li>
   <li><strong>远程资源：</strong>可仅保存公网地址，每次访问时由服务器实时从源站获取内容。</li>
-  {{if .Legal.Anonymous}}<li><strong>临时分享：</strong>无需登录，在首页粘贴文本或上传文件即可生成有效期最长 {{legalDuration true .Legal.AnonymousTTL}}的链接。</li>
-  <li><strong>端到端加密（可选）：</strong>登录用户设置主密码后，可为资源和临时分享开启端到端加密，内容在浏览器中加密，本服务仅保存密文；密钥随链接传递的，本服务无法读取其内容，以 4 位口令代替密钥的，保护程度较低。</li>{{end}}
+  {{if .Legal.Anonymous}}<li><strong>临时分享：</strong>无需登录，在首页粘贴文本或上传文件即可生成有效期最长 {{legalDuration true .Legal.AnonymousTTL}}的链接。</li>{{end}}
+  <li><strong>命令行工具：</strong>可在终端中查看、编辑和上传资源，编辑时使用本机的编辑器，关闭后保存为新版本。</li>
+  <li><strong>端到端加密（可选）：</strong>登录用户设置主密码后，可为资源{{if .Legal.Anonymous}}和临时分享{{end}}开启端到端加密，内容在浏览器中加密，本服务仅保存密文，无法读取其内容；分享链接以 4 位口令代替密钥的，保护程度较低。</li>
 </ul>
 
 <h2>隐私与安全</h2>
@@ -29,11 +30,12 @@
 <ul>
   <li><strong>Independent share links:</strong> a single resource can have multiple links, each with its own validity period and use limit. Revoking one link does not affect the others.</li>
   <li><strong>Access without an account:</strong> recipients retrieve content simply by opening the link, with no registration or sign-in required.</li>
-  <li><strong>Access records:</strong> each access through a link records the time, source IP address and client information, visible only to the resource owner.</li>
+  <li><strong>Access records:</strong> each access through a link records the time, source IP address{{if .Legal.Location}}, approximate location{{end}} and client information, visible only to the resource owner.</li>
   <li><strong>Version history:</strong> when the content of a resource changes, the version it replaces is kept for a period and can be viewed, compared and restored; access records state which version each access received.</li>
   <li><strong>Remote resources:</strong> a resource can consist of a public URL only, with the content fetched live from the origin server by the Service on each access.</li>
-  {{if .Legal.Anonymous}}<li><strong>Quick shares:</strong> paste text or upload a file on the home page, without signing in, to generate a link valid for up to {{legalDuration false .Legal.AnonymousTTL}}.</li>
-  <li><strong>End-to-end encryption (optional):</strong> signed-in users who set a master password can turn it on for resources and quick shares; content is encrypted in the browser and the Service stores only the ciphertext; where the key travels in the link, the Service cannot read the content, and a four-character code used in place of the key offers weaker protection.</li>{{end}}
+  {{if .Legal.Anonymous}}<li><strong>Quick shares:</strong> paste text or upload a file on the home page, without signing in, to generate a link valid for up to {{legalDuration false .Legal.AnonymousTTL}}.</li>{{end}}
+  <li><strong>Command line tool:</strong> resources can be viewed, edited and uploaded from a terminal, editing in the machine’s own editor and saving a new version when it is closed.</li>
+  <li><strong>End-to-end encryption (optional):</strong> signed-in users who set a master password can turn it on for resources{{if .Legal.Anonymous}} and quick shares{{end}}; content is encrypted in the browser and the Service stores only the ciphertext and cannot read it; a share link opened with a four-character code in place of the key offers weaker protection.</li>
 </ul>
 
 <h2>Privacy and security</h2>

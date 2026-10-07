@@ -20,7 +20,7 @@
 
 <h3>（三）您存储的内容</h3>
 <p>包括您创建的资源的正文及其历史版本、名称和文件名等信息（远程资源仅保存其源地址），以及分享链接的备注、有效期、次数上限、使用次数和撤销状态。{{if .Legal.R2}}资源正文存放于 Cloudflare R2 对象存储，并以加密形式保存。{{end}}我们在技术上能够访问上述内容，但仅在排查故障、处理滥用举报或依法需要时查看。您设置主密码后，可以为资源开启端到端加密：其正文、历史版本、名称和文件名在您的浏览器中加密后上传，本服务仅保存密文，不保存亦无法获得解密所需的密钥，因此无法查看其内容；内容大小、更新时间、分享链接的状态和访问记录不在加密范围内。</p>
-<p>您设置主密码后，本服务保存由您的浏览器生成并加密的密钥材料，包括经主密码派生的密钥加密的账号密钥、经恢复密钥加密的同一账号密钥，以及派生所用的参数。主密码和恢复密钥不会发送至本服务；本服务无法据此获得主密码、恢复密钥或您加密的内容。</p>
+<p>您设置主密码后，本服务保存由您的浏览器生成并加密的密钥材料，包括经主密码派生的密钥加密的账号密钥、经恢复密钥加密的同一账号密钥、派生所用的参数，以及经账号密钥加密的各加密内容的密钥和分享链接的密钥或口令。主密码和恢复密钥不会发送至本服务；本服务无法据此获得主密码、恢复密钥或您加密的内容。您使用命令行工具打开或创建加密内容时，主密码同样仅在您的设备上使用，命令行工具不保存主密码。</p>
 
 <h3>（四）分享链接访问记录</h3>
 <p>通过分享链接获取内容时，无论请求成功或被拒绝，本服务均会生成访问记录，内容包括访问时间、访问结果、IP 地址、浏览器与设备信息、来源页面以及请求地址等网络请求信息。{{if .Legal.Location}}访问记录同时包括根据 IP 地址估算的大致地理位置，精确至国家或地区、省级行政区和城市；该位置在访问时由网络服务商估算，可能与实际位置不符，本服务不获取更精确的位置信息。{{end}}</p>
@@ -29,7 +29,7 @@
 <h3>（五）临时分享</h3>
 <p>首页的临时分享（界面中称“快速分享”）无需登录即可使用。本服务保存您提交的文本或文件及文件名（开启端到端加密的，仅保存密文，见本节第三段），链接最长在 {{legalDuration true .Legal.AnonymousTTL}}后失效，失效后相关内容将被删除。本服务不记录临时分享创建者的 IP 地址。在登录状态下创建的临时分享（包括通过命令行工具创建的）归属于您的账号，显示在“我的资源”中，计入账号的存储容量，并在链接失效时删除；在此之前，您可以将其转为资源，转为资源后按本节第（三）项的规定保存。</p>
 <p>未登录状态下创建的临时分享，其访问记录不归属于任何账号，任何用户均无法查看；创建者登录后将其保存至个人资源的，此前的访问记录随之归属其账号。登录状态下创建的临时分享，其访问记录归属于创建者，按本节第（四）项的规定处理，临时分享删除后仍予保留。</p>
-<p>已登录用户设置主密码后，可在首页创建临时分享时选择端到端加密。选择加密的，临时分享在您的浏览器中加密后再上传，与开启端到端加密的资源相同：本服务仅保存密文，不保存亦无法获得解密所需的密钥或口令。分享链接的密钥或口令经您的账号密钥加密后保存，仅供您以主密码解锁后再次查看。密钥随链接传递的，本服务无法读取、恢复或审查其内容；以 4 位口令代替密钥的，由于口令的可能组合有限，持有密文者可通过逐一尝试恢复其内容，此种方式的保护程度较低。内容大小以及访问时间、IP 地址等访问记录信息不在加密范围内，仍按本节前述关于临时分享访问记录的规定处理。加密与解密程序由本服务提供，其安全性取决于本服务所提供代码的完整性{{if .Legal.SourceURL}}；本服务的源代码公开于 <a href="{{.Legal.SourceURL}}" rel="noopener">{{.Legal.SourceURL}}</a>，可供核对{{end}}。</p>
+<p>已登录用户设置主密码后，在首页或通过命令行工具创建临时分享时可以选择端到端加密。选择加密的，临时分享在您的浏览器中加密后再上传，与开启端到端加密的资源相同：本服务仅保存密文，不保存亦无法获得解密所需的密钥或口令。分享链接的密钥或口令经您的账号密钥加密后保存，仅供您以主密码解锁后再次查看。密钥随链接传递的，本服务无法读取、恢复或审查其内容；以 4 位口令代替密钥的，由于口令的可能组合有限，持有密文者可通过逐一尝试恢复其内容，此种方式的保护程度较低。内容大小以及访问时间、IP 地址等访问记录信息不在加密范围内，仍按本节前述关于临时分享访问记录的规定处理。加密与解密程序由本服务提供，其安全性取决于本服务所提供代码的完整性{{if .Legal.SourceURL}}；本服务的源代码公开于 <a href="{{.Legal.SourceURL}}" rel="noopener">{{.Legal.SourceURL}}</a>，可供核对{{end}}。</p>
 {{end}}
 <h3>（{{if .Legal.Anonymous}}六{{else}}五{{end}}）数据导出记录</h3>
 <p>您导出数据时，本服务记录导出时间，仅用于限制导出频率，并在 {{legalDuration true .Legal.ExportWindow}}后删除。</p>
@@ -39,7 +39,7 @@
 
 <h2>二、我们如何使用信息</h2>
 <p>我们仅将上述信息用于以下目的：提供本服务，包括登录、内容存储与分发，以及向资源所有者展示访问记录；保障服务安全，调查和处理滥用行为；排查和修复故障。我们不会将上述信息用于广告投放、用户画像或机器学习模型训练，也不会出售上述信息。</p>
-<p>运营者通过管理接口管理本服务。该接口仅提供账号与资源的元数据（如 GitHub 用户名、资源名称、文件名、类型、大小及分享链接的数量与状态）和汇总统计，不提供资源内容、分享链接地址或访问记录中的访问者信息。通过该接口进行的停用账号、下架或删除资源等操作均记录操作时间、对象、原因及操作来源 IP。</p>
+<p>运营者通过管理接口管理本服务。该接口仅提供账号与资源的元数据（如 GitHub 用户名、资源名称、文件名、类型、大小、分享链接的数量与状态、账号是否设置主密码以及资源是否加密）和汇总统计，不提供资源内容、分享链接地址、任何密钥材料或访问记录中的访问者信息。通过该接口进行的停用账号、下架或删除资源等操作均记录操作时间、对象、原因及操作来源 IP。</p>
 
 <h2>三、我们如何共享和披露信息</h2>
 <ul>
@@ -68,7 +68,7 @@
 <h2>五、您的权利</h2>
 <ul>
   <li>登录后，您可以随时查看、修改和删除您的资源与分享链接，并查看相应的访问记录。</li>
-  <li>您可以在“账号”页面导出您的数据，导出内容包括基本账号信息、已存储的文件及其历史版本、远程资源地址和访问记录；导出文件不包含分享链接地址或分享设置。每个账号每 {{legalDuration true .Legal.ExportWindow}}最多可导出 {{.Legal.ExportLimit}} 次。</li>
+  <li>您可以在“账号”页面导出您的数据，导出内容包括基本账号信息、已存储的文件及其历史版本、远程资源地址和访问记录；导出文件不包含分享链接地址或分享设置。加密内容以密文形式导出，并附带解密所需的密钥材料（经主密码或恢复密钥保护）；在浏览器中以主密码解锁后导出的，由浏览器解密后以明文保存。每个账号每 {{legalDuration true .Legal.ExportWindow}}最多可导出 {{.Legal.ExportLimit}} 次。</li>
   <li>您可以在“账号”页面删除账号。删除后，账号及其资源、分享链接、访问记录和其他关联数据将从在线服务中移除，已发出的链接立即失效，且无法通过本服务恢复；短期备份按上述期限清除。</li>
   <li>如您无法登录，也可以发送邮件至 {{template "legal-email" .}} 并注明您的 GitHub 用户名，申请删除账号或获取数据副本；我们可能要求您证明对该 GitHub 账号的控制权，并将在收到请求后 30 日内处理。</li>
   <li>若您并非本服务用户，但您的 IP 地址出现在他人的访问记录中，您可以联系我们申请删除相关记录。</li>
@@ -110,7 +110,7 @@
 
 <h3>1.3 Content you store</h3>
 <p>This includes the body and earlier versions, name, filename and similar details of the resources you create (for remote resources, only the source URL), together with the note, validity period, use limit, use count and revocation status of your share links. {{if .Legal.R2}}Resource bodies are held in Cloudflare R2 object storage in encrypted form. {{end}}We are technically able to access this content, but do so only to diagnose faults, handle abuse reports or where required by law. If you set a master password, you can turn on end-to-end encryption for a resource: its body, earlier versions, name and filename are encrypted in your browser before upload, and the Service stores only the ciphertext and neither stores nor can obtain the keys needed to decrypt it, so it cannot see the content. The size, update times, share link status and access records are not encrypted.</p>
-<p>If you set a master password, the Service stores key material generated and encrypted by your browser: your account key encrypted with the key derived from the master password, the same account key encrypted with the recovery key, and the parameters of the derivation. The master password and the recovery key are never sent to the Service, and the Service cannot obtain from this material the master password, the recovery key or any content you encrypt.</p>
+<p>If you set a master password, the Service stores key material generated and encrypted by your browser: your account key encrypted with the key derived from the master password, the same account key encrypted with the recovery key, the parameters of the derivation, and, encrypted with the account key, the key of each piece of encrypted content and the key or code of each share link. The master password and the recovery key are never sent to the Service, and the Service cannot obtain from this material the master password, the recovery key or any content you encrypt. When you open or create encrypted content with the command line tool, the master password is likewise used only on your device, and the command line tool does not store it.</p>
 
 <h3>1.4 Share link access records</h3>
 <p>Whenever content is requested through a share link, whether the request is served or refused, the Service creates an access record containing network request information such as the time, outcome, IP address, browser and device information, referring page and requested address.{{if .Legal.Location}} Access records also include an approximate location estimated from the IP address, to the level of country or region, first-level administrative division and city. The location is estimated by the network provider at the time of access and may not match the actual location; the Service does not obtain more precise location information.{{end}}</p>
@@ -119,7 +119,7 @@
 <h3>1.5 Quick shares</h3>
 <p>Quick shares on the home page can be created without an account. The Service stores the text or file and the filename you submit (or, with end-to-end encryption, only the ciphertext; see the third paragraph of this section). The link expires after at most {{legalDuration false .Legal.AnonymousTTL}}, after which the related content is deleted. The Service does not record the IP address of the person who creates a quick share. A quick share created while signed in (including one created with the command line tool) belongs to your account: it appears under My resources, counts toward your account’s storage and is deleted when its link expires. Before then you may convert it into a resource, after which it is kept as described in section 1.3.</p>
 <p>Access records for quick shares created without signing in do not belong to any account and cannot be viewed by any user; if the creator signs in and saves such a quick share to their resources, its existing access records are transferred to that account. Access records for quick shares created while signed in belong to the creator, are handled as described in section 1.4 and are kept after the quick share is deleted.</p>
-<p>Signed-in users who have set a master password can choose end-to-end encryption when creating a quick share on the home page. Such a quick share is encrypted in your browser before it is uploaded, as end-to-end encrypted resources are: the Service stores only the ciphertext and neither stores nor can obtain the key or code needed to decrypt it. The key or code of the share link is stored encrypted with your account key, so that only you can see it again after unlocking with your master password. Where the key travels in the link, the Service cannot read, recover or review the content; where a four-character code is used instead of a key, the small number of possible codes means that anyone holding the ciphertext could recover the content by trying them all, and this offers weaker protection. The size of the content and access record information such as the time of access and IP address are not encrypted and are handled as set out above for quick share access records. The encryption and decryption code is provided by the Service, and its security depends on the integrity of the code the Service delivers{{if .Legal.SourceURL}}; the source code of the Service is published at <a href="{{.Legal.SourceURL}}" rel="noopener">{{.Legal.SourceURL}}</a> and can be checked{{end}}.</p>
+<p>Signed-in users who have set a master password can choose end-to-end encryption when creating a quick share on the home page or with the command line tool. Such a quick share is encrypted in your browser before it is uploaded, as end-to-end encrypted resources are: the Service stores only the ciphertext and neither stores nor can obtain the key or code needed to decrypt it. The key or code of the share link is stored encrypted with your account key, so that only you can see it again after unlocking with your master password. Where the key travels in the link, the Service cannot read, recover or review the content; where a four-character code is used instead of a key, the small number of possible codes means that anyone holding the ciphertext could recover the content by trying them all, and this offers weaker protection. The size of the content and access record information such as the time of access and IP address are not encrypted and are handled as set out above for quick share access records. The encryption and decryption code is provided by the Service, and its security depends on the integrity of the code the Service delivers{{if .Legal.SourceURL}}; the source code of the Service is published at <a href="{{.Legal.SourceURL}}" rel="noopener">{{.Legal.SourceURL}}</a> and can be checked{{end}}.</p>
 {{end}}
 <h3>1.{{if .Legal.Anonymous}}6{{else}}5{{end}} Data export records</h3>
 <p>When you export your data, the Service records the time of the export solely to limit how often exports can be made, and deletes the record after {{legalDuration false .Legal.ExportWindow}}.</p>
@@ -129,7 +129,7 @@
 
 <h2>2. How we use information</h2>
 <p>We use the information above only to: provide the Service, including sign-in, content storage and delivery, and displaying access records to resource owners; maintain the security of the Service and investigate and address abuse; and diagnose and fix faults. We do not use this information for advertising, profiling or training machine learning models, and we do not sell it.</p>
-<p>The operator manages the Service through an administration interface. It provides only metadata about accounts and resources (such as the GitHub username, resource name, filename, type and size, and the number and state of share links) and aggregate statistics; it does not provide resource content, share link addresses or visitor information from access records. Actions taken through it, such as suspending an account or taking down or deleting a resource, are recorded with the time, the object, the reason and the source IP address of the action.</p>
+<p>The operator manages the Service through an administration interface. It provides only metadata about accounts and resources (such as the GitHub username, resource name, filename, type and size, the number and state of share links, whether an account has set a master password and whether a resource is encrypted) and aggregate statistics; it does not provide resource content, share link addresses, any key material or visitor information from access records. Actions taken through it, such as suspending an account or taking down or deleting a resource, are recorded with the time, the object, the reason and the source IP address of the action.</p>
 
 <h2>3. How we share and disclose information</h2>
 <ul>
@@ -158,7 +158,7 @@
 <h2>5. Your rights</h2>
 <ul>
   <li>When signed in, you may view, modify and delete your resources and share links at any time, and view their access records.</li>
-  <li>You may export your data from the Account page. The export contains basic account information, stored files and their earlier versions, remote resource addresses and access records; share link addresses and settings are not included. Each account may export up to {{.Legal.ExportLimit}} times every {{legalDuration false .Legal.ExportWindow}}.</li>
+  <li>You may export your data from the Account page. The export contains basic account information, stored files and their earlier versions, remote resource addresses and access records; share link addresses and settings are not included. Encrypted content is exported as ciphertext together with the key material needed to decrypt it, which remains protected by the master password or the recovery key; when you export after unlocking with your master password in the browser, the browser decrypts it and saves it as plaintext. Each account may export up to {{.Legal.ExportLimit}} times every {{legalDuration false .Legal.ExportWindow}}.</li>
   <li>You may delete your account from the Account page. The account and its resources, share links, access records and other associated data are removed from the active Service, links already sent stop working immediately, and the data cannot be restored through the Service; short-term backups are cleared as described above.</li>
   <li>If you are unable to sign in, you may email {{template "legal-email" .}} with your GitHub username to request account deletion or a copy of your data; we may ask you to demonstrate control of that GitHub account, and will process the request within 30 days of receipt.</li>
   <li>If you are not a user of the Service but your IP address appears in another user’s access records, you may contact us to request deletion of the relevant records.</li>

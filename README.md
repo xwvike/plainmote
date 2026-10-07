@@ -19,13 +19,13 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 
 - **Quick share**: no account is required. Text or a file of up to 10 MiB submitted on the home page receives a share link valid for 10 minutes, 1 hour, 1 day, 7 days or 30 days; the default is 1 hour. Content can also be submitted from the command line with curl. A quick share created while signed in appears, marked, under My resources and its access history belongs to its creator; it is read only until its link expires and can be converted into an ordinary resource to keep it, otherwise its content is deleted at expiry while its access history is kept.
 - **Resources and share links**: signed-in users can store files (100 MiB per account by default) and issue any number of share links for each resource. Each link has its own expiry and use limit; revoking one leaves the others in effect. When a resource is updated, every link keeps its address and serves the new content immediately.
-- **Access history**: every access through a link is recorded with its time, result, source IP address and client details, visible only to the owner of the resource. Records are kept for 30 days by default.
+- **Access history**: every access through a link is recorded with its time, result, source IP address and client details, and optionally the approximate location supplied by Cloudflare, visible only to the owner of the resource. Records are kept for 30 days by default.
 - **Version history**: each save that changes a resource's content retains the version it replaces, up to 10 per resource, each for 30 days after it was replaced. Earlier versions can be viewed, compared with any other version, restored as a new version, copied into a new resource or deleted individually. Text is compared line by line; images, audio, video and other files are shown side by side with their size, SHA-256 digest and, for images, dimensions. Earlier versions count towards storage but occupy only the space not used by current content; when a save requires that space, the versions replaced longest ago are removed first. The access history records which version each access received. A save based on an outdated version is not applied; the conflict is reported instead, so that newer content is not overwritten.
 - **Remote resources**: a resource may consist of a public URL only, in which case the service fetches the content from the origin on each access.
 - **Conditional requests**: share links answer `HEAD`, and responses carry an `ETag` (and, for stored content, `Last-Modified`). A request with `If-None-Match` or `If-Modified-Since` receives `304` with no body while the content is unchanged. Every response counts as one use and is recorded.
 - **Editor**: built on CodeMirror 6, with syntax highlighting for YAML, JSON, TOML, XML, INI and `.env`, shell, nginx, Dockerfile, SQL, diffs and logs; the quick share box uses the same editor. UTF-8, UTF-16, GB18030, Big5, Shift_JIS and other encodings are detected, and files are saved in their original encoding and line endings.
-- **Command line**: `plainmote` views, edits and uploads resources and makes quick shares from a terminal, editing in the machine's own editor and saving a new version when it is closed; signing in is confirmed in a browser.
-- **End-to-end encryption (optional)**: signed-in users can set a master password and turn on end-to-end encryption for individual resources: content, name, filename and earlier versions are encrypted in the browser before upload, and the service stores only ciphertext; each share link carries its own key, and the recipient decrypts in the browser. Quick shares can be encrypted the same way, with a switch in the home page's box; their owner can show the link again after unlocking. See [docs/encryption.md](docs/encryption.md) for the design and formats.
+- **Command line**: `plainmote` views, edits and uploads resources, end-to-end encrypted ones included, and makes quick shares from a terminal, editing in the machine's own editor and saving a new version when it is closed; signing in is confirmed in a browser.
+- **End-to-end encryption (optional)**: signed-in users can set a master password and turn on end-to-end encryption for individual resources: content, name, filename and earlier versions are encrypted in the browser before upload, and the service stores only ciphertext; each share link carries its own key in its address, or opens with a four-character code instead, and the recipient decrypts in the browser. Quick shares can be encrypted the same way, with a switch in the home page's box; their owner can show the link again after unlocking. See [docs/encryption.md](docs/encryption.md) for the design and formats.
 - **Media preview**: when a share link is opened in a browser, images are displayed and audio and video are played; other clients receive the original bytes.
 - **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, selected from the browser's language. The home page and legal pages also have a separate address per language (such as `/zh-cn/` or `/ja/`) for search engines. Light and dark themes are available.
 
@@ -105,7 +105,7 @@ curl https://plainmote.link/paste    # prints usage
 - **No web hosting**: types a browser may execute (HTML, scripts, SVG and similar) are never delivered as themselves. For quick shares made without an account, text is delivered as plain text, images, audio and video confirmed by their file signatures are delivered as their own types, and all other files are delivered only as downloads; encrypted shares are always delivered as ciphertext.
 - **Only the site's own scripts**: a content security policy lets pages run only the script files the site serves, never inline scripts, and keeps other sites from framing them.
 - **Command line tokens**: issued by device authorization and stored only as a digest. A token is valid for 90 days from sign-in, is read-only or read-write, and cannot delete resources, manage share links or change the account. Every signed-in device, with its last use, is listed on the Account page and can be revoked there. The API accepts a token only in the `Authorization` header, never from a cookie or the address, and answers no cross-site requests.
-- **End-to-end encryption**: uses only the browser's built-in WebCrypto, with AES-256-GCM. By default the key is carried in the part of the link after `#`, which browsers do not send to the server. The creator may use a four-character code instead, in which case the recipient's browser derives the key from the code with PBKDF2-SHA-256 (600,000 iterations).
+- **End-to-end encryption**: uses only the browser's built-in WebCrypto (and the Go standard library in the command line), with AES-256-GCM. The master password never leaves the device: PBKDF2-SHA-256 (600,000 iterations) derives from it a key that wraps a random account key, which in turn wraps a random key for each encrypted resource; the service keeps these keys only wrapped. A share link's key is carried in the part of the address after `#`, which browsers do not send to the server, or is derived in the recipient's browser from a four-character code with PBKDF2-SHA-256 (600,000 iterations).
 - **Limits of encryption**: decryption requires JavaScript; content cannot be recovered if both the master password and the recovery key are lost; content size and access history are not encrypted. A code is drawn from 31 characters, about 920,000 combinations: it prevents viewing by someone who merely sees the link, but not by an attacker who obtains the link and tries every code, so sensitive content should be shared with the full link and its key. Because the encryption code is delivered by the service, its trustworthiness depends on the integrity of the deployed code; the published source code allows this to be verified.
 
 ## Self-hosting
@@ -148,6 +148,7 @@ Optional:
 | `PLAINMOTE_LISTEN` | `:8964` | HTTP listen address |
 | `PLAINMOTE_BLOB_REGION` | `auto` | S3 region |
 | `PLAINMOTE_TRUSTED_PROXIES` | empty | Trusted proxy IPs or CIDRs, comma-separated |
+| `PLAINMOTE_VISITOR_LOCATION` | empty | `cloudflare` records visitors' approximate location in the access history from Cloudflare's location headers; requires `PLAINMOTE_TRUSTED_PROXIES` |
 | `PLAINMOTE_SESSION_TTL` | `720h` | Sign-in session lifetime |
 | `PLAINMOTE_MAX_CONTENT_MIB` | `10` | Size limit for one piece of content |
 | `PLAINMOTE_LOG_RETENTION` | `720h` | How long access history is kept; `0` keeps it forever |
@@ -174,6 +175,7 @@ When `PLAINMOTE_CONTACT_EMAIL` is set, the service provides an about page, a pri
 - [Deployment](docs/deployment.md): building the image, external services, the public entry point, upgrades and rollbacks, runtime constraints and backups
 - [Administration](docs/admin.md): what administration covers, setup and the admin API reference
 - [Command line API](docs/api.md): device authorization, tokens and the `/api/v1/` reference
+- [End-to-end encryption](docs/encryption.md): keys, formats, flows and the threat model
 
 ## Development
 
@@ -194,6 +196,8 @@ go vet ./...
 node tools/e2ee/e2ee_test.mjs
 npm --prefix tools/codemirror test
 ```
+
+With Node.js installed, `go test` also runs the browser's encryption, comparison and export modules, and checks that the command line and the browser read each other's encrypted content; without it those tests are skipped.
 
 The dependencies of the editor and of encoding detection are committed as a bundle and are not loaded from a third-party CDN at runtime. The bundle is rebuilt with `tools/codemirror/build.sh`; regular builds do not require Node.js.
 
