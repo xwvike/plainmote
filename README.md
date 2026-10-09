@@ -116,12 +116,14 @@ PlainMote is a single stateless Go service with the following dependencies:
 - S3-compatible object storage (such as Cloudflare R2 or MinIO)
 - A GitHub OAuth App (for sign-in)
 
+The image is published as `ghcr.io/xwvike/plainmote` for amd64 and arm64, built in GitHub Actions with a signed build provenance attestation. The server needs only `compose.yaml` and `.env`:
+
 ```bash
-cp .env.example .env    # fill in the database, object storage, OAuth and keys
+cp .env.example .env    # fill in the image version, database, object storage, OAuth and keys
 docker compose up -d
 ```
 
-Building the image, preparing the external services, public exposure, upgrades and rollbacks are described in the [deployment guide](docs/deployment.md).
+The image and its tags, preparing the external services, public exposure, upgrades and rollbacks are described in the [deployment guide](docs/deployment.md).
 
 ### Configuration
 

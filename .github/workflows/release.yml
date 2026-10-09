@@ -1,0 +1,93 @@
+# Publishes the image to ghcr.io/xwvike/plainmote for amd64 and arm64.
+# A version tag (v1.2.3, v1.2.3-rc.1) publishes that version, its commit and,
+# for a final release, latest; a manual run publishes the commit alone.
+# Deployment stays with the servers, which pull: nothing here can reach one.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The version is stamped into the service and the command line, and the
+      # install scripts carry it, so it is held to what they accept.
+      - id: version
+        run: |
+          commit="$(git rev-parse --short=12 HEAD)"
+          tags="$IMAGE:$commit"
+          version="$commit"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if ! printf '%s' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+              echo "::error::$GITHUB_REF_NAME is not a version tag such as v1.2.3 or v1.2.3-rc.1"
+              exit 1
+            fi
+            version="$GITHUB_REF_NAME"
+            tags="$tags,$IMAGE:$version"
+            case "$version" in *-*) ;; *) tags="$tags,$IMAGE:latest" ;; esac
+          fi
+          {
+            echo "version=$version"
+            echo "tags=$tags"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          sbom: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          tags: ${{ steps.version.outputs.tags }}
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.version.outputs.tags }}
+        run: |
+          {
+            echo "### $IMAGE"
+            echo
+            echo '```dotenv'
+            echo "PLAINMOTE_IMAGE=$IMAGE@$DIGEST"
+            echo '```'
+            echo
+            echo "Tags: ${TAGS//$IMAGE:/}"
+          } >> "$GITHUB_STEP_SUMMARY"

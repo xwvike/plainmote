@@ -5,86 +5,77 @@
 生产容器只运行 PlainMote Web 服务。PostgreSQL、S3 兼容对象存储、TLS 和公网入口均在容器外提供；
 容器本地没有需要保留的数据，也不读取配置文件。
 
-## 1. 构建镜像
+## 1. 获取镜像
 
-在仓库根目录构建当前机器架构的本地镜像：
+每个版本都以公开镜像发布到 GitHub Container Registry，包含 `linux/amd64` 与 `linux/arm64`：
 
-```bash
-test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
-VERSION="$(git rev-parse --short=12 HEAD)"
-docker buildx build \
-  --load \
-  --build-arg VERSION="$VERSION" \
-  --build-arg REVISION="$(git rev-parse HEAD)" \
-  --tag "plainmote:$VERSION" \
-  .
-```
+| 标签 | 指向 |
+| --- | --- |
+| `ghcr.io/xwvike/plainmote:v1.2.3` | 一个发布版本 |
+| `ghcr.io/xwvike/plainmote:<commit>` | 构建所用提交哈希的前 12 位 |
+| `ghcr.io/xwvike/plainmote:latest` | 最新的发布版本，仅供试用 |
 
-构建过程同时为 macOS、Linux 和 Windows 的 amd64 与 arm64 编译 `plainmote` 命令行，放在镜像的 `/cli` 目录中，
-由服务的 `/cli` 页面提供下载；`VERSION` 同时写入服务端与命令行，二者版本始终一致。命令行文件使镜像增加约
-35 MiB。
-
-部署到普通 x86 Linux 服务器时，也可以明确构建 amd64 镜像：
+部署文件应始终使用版本标签、提交标签或镜像摘要，不能依赖 `latest`，否则无法确认当前运行的代码，也无法可靠回滚。
+镜像摘要比标签更严格，标签被移动后摘要仍然指向原来的内容。查询摘要：
 
 ```bash
-test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
-VERSION="$(git rev-parse --short=12 HEAD)"
-docker buildx build \
-  --load \
-  --platform linux/amd64 \
-  --build-arg VERSION="$VERSION" \
-  --build-arg REVISION="$(git rev-parse HEAD)" \
-  --tag "plainmote:$VERSION" \
-  .
+docker buildx imagetools inspect ghcr.io/xwvike/plainmote:v1.2.3
 ```
 
-发布到 GHCR，并同时生成 amd64 与 arm64 镜像：
-
-```bash
-export IMAGE=ghcr.io/OWNER/plainmote    # OWNER: your GitHub user or organisation
-export VERSION="$(git rev-parse --short=12 HEAD)"
-
-test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
-printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u OWNER --password-stdin
-docker buildx build \
-  --push \
-  --platform linux/amd64,linux/arm64 \
-  --build-arg VERSION="$VERSION" \
-  --build-arg REVISION="$(git rev-parse HEAD)" \
-  --tag "$IMAGE:$VERSION" \
-  .
-```
-
-确认这个版本可以部署后，再单独增加 `latest` 标签。部署文件应始终使用提交版本标签或镜像摘要，不能依赖
-`latest`，否则无法确认当前运行的代码，也无法可靠回滚。
-
-```bash
-docker buildx imagetools create \
-  --tag "$IMAGE:latest" \
-  "$IMAGE:$VERSION"
-```
-
-镜像摘要比标签更严格，标签被重新推送后摘要仍然指向原来的内容。发布后可查询摘要：
-
-```bash
-docker buildx imagetools inspect "$IMAGE:$VERSION"
-```
-
-需要完全固定构建产物时，在服务器 `.env` 中使用输出的 manifest list 摘要：
+并在服务器 `.env` 中固定：
 
 ```dotenv
-PLAINMOTE_IMAGE=ghcr.io/OWNER/plainmote@sha256:DIGEST
+PLAINMOTE_IMAGE=ghcr.io/xwvike/plainmote@sha256:DIGEST
 ```
 
-GHCR Token 至少需要 `write:packages`；私有镜像的部署机器需要 `read:packages`。镜像使用
-OCI 标签记录源码仓库、版本和完整提交哈希，可以通过以下命令核对：
+镜像由仓库的 [发布工作流](../.github/workflows/release.yml) 在 GitHub Actions 中构建，不在任何人的机器上构建，并附带经签名的构建来源证明。
+核对镜像确由本仓库的该工作流构建：
 
 ```bash
-docker image inspect "plainmote:$VERSION" \
+gh attestation verify oci://ghcr.io/xwvike/plainmote@sha256:DIGEST --owner xwvike
+```
+
+镜像同时使用 OCI 标签记录源码仓库、版本和完整提交哈希：
+
+```bash
+docker image inspect ghcr.io/xwvike/plainmote:v1.2.3 \
   --format '{{json .Config.Labels}}'
 ```
 
-不使用镜像仓库时，可以把单架构镜像导出后传到服务器：
+构建过程同时为 macOS、Linux 和 Windows 的 amd64 与 arm64 编译 `plainmote` 命令行，放在镜像的 `/cli` 目录中，
+由服务的 `/cli` 页面提供下载；版本号同时写入服务端与命令行，二者版本始终一致。命令行文件使镜像增加约
+35 MiB。
+
+### 发布版本
+
+在 `main` 上已推送的提交打标签并推送：
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+工作流发布 `v1.2.3` 与提交标签；版本号不带 `-rc.1` 等后缀时，同时更新 `latest`。运行摘要中给出写入 `.env` 的镜像摘要。
+手动运行工作流时只发布提交标签。工作流只使用仓库自身的 `GITHUB_TOKEN`，不持有任何服务器的凭据，镜像由服务器自行拉取。
+首次发布后，应在 GitHub 上该包的设置中确认其为公开；私有包要求每台服务器在拉取前登录（见第 3 节）。
+
+### 自行构建
+
+在仓库根目录构建当前机器架构的本地镜像，例如修改过的版本：
+
+```bash
+test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
+VERSION="$(git rev-parse --short=12 HEAD)"
+docker buildx build \
+  --load \
+  --build-arg VERSION="$VERSION" \
+  --build-arg REVISION="$(git rev-parse HEAD)" \
+  --tag "plainmote:$VERSION" \
+  .
+```
+
+在其他机器上为普通 x86 服务器构建时，加上 `--platform linux/amd64`。发布双架构镜像到自己的镜像仓库时，把 `--load`
+换成 `--push --platform linux/amd64,linux/arm64`，并以该仓库的地址作为标签。不使用镜像仓库时，可以把单架构镜像导出后传到服务器：
 
 ```bash
 docker save "plainmote:$VERSION" | gzip > "plainmote-$VERSION.tar.gz"
@@ -95,6 +86,9 @@ docker save "plainmote:$VERSION" | gzip > "plainmote-$VERSION.tar.gz"
 ```bash
 gzip -dc "plainmote-$VERSION.tar.gz" | docker load
 ```
+
+部署修改过的代码时，须把 `PLAINMOTE_SOURCE_URL` 指向修改后的源代码（AGPL-3.0）；发布到 GHCR 时，还应修改 `Dockerfile`
+中的 `org.opencontainers.image.source` 标签，GHCR 据此把镜像包关联到仓库。
 
 ## 2. 准备外部服务
 
@@ -141,10 +135,10 @@ R2 使用 `PLAINMOTE_BLOB_REGION=auto`。Bucket 不需要公开访问，所有�
   .env
 ```
 
-复制 [`.env.example`](../.env.example) 为 `.env`，填写全部必填项，并把镜像固定到刚刚发布的版本或摘要：
+复制 [`.env.example`](../.env.example) 为 `.env`，填写全部必填项，并把镜像固定到某个版本或摘要（见第 1 节）：
 
 ```dotenv
-PLAINMOTE_IMAGE=ghcr.io/OWNER/plainmote:COMMIT_TAG
+PLAINMOTE_IMAGE=ghcr.io/xwvike/plainmote:v1.2.3
 ```
 
 生成 Token 加密密钥：
@@ -169,10 +163,10 @@ openssl rand -hex 32
 chmod 600 .env
 ```
 
-如果镜像为私有包，先在部署机器登录 GHCR：
+如果镜像为私有包，先在部署机器登录其镜像仓库；GHCR 使用具有 `read:packages` 权限的 Token：
 
 ```bash
-printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u OWNER --password-stdin
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u USER --password-stdin
 ```
 
 ## 4. 启动与核验
@@ -221,7 +215,7 @@ Docker 或 Tunnel 场景下，应用看到的直连地址可能是网桥网关�
 
 ## 6. 升级与回滚
 
-每次发布都构建新的提交标签。升级时修改 `.env` 中的 `PLAINMOTE_IMAGE`，然后执行：
+每个版本都有各自的标签与摘要（见第 1 节）。升级时修改 `.env` 中的 `PLAINMOTE_IMAGE`，然后执行：
 
 ```bash
 docker compose pull
@@ -229,7 +223,7 @@ docker compose up -d --remove-orphans
 curl --fail --silent --show-error http://127.0.0.1:8964/healthz
 ```
 
-查看启动日志并完成一次登录、资源读取和分享访问。回滚时把 `PLAINMOTE_IMAGE` 改回上一个提交标签，再执行相同命令。
+查看启动日志并完成一次登录、资源读取和分享访问。回滚时把 `PLAINMOTE_IMAGE` 改回上一个版本或摘要，再执行相同命令。
 
 命令行随镜像一同更新：新版本上线后，`/cli` 提供的就是新版本的命令行，用户重新执行安装命令即可升级，已有的登录不受影响。
 

@@ -4,82 +4,70 @@ English | [简体中文](deployment.zh-CN.md)
 
 The production container runs only the PlainMote web service. PostgreSQL, S3-compatible object storage, TLS and the public entry point are provided outside the container; the container holds no data that needs to be kept and reads no configuration file.
 
-## 1. Building the image
+## 1. Getting the image
 
-Build a local image for the current machine's architecture from the repository root:
+Every release is published to GitHub Container Registry as a public image for `linux/amd64` and `linux/arm64`:
 
-```bash
-test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
-VERSION="$(git rev-parse --short=12 HEAD)"
-docker buildx build \
-  --load \
-  --build-arg VERSION="$VERSION" \
-  --build-arg REVISION="$(git rev-parse HEAD)" \
-  --tag "plainmote:$VERSION" \
-  .
-```
+| Tag | Points at |
+| --- | --- |
+| `ghcr.io/xwvike/plainmote:v1.2.3` | A release |
+| `ghcr.io/xwvike/plainmote:<commit>` | The commit it was built from, by its first 12 characters |
+| `ghcr.io/xwvike/plainmote:latest` | The newest release, for trying it out only |
 
-The build also compiles the `plainmote` command line for macOS, Linux and Windows on amd64 and arm64 into the image's `/cli` directory, from which the service's `/cli` page offers them for download. `VERSION` is stamped into both the service and the command line, so their versions always match. The command line builds add about 35 MiB to the image.
-
-For an ordinary x86 Linux server, an amd64 image can be built explicitly:
+Deployment files should use a release, a commit or a digest, never `latest`; otherwise the running code cannot be identified and a rollback cannot be relied on. A digest is stricter than a tag: it keeps pointing at the same content even if a tag is moved. Look it up:
 
 ```bash
-test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
-VERSION="$(git rev-parse --short=12 HEAD)"
-docker buildx build \
-  --load \
-  --platform linux/amd64 \
-  --build-arg VERSION="$VERSION" \
-  --build-arg REVISION="$(git rev-parse HEAD)" \
-  --tag "plainmote:$VERSION" \
-  .
+docker buildx imagetools inspect ghcr.io/xwvike/plainmote:v1.2.3
 ```
 
-To publish to GHCR with both amd64 and arm64 images:
-
-```bash
-export IMAGE=ghcr.io/OWNER/plainmote    # OWNER: your GitHub user or organisation
-export VERSION="$(git rev-parse --short=12 HEAD)"
-
-test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
-printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u OWNER --password-stdin
-docker buildx build \
-  --push \
-  --platform linux/amd64,linux/arm64 \
-  --build-arg VERSION="$VERSION" \
-  --build-arg REVISION="$(git rev-parse HEAD)" \
-  --tag "$IMAGE:$VERSION" \
-  .
-```
-
-Add the `latest` tag separately, once the version is known to be deployable. Deployment files should always use a commit tag or an image digest, never `latest`; otherwise the running code cannot be identified and a rollback cannot be relied on.
-
-```bash
-docker buildx imagetools create \
-  --tag "$IMAGE:latest" \
-  "$IMAGE:$VERSION"
-```
-
-A digest is stricter than a tag: it keeps pointing at the same content even if the tag is pushed again. Query it after publishing:
-
-```bash
-docker buildx imagetools inspect "$IMAGE:$VERSION"
-```
-
-To pin the build exactly, use the manifest list digest it prints in the server's `.env`:
+and pin it in the server's `.env`:
 
 ```dotenv
-PLAINMOTE_IMAGE=ghcr.io/OWNER/plainmote@sha256:DIGEST
+PLAINMOTE_IMAGE=ghcr.io/xwvike/plainmote@sha256:DIGEST
 ```
 
-The GHCR token needs at least `write:packages`; servers deploying a private image need `read:packages`. The image records the source repository, version and full commit hash in OCI labels, which can be checked with:
+Images are built by the repository's [release workflow](../.github/workflows/release.yml) in GitHub Actions, not on anyone's machine, and carry a signed build provenance attestation. To check that an image was built from this repository by that workflow:
 
 ```bash
-docker image inspect "plainmote:$VERSION" \
+gh attestation verify oci://ghcr.io/xwvike/plainmote@sha256:DIGEST --owner xwvike
+```
+
+The image also records the source repository, version and full commit hash in OCI labels:
+
+```bash
+docker image inspect ghcr.io/xwvike/plainmote:v1.2.3 \
   --format '{{json .Config.Labels}}'
 ```
 
-Without a registry, a single-architecture image can be exported and copied to the server:
+The build also compiles the `plainmote` command line for macOS, Linux and Windows on amd64 and arm64 into the image's `/cli` directory, from which the service's `/cli` page offers them for download. The version is stamped into both the service and the command line, so their versions always match. The command line builds add about 35 MiB to the image.
+
+### Publishing a release
+
+Tag a commit on `main` that has been pushed, and push the tag:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The workflow publishes `v1.2.3`, the commit tag and, for a version without a suffix such as `-rc.1`, `latest`; the run's summary shows the digest for `.env`. Run by hand, it publishes the commit tag alone. It uses only the repository's own `GITHUB_TOKEN` and holds no credentials for any server: servers pull the image themselves. After the first publication, check in the package's settings on GitHub that it is public; a private package needs every server to sign in before pulling (section 3).
+
+### Building the image yourself
+
+To build from the repository root, for example a modified version, for the current machine's architecture:
+
+```bash
+test -z "$(git status --porcelain)" || { echo 'working tree is not clean'; exit 1; }
+VERSION="$(git rev-parse --short=12 HEAD)"
+docker buildx build \
+  --load \
+  --build-arg VERSION="$VERSION" \
+  --build-arg REVISION="$(git rev-parse HEAD)" \
+  --tag "plainmote:$VERSION" \
+  .
+```
+
+Add `--platform linux/amd64` to build for an ordinary x86 server on another machine. To publish both architectures to a registry of your own, replace `--load` with `--push --platform linux/amd64,linux/arm64` and tag the image with the registry's address. Without a registry, a single-architecture image can be exported and copied to the server:
 
 ```bash
 docker save "plainmote:$VERSION" | gzip > "plainmote-$VERSION.tar.gz"
@@ -90,6 +78,8 @@ After loading it on the server, set `PLAINMOTE_IMAGE` in `.env` to `plainmote:VE
 ```bash
 gzip -dc "plainmote-$VERSION.tar.gz" | docker load
 ```
+
+A deployment of modified code must set `PLAINMOTE_SOURCE_URL` to its own source code (AGPL-3.0). If it is published to GHCR, also change the `org.opencontainers.image.source` label in the `Dockerfile`, which GHCR uses to link the package to a repository.
 
 ## 2. Preparing external services
 
@@ -133,10 +123,10 @@ The server needs only `compose.yaml` and `.env`, not the source code:
   .env
 ```
 
-Copy [`.env.example`](../.env.example) to `.env`, fill in every required value, and pin the image to the version or digest just published:
+Copy [`.env.example`](../.env.example) to `.env`, fill in every required value, and pin the image to a release or digest (section 1):
 
 ```dotenv
-PLAINMOTE_IMAGE=ghcr.io/OWNER/plainmote:COMMIT_TAG
+PLAINMOTE_IMAGE=ghcr.io/xwvike/plainmote:v1.2.3
 ```
 
 Generate the token encryption key:
@@ -157,10 +147,10 @@ Restrict access to `.env`:
 chmod 600 .env
 ```
 
-If the image is a private package, sign in to GHCR on the server first:
+If the image is a private package, sign in to its registry on the server first, for GHCR with a token that has `read:packages`:
 
 ```bash
-printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u OWNER --password-stdin
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u USER --password-stdin
 ```
 
 ## 4. Starting and checking
@@ -205,7 +195,7 @@ With Cloudflare, also:
 
 ## 6. Upgrades and rollbacks
 
-Build a new commit tag for every release. To upgrade, change `PLAINMOTE_IMAGE` in `.env` and run:
+Every release has its own tag and digest (section 1). To upgrade, change `PLAINMOTE_IMAGE` in `.env` and run:
 
 ```bash
 docker compose pull
@@ -213,7 +203,7 @@ docker compose up -d --remove-orphans
 curl --fail --silent --show-error http://127.0.0.1:8964/healthz
 ```
 
-Check the startup log and complete a sign-in, a resource read and a share link access. To roll back, set `PLAINMOTE_IMAGE` back to the previous commit tag and run the same commands.
+Check the startup log and complete a sign-in, a resource read and a share link access. To roll back, set `PLAINMOTE_IMAGE` back to the previous release or digest and run the same commands.
 
 The command line is upgraded with the image: once a new version is deployed, `/cli` serves the new command line, and users upgrade by running the install command again. Existing sign-ins are not affected.
 

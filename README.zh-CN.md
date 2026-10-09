@@ -116,12 +116,14 @@ PlainMote 为单个无状态的 Go 服务，依赖以下组件：
 - S3 兼容对象存储（例如 Cloudflare R2、MinIO）
 - GitHub OAuth App（用于登录）
 
+镜像以 `ghcr.io/xwvike/plainmote` 发布，包含 amd64 与 arm64，在 GitHub Actions 中构建并附带经签名的构建来源证明。服务器只需要 `compose.yaml` 与 `.env`：
+
 ```bash
-cp .env.example .env    # 填写数据库、对象存储、OAuth 和密钥
+cp .env.example .env    # 填写镜像版本、数据库、对象存储、OAuth 和密钥
 docker compose up -d
 ```
 
-镜像构建、外部服务准备、公网入口配置以及升级与回滚，见 [部署文档](docs/deployment.zh-CN.md)。
+镜像及其标签、外部服务准备、公网入口配置以及升级与回滚，见 [部署文档](docs/deployment.zh-CN.md)。
 
 ### 配置
 
