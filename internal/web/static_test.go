@@ -237,7 +237,7 @@ func TestLoginPageShowsLogo(t *testing.T) {
 	for _, want := range []string{
 		`class="signin-mark" src="` + assetPath("logo.png") + `"`,
 		`rel="icon" href="/favicon.ico" sizes="48x48"`,
-		`rel="icon" href="` + assetPath("icon-192.png") + `" type="image/png" sizes="192x192"`,
+		`rel="icon" href="/static/icon-192.png" type="image/png" sizes="192x192"`,
 		`<h1 class="signin-name">PlainMote</h1>`,
 	} {
 		if !strings.Contains(page, want) {
