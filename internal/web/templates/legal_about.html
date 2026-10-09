@@ -1,5 +1,5 @@
 {{define "about-zh"}}
-<h1>关于</h1>
+<h1>关于 PlainMote</h1>
 <p class="doc-lede">PlainMote 用于在线分享配置、日志和其他文件：可为每个人或每台机器分别创建链接，每条链接可独立设置有效期与使用次数、单独撤销，每次访问均有记录。</p>
 
 <h2>主要功能</h2>
@@ -14,6 +14,9 @@
   <li><strong>端到端加密（可选）：</strong>登录用户设置主密码后，可为资源{{if .Legal.Anonymous}}和临时分享{{end}}开启端到端加密，内容在浏览器中加密，本服务仅保存密文，无法读取其内容；分享链接以 4 位口令代替密钥的，保护程度较低。</li>
 </ul>
 
+<h2>账号与登录</h2>
+<p>访问分享链接无需账号；保存资源、为同一资源创建多条分享链接及查看访问记录须登录。账号通过 {{.Legal.Providers}} 登录创建，本服务不另设登录密码。{{if .Legal.Google}}使用 Google 登录时，本服务仅获取您的 Google 账号 ID、名称和头像地址，用于识别您的账号，不获取您的邮箱地址或其他 Google 数据，详见<a href="/privacy">《隐私政策》</a>第九节“Google 用户数据”。{{end}}</p>
+
 <h2>隐私与安全</h2>
 <p>本服务不展示广告，不使用分析脚本或第三方跟踪工具。分享链接即为访问凭证，为防止链接经搜索引擎收录而泄露，分享链接及账号相关页面均禁止搜索引擎收录。本服务处理的信息详见<a href="/privacy">《隐私政策》</a>。</p>
 {{if .Legal.SourceURL}}<p>本服务的源代码以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）公开，见 <a href="{{.Legal.SourceURL}}" rel="noopener">{{.Legal.SourceURL}}</a>。</p>{{end}}
@@ -23,7 +26,7 @@
 {{end}}
 
 {{define "about-en"}}
-<h1>About</h1>
+<h1>About PlainMote</h1>
 <p class="doc-lede">PlainMote shares configs, logs and other files online: a separate link for each person or machine, each with its own expiry and use limit, revocable on its own, with every access recorded.</p>
 
 <h2>Features</h2>
@@ -37,6 +40,9 @@
   <li><strong>Command line tool:</strong> resources can be viewed, edited and uploaded from a terminal, editing in the machine’s own editor and saving a new version when it is closed.</li>
   <li><strong>End-to-end encryption (optional):</strong> signed-in users who set a master password can turn it on for resources{{if .Legal.Anonymous}} and quick shares{{end}}; content is encrypted in the browser and the Service stores only the ciphertext and cannot read it; a share link opened with a four-character code in place of the key offers weaker protection.</li>
 </ul>
+
+<h2>Accounts and sign-in</h2>
+<p>No account is required to open a share link; saving resources, creating multiple share links for a resource and viewing access records require signing in. Accounts are created by signing in with {{.Legal.Providers}}; the Service does not use a separate sign-in password.{{if .Legal.Google}} When you sign in with Google, the Service obtains only your Google account ID, name and profile picture URL, which are used to identify your account; it does not obtain your email address or any other Google data. See section 9, “Google user data”, of the <a href="/privacy">Privacy Policy</a>.{{end}}</p>
 
 <h2>Privacy and security</h2>
 <p>The Service displays no advertising and uses no analytics scripts or third-party tracking tools. Because a share link serves as the access credential, share links and account pages are excluded from search engine indexing to prevent links from being exposed. Details of the information the Service processes are set out in the <a href="/privacy">Privacy Policy</a>.</p>

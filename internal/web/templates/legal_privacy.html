@@ -12,7 +12,7 @@
 
 <h2>一、我们收集的信息</h2>
 <h3>（一）账号信息</h3>
-<p>{{if .Legal.GitHub}}您使用 GitHub 登录时，本服务仅读取您的 GitHub 公开资料，并保存您的 GitHub 用户 ID、用户名、显示名称和头像地址，不获取您的邮箱地址、代码仓库或其他 GitHub 数据。{{end}}{{if .Legal.Google}}您使用 Google 登录时，本服务仅请求您的基本资料，并保存您的 Google 账号 ID、名称和头像地址，不获取您的邮箱地址或其他 Google 数据；本服务对从 Google 获得的信息的使用遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API 服务用户数据政策</a>，包括其中的有限使用要求。{{end}}本服务不保存登录服务授予的访问令牌。{{if and .Legal.GitHub .Legal.Google}}您可以在账号页面为同一账号绑定或解除另一种登录方式，至少保留一种；不同登录方式创建的账号不会被自动合并。{{end}}</p>
+<p>{{if .Legal.GitHub}}您使用 GitHub 登录时，本服务仅读取您的 GitHub 公开资料，并保存您的 GitHub 用户 ID、用户名、显示名称和头像地址，不获取您的邮箱地址、代码仓库或其他 GitHub 数据。{{end}}{{if .Legal.Google}}您使用 Google 登录时，本服务仅请求您的基本资料，并保存您的 Google 账号 ID、名称和头像地址，不获取您的邮箱地址或其他 Google 数据，详见本政策第九节“Google 用户数据”。{{end}}本服务不保存登录服务授予的访问令牌。{{if and .Legal.GitHub .Legal.Google}}您可以在账号页面为同一账号绑定或解除另一种登录方式，至少保留一种；不同登录方式创建的账号不会被自动合并。{{end}}</p>
 
 <h3>（二）登录状态</h3>
 <p>登录后，本服务通过 Cookie 维持您的登录状态。登录有效期为 {{legalDuration true .Legal.SessionTTL}}，退出登录后立即失效。</p>
@@ -85,7 +85,18 @@
 <h2>八、本政策的更新</h2>
 <p>本政策修订时，我们将同步更新页首的更新日期。如修订扩大了信息收集或使用的范围，我们将在修订生效前于本页予以说明。</p>
 
-<h2>九、联系我们</h2>
+{{if .Legal.Google}}<h2>九、Google 用户数据</h2>
+<p>本节说明您使用 Google 登录时，本服务如何访问、使用、存储、共享和删除 Google 用户数据。</p>
+<ul>
+  <li><strong>访问的数据：</strong>本服务仅请求 <code>openid</code> 与 <code>profile</code> 两项权限，并据此获取您的 Google 账号 ID、名称和头像地址。本服务不请求您的邮箱地址，亦不访问您的 Gmail、通讯录、云端硬盘、日历或其他任何 Google 数据。</li>
+  <li><strong>使用方式：</strong>Google 账号 ID 用于识别您的账号，以便您此后使用同一 Google 账号登录；名称用作您在本服务中的用户名，仅在您本人可见的页面中显示，运营者可通过管理接口查看；头像地址作为账号信息的一部分保存，并包含在您导出的数据中，不在任何页面中展示。上述数据仅用于提供登录服务，不用于广告投放、用户画像或机器学习模型训练。</li>
+  <li><strong>存储方式：</strong>上述数据存储于本服务的数据库中，保存期限为您的账号保留 Google 登录方式的期间。本服务不保存 Google 签发的任何令牌，包括访问令牌和 ID 令牌。</li>
+  <li><strong>共享与披露：</strong>本服务不向任何第三方出售、出租、转让或披露 Google 用户数据，但法律法规另有规定的除外。</li>
+  <li><strong>删除：</strong>您可以在“账号”页面{{if .Legal.GitHub}}解除 Google 登录方式（账号须保留至少一种登录方式）或{{end}}删除账号，相关数据将立即删除。您亦可随时在 Google 账号的<a href="https://myaccount.google.com/connections" rel="noopener">“第三方应用和服务”</a>页面撤销对本服务的授权；撤销授权不会删除本服务已保存的上述数据，如需删除，请按前述方式操作。</li>
+</ul>
+<p>本服务对通过 Google API 获取的信息的使用，以及向其他任何应用传输此类信息，均遵守<a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">《Google API 服务用户数据政策》</a>，包括其中的“有限使用”要求。</p>
+
+{{end}}<h2>{{if .Legal.Google}}十{{else}}九{{end}}、联系我们</h2>
 <p>如您对本政策或您的个人信息有任何疑问，请发送邮件至 {{template "legal-email" .}}。</p>
 {{end}}
 
@@ -103,7 +114,7 @@
 
 <h2>1. Information we collect</h2>
 <h3>1.1 Account information</h3>
-<p>{{if .Legal.GitHub}}When you sign in with GitHub, the Service reads only your public GitHub profile and stores your GitHub user ID, username, display name and avatar URL; it does not obtain your email address, repositories or any other GitHub data. {{end}}{{if .Legal.Google}}When you sign in with Google, the Service requests only your basic profile and stores your Google account ID, name and profile picture URL; it does not obtain your email address or any other Google data. The Service’s use of information received from Google adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements. {{end}}The Service does not store the access tokens granted by the sign-in provider.{{if and .Legal.GitHub .Legal.Google}} On the account page you can link the other sign-in method to the same account or unlink it, keeping at least one; accounts created with different methods are never merged automatically.{{end}}</p>
+<p>{{if .Legal.GitHub}}When you sign in with GitHub, the Service reads only your public GitHub profile and stores your GitHub user ID, username, display name and avatar URL; it does not obtain your email address, repositories or any other GitHub data. {{end}}{{if .Legal.Google}}When you sign in with Google, the Service requests only your basic profile and stores your Google account ID, name and profile picture URL; it does not obtain your email address or any other Google data; see section 9, “Google user data”, of this policy. {{end}}The Service does not store the access tokens granted by the sign-in provider.{{if and .Legal.GitHub .Legal.Google}} On the account page you can link the other sign-in method to the same account or unlink it, keeping at least one; accounts created with different methods are never merged automatically.{{end}}</p>
 
 <h3>1.2 Sign-in state</h3>
 <p>After you sign in, the Service uses a cookie to keep you signed in. A sign-in remains valid for {{legalDuration false .Legal.SessionTTL}} and ends immediately when you sign out.</p>
@@ -176,6 +187,17 @@
 <h2>8. Changes to this policy</h2>
 <p>When this policy is revised, we will update the date at the top of this page. If a revision expands the scope of information collected or its use, we will state this on this page before the revision takes effect.</p>
 
-<h2>9. Contact us</h2>
+{{if .Legal.Google}}<h2>9. Google user data</h2>
+<p>This section sets out how the Service accesses, uses, stores, shares and deletes Google user data when you sign in with Google.</p>
+<ul>
+  <li><strong>Data accessed:</strong> the Service requests only the <code>openid</code> and <code>profile</code> scopes, through which it obtains your Google account ID, name and profile picture URL. The Service does not request your email address and does not access your Gmail, Contacts, Drive, Calendar or any other Google data.</li>
+  <li><strong>Use:</strong> your Google account ID is used to identify your account so that you can subsequently sign in with the same Google account. Your name is used as your username on the Service; it is displayed only on pages visible to you, and the operator can view it through the admin interface. Your profile picture URL is stored as part of your account information and included in your data exports; it is not displayed on any page. This data is used solely to provide sign-in and is not used for advertising, profiling or training machine learning models.</li>
+  <li><strong>Storage:</strong> this data is stored in the Service’s database for as long as Google sign-in remains linked to your account. The Service does not store any token issued by Google, including access tokens and ID tokens.</li>
+  <li><strong>Sharing and disclosure:</strong> the Service does not sell, rent, transfer or disclose Google user data to any third party, except as required by law.</li>
+  <li><strong>Deletion:</strong> on the account page you may {{if .Legal.GitHub}}unlink Google sign-in (at least one sign-in method must remain) or {{end}}delete your account, whereupon this data is deleted immediately. You may also revoke the Service’s access at any time on the <a href="https://myaccount.google.com/connections" rel="noopener">Third-party apps &amp; services</a> page of your Google account; revoking access does not delete data already stored by the Service, which can be deleted as described above.</li>
+</ul>
+<p>The Service’s use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+{{end}}<h2>{{if .Legal.Google}}10{{else}}9{{end}}. Contact us</h2>
 <p>If you have any questions about this policy or your personal information, please email {{template "legal-email" .}}.</p>
 {{end}}

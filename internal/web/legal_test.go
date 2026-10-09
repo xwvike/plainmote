@@ -46,7 +46,7 @@ func TestLegalPagesNeedAContactAddress(t *testing.T) {
 func TestLegalPagesRenderInChineseOrEnglish(t *testing.T) {
 	app := legalApp(Config{ContactEmail: "ops@example.com", Operator: "Example Ops", LogRetention: 720 * time.Hour})
 	titles := map[string][2]string{
-		"about":   {"<h1>关于</h1>", "<h1>About</h1>"},
+		"about":   {"<h1>关于 PlainMote</h1>", "<h1>About PlainMote</h1>"},
 		"privacy": {"<h1>隐私政策</h1>", "<h1>Privacy Policy</h1>"},
 		"terms":   {"<h1>服务条款</h1>", "<h1>Terms of Service</h1>"},
 		"contact": {"<h1>联系我们</h1>", "<h1>Contact us</h1>"},
