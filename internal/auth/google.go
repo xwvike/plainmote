@@ -82,7 +82,6 @@ func (g *Google) AuthorizationURL(redirectURI string, flow Flow) string {
 		"nonce":                 {flow.Nonce},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(challenge[:])},
 		"code_challenge_method": {"S256"},
-		"prompt":                {"select_account"},
 	}
 	return googleAuthorize + "?" + query.Encode()
 }
