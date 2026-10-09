@@ -6,13 +6,13 @@
 <h2>要点</h2>
 <ul>
   <li>本服务不展示广告，不使用任何分析或跟踪工具，不出售用户信息。</li>
-  <li>使用 GitHub 登录时，本服务仅读取您的公开资料，不获取邮箱地址。</li>
+  <li>使用 {{.Legal.Providers}} 登录时，本服务仅读取您的公开资料，不获取邮箱地址。</li>
   <li>通过分享链接访问内容时，本服务会记录访问者的 IP 地址{{if .Legal.Location}}、大致地理位置{{end}}和浏览器信息，该记录对链接创建者可见。</li>
 </ul>
 
 <h2>一、我们收集的信息</h2>
 <h3>（一）账号信息</h3>
-<p>您使用 GitHub 登录时，本服务仅读取您的 GitHub 公开资料，并保存您的 GitHub 用户 ID、用户名、显示名称和头像地址。本服务不获取您的邮箱地址、代码仓库或其他 GitHub 数据，也不保存 GitHub 授予的访问令牌。</p>
+<p>{{if .Legal.GitHub}}您使用 GitHub 登录时，本服务仅读取您的 GitHub 公开资料，并保存您的 GitHub 用户 ID、用户名、显示名称和头像地址，不获取您的邮箱地址、代码仓库或其他 GitHub 数据。{{end}}{{if .Legal.Google}}您使用 Google 登录时，本服务仅请求您的基本资料，并保存您的 Google 账号 ID、名称和头像地址，不获取您的邮箱地址或其他 Google 数据；本服务对从 Google 获得的信息的使用遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API 服务用户数据政策</a>，包括其中的有限使用要求。{{end}}本服务不保存登录服务授予的访问令牌。{{if and .Legal.GitHub .Legal.Google}}您可以在账号页面为同一账号绑定或解除另一种登录方式，至少保留一种；不同登录方式创建的账号不会被自动合并。{{end}}</p>
 
 <h3>（二）登录状态</h3>
 <p>登录后，本服务通过 Cookie 维持您的登录状态。登录有效期为 {{legalDuration true .Legal.SessionTTL}}，退出登录后立即失效。</p>
@@ -39,11 +39,12 @@
 
 <h2>二、我们如何使用信息</h2>
 <p>我们仅将上述信息用于以下目的：提供本服务，包括登录、内容存储与分发，以及向资源所有者展示访问记录；保障服务安全，调查和处理滥用行为；排查和修复故障。我们不会将上述信息用于广告投放、用户画像或机器学习模型训练，也不会出售上述信息。</p>
-<p>运营者通过管理接口管理本服务。该接口仅提供账号与资源的元数据（如 GitHub 用户名、资源名称、文件名、类型、大小、分享链接的数量与状态、账号是否设置主密码以及资源是否加密）和汇总统计，不提供资源内容、分享链接地址、任何密钥材料或访问记录中的访问者信息。通过该接口进行的停用账号、下架或删除资源等操作均记录操作时间、对象、原因及操作来源 IP。</p>
+<p>运营者通过管理接口管理本服务。该接口仅提供账号与资源的元数据（如用户名、登录方式及其账号 ID、资源名称、文件名、类型、大小、分享链接的数量与状态、账号是否设置主密码以及资源是否加密）和汇总统计，不提供资源内容、分享链接地址、任何密钥材料或访问记录中的访问者信息。通过该接口进行的停用账号、下架或删除资源等操作均记录操作时间、对象、原因及操作来源 IP。</p>
 
 <h2>三、我们如何共享和披露信息</h2>
 <ul>
-  <li><strong>GitHub：</strong>登录时您将跳转至 GitHub 完成授权，该过程适用 GitHub 的隐私政策。</li>
+  {{if .Legal.GitHub}}<li><strong>GitHub：</strong>使用 GitHub 登录时，您将跳转至 GitHub 完成授权，该过程适用 GitHub 的隐私政策。</li>{{end}}
+  {{if .Legal.Google}}<li><strong>Google：</strong>使用 Google 登录时，您将跳转至 Google 完成授权，该过程适用 Google 的隐私权政策。</li>{{end}}
   <li><strong>Google Fonts：</strong>页面字体由 Google Fonts 提供，加载字体时您的浏览器会向 Google 发送 IP 地址等信息。</li>
   {{if .Legal.R2}}<li><strong>Cloudflare：</strong>资源正文存储于 Cloudflare R2，适用 Cloudflare 的隐私政策。</li>
   {{end}}<li><strong>基础设施服务商：</strong>为本服务提供网络传输等基础设施的服务商，可能在提供服务的过程中处理相关技术数据。</li>
@@ -52,7 +53,7 @@
 
 <h2>四、我们如何存储信息</h2>
 <ul>
-  <li>账号信息：在账号存续期间保存，删除账号时立即删除。</li>
+  <li>账号信息：在账号存续期间保存，删除账号时立即删除。{{if and .Legal.GitHub .Legal.Google}}解除某种登录方式时，该方式的账号 ID、名称和头像地址立即删除。{{end}}</li>
   <li>主密码密钥材料：在账号存续期间保存，删除账号时立即删除。</li>
   <li>登录状态：过期或退出登录时失效。</li>
   <li>命令行登录：被撤销或退出登录时立即删除，过期后在定期清理中删除；登录请求在确认后或有效期届满后失效，并在定期清理中删除。</li>
@@ -70,9 +71,9 @@
   <li>登录后，您可以随时查看、修改和删除您的资源与分享链接，并查看相应的访问记录。</li>
   <li>您可以在“账号”页面导出您的数据，导出内容包括基本账号信息、已存储的文件及其历史版本、远程资源地址和访问记录；导出文件不包含分享链接地址或分享设置。加密内容以密文形式导出，并附带解密所需的密钥材料（经主密码或恢复密钥保护）；在浏览器中以主密码解锁后导出的，由浏览器解密后以明文保存。每个账号每 {{legalDuration true .Legal.ExportWindow}}最多可导出 {{.Legal.ExportLimit}} 次。</li>
   <li>您可以在“账号”页面删除账号。删除后，账号及其资源、分享链接、访问记录和其他关联数据将从在线服务中移除，已发出的链接立即失效，且无法通过本服务恢复；短期备份按上述期限清除。</li>
-  <li>如您无法登录，也可以发送邮件至 {{template "legal-email" .}} 并注明您的 GitHub 用户名，申请删除账号或获取数据副本；我们可能要求您证明对该 GitHub 账号的控制权，并将在收到请求后 30 日内处理。</li>
+  <li>如您无法登录，也可以发送邮件至 {{template "legal-email" .}} 并注明您的用户名及登录方式，申请删除账号或获取数据副本；我们可能要求您证明对该登录账号的控制权，并将在收到请求后 30 日内处理。</li>
   <li>若您并非本服务用户，但您的 IP 地址出现在他人的访问记录中，您可以联系我们申请删除相关记录。</li>
-  <li>您可以随时在 GitHub 设置中撤销对本服务的授权。撤销授权不影响您的账号，下次登录时需重新授权。</li>
+  <li>您可以随时在 {{.Legal.Providers}} 的账号设置中撤销对本服务的授权。撤销授权不影响您的账号，下次登录时需重新授权。</li>
 </ul>
 
 <h2>六、我们如何保护信息</h2>
@@ -96,13 +97,13 @@
 <h2>Key points</h2>
 <ul>
   <li>The Service displays no advertising, uses no analytics or tracking tools, and does not sell user information.</li>
-  <li>When you sign in with GitHub, the Service reads your public profile only and does not obtain your email address.</li>
+  <li>When you sign in with {{.Legal.Providers}}, the Service reads your public profile only and does not obtain your email address.</li>
   <li>When content is accessed through a share link, the Service records the visitor’s IP address{{if .Legal.Location}}, approximate location{{end}} and browser information, and this record is visible to the creator of the link.</li>
 </ul>
 
 <h2>1. Information we collect</h2>
 <h3>1.1 Account information</h3>
-<p>When you sign in with GitHub, the Service reads only your public GitHub profile and stores your GitHub user ID, username, display name and avatar URL. The Service does not obtain your email address, repositories or any other GitHub data, and does not store the access token granted by GitHub.</p>
+<p>{{if .Legal.GitHub}}When you sign in with GitHub, the Service reads only your public GitHub profile and stores your GitHub user ID, username, display name and avatar URL; it does not obtain your email address, repositories or any other GitHub data. {{end}}{{if .Legal.Google}}When you sign in with Google, the Service requests only your basic profile and stores your Google account ID, name and profile picture URL; it does not obtain your email address or any other Google data. The Service’s use of information received from Google adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements. {{end}}The Service does not store the access tokens granted by the sign-in provider.{{if and .Legal.GitHub .Legal.Google}} On the account page you can link the other sign-in method to the same account or unlink it, keeping at least one; accounts created with different methods are never merged automatically.{{end}}</p>
 
 <h3>1.2 Sign-in state</h3>
 <p>After you sign in, the Service uses a cookie to keep you signed in. A sign-in remains valid for {{legalDuration false .Legal.SessionTTL}} and ends immediately when you sign out.</p>
@@ -129,11 +130,12 @@
 
 <h2>2. How we use information</h2>
 <p>We use the information above only to: provide the Service, including sign-in, content storage and delivery, and displaying access records to resource owners; maintain the security of the Service and investigate and address abuse; and diagnose and fix faults. We do not use this information for advertising, profiling or training machine learning models, and we do not sell it.</p>
-<p>The operator manages the Service through an administration interface. It provides only metadata about accounts and resources (such as the GitHub username, resource name, filename, type and size, the number and state of share links, whether an account has set a master password and whether a resource is encrypted) and aggregate statistics; it does not provide resource content, share link addresses, any key material or visitor information from access records. Actions taken through it, such as suspending an account or taking down or deleting a resource, are recorded with the time, the object, the reason and the source IP address of the action.</p>
+<p>The operator manages the Service through an administration interface. It provides only metadata about accounts and resources (such as the username, the sign-in methods and their account IDs, resource name, filename, type and size, the number and state of share links, whether an account has set a master password and whether a resource is encrypted) and aggregate statistics; it does not provide resource content, share link addresses, any key material or visitor information from access records. Actions taken through it, such as suspending an account or taking down or deleting a resource, are recorded with the time, the object, the reason and the source IP address of the action.</p>
 
 <h2>3. How we share and disclose information</h2>
 <ul>
-  <li><strong>GitHub:</strong> signing in redirects you to GitHub for authorization, and that process is governed by GitHub’s privacy policy.</li>
+  {{if .Legal.GitHub}}<li><strong>GitHub:</strong> signing in with GitHub redirects you to GitHub for authorization, and that process is governed by GitHub’s privacy policy.</li>{{end}}
+  {{if .Legal.Google}}<li><strong>Google:</strong> signing in with Google redirects you to Google for authorization, and that process is governed by Google’s privacy policy.</li>{{end}}
   <li><strong>Google Fonts:</strong> page fonts are provided by Google Fonts, and when they load, your browser sends information such as your IP address to Google.</li>
   {{if .Legal.R2}}<li><strong>Cloudflare:</strong> resource bodies are stored in Cloudflare R2, and Cloudflare’s privacy policy applies.</li>
   {{end}}<li><strong>Infrastructure providers:</strong> providers of network transport and other infrastructure for the Service may process related technical data in the course of providing their services.</li>
@@ -142,7 +144,7 @@
 
 <h2>4. How we store information</h2>
 <ul>
-  <li>Account information: retained for as long as the account exists, and deleted immediately when the account is deleted.</li>
+  <li>Account information: retained for as long as the account exists, and deleted immediately when the account is deleted.{{if and .Legal.GitHub .Legal.Google}} When a sign-in method is unlinked, its account ID, name and avatar URL are deleted immediately.{{end}}</li>
   <li>Master password key material: retained for as long as the account exists, and deleted immediately when the account is deleted.</li>
   <li>Sign-in state: ends on expiry or sign-out.</li>
   <li>Command line sign-ins: deleted immediately on revocation or sign-out, and in routine cleanup after expiry; sign-in requests lapse once confirmed or on expiry and are deleted in routine cleanup.</li>
@@ -160,9 +162,9 @@
   <li>When signed in, you may view, modify and delete your resources and share links at any time, and view their access records.</li>
   <li>You may export your data from the Account page. The export contains basic account information, stored files and their earlier versions, remote resource addresses and access records; share link addresses and settings are not included. Encrypted content is exported as ciphertext together with the key material needed to decrypt it, which remains protected by the master password or the recovery key; when you export after unlocking with your master password in the browser, the browser decrypts it and saves it as plaintext. Each account may export up to {{.Legal.ExportLimit}} times every {{legalDuration false .Legal.ExportWindow}}.</li>
   <li>You may delete your account from the Account page. The account and its resources, share links, access records and other associated data are removed from the active Service, links already sent stop working immediately, and the data cannot be restored through the Service; short-term backups are cleared as described above.</li>
-  <li>If you are unable to sign in, you may email {{template "legal-email" .}} with your GitHub username to request account deletion or a copy of your data; we may ask you to demonstrate control of that GitHub account, and will process the request within 30 days of receipt.</li>
+  <li>If you are unable to sign in, you may email {{template "legal-email" .}} with your username and how you sign in to request account deletion or a copy of your data; we may ask you to demonstrate control of that sign-in account, and will process the request within 30 days of receipt.</li>
   <li>If you are not a user of the Service but your IP address appears in another user’s access records, you may contact us to request deletion of the relevant records.</li>
-  <li>You may revoke the Service’s authorization in your GitHub settings at any time. This does not affect your account; you will be asked to authorize again the next time you sign in.</li>
+  <li>You may revoke the Service’s authorization in your {{.Legal.Providers}} account settings at any time. This does not affect your account; you will be asked to authorize again the next time you sign in.</li>
 </ul>
 
 <h2>6. How we protect information</h2>

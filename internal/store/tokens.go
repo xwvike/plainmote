@@ -318,7 +318,7 @@ FROM device_grants WHERE device_code_hash = $1 FOR UPDATE
 		// approval and this poll gets nothing.
 		var user User
 		err = tx.QueryRow(ctx, `
-SELECT id, github_id, login, name, avatar_url FROM users WHERE id = $1 AND suspended_at IS NULL
+SELECT id, COALESCE(github_id, ''), login, name, avatar_url FROM users WHERE id = $1 AND suspended_at IS NULL
 `, userID).Scan(&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL)
 		if errors.Is(err, pgx.ErrNoRows) {
 			result.State = DeviceDenied
@@ -364,7 +364,7 @@ func (d *Store) TokenUser(ctx context.Context, token, ip string, now time.Time) 
 	var lastUsed pgtype.Timestamptz
 	err := d.db.QueryRow(ctx, `
 SELECT t.id, t.scope, t.device_name, t.device_os, t.client_version, t.created_at, t.expires_at, t.last_used_at, t.last_used_ip,
-       u.id, u.github_id, u.login, u.name, u.avatar_url
+       u.id, COALESCE(u.github_id, ''), u.login, u.name, u.avatar_url
 FROM api_tokens t
 JOIN users u ON u.id = t.user_id
 WHERE t.token_hash = $1 AND t.expires_at > $2 AND u.suspended_at IS NULL

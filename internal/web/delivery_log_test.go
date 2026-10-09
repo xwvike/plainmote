@@ -43,7 +43,7 @@ func TestNoDeliveryWithoutARecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	address := "https://cfg.test" + shareAddress(link.Token, resource.Filename)
 	fetch := func(method, etag string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(method, address, nil)

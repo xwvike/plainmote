@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -22,6 +23,8 @@ const (
 	accountExportPath = "/account/export"
 	accountDeletePath = "/account/delete"
 	accountTokensPath = "/account/tokens"
+	// accountIdentitiesPath links and unlinks sign-in methods.
+	accountIdentitiesPath = "/account/identities"
 )
 
 // exportWriteTimeout replaces the server's 30-second write timeout for the one
@@ -69,6 +72,10 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, p
 	data.Error = pageError
 	data.DeleteOpen = deleteOpen
 	data.KeyringLockChoices = store.KeyringLockChoices
+	data.SignIns = a.signIns(account.Identities)
+	if pageError == "" {
+		data.Notice, data.Error = identityFlash(r)
+	}
 	if sealed, err := a.db.SealedIndex(r.Context(), user.ID); err == nil {
 		data.SealedCount = len(sealed)
 		for _, entry := range sealed {
@@ -99,6 +106,98 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, p
 		}
 	}
 	a.renderTemplate(w, r, status, "account.html", data)
+}
+
+// signInView is one row of the account's sign-in methods: a provider and the
+// identity linked there, if any.
+type signInView struct {
+	Provider  string
+	Label     string
+	Identity  *store.Identity
+	CanLink   bool
+	CanUnlink bool
+}
+
+func (a *App) signIns(identities []store.Identity) []signInView {
+	var views []signInView
+	seen := map[string]bool{}
+	for i := range identities {
+		seen[identities[i].Provider] = true
+		views = append(views, signInView{
+			Provider: identities[i].Provider, Label: providerLabel(identities[i].Provider),
+			Identity: &identities[i], CanUnlink: len(identities) > 1,
+		})
+	}
+	for _, p := range a.providers() {
+		if !seen[p.name] {
+			views = append(views, signInView{Provider: p.name, Label: p.label, CanLink: true})
+		}
+	}
+	return views
+}
+
+// identityFlash is the line the account page shows after a sign-in method
+// was linked or unlinked, or could not be.
+func identityFlash(r *http.Request) (notice, failure string) {
+	locale := requestLanguage(r).Locale
+	query := r.URL.Query()
+	switch {
+	case query.Get("linked") != "":
+		return fmt.Sprintf(translate(locale, "identity_linked"), providerLabel(query.Get("linked"))), ""
+	case query.Get("unlinked") != "":
+		return fmt.Sprintf(translate(locale, "identity_unlinked"), providerLabel(query.Get("unlinked"))), ""
+	}
+	switch query.Get("identity") {
+	case "taken":
+		return "", translate(locale, "identity_taken")
+	case "linked":
+		return "", translate(locale, "identity_provider_linked")
+	case "last":
+		return "", translate(locale, "identity_last")
+	}
+	return "", ""
+}
+
+// handleAccountIdentities starts linking a provider, through the same flow
+// as signing in with it, or removes one the account no longer wants.
+func (a *App) handleAccountIdentities(w http.ResponseWriter, r *http.Request) {
+	user, sessionID, ok := a.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !a.checkCSRF(r, sessionID) {
+		writePlainError(w, http.StatusForbidden, "invalid csrf token")
+		return
+	}
+	provider := r.FormValue("provider")
+	switch r.FormValue("action") {
+	case "link":
+		p, ok := a.provider(provider)
+		if !ok {
+			writePlainError(w, http.StatusBadRequest, "unknown provider")
+			return
+		}
+		a.beginOAuth(w, r, p, "", true)
+	case "unlink":
+		err := a.db.UnlinkIdentity(r.Context(), user.ID, provider)
+		switch {
+		case err == nil:
+			http.Redirect(w, r, accountPath+"?unlinked="+url.QueryEscape(provider), http.StatusSeeOther)
+		case errors.Is(err, store.ErrLastIdentity):
+			http.Redirect(w, r, accountPath+"?identity=last", http.StatusSeeOther)
+		case errors.Is(err, store.ErrNotFound):
+			http.Redirect(w, r, accountPath, http.StatusSeeOther)
+		default:
+			a.serverError(w, "unlink identity", err)
+		}
+	default:
+		writePlainError(w, http.StatusBadRequest, "unknown action")
+	}
 }
 
 // handleAccountTokens revokes one signed-in command line. Its next request is
@@ -216,7 +315,7 @@ func (a *App) handleAccountExport(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = http.NewResponseController(w).SetWriteDeadline(now.Add(exportWriteTimeout))
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="plainmote-%s-%s.zip"`, exportFilePart(account.User.Login), now.Format("20060102")))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="plainmote-%s-%s.zip"`, exportFilePart(account.User), now.Format("20060102")))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
@@ -393,10 +492,19 @@ func writeExportAccount(archive *zip.Writer, account store.Account, now time.Tim
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(entry, "GitHub ID: %s\nGitHub username: %s\nDisplay name: %s\nAvatar URL: %s\nRegistered: %s\nExported: %s\n",
-		exportText(account.User.GitHubID), exportText(account.User.Login), exportText(account.User.Name),
+	_, err = fmt.Fprintf(entry, "Username: %s\nDisplay name: %s\nAvatar URL: %s\nRegistered: %s\nExported: %s\n",
+		exportText(account.User.Login), exportText(account.User.Name),
 		exportText(account.User.AvatarURL), account.CreatedAt.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339))
-	return err
+	if err != nil {
+		return err
+	}
+	for _, identity := range account.Identities {
+		if _, err = fmt.Fprintf(entry, "Sign-in: %s %s (%s), linked %s\n", providerLabel(identity.Provider),
+			exportText(identity.Subject), exportText(identity.Login), identity.CreatedAt.UTC().Format(time.RFC3339)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func writeExportRemote(archive *zip.Writer, resource Resource) error {
@@ -495,15 +603,24 @@ func exportText(value string) string {
 }
 
 // exportFilePart keeps the download name to characters every browser and
-// filesystem accept. GitHub logins already are, so this only matters if that
-// ever changes.
-func exportFilePart(value string) string {
-	return strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+// filesystem accept. A name with none of them, such as a Google name in
+// another script, gives way to the start of the account ID.
+func exportFilePart(user store.User) string {
+	kept := false
+	part := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			kept = true
+			return r
+		}
+		if r == '-' || r == '_' {
 			return r
 		}
 		return '_'
-	}, value)
+	}, user.Login)
+	if !kept {
+		return user.ID[:min(8, len(user.ID))]
+	}
+	return part
 }
 
 // sealedExportName is what an encrypted content is called in an export.

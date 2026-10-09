@@ -28,7 +28,7 @@ var pngBytes = []byte{
 func TestUploadedBinarySurvivesTheRoundTrip(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestSavedVideoLoadsMetadataAndFirstFrame(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+video.ID, nil)
 	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
 	response := httptest.NewRecorder()
-	newTestApp(db, user.GitHubID).Handler().ServeHTTP(response, request)
+	newTestApp(db).Handler().ServeHTTP(response, request)
 	page := response.Body.String()
 	if response.Code != http.StatusOK {
 		t.Fatalf("video page: %d %q", response.Code, page)

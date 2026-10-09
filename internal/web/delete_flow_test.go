@@ -18,7 +18,7 @@ import (
 func TestDeleteFlowThroughRouter(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)

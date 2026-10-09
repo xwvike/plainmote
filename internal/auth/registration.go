@@ -5,37 +5,28 @@ import (
 	"strings"
 )
 
-// RegistrationMode controls which previously unseen GitHub identities may
-// create a PlainMote account. It does not govern subsequent logins: once a
-// user exists, disabling that account is a separate product decision.
+// RegistrationMode controls whether a previously unseen GitHub or Google
+// identity may create a PlainMote account. It does not govern subsequent
+// logins: an existing account signs in whatever the mode is now.
 type RegistrationMode string
 
 const (
-	RegistrationOpen      RegistrationMode = "open"
-	RegistrationAllowlist RegistrationMode = "allowlist"
-	RegistrationClosed    RegistrationMode = "closed"
+	RegistrationOpen   RegistrationMode = "open"
+	RegistrationClosed RegistrationMode = "closed"
 )
 
 func ParseRegistrationMode(value string) (RegistrationMode, error) {
 	mode := RegistrationMode(strings.ToLower(strings.TrimSpace(value)))
 	switch mode {
-	case RegistrationOpen, RegistrationAllowlist, RegistrationClosed:
+	case RegistrationOpen, RegistrationClosed:
 		return mode, nil
 	default:
-		return "", fmt.Errorf("PLAINMOTE_REGISTRATION_MODE must be open, allowlist, or closed")
+		return "", fmt.Errorf("PLAINMOTE_REGISTRATION_MODE must be open or closed")
 	}
 }
 
-// AllowsNewUser deliberately fails closed for an invalid zero or manually
-// constructed mode. Config parsing rejects such a mode before production
-// starts, while this default protects tests and other direct App constructors.
-func (m RegistrationMode) AllowsNewUser(githubID string, allowedIDs map[string]bool) bool {
-	switch m {
-	case RegistrationOpen:
-		return true
-	case RegistrationAllowlist:
-		return allowedIDs[githubID]
-	default:
-		return false
-	}
+// AllowsNewUser fails closed for any mode but open, so a zero or manually
+// constructed mode admits nobody.
+func (m RegistrationMode) AllowsNewUser() bool {
+	return m == RegistrationOpen
 }

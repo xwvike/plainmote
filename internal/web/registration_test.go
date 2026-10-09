@@ -9,15 +9,16 @@ import (
 	"time"
 
 	"plainmote/internal/auth"
+	"plainmote/internal/store"
 )
 
-// The allowlist admits new accounts; it is not a live access-control list.
-// Removing an ID must not silently revoke sessions belonging to an existing
-// user. Account suspension, when added, belongs to the user record instead.
-func TestExistingSessionDoesNotDependOnRegistrationAllowlist(t *testing.T) {
+// The registration mode admits new accounts; it is not a live access-control
+// list. Closing registration must not silently revoke sessions belonging to an
+// existing user. Suspension belongs to the user record instead.
+func TestExistingSessionDoesNotDependOnRegistrationMode(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	app := newTestApp(db)
-	app.cfg.RegistrationMode = auth.RegistrationAllowlist
+	app.cfg.RegistrationMode = auth.RegistrationClosed
 
 	session, _, _, err := db.CreateSession(context.Background(), user.ID, time.Hour)
 	if err != nil {
@@ -28,7 +29,7 @@ func TestExistingSessionDoesNotDependOnRegistrationAllowlist(t *testing.T) {
 
 	got, _, ok := app.currentUser(request)
 	if !ok || got.ID != user.ID {
-		t.Fatalf("existing user was rejected after leaving the registration allowlist: ok=%v user=%+v", ok, got)
+		t.Fatalf("existing user was rejected after registration closed: ok=%v user=%+v", ok, got)
 	}
 }
 
@@ -38,38 +39,33 @@ func TestGitHubIdentityAdmissionAppliesOnlyToNewUsers(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range []struct {
-		name    string
-		mode    auth.RegistrationMode
-		allowed map[string]bool
-		id      string
-		want    bool
+		name string
+		mode auth.RegistrationMode
+		id   string
+		want bool
 	}{
-		{"existing user while closed", auth.RegistrationClosed, nil, user.GitHubID, true},
-		{"new user while closed", auth.RegistrationClosed, nil, "200", false},
-		{"new user while open", auth.RegistrationOpen, nil, "200", true},
-		{"allowlisted new user", auth.RegistrationAllowlist, map[string]bool{"200": true}, "200", true},
-		{"new user outside allowlist", auth.RegistrationAllowlist, map[string]bool{"300": true}, "200", false},
+		{"existing user while closed", auth.RegistrationClosed, user.GitHubID, true},
+		{"new user while closed", auth.RegistrationClosed, "200", false},
+		{"new user while open", auth.RegistrationOpen, "200", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			app.cfg.RegistrationMode = tc.mode
-			app.cfg.AllowedIDs = tc.allowed
-			got, err := app.githubIdentityAdmitted(ctx, tc.id)
+			got, err := app.identityAdmitted(ctx, store.ProviderGitHub, tc.id)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if got != tc.want {
-				t.Fatalf("githubIdentityAdmitted() = %v, want %v", got, tc.want)
+				t.Fatalf("identityAdmitted() = %v, want %v", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestLoginExplainsRestrictedRegistrationModes(t *testing.T) {
+func TestLoginExplainsClosedRegistration(t *testing.T) {
 	for _, tc := range []struct {
 		mode auth.RegistrationMode
 		want string
 	}{
-		{auth.RegistrationAllowlist, "Only approved GitHub accounts can sign in."},
 		{auth.RegistrationClosed, "New account registration is currently closed."},
 	} {
 		app := &App{cfg: Config{RegistrationMode: tc.mode}}

@@ -18,7 +18,7 @@ import (
 func TestNothingHereIsIndexable(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	share, err := db.CreateShare(ctx, user.ID, resource.ID, "s", time.Hour, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +186,7 @@ func TestNoSitemapWithoutPublicPages(t *testing.T) {
 func TestPagesCannotBeFramed(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)

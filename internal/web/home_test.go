@@ -58,7 +58,7 @@ func TestAnyoneCanPasteAndGetALink(t *testing.T) {
 	if home.Code != http.StatusOK {
 		t.Fatalf("the home page must open without a session, got %d", home.Code)
 	}
-	if body := home.Body.String(); !strings.Contains(body, `action="/paste"`) || !strings.Contains(body, "Continue with GitHub") {
+	if body := home.Body.String(); !strings.Contains(body, `action="/paste"`) || !strings.Contains(body, `href="/login">Sign in</a>`) {
 		t.Fatal("the home page must offer the box and a way to sign in")
 	}
 	// The meta tag and the response header have to agree, or the one page meant
@@ -176,7 +176,7 @@ func TestPasteRefusesADrivenCrossSitePost(t *testing.T) {
 func TestSignedInQuickShareIsTheCreatorsOwn(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -316,7 +316,7 @@ func TestSignedInQuickShareIsTheCreatorsOwn(t *testing.T) {
 func TestEndedQuickShareIsDeletedAndItsHistoryKept(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	now := time.Now().UTC()
 	resource, link, err := db.CreateQuickShare(ctx, user.ID, "app.log", []byte("line\n"), time.Minute, now)
 	if err != nil {
@@ -345,7 +345,7 @@ func TestEndedQuickShareIsDeletedAndItsHistoryKept(t *testing.T) {
 func TestAnonymousPasteCanReturnFromLoginAndBeSaved(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	posted := postPaste(t, app, url.Values{"content": {"keep after login"}, "ttl": {"5"}}, nil)
 	result := getPasteResult(t, app, posted)
 	if result.Code != http.StatusOK {
@@ -413,7 +413,7 @@ func findPasteResourceID(t *testing.T, page string) string {
 func TestAnonymousCanBeTurnedOff(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := &App{db: db, cfg: Config{PublicURL: "https://cfg.test", AllowedIDs: map[string]bool{user.GitHubID: true}}}
+	app := &App{db: db, cfg: Config{PublicURL: "https://cfg.test"}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()
 
@@ -482,7 +482,7 @@ func TestHomePreselectsTheDefaultLifetime(t *testing.T) {
 func TestQuickSharesInTheResourceList(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	now := time.Now().UTC()
 	plain, _, err := db.CreateQuickShare(ctx, user.ID, "app.log", []byte("x\n"), time.Hour, now)
 	if err != nil {

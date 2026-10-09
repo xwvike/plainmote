@@ -16,7 +16,7 @@ import (
 func TestTokenIsTheWholeAddress(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	resource, err := db.CreateResource(ctx, user.ID, "clash", "clash.yaml", []byte("port: 7890\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestTokenIsTheWholeAddress(t *testing.T) {
 func TestTokenIsNotWrittenToTheAuditLog(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	resource, err := db.CreateResource(ctx, user.ID, "clash", "clash.yaml", []byte("a: 1\n"), "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestSameFilenameForTwoOwners(t *testing.T) {
 func TestUnnamedResourceStillGetsAFilename(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)

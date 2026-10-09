@@ -15,7 +15,7 @@ import (
 func TestSharesAnswerConditionalRequests(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	link, err := db.CreateShare(ctx, user.ID, resource.ID, "agent", time.Hour, 5)
 	if err != nil {
 		t.Fatal(err)

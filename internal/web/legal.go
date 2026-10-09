@@ -17,7 +17,7 @@ var legalPages = []string{"about", "privacy", "terms", "contact"}
 
 // legalUpdated is the date printed at the top of the privacy policy and the
 // terms. Change it in the same commit as the text.
-const legalUpdated = "2026-10-07"
+const legalUpdated = "2026-10-09"
 
 // legalView is what the texts need to be true of this deployment rather than
 // of some deployment: every retention period and limit they state is read from
@@ -39,6 +39,9 @@ type legalView struct {
 	ExportLimit   int
 	ExportWindow  time.Duration
 	SourceURL     string
+	// GitHub and Google are the sign-in providers this deployment offers.
+	GitHub bool
+	Google bool
 	// Location is whether access records carry a location estimated from
 	// the visitor's IP address.
 	Location bool
@@ -87,6 +90,8 @@ func (a *App) serveLegal(w http.ResponseWriter, r *http.Request, page string) {
 		Location:      a.cfg.CloudflareLocation,
 		Updated:       legalUpdated,
 		R2:            cloudflareR2(a.cfg.BlobEndpoint),
+		GitHub:        a.github != nil && a.github.Configured(),
+		Google:        a.google.Configured(),
 		SessionTTL:    a.cfg.SessionTTL,
 		LogRetention:  a.cfg.LogRetention,
 		Anonymous:     a.cfg.AnonymousEnabled,
@@ -144,4 +149,18 @@ func cloudflareR2(endpoint string) bool {
 		return false
 	}
 	return strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".r2.cloudflarestorage.com")
+}
+
+// Providers names the sign-in providers in a sentence: "GitHub", "Google",
+// or both.
+func (l legalView) Providers() string {
+	switch {
+	case l.GitHub && l.Google && l.Chinese:
+		return "GitHub 或 Google"
+	case l.GitHub && l.Google:
+		return "GitHub or Google"
+	case l.Google:
+		return "Google"
+	}
+	return "GitHub"
 }

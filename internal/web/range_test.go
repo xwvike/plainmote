@@ -45,7 +45,7 @@ func TestOwnerPreviewServesByteRanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {

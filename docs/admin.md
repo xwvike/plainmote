@@ -11,7 +11,7 @@ The first part of this document describes what administration covers and how it 
 | Area | Operations |
 | --- | --- |
 | Deployment overview | Version, main settings, database and object storage status, user and resource counts and sizes, share link and access statistics, the result of the last scheduled cleanup |
-| Accounts | Find by login or GitHub ID; view resource counts, storage and active plans; suspend and unsuspend |
+| Accounts | Find by login or a sign-in method's account ID; view resource counts, storage and active plans; suspend and unsuspend |
 | Plans | Create and delete plans; grant plans to accounts or revoke them, optionally with an expiry |
 | Resources | Find by owner, name or status; view metadata and share links; take down and restore; delete |
 | Share links | Find the resource and link behind a reported share address; revoke a single link |
@@ -21,7 +21,7 @@ The interface has the following limits:
 
 - **No access to content**: no endpoint returns resource content, earlier versions, share link addresses or the visitor details (IP address and client information) in access records. Operators see metadata and aggregate figures only; for a remote resource, only the host name of its origin is given.
 - **Every change is justified and recorded**: each change requires a reason and is written to an append-only audit log with its time, key, operation, target, reason and source IP. Audit records cannot be modified or deleted, and are not removed with the access history.
-- **Registration allowlist excluded**: in `allowlist` mode, the accounts allowed to register are set by `GITHUB_ALLOWED_IDS` at startup.
+- **Registration excluded**: whether new accounts can register is set by `PLAINMOTE_REGISTRATION_MODE` at startup.
 
 ### Effect on users
 
@@ -168,9 +168,10 @@ An authenticated request that fails receives `{"error": "<code>", "message": "<d
 | Field | Type | Description |
 | --- | --- | --- |
 | `id` | string | Account ID |
-| `github_id` | string | Numeric GitHub user ID |
-| `login` | string | GitHub login |
-| `name` | string | GitHub display name |
+| `github_id` | string | Numeric GitHub user ID; empty for an account without GitHub sign-in |
+| `login` | string | Username: the GitHub login, or the Google name for an account without GitHub sign-in |
+| `name` | string | Display name, from the same provider as `login` |
+| `identities` | array | Sign-in methods, GitHub first: `provider` (`github` or `google`), `subject` (the provider's account ID), `login`, `created_at` |
 | `created_at` | time | Registration time |
 | `last_signed_in_at` | time \| null | Time of the most recent sign-in |
 | `status` | string | `active` or `suspended` |
@@ -279,7 +280,7 @@ No endpoint returns a share link's token or address.
   "started_at": "2026-10-03T03:42:30Z",
   "config": {
     "public_url": "https://plainmote.link",
-    "registration_mode": "allowlist",
+    "registration_mode": "closed",
     "anonymous": true,
     "max_content_bytes": 10485760,
     "log_retention_hours": 720,
@@ -309,7 +310,7 @@ No endpoint returns a share link's token or address.
 
 `GET /_admin/v1/users?q=&status=&page=&size=`
 
-`q` matches part of the login (case-insensitive) or the whole GitHub ID; `status` is `active` or `suspended`. Returns a list of account objects (without `plans`).
+`q` matches part of the login (case-insensitive) or the whole account ID of any sign-in method; `status` is `active` or `suspended`. Returns a list of account objects (without `plans`).
 
 `GET /_admin/v1/users/{id}`
 

@@ -38,14 +38,10 @@ func testDatabase(t *testing.T) (*store.Store, User, Resource) {
 
 func testDatabaseURL(t *testing.T) string { return testsupport.DatabaseURL(t) }
 
-func newTestApp(db *store.Store, allowed ...string) *App {
-	ids := map[string]bool{}
-	for _, id := range allowed {
-		ids[id] = true
-	}
+func newTestApp(db *store.Store) *App {
 	app := &App{db: db, upstream: upstream.New(4 << 20), cfg: Config{
-		MaxContent: 4 << 20, PublicURL: "https://cfg.test", AllowedIDs: ids,
-		RegistrationMode: auth.RegistrationAllowlist, AnonymousEnabled: true,
+		MaxContent: 4 << 20, PublicURL: "https://cfg.test",
+		RegistrationMode: auth.RegistrationClosed, AnonymousEnabled: true,
 	}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()

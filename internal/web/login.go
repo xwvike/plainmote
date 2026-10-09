@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/http"
-	"net/url"
 )
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -10,10 +9,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
 		return
 	}
-	data := pageData{LoginURL: "/auth/github", RegistrationMode: a.cfg.RegistrationMode}
-	if next := safeNext(r.URL.Query().Get("next")); next != "" {
-		data.LoginURL += "?next=" + url.QueryEscape(next)
-	}
+	data := pageData{LoginOptions: a.loginOptions(safeNext(r.URL.Query().Get("next"))), RegistrationMode: a.cfg.RegistrationMode}
 	if r.URL.Query().Get("deleted") == "1" {
 		data.Notice = translate(requestLanguage(r).Locale, "account_deleted")
 	}

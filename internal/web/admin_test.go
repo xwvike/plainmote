@@ -220,7 +220,7 @@ func TestAdminSuspension(t *testing.T) {
 	signIn := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/auth/github/callback", nil)
 	request.Header.Set("Accept-Language", "en")
-	client.app.renderSuspended(signIn, request, user.GitHubID)
+	client.app.renderSuspended(signIn, request, store.ProviderGitHub, user.GitHubID)
 	if signIn.Code != http.StatusForbidden || !strings.Contains(signIn.Body.String(), "This account has been suspended. Reason: spam") {
 		t.Fatalf("the sign-in page says why: %d", signIn.Code)
 	}

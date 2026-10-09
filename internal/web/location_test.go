@@ -116,7 +116,7 @@ func TestDeliveryRecordsTheVisitorLocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newTestApp(db, user.GitHubID, other.GitHubID)
+	app := newTestApp(db)
 	app.cfg.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("172.18.0.2/32")}
 	app.cfg.CloudflareLocation = true
 

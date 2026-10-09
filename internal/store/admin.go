@@ -216,6 +216,16 @@ type AdminUser struct {
 	// if it has none. Nothing of the keys themselves is ever given.
 	MasterPassword   bool       `json:"master_password"`
 	MasterPasswordAt *time.Time `json:"master_password_at"`
+	// Identities are the ways the account signs in. GitHubID repeats the
+	// GitHub one's subject, and is empty without it.
+	Identities []AdminIdentity `json:"identities"`
+}
+
+type AdminIdentity struct {
+	Provider  string    `json:"provider"`
+	Subject   string    `json:"subject"`
+	Login     string    `json:"login"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type AdminGrant struct {
@@ -227,7 +237,7 @@ type AdminGrant struct {
 }
 
 const adminUserColumns = `
-  u.id, u.github_id, u.login, u.name, u.created_at, u.last_signed_in_at, u.suspended_at IS NOT NULL, u.suspended_reason,
+  u.id, COALESCE(u.github_id, ''), u.login, u.name, u.created_at, u.last_signed_in_at, u.suspended_at IS NOT NULL, u.suspended_reason,
   (SELECT COUNT(*) FROM resources r WHERE r.owner_id = u.id),
   (SELECT COUNT(*) FROM links l JOIN resources r ON r.id = l.resource_id
      WHERE r.owner_id = u.id AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at > $1)
@@ -235,7 +245,9 @@ const adminUserColumns = `
   (SELECT COALESCE(SUM(r.content_size), 0) FROM resources r WHERE r.owner_id = u.id),
   (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v JOIN resources r ON r.id = v.resource_id WHERE r.owner_id = u.id),
   limits.storage, limits.resources,
-  (SELECT k.created_at FROM keyrings k WHERE k.user_id = u.id)`
+  (SELECT k.created_at FROM keyrings k WHERE k.user_id = u.id),
+  (SELECT COALESCE(json_agg(json_build_object('provider', i.provider, 'subject', i.subject, 'login', i.login, 'created_at', i.created_at)
+     ORDER BY i.provider = 'github' DESC, i.created_at), '[]') FROM user_identities i WHERE i.user_id = u.id)`
 
 // adminUserLimits sums the plans in force at $1, the same way the quota does.
 const adminUserLimits = `
@@ -251,7 +263,7 @@ func scanAdminUser(row rowScanner) (AdminUser, error) {
 	var lastSignedIn, keyring pgtype.Timestamptz
 	var suspended bool
 	err := row.Scan(&u.ID, &u.GitHubID, &u.Login, &u.Name, &u.CreatedAt, &lastSignedIn, &suspended, &u.SuspendedReason,
-		&u.Resources, &u.LiveLinks, &u.Storage.CurrentBytes, &u.Storage.HistoryBytes, &u.Storage.LimitBytes, &u.ResourcesLimit, &keyring)
+		&u.Resources, &u.LiveLinks, &u.Storage.CurrentBytes, &u.Storage.HistoryBytes, &u.Storage.LimitBytes, &u.ResourcesLimit, &keyring, &u.Identities)
 	u.LastSignedInAt = timePointer(lastSignedIn)
 	u.MasterPasswordAt = timePointer(keyring)
 	u.MasterPassword = u.MasterPasswordAt != nil
@@ -263,11 +275,12 @@ func scanAdminUser(row rowScanner) (AdminUser, error) {
 }
 
 // AdminListUsers lists accounts, newest first. query matches a login or a
-// GitHub ID; status is "active", "suspended" or empty for both.
+// provider's ID for the account; status is "active", "suspended" or empty for both.
 func (d *Store) AdminListUsers(ctx context.Context, query, status string, limit, offset int, now time.Time) ([]AdminUser, int, error) {
 	query = strings.TrimSpace(query)
 	pattern := "%" + escapeLikePattern(query) + "%"
-	where := `u.id <> $2 AND ($3 = '' OR u.login ILIKE $4 ESCAPE '\' OR u.github_id = $3)
+	where := `u.id <> $2 AND ($3 = '' OR u.login ILIKE $4 ESCAPE '\'
+    OR EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id = u.id AND i.subject = $3))
   AND ($5 = '' OR ($5 = 'suspended') = (u.suspended_at IS NOT NULL))`
 	var total int
 	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM users u WHERE $1::timestamptz IS NOT NULL AND `+where,

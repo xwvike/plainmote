@@ -45,6 +45,28 @@
       {{end}}
     </section>
 
+    {{/* Every provider the account signs in with, and those it could link.
+         Linking goes through the provider as a sign-in does; the last method
+         cannot be removed. */}}
+    <section class="panel ruled">
+      <div class="pt"><span class="sec">{{tr .Locale "signin_methods"}}</span></div>
+      <div class="pb">
+        <div class="kv-rows">
+          {{range .SignIns}}
+          <div><span class="k">{{.Label}}</span>
+            <span class="v">{{with .Identity}}{{.Login}}<span class="mut"> · {{tr $.Locale "identity_linked_on"}} {{formatMinute .CreatedAt}}</span>{{else}}<span class="mut">{{tr $.Locale "identity_none"}}</span>{{end}}</span>
+            <span class="a">{{if or .CanLink .CanUnlink}}<form method="post" action="/account/identities" class="inline">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <input type="hidden" name="provider" value="{{.Provider}}">
+              {{if .CanLink}}<button type="submit" name="action" value="link" class="txt">{{tr $.Locale "identity_link"}}</button>
+              {{else}}<button type="submit" name="action" value="unlink" class="txt danger">{{tr $.Locale "identity_unlink"}}</button>{{end}}
+            </form>{{end}}</span>
+          </div>
+          {{end}}
+        </div>
+      </div>
+    </section>
+
     {{/* End-to-end encryption as one panel. Its header says the state the
          master password is in - not set, locked, unlocked - and offers what
          comes next in that state; the rows under it are the master password's
@@ -173,7 +195,7 @@
 </html>{{end}}
 
 
-{{define "account-flash"}}<div data-part="flash">{{if .Error}}<p class="err">{{.Error}}</p>{{end}}</div>{{end}}
+{{define "account-flash"}}<div data-part="flash">{{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}{{if .Error}}<p class="err">{{.Error}}</p>{{end}}</div>{{end}}
 
 {{define "account-dialog"}}
   {{if .DeleteOpen}}

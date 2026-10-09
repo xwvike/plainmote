@@ -30,13 +30,15 @@ type Config struct {
 	TrustedProxies   []netip.Prefix
 	// VisitorLocation names who tells the service where a caller is; empty
 	// means nobody does and access history has no location.
-	VisitorLocation  string
-	SessionTTL       time.Duration
-	LogRetention     time.Duration
-	MaxContent       int64
+	VisitorLocation string
+	SessionTTL      time.Duration
+	LogRetention    time.Duration
+	MaxContent      int64
+	// A sign-in provider is offered only with both its client ID and secret.
 	GitHubID         string
 	GitHubSecret     string
-	AllowedIDs       map[string]bool
+	GoogleID         string
+	GoogleSecret     string
 	RegistrationMode auth.RegistrationMode
 	TokenKey         []byte
 	Operator         string
@@ -78,6 +80,8 @@ func Load() (Config, error) {
 		PublicURL:     strings.TrimRight(strings.TrimSpace(os.Getenv("PLAINMOTE_PUBLIC_URL")), "/"),
 		GitHubID:      strings.TrimSpace(os.Getenv("GITHUB_CLIENT_ID")),
 		GitHubSecret:  strings.TrimSpace(os.Getenv("GITHUB_CLIENT_SECRET")),
+		GoogleID:      strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID")),
+		GoogleSecret:  strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_SECRET")),
 	}
 
 	for _, required := range []struct{ name, value string }{
@@ -88,27 +92,20 @@ func Load() (Config, error) {
 		{"PLAINMOTE_BLOB_ACCESS_KEY", cfg.BlobAccessKey},
 		{"PLAINMOTE_BLOB_SECRET_KEY", cfg.BlobSecretKey},
 		{"PLAINMOTE_TOKEN_KEY", strings.TrimSpace(os.Getenv("PLAINMOTE_TOKEN_KEY"))},
-		{"GITHUB_CLIENT_ID", cfg.GitHubID},
-		{"GITHUB_CLIENT_SECRET", cfg.GitHubSecret},
 	} {
 		if required.value == "" {
 			return Config{}, fmt.Errorf("%s is required", required.name)
 		}
 	}
+	if !cfg.GitHubConfigured() && !cfg.GoogleConfigured() {
+		return Config{}, errors.New("no sign-in method: set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, or GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET")
+	}
 
-	registrationMode, err := auth.ParseRegistrationMode(env("PLAINMOTE_REGISTRATION_MODE", string(auth.RegistrationAllowlist)))
+	registrationMode, err := auth.ParseRegistrationMode(env("PLAINMOTE_REGISTRATION_MODE", string(auth.RegistrationClosed)))
 	if err != nil {
 		return Config{}, err
 	}
 	cfg.RegistrationMode = registrationMode
-	allowedIDs, err := parseAllowedIDs(os.Getenv("GITHUB_ALLOWED_IDS"))
-	if err != nil {
-		return Config{}, err
-	}
-	cfg.AllowedIDs = allowedIDs
-	if cfg.RegistrationMode == auth.RegistrationAllowlist && len(cfg.AllowedIDs) == 0 {
-		return Config{}, errors.New("GITHUB_ALLOWED_IDS is required when PLAINMOTE_REGISTRATION_MODE is allowlist")
-	}
 
 	parsedPublicURL, err := url.Parse(cfg.PublicURL)
 	if err != nil || parsedPublicURL.Scheme == "" || parsedPublicURL.Host == "" ||
@@ -231,6 +228,10 @@ func parseSourceURL(value string) (string, error) {
 	return value, nil
 }
 
+func (c Config) GitHubConfigured() bool { return c.GitHubID != "" && c.GitHubSecret != "" }
+
+func (c Config) GoogleConfigured() bool { return c.GoogleID != "" && c.GoogleSecret != "" }
+
 func env(name, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 		return value
@@ -315,22 +316,6 @@ func parseTrustedProxies(value string) ([]netip.Prefix, error) {
 		}
 	}
 	return prefixes, nil
-}
-
-func parseAllowedIDs(value string) (map[string]bool, error) {
-	allowed := map[string]bool{}
-	for item := range strings.SplitSeq(value, ",") {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
-		}
-		id, err := strconv.ParseUint(item, 10, 64)
-		if err != nil || id == 0 {
-			return nil, fmt.Errorf("GITHUB_ALLOWED_IDS contains invalid GitHub user ID %q", item)
-		}
-		allowed[strconv.FormatUint(id, 10)] = true
-	}
-	return allowed, nil
 }
 
 func parseSecretKey(raw string) ([]byte, error) {

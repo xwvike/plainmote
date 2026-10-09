@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"plainmote/internal/auth"
 	"plainmote/internal/store"
 )
 
@@ -52,7 +53,8 @@ func TestAllPagesRender(t *testing.T) {
 	}
 
 	app := &App{
-		db: db,
+		db:     db,
+		github: auth.NewGitHub("client", "secret"),
 		upstream: upstreamFunc(func(_ context.Context, _ string) ([]byte, string, error) {
 			return []byte("rules:\n  - MATCH,PROXY\n"), "text/yaml; charset=utf-8", nil
 		}),
@@ -60,7 +62,6 @@ func TestAllPagesRender(t *testing.T) {
 			MaxContent:       4 << 20,
 			PublicURL:        "https://cfg.test",
 			AnonymousEnabled: true,
-			AllowedIDs:       map[string]bool{user.GitHubID: true},
 		},
 	}
 	app.templates = app.templateSet()

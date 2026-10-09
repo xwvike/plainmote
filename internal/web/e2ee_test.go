@@ -252,7 +252,7 @@ func TestE2EEAccountRefusesPlaintextFromTheBox(t *testing.T) {
 func TestEncryptedLinkOpensTheDecryptionPage(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	resource, link, err := db.CreateEncryptedPaste(ctx, user.ID, sampleEnvelope(), 0, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)

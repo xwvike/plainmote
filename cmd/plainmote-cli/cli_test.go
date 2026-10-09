@@ -105,7 +105,7 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(server.Close)
 	app := web.New(web.Config{
 		PublicURL: server.URL, MaxContent: 4 << 20, SessionTTL: time.Hour,
-		AllowedIDs: map[string]bool{"100": true}, RegistrationMode: auth.RegistrationAllowlist, Version: "test",
+		RegistrationMode: auth.RegistrationClosed, Version: "test",
 		AnonymousEnabled: true,
 	}, db, upstream.New(4<<20), nil)
 	handler = app.Handler()

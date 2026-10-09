@@ -21,7 +21,6 @@ func TestShareFlowThroughRouter(t *testing.T) {
 	ctx := context.Background()
 	app := &App{db: db, upstream: upstream.New(4 << 20), cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test",
-		AllowedIDs: map[string]bool{user.GitHubID: true},
 	}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()
@@ -305,7 +304,7 @@ func TestParseShareDuration(t *testing.T) {
 func TestServedContentTypeIsDetected(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 
 	serve := func(path, token string) string {
 		t.Helper()
@@ -364,7 +363,7 @@ func TestServedContentTypeIsDetected(t *testing.T) {
 func TestSharesAreOnThePageNotBehindIt(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -425,7 +424,7 @@ func TestSharesAreOnThePageNotBehindIt(t *testing.T) {
 func TestDefaultShareSurvivesALinkPreview(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -472,7 +471,7 @@ func TestShareAddressesSelectWithoutScript(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	for _, target := range []string{"/resources/" + resource.ID, "/resources/" + resource.ID + "?share=" + share.ID} {
 		r := httptest.NewRequest(http.MethodGet, "https://cfg.test"+target, nil)
 		r.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})

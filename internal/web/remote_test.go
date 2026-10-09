@@ -95,7 +95,7 @@ func TestRemotePreviewUsesUpstreamCharset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	app.upstream = upstreamFunc(func(_ context.Context, _ string) ([]byte, string, error) {
 		return []byte{'c', 'a', 'f', 0xe9, '\n'}, "text/plain; charset=windows-1252", nil
 	})

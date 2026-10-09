@@ -29,7 +29,7 @@ func signedIn(t *testing.T, db *store.Store, user User) accountClient {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return accountClient{t: t, app: newTestApp(db, user.GitHubID), session: session, csrf: csrf}
+	return accountClient{t: t, app: newTestApp(db), session: session, csrf: csrf}
 }
 
 func (c accountClient) do(method, target string, form url.Values) *httptest.ResponseRecorder {
@@ -126,7 +126,7 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 		reader.Close()
 	}
 
-	if account := string(files["account.txt"]); !strings.Contains(account, "GitHub username: alice") || !strings.Contains(account, "Display name: Alice") {
+	if account := string(files["account.txt"]); !strings.Contains(account, "Username: alice") || !strings.Contains(account, "Display name: Alice") {
 		t.Fatalf("account.txt: %s", account)
 	}
 	if _, ok := files["account.json"]; ok {

@@ -23,7 +23,6 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	ctx := context.Background()
 	app := &App{db: db, upstream: upstream.New(4 << 20), cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test",
-		AllowedIDs: map[string]bool{user.GitHubID: true},
 	}}
 	app.templates = app.templateSet()
 	app.handler = app.routes()
@@ -154,7 +153,7 @@ func TestLegacyTextKeepsBytesUntilEdited(t *testing.T) {
 	}
 	originalKey := resource.ContentKey
 
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -243,7 +242,7 @@ func TestEditorSavesSelectedEncodingAndLineEnding(t *testing.T) {
 	}
 	originalKey := resource.ContentKey
 
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)

@@ -45,7 +45,7 @@ func TestResourcePageOffersTheEditCommand(t *testing.T) {
 	if _, err := db.AdminTakedown(ctx, store.AdminActor{KeyID: "test"}, banned.ID, "test", time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)

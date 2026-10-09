@@ -50,7 +50,7 @@ func uploadResource(t *testing.T, app *App, session, csrf, name, filename, body 
 func TestRejectedUploadKeepsItsBody(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestRejectedUploadKeepsItsBody(t *testing.T) {
 func TestUploadedNameSurvivesTheRoundTrip(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func TestUploadedNameSurvivesTheRoundTrip(t *testing.T) {
 func TestRefusedUpdateKeepsTheEditInProgress(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	session, csrf, _, err := db.CreateSession(ctx, user.ID, time.Hour)
 	if err != nil {
 		t.Fatal(err)

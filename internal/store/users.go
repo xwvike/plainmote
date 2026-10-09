@@ -4,48 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
+// UpsertUser signs in with a GitHub identity; see SignIn.
 func (d *Store) UpsertUser(ctx context.Context, githubID, login, name, avatar string) (User, error) {
-	if strings.TrimSpace(githubID) == "" {
-		return User{}, errors.New("github user id must not be empty")
-	}
-	now := time.Now().UTC()
-	var user User
-	err := d.withTx(ctx, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `
-INSERT INTO users(id, github_id, login, name, avatar_url, created_at, updated_at)
-VALUES($1, $2, $3, $4, $5, $6, $6)
-ON CONFLICT(github_id) DO NOTHING
-RETURNING id, github_id, login, name, avatar_url
-		`, uuid.NewString(), githubID, login, name, avatar, now).Scan(
-			&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
-		)
-		if err == nil {
-			return grantDefaultPlan(ctx, tx, user.ID, now)
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("create user: %w", err)
-		}
-
-		return tx.QueryRow(ctx, `
-UPDATE users
-SET login = $2, name = $3, avatar_url = $4, updated_at = $5
-WHERE github_id = $1
-RETURNING id, github_id, login, name, avatar_url
-		`, githubID, login, name, avatar, now).Scan(
-			&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
-		)
-	})
-	if err != nil {
-		return User{}, fmt.Errorf("save user: %w", err)
-	}
-	return user, nil
+	return d.SignIn(ctx, Identity{Provider: ProviderGitHub, Subject: githubID, Login: login, Name: name, AvatarURL: avatar})
 }
 
 // ErrSuspended is a sign-in by an account the operator has suspended.
@@ -91,7 +58,7 @@ func (d *Store) SessionUser(ctx context.Context, token string) (User, string, er
 	var sessionID string
 	tokenHash := hashToken(token)
 	err := d.db.QueryRow(ctx, `
-SELECT s.id, u.id, u.github_id, u.login, u.name, u.avatar_url
+SELECT s.id, u.id, COALESCE(u.github_id, ''), u.login, u.name, u.avatar_url
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > $2 AND u.suspended_at IS NULL
@@ -119,18 +86,7 @@ func (d *Store) DeleteSession(ctx context.Context, sessionID string) error {
 	return err
 }
 
+// GetUser is the account a GitHub identity signs in to; see IdentityUser.
 func (d *Store) GetUser(ctx context.Context, githubID string) (User, error) {
-	var user User
-	err := d.db.QueryRow(ctx, `
-SELECT id, github_id, login, name, avatar_url, suspended_at IS NOT NULL, suspended_reason FROM users WHERE github_id = $1
-`, githubID).Scan(
-		&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL, &user.Suspended, &user.SuspendedReason,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return User{}, ErrNotFound
-	}
-	if err != nil {
-		return User{}, fmt.Errorf("read user: %w", err)
-	}
-	return user, nil
+	return d.IdentityUser(ctx, ProviderGitHub, githubID)
 }

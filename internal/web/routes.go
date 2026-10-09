@@ -21,6 +21,7 @@ type App struct {
 	db        *store.Store
 	upstream  upstreamFetcher
 	github    *auth.GitHub
+	google    *auth.Google
 	templates *template.Template
 	handler   http.Handler
 	probes    probeLog
@@ -39,11 +40,13 @@ type Link = store.Link
 type AccessLog = store.AccessLog
 
 type Config struct {
-	PublicURL      string
-	SessionTTL     time.Duration
-	MaxContent     int64
-	AllowedIDs     map[string]bool
-	TrustedProxies []netip.Prefix
+	PublicURL  string
+	SessionTTL time.Duration
+	MaxContent int64
+	// Google sign-in is on when both halves of its client are set.
+	GoogleClientID     string
+	GoogleClientSecret string
+	TrustedProxies     []netip.Prefix
 	// CloudflareLocation believes the visitor location headers Cloudflare
 	// adds, when they come from a trusted proxy.
 	CloudflareLocation bool
@@ -66,7 +69,7 @@ type Config struct {
 }
 
 func New(cfg Config, db *store.Store, source upstreamFetcher, github *auth.GitHub) *App {
-	app := &App{cfg: cfg, db: db, upstream: source, github: github}
+	app := &App{cfg: cfg, db: db, upstream: source, github: github, google: auth.NewGoogle(cfg.GoogleClientID, cfg.GoogleClientSecret)}
 	if len(cfg.AdminKeys) > 0 {
 		app.admin = newAdminGate(cfg.AdminKeys, cfg.AdminOrigins)
 	}
@@ -78,18 +81,18 @@ func New(cfg Config, db *store.Store, source upstreamFetcher, github *auth.GitHu
 func (a *App) Handler() http.Handler { return a.handler }
 
 type pageData struct {
-	User       User
-	CSRF       string
-	Active     string
-	BaseURL    string
-	MaxContent int64
-	Error      string
-	LoginURL   string
-	SignInURL  string
-	Locale     string
-	Language   languageView
-	Theme      themeView
-	SourceURL  string
+	User         User
+	CSRF         string
+	Active       string
+	BaseURL      string
+	MaxContent   int64
+	Error        string
+	LoginOptions []loginOption
+	SignInURL    string
+	Locale       string
+	Language     languageView
+	Theme        themeView
+	SourceURL    string
 	// Canonical is the page's own address, as a path; Alternates are the same
 	// page in its other languages. LocalePrefix is the language segment of a
 	// language's own address ("" elsewhere), which the home links keep, and
@@ -112,6 +115,9 @@ type pageData struct {
 	// RevokeToken the one its revoke dialog is about.
 	APITokens   []store.APIToken
 	RevokeToken store.APIToken
+	// SignIns are the account page's sign-in methods: every provider the
+	// account has or could link.
+	SignIns []signInView
 	// E2EE is whether this account's quick shares are encrypted in the browser.
 	E2EE bool
 	// Keyring is the account's master password, if it has one, and
@@ -310,8 +316,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(faviconPath, a.handleFavicon)
 	mux.HandleFunc("/healthz", a.handleHealth)
 	mux.HandleFunc("/login", a.handleLogin)
-	mux.HandleFunc("/auth/github", a.handleGitHubLogin)
-	mux.HandleFunc("/auth/github/callback", a.handleGitHubCallback)
+	mux.HandleFunc(oauthPrefix, a.handleOAuth)
 	mux.HandleFunc("/logout", a.handleLogout)
 	mux.HandleFunc("/language", a.handleLanguage)
 	mux.HandleFunc("/theme", a.handleTheme)
@@ -322,6 +327,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(accountDeletePath, a.handleAccountDelete)
 	mux.HandleFunc(accountTokensPath, a.handleAccountTokens)
 	mux.HandleFunc(accountKeyringPath, a.handleAccountKeyring)
+	mux.HandleFunc(accountIdentitiesPath, a.handleAccountIdentities)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc(apiPrefix, a.handleAPI)
 	mux.HandleFunc(cliPath, a.handleCLI)

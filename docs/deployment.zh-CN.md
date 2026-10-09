@@ -125,6 +125,24 @@ R2 使用 `PLAINMOTE_BLOB_REGION=auto`。Bucket 不需要公开访问，所有�
 授权页面展示的名称来自这个 OAuth App。应由项目或组织账号持有该 App；使用个人账号创建时，GitHub 仍可能
 在授权信息中展示该账号的归属关系。
 
+### Google OAuth 客户端
+
+Google 登录为可选项，可与 GitHub 同时启用，也可单独使用。在 Google Cloud Console 的 Google Auth Platform 中：
+
+1. **品牌（Branding）**：填写应用名称、支持邮箱、首页（`PLAINMOTE_PUBLIC_URL/about`）、隐私政策（`/privacy`）和服务条款（`/terms`），并把域名加入已授权网域。该域名须在同一 Google 账号的 Google Search Console 中完成验证。法律页面仅在设置 `PLAINMOTE_CONTACT_EMAIL` 后提供。
+2. **受众（Audience）**：选择 External。应用处于测试状态时只有列出的测试用户可以登录，发布到正式环境后对所有人开放。
+3. **数据访问（Data access）**：只添加 `openid` 与 `.../auth/userinfo.profile`。PlainMote 不请求其他权限，包括邮箱；这些范围无需应用验证。
+4. **客户端（Clients）**：新建 Web 应用类型的客户端，已获授权的重定向 URI 为 `PLAINMOTE_PUBLIC_URL/auth/google/callback`。Client Secret 只在创建时显示，应当场保存。
+5. 可选：提交品牌验证，通过后同意页面显示应用名称。
+
+设置 `GOOGLE_CLIENT_ID` 与 `GOOGLE_CLIENT_SECRET`。账号以 Google 账号 ID（`sub`）识别；用 GitHub 和用 Google 创建的账号互相独立，所有者可以在账号页面绑定另一种登录方式。
+
+### 注册
+
+`PLAINMOTE_REGISTRATION_MODE` 决定从未登录过的 GitHub 或 Google 账号能否创建账号：`open` 或 `closed`（默认）。已有账号不受影响，修改后重启即生效，可随时切换。新部署时先设为 `open`，登录创建自己的账号；如不希望他人注册，再改回 `closed`。
+
+某种登录方式只有在 Client ID 与 Secret 都设置时才会提供。缺少其中一项时，不显示对应按钮，并在启动日志中说明；两种方式都不完整时，服务不会启动。
+
 ## 3. 配置部署目录
 
 服务器只需要 `compose.yaml` 与 `.env`，不需要克隆源码：

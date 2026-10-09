@@ -19,7 +19,7 @@ func TestShareAddressCannotBeEmbeddedCrossSite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	address := shareAddress(share.Token, resource.Filename)
 
 	fetch := func(site, mode, dest string) *httptest.ResponseRecorder {

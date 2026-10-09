@@ -31,7 +31,7 @@ func newVersionClient(t *testing.T, db *store.Store, user User) *versionClient {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &versionClient{t: t, app: newTestApp(db, user.GitHubID), session: session, csrf: csrf}
+	return &versionClient{t: t, app: newTestApp(db), session: session, csrf: csrf}
 }
 
 func (c *versionClient) do(method, target string, form url.Values) *httptest.ResponseRecorder {

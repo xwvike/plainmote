@@ -704,6 +704,7 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .signin-card .rule { width: 100%; margin: 17px 0; background: none; border-top: 1px dashed var(--line2); }
 .signin-card .err { width: 100%; margin-bottom: 12px; text-align: left; }
 .signin-go { width: 100%; height: 32px; }
+.signin-go + .signin-go { margin-top: 8px; }
 .signin-note { margin-top: 11px; }
 
 /* The editor mounts beside its textarea, and .cm-source is put on that

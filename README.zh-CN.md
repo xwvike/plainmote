@@ -114,7 +114,7 @@ PlainMote 为单个无状态的 Go 服务，依赖以下组件：
 
 - PostgreSQL
 - S3 兼容对象存储（例如 Cloudflare R2、MinIO）
-- GitHub OAuth App（用于登录）
+- GitHub OAuth App 或 Google OAuth 客户端（用于登录，可同时启用）
 
 镜像以 `ghcr.io/xwvike/plainmote` 发布，包含 amd64 与 arm64，在 GitHub Actions 中构建并附带经签名的构建来源证明。服务器只需要 `compose.yaml` 与 `.env`：
 
@@ -140,8 +140,6 @@ docker compose up -d
 | `PLAINMOTE_BLOB_ACCESS_KEY` | Access Key ID |
 | `PLAINMOTE_BLOB_SECRET_KEY` | Secret Access Key |
 | `PLAINMOTE_TOKEN_KEY` | 32 字节的 Token 加密密钥（64 位十六进制或 Base64）；更换后已有分享地址无法解密 |
-| `GITHUB_CLIENT_ID` | GitHub OAuth Client ID |
-| `GITHUB_CLIENT_SECRET` | GitHub OAuth Client Secret |
 
 可选：
 
@@ -154,8 +152,9 @@ docker compose up -d
 | `PLAINMOTE_SESSION_TTL` | `720h` | 登录会话有效期 |
 | `PLAINMOTE_MAX_CONTENT_MIB` | `10` | 单份内容大小上限 |
 | `PLAINMOTE_LOG_RETENTION` | `720h` | 访问记录保留时长，`0` 表示永久保留 |
-| `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | 新用户注册策略：`open`、`allowlist` 或 `closed` |
-| `GITHUB_ALLOWED_IDS` | 空 | `allowlist` 模式下允许注册的 GitHub 数字用户 ID，逗号分隔 |
+| `PLAINMOTE_REGISTRATION_MODE` | `closed` | 是否允许新账号注册：`open` 或 `closed`。已有账号不受影响，可随时切换 |
+| `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` | 空 | GitHub OAuth App 的 Client ID 与 Secret；与 Google 至少启用一种。任一项缺失则该登录方式关闭，不显示对应按钮 |
+| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | 空 | Google OAuth 客户端的 Client ID 与 Secret；仅请求名称与头像，不获取邮箱 |
 | `PLAINMOTE_ANONYMOUS` | `false` | 是否开放首页的免登录快速分享 |
 | `PLAINMOTE_OPERATOR` | 空 | 运营者名称，显示在关于、隐私政策和服务条款中 |
 | `PLAINMOTE_CONTACT_EMAIL` | 空 | 联系邮箱；设置后才提供关于、隐私政策、服务条款和联系页面 |
@@ -187,7 +186,7 @@ docker compose up -d
 docker compose -f compose.dev.yaml up --build
 ```
 
-应用地址为 `http://localhost:8964`，MinIO 控制台地址为 `http://localhost:9001`。登录功能需在 `.env` 中配置 GitHub OAuth 参数。
+应用地址为 `http://localhost:8964`，MinIO 控制台地址为 `http://localhost:9001`。登录功能需在 `.env` 中配置 GitHub 或 Google 的 OAuth 参数。
 
 运行测试：
 
@@ -208,7 +207,7 @@ cmd/plainmote/       服务入口
 cmd/plainmote-admin/ 管理密钥生成与请求签名工具
 cmd/plainmote-cli/   plainmote 命令行
 internal/app/        服务组装与 HTTP 生命周期
-internal/auth/       GitHub OAuth
+internal/auth/       GitHub OAuth 与 Google OpenID Connect
 internal/blob/       S3 兼容对象存储
 internal/config/     环境变量解析与校验
 internal/linediff/   版本页面与命令行共用的行级差异比较

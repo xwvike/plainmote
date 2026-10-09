@@ -113,6 +113,24 @@ Create a dedicated OAuth App on GitHub:
 
 The name shown on the authorization page comes from this OAuth App. It should be owned by a project or organisation account; when it is created under a personal account, GitHub may still show that account's ownership in the authorization details.
 
+### Google OAuth client
+
+Google sign-in is optional, beside or instead of GitHub. In the Google Cloud Console, under Google Auth Platform:
+
+1. **Branding**: application name, support email, home page (`PLAINMOTE_PUBLIC_URL/about`), privacy policy (`/privacy`) and terms of service (`/terms`), and the domain as an authorized domain. The domain must be verified in Google Search Console under the same Google account. The legal pages exist only with `PLAINMOTE_CONTACT_EMAIL` set.
+2. **Audience**: External. While the app is in testing, only the test users listed there can sign in; publish it to production for everyone.
+3. **Data access**: only `openid` and `.../auth/userinfo.profile`. PlainMote asks for nothing else, the email address included; these scopes need no app verification.
+4. **Clients**: a Web application client with the authorized redirect URI `PLAINMOTE_PUBLIC_URL/auth/google/callback`. The client secret is shown only when it is created; keep it in that moment.
+5. Optionally, submit the branding for verification, after which the consent screen shows the application's name.
+
+Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. An account signs in with a Google account by its ID (`sub`); accounts made with GitHub and with Google are separate, and their owner can link the other method on the account page.
+
+### Registration
+
+`PLAINMOTE_REGISTRATION_MODE` decides whether a GitHub or Google account that has never signed in may create an account: `open` or `closed`, the default. Existing accounts sign in either way, so it can be changed at any time with a restart. On a new deployment, set it to `open`, sign in to create your own account, and set it back to `closed` if nobody else should register.
+
+A sign-in method is offered only when both its client ID and secret are set. With one of the two missing, its button is not shown and the startup log says which; with neither method complete, the service does not start.
+
 ## 3. Preparing the deployment directory
 
 The server needs only `compose.yaml` and `.env`, not the source code:

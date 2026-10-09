@@ -11,7 +11,7 @@ PlainMote 不包含管理页面。运营者通过一组以 Ed25519 签名保护�
 | 范围 | 可进行的操作 |
 | --- | --- |
 | 部署概况 | 查看版本、主要配置、数据库与对象存储的状态、用户与资源的数量及容量、分享链接与访问的统计、最近一次定时清理的结果 |
-| 账号 | 按登录名或 GitHub ID 查找；查看资源数量、容量与生效中的套餐；停用与恢复 |
+| 账号 | 按登录名或登录方式的账号 ID 查找；查看资源数量、容量与生效中的套餐；停用与恢复 |
 | 套餐 | 新建与删除套餐；为账号授予或撤回套餐，可设置到期时间 |
 | 资源 | 按所有者、名称或状态查找；查看元数据与分享链接列表；下架与撤销下架；删除 |
 | 分享链接 | 由举报中的分享地址找到对应的资源与链接；撤销单条链接 |
@@ -21,7 +21,7 @@ PlainMote 不包含管理页面。运营者通过一组以 Ed25519 签名保护�
 
 - **不接触内容**：任何接口都不返回资源正文、历史版本正文、分享链接地址或访问记录中的访问者信息（IP 地址与客户端信息）。运营者只能看到元数据与汇总数字；远程资源只给出源地址的主机名。
 - **变更必须说明原因并留痕**：每一项变更都须附带原因，并写入只追加的审计记录，记录时间、所用密钥、操作、对象、原因及来源 IP。审计记录不能修改或删除，也不随访问记录的保留期清理。
-- **注册白名单不在其中**：`allowlist` 模式下允许注册的账号由 `GITHUB_ALLOWED_IDS` 在启动时决定。
+- **注册开关不在其中**：是否允许新账号注册由 `PLAINMOTE_REGISTRATION_MODE` 在启动时决定。
 
 ### 对用户的影响
 
@@ -168,9 +168,10 @@ PLAINMOTE-ADMIN-V1
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | string | 账号 ID |
-| `github_id` | string | GitHub 数字用户 ID |
-| `login` | string | GitHub 登录名 |
-| `name` | string | GitHub 显示名称 |
+| `github_id` | string | GitHub 数字用户 ID；未使用 GitHub 登录的账号为空 |
+| `login` | string | 用户名：GitHub 登录名；未使用 GitHub 登录的账号为 Google 名称 |
+| `name` | string | 显示名称，与 `login` 来自同一登录方式 |
+| `identities` | array | 登录方式，GitHub 在前：`provider`（`github` 或 `google`）、`subject`（该服务的账号 ID）、`login`、`created_at` |
 | `created_at` | time | 注册时间 |
 | `last_signed_in_at` | time \| null | 最近一次登录时间 |
 | `status` | string | `active` 或 `suspended` |
@@ -279,7 +280,7 @@ PLAINMOTE-ADMIN-V1
   "started_at": "2026-10-03T03:42:30Z",
   "config": {
     "public_url": "https://plainmote.link",
-    "registration_mode": "allowlist",
+    "registration_mode": "closed",
     "anonymous": true,
     "max_content_bytes": 10485760,
     "log_retention_hours": 720,
@@ -309,7 +310,7 @@ PLAINMOTE-ADMIN-V1
 
 `GET /_admin/v1/users?q=&status=&page=&size=`
 
-`q` 部分匹配登录名（不区分大小写），或完全匹配 GitHub ID；`status` 为 `active` 或 `suspended`。返回账号对象的列表（不含 `plans`）。
+`q` 部分匹配登录名（不区分大小写），或完全匹配任一登录方式的账号 ID；`status` 为 `active` 或 `suspended`。返回账号对象的列表（不含 `plans`）。
 
 `GET /_admin/v1/users/{id}`
 

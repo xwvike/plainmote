@@ -31,7 +31,7 @@ func (d *Store) quotaForUser(ctx context.Context, q storeQuerier, userID string,
 
 	var user User
 	err := q.QueryRow(ctx,
-		`SELECT id, github_id, login, name, avatar_url FROM users WHERE id = $1`, userID).Scan(&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL)
+		`SELECT id, COALESCE(github_id, ''), login, name, avatar_url FROM users WHERE id = $1`, userID).Scan(&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL)
 	if err != nil {
 		return UserQuota{}, translateNotFound(err)
 	}

@@ -114,7 +114,7 @@ PlainMote is a single stateless Go service with the following dependencies:
 
 - PostgreSQL
 - S3-compatible object storage (such as Cloudflare R2 or MinIO)
-- A GitHub OAuth App (for sign-in)
+- A GitHub OAuth App or a Google OAuth client (for sign-in; both may be enabled)
 
 The image is published as `ghcr.io/xwvike/plainmote` for amd64 and arm64, built in GitHub Actions with a signed build provenance attestation. The server needs only `compose.yaml` and `.env`:
 
@@ -140,8 +140,6 @@ Required:
 | `PLAINMOTE_BLOB_ACCESS_KEY` | Access Key ID |
 | `PLAINMOTE_BLOB_SECRET_KEY` | Secret Access Key |
 | `PLAINMOTE_TOKEN_KEY` | 32-byte token encryption key (64 hex digits or Base64); changing it makes existing share links undecryptable |
-| `GITHUB_CLIENT_ID` | GitHub OAuth Client ID |
-| `GITHUB_CLIENT_SECRET` | GitHub OAuth Client Secret |
 
 Optional:
 
@@ -154,8 +152,9 @@ Optional:
 | `PLAINMOTE_SESSION_TTL` | `720h` | Sign-in session lifetime |
 | `PLAINMOTE_MAX_CONTENT_MIB` | `10` | Size limit for one piece of content |
 | `PLAINMOTE_LOG_RETENTION` | `720h` | How long access history is kept; `0` keeps it forever |
-| `PLAINMOTE_REGISTRATION_MODE` | `allowlist` | New account policy: `open`, `allowlist` or `closed` |
-| `GITHUB_ALLOWED_IDS` | empty | Numeric GitHub user IDs allowed to register in `allowlist` mode, comma-separated |
+| `PLAINMOTE_REGISTRATION_MODE` | `closed` | Whether new accounts can register: `open` or `closed`. Existing accounts sign in either way, so it can be changed at any time |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | empty | GitHub OAuth App client ID and secret; GitHub, Google or both must be enabled. A provider missing either value is off, and its button is not shown |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | Google OAuth client ID and secret; only the name and picture are requested, never the email address |
 | `PLAINMOTE_ANONYMOUS` | `false` | Whether the home page offers quick share without signing in |
 | `PLAINMOTE_OPERATOR` | empty | Operator name, shown in the about page, privacy policy and terms |
 | `PLAINMOTE_CONTACT_EMAIL` | empty | Contact email; the about, privacy, terms and contact pages are served only when it is set |
@@ -187,7 +186,7 @@ The development environment comprises PostgreSQL, MinIO and the application with
 docker compose -f compose.dev.yaml up --build
 ```
 
-The application is served at `http://localhost:8964` and the MinIO console at `http://localhost:9001`. Sign-in requires the GitHub OAuth settings in `.env`.
+The application is served at `http://localhost:8964` and the MinIO console at `http://localhost:9001`. Sign-in requires the GitHub or Google OAuth settings in `.env`.
 
 Running the tests:
 
@@ -208,7 +207,7 @@ cmd/plainmote/       service entry point
 cmd/plainmote-admin/ admin key generation and request signing
 cmd/plainmote-cli/   the plainmote command line
 internal/app/        service assembly and HTTP lifecycle
-internal/auth/       GitHub OAuth
+internal/auth/       GitHub OAuth and Google OpenID Connect
 internal/blob/       S3-compatible object storage
 internal/config/     environment parsing and validation
 internal/linediff/   line diff for version pages and the command line

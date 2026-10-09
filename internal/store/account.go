@@ -13,8 +13,9 @@ import (
 
 // Account is what the account page and the export say about the account itself.
 type Account struct {
-	User      User
-	CreatedAt time.Time
+	User       User
+	CreatedAt  time.Time
+	Identities []Identity
 }
 
 func (d *Store) Account(ctx context.Context, userID string) (Account, error) {
@@ -23,11 +24,14 @@ func (d *Store) Account(ctx context.Context, userID string) (Account, error) {
 	}
 	var account Account
 	err := d.db.QueryRow(ctx, `
-SELECT id, github_id, login, name, avatar_url, created_at FROM users WHERE id = $1
+SELECT id, COALESCE(github_id, ''), login, name, avatar_url, created_at FROM users WHERE id = $1
 `, userID).Scan(&account.User.ID, &account.User.GitHubID, &account.User.Login,
 		&account.User.Name, &account.User.AvatarURL, &account.CreatedAt)
 	if err != nil {
 		return Account{}, translateNotFound(err)
+	}
+	if account.Identities, err = identities(ctx, d.db, userID); err != nil {
+		return Account{}, err
 	}
 	return account, nil
 }

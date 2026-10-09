@@ -178,7 +178,7 @@ func TestDevicePageLocksAfterWrongCodes(t *testing.T) {
 // and sign out - and what a read-only token and a stale save are told.
 func TestTheResourceAPI(t *testing.T) {
 	db, user, resource := testDatabase(t)
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	token := issueToken(t, db, user, store.TokenScopeWrite)
 	reader := issueToken(t, db, user, store.TokenScopeRead)
 	base := apiPrefix + "resources/" + resource.ID
@@ -269,7 +269,7 @@ func TestTheResourceAPI(t *testing.T) {
 // is not offered.
 func TestQuickSharesThroughTheAPI(t *testing.T) {
 	db, user, _ := testDatabase(t)
-	app := newTestApp(db, user.GitHubID)
+	app := newTestApp(db)
 	token := issueToken(t, db, user, store.TokenScopeWrite)
 	share := func(ttl string, content string) *httptest.ResponseRecorder {
 		var form bytes.Buffer
@@ -357,7 +357,7 @@ func TestAnotherAccountsTokenReachesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newTestApp(db, owner.GitHubID, intruder.GitHubID)
+	app := newTestApp(db)
 	token := issueToken(t, db, intruder, store.TokenScopeWrite)
 
 	base := apiPrefix + "resources/" + resource.ID

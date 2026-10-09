@@ -216,6 +216,34 @@ CREATE TABLE IF NOT EXISTS keyrings (
   recovery_at TIMESTAMPTZ NOT NULL
 );
 
+-- The ways an account is signed in to: a GitHub or Google account, by the
+-- provider's own stable ID (GitHub's numeric user ID, Google's sub). One of
+-- each provider per account, and one account per provider identity: a second
+-- one is linked from the account page, never merged by matching anything.
+-- login, name and avatar_url are what the provider last said; the account's
+-- own copy in users follows the GitHub identity when there is one.
+CREATE TABLE IF NOT EXISTS user_identities (
+  provider TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  login TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL DEFAULT '',
+  avatar_url TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL,
+  last_used_at TIMESTAMPTZ,
+  PRIMARY KEY (provider, subject),
+  UNIQUE (user_id, provider)
+);
+-- Every account from before had exactly its GitHub identity. The anonymous
+-- account's github_id is not numeric and is left out, so nobody signs in as it.
+INSERT INTO user_identities (provider, subject, user_id, login, name, avatar_url, created_at, last_used_at)
+SELECT 'github', github_id, id, login, name, avatar_url, created_at, last_signed_in_at
+FROM users WHERE github_id ~ '^[0-9]+$'
+ON CONFLICT DO NOTHING;
+-- users.github_id stays as the GitHub identity's copy, for the admin
+-- interface; an account signed up with Google has none.
+ALTER TABLE users ALTER COLUMN github_id DROP NOT NULL;
+
 -- One row per data export, kept only as long as the rate window needs it.
 CREATE TABLE IF NOT EXISTS account_exports (
   id UUID PRIMARY KEY,

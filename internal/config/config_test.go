@@ -18,7 +18,6 @@ func setRequiredEnvironment(t *testing.T) {
 	t.Setenv("PLAINMOTE_TOKEN_KEY", "0123456789abcdef0123456789abcdef")
 	t.Setenv("GITHUB_CLIENT_ID", "client")
 	t.Setenv("GITHUB_CLIENT_SECRET", "secret")
-	t.Setenv("GITHUB_ALLOWED_IDS", "100")
 	t.Setenv("PLAINMOTE_REGISTRATION_MODE", "")
 }
 
@@ -41,8 +40,8 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	if len(cfg.TrustedProxies) != 2 {
 		t.Fatalf("got %d trusted proxies, want 2", len(cfg.TrustedProxies))
 	}
-	if cfg.RegistrationMode != auth.RegistrationAllowlist || !cfg.AllowedIDs["100"] {
-		t.Fatalf("default registration policy was not loaded: mode=%q ids=%v", cfg.RegistrationMode, cfg.AllowedIDs)
+	if cfg.RegistrationMode != auth.RegistrationClosed {
+		t.Fatalf("default registration mode = %q, want closed", cfg.RegistrationMode)
 	}
 }
 
@@ -50,23 +49,17 @@ func TestLoadRegistrationPolicy(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		mode    string
-		ids     string
 		want    auth.RegistrationMode
-		wantIDs []string
 		wantErr bool
 	}{
-		{name: "open without allowlist", mode: "open", want: auth.RegistrationOpen},
-		{name: "closed without allowlist", mode: "closed", want: auth.RegistrationClosed},
-		{name: "allowlist", mode: "allowlist", ids: "100, 00200,100", want: auth.RegistrationAllowlist, wantIDs: []string{"100", "200"}},
-		{name: "allowlist requires IDs", mode: "allowlist", wantErr: true},
-		{name: "invalid mode", mode: "opne", ids: "100", wantErr: true},
-		{name: "wildcard is not an ID", mode: "allowlist", ids: "*", wantErr: true},
-		{name: "login is not an ID", mode: "allowlist", ids: "alice", wantErr: true},
+		{name: "open", mode: "open", want: auth.RegistrationOpen},
+		{name: "closed", mode: "closed", want: auth.RegistrationClosed},
+		{name: "allowlist is gone", mode: "allowlist", wantErr: true},
+		{name: "invalid mode", mode: "opne", wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setRequiredEnvironment(t)
 			t.Setenv("PLAINMOTE_REGISTRATION_MODE", tc.mode)
-			t.Setenv("GITHUB_ALLOWED_IDS", tc.ids)
 			cfg, err := Load()
 			if tc.wantErr {
 				if err == nil {
@@ -79,14 +72,6 @@ func TestLoadRegistrationPolicy(t *testing.T) {
 			}
 			if cfg.RegistrationMode != tc.want {
 				t.Fatalf("mode = %q, want %q", cfg.RegistrationMode, tc.want)
-			}
-			if len(cfg.AllowedIDs) != len(tc.wantIDs) {
-				t.Fatalf("allowed IDs = %v, want %v", cfg.AllowedIDs, tc.wantIDs)
-			}
-			for _, id := range tc.wantIDs {
-				if !cfg.AllowedIDs[id] {
-					t.Errorf("allowed IDs %v do not contain %q", cfg.AllowedIDs, id)
-				}
 			}
 		})
 	}

@@ -43,6 +43,15 @@ func Run() error {
 		return err
 	}
 
+	for _, provider := range []struct{ name, id, secret string }{
+		{"GITHUB", cfg.GitHubID, cfg.GitHubSecret},
+		{"GOOGLE", cfg.GoogleID, cfg.GoogleSecret},
+	} {
+		if (provider.id == "") != (provider.secret == "") {
+			fmt.Fprintf(os.Stderr, "%s_CLIENT_ID and %s_CLIENT_SECRET are not both set: that sign-in is off\n", provider.name, provider.name)
+		}
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	db, err := store.Open(ctx, cfg.DatabaseURL, cfg.TokenKey, blobs)
@@ -57,7 +66,8 @@ func Run() error {
 		PublicURL:          cfg.PublicURL,
 		SessionTTL:         cfg.SessionTTL,
 		MaxContent:         cfg.MaxContent,
-		AllowedIDs:         cfg.AllowedIDs,
+		GoogleClientID:     cfg.GoogleID,
+		GoogleClientSecret: cfg.GoogleSecret,
 		TrustedProxies:     cfg.TrustedProxies,
 		CloudflareLocation: cfg.VisitorLocation == config.LocationCloudflare,
 		RegistrationMode:   cfg.RegistrationMode,
