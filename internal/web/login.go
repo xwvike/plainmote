@@ -13,9 +13,6 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("deleted") == "1" {
 		data.Notice = translate(requestLanguage(r).Locale, "account_deleted")
 	}
-	if r.URL.Query().Get("error") != "" {
-		data.Error = r.URL.Query().Get("error")
-	}
 	a.renderTemplate(w, r, http.StatusOK, "login.html", data)
 }
 

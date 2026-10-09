@@ -141,10 +141,13 @@ func (a *App) signIns(identities []store.Identity) []signInView {
 func identityFlash(r *http.Request) (notice, failure string) {
 	locale := requestLanguage(r).Locale
 	query := r.URL.Query()
+	// Only a provider's own name is said back: anything else in the address
+	// would be someone else's words on this page.
+	known := func(name string) bool { return name == store.ProviderGitHub || name == store.ProviderGoogle }
 	switch {
-	case query.Get("linked") != "":
+	case known(query.Get("linked")):
 		return fmt.Sprintf(translate(locale, "identity_linked"), providerLabel(query.Get("linked"))), ""
-	case query.Get("unlinked") != "":
+	case known(query.Get("unlinked")):
 		return fmt.Sprintf(translate(locale, "identity_unlinked"), providerLabel(query.Get("unlinked"))), ""
 	}
 	switch query.Get("identity") {
