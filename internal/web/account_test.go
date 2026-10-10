@@ -57,8 +57,14 @@ func TestAccountPageIsReachableFromTheTopBar(t *testing.T) {
 	}
 	page := client.do(http.MethodGet, "/account", nil)
 	body := page.Body.String()
-	if page.Code != http.StatusOK || !strings.Contains(body, `action="/account/export"`) || !strings.Contains(body, `action="/account/delete"`) {
-		t.Fatalf("account page: %d %s", page.Code, body)
+	for _, link := range []string{`href="/account/sign-in"`, `href="/account/security"`, `href="/account/devices"`, `href="/account/data"`, `href="/developers/cli"`} {
+		if page.Code != http.StatusOK || !strings.Contains(body, link) {
+			t.Fatalf("account page: %d, the side navigation lacks %s", page.Code, link)
+		}
+	}
+	data := client.do(http.MethodGet, "/account/data", nil).Body.String()
+	if !strings.Contains(data, `action="/account/export"`) || !strings.Contains(data, `action="/account/delete"`) {
+		t.Fatalf("data page: %s", data)
 	}
 }
 
@@ -239,15 +245,15 @@ func TestExportIsLimitedAndThePageSaysSo(t *testing.T) {
 	if refused.Code != http.StatusTooManyRequests || !strings.Contains(refused.Body.String(), "The export limit has been reached.") {
 		t.Fatalf("an export over the limit: %d", refused.Code)
 	}
-	page := client.do(http.MethodGet, "/account", nil).Body.String()
-	if !strings.Contains(page, "Up to 2 exports every 24 hours.") || !strings.Contains(page, `<button type="submit" disabled>`) || !strings.Contains(page, "Next export available: ") {
+	page := client.do(http.MethodGet, "/account/data", nil).Body.String()
+	if !strings.Contains(page, "Up to 2 exports every 24 hours.") || !strings.Contains(page, `<button type="submit" class="pri" disabled>`) || !strings.Contains(page, "Next export available: ") {
 		t.Fatal("the account page does not show that the limit is reached")
 	}
 }
 
 func TestDeleteConfirmationDoesNotPrefillTheUsername(t *testing.T) {
 	db, user, _ := testDatabase(t)
-	page := signedIn(t, db, user).do(http.MethodGet, "/account", nil).Body.String()
+	page := signedIn(t, db, user).do(http.MethodGet, "/account/data", nil).Body.String()
 	start := strings.Index(page, `name="confirm"`)
 	field := page[start : start+strings.Index(page[start:], ">")]
 	if strings.Contains(field, "alice") || strings.Contains(field, "placeholder") {

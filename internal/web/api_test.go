@@ -149,7 +149,7 @@ func TestDeviceSignInThroughTheBrowser(t *testing.T) {
 	if me.Code != http.StatusOK || !strings.Contains(me.Body.String(), `"login":"alice"`) {
 		t.Fatalf("the token signs in: %d %s", me.Code, me.Body.String())
 	}
-	if account := client.page("/account"); !strings.Contains(account, "mira-mbp") || !strings.Contains(account, "darwin/arm64") {
+	if account := client.page("/account/devices"); !strings.Contains(account, "mira-mbp") || !strings.Contains(account, "darwin/arm64") {
 		t.Fatal("the account page lists the device")
 	}
 }
@@ -397,7 +397,7 @@ func TestRevokingADeviceFromTheAccountPage(t *testing.T) {
 	if err != nil || len(tokens) != 1 {
 		t.Fatalf("tokens: %v %v", tokens, err)
 	}
-	dialog := client.partsPage("/account?revoke=" + tokens[0].ID)
+	dialog := client.partsPage("/account/devices?revoke=" + tokens[0].ID)
 	if !strings.Contains(dialog, `data-part="dialog"`) || !strings.Contains(dialog, `name="token" value="`+tokens[0].ID+`"`) {
 		t.Fatal("the revoke link opens its dialog")
 	}
@@ -446,12 +446,17 @@ func TestInstallPageAndScripts(t *testing.T) {
 	linuxSum, _, _ := fileSHA256(filepath.Join(dir, "plainmote-linux-amd64"))
 	windowsSum, _, _ := fileSHA256(filepath.Join(dir, "plainmote-windows-amd64.exe"))
 
+	// In a browser /cli is the developer page on the command line.
+	if page := get("/cli", "text/html"); page.Code != http.StatusFound || page.Header().Get("Location") != "/developers/cli" {
+		t.Fatalf("/cli in a browser: %d %q", page.Code, page.Header().Get("Location"))
+	}
+
 	// The page leads with the command for the system it is opened on, and
 	// folds the other one and the downloads away.
 	curl, irm := "curl -fsSL https://cfg.test/cli/en | sh", "irm https://cfg.test/cli/en.ps1 | iex"
 	pageFor := func(agent, platform string) string {
 		t.Helper()
-		request := httptest.NewRequest(http.MethodGet, "/cli", nil)
+		request := httptest.NewRequest(http.MethodGet, "/developers/cli", nil)
 		request.Header.Set("Accept", "text/html,application/xhtml+xml")
 		request.Header.Set("User-Agent", agent)
 		if platform != "" {
@@ -486,7 +491,7 @@ func TestInstallPageAndScripts(t *testing.T) {
 
 	// A command copied from a page installs a command line in the page's
 	// language; the plain address leaves the language to the system.
-	chinese := httptest.NewRequest(http.MethodGet, "/cli", nil)
+	chinese := httptest.NewRequest(http.MethodGet, "/developers/cli", nil)
 	chinese.Header.Set("Accept", "text/html")
 	chinese.Header.Set("Accept-Language", "zh-CN")
 	chinese.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh)")

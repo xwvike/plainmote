@@ -17,14 +17,14 @@
     {{template "resource-crumb" .}}
     {{if .IsNew}}
     <div class="ph"><h1>{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}</h1>
-      {{if ne .NewKind "remote"}}<span class="sp">{{template "seal-switch" .}}</span>{{end}}</div>
+      {{if and .HasKeyring (ne .NewKind "remote")}}<span class="sp">{{template "seal-switch" .}}</span>{{end}}</div>
     {{else}}
     <div class="ph">
       <h1 data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{resourceLabel .Locale .Resource}}</h1>
       {{if .Resource.QuickShare}}<span class="tag qs">{{tr .Locale "quick_share"}}</span>{{end}}
       {{if .Resource.Sealed}}<span class="tag enc">{{tr .Locale "encrypted"}}</span>{{end}}
       <span class="sp">
-        {{if not (or .Resource.Remote .Resource.QuickShare .Resource.TakenDown)}}{{template "seal-switch" .}}{{end}}
+        {{if and .HasKeyring (not (or .Resource.Remote .Resource.QuickShare .Resource.TakenDown))}}{{template "seal-switch" .}}{{end}}
         {{/* Beside the one other thing done to the resource as a whole. Shown
              with nothing in it too: the page behind it says how it fills. */}}
         {{if not (or .Resource.Remote .Resource.QuickShare)}}{{template "resource-hist" .}}{{end}}
@@ -178,15 +178,16 @@
       </div>
     </form>
 
-    {{if and (not .IsNew) .Resource.Editable (not .Resource.Remote) (not .Resource.TakenDown)}}
+    {{if and .CLIDevices (not .IsNew) .Resource.Editable (not .Resource.Remote) (not .Resource.TakenDown)}}
     {{/* The same edit from a terminal, saved the same way: as a new version,
-         refused if this one moved on meanwhile. */}}
+         refused if this one moved on meanwhile. Offered once the account has
+         a command line signed in. */}}
     {{$command := cliEdit .BaseURL .Resource.ID}}
     <div class="cli-edit">
       <span class="hint">{{tr .Locale "cli_edit_hint"}}</span>
       <code><b>$</b> {{$command}}</code>
       <button type="button" class="sm" data-copy="{{$command}}">{{template "copy-label" .}}</button>
-      <a class="txt" href="/cli">{{tr .Locale "cli_about_link"}} →</a>
+      <a class="txt" href="/developers/cli">{{tr .Locale "cli_about_link"}} →</a>
     </div>
     {{end}}
 
@@ -460,16 +461,16 @@
     {{end}}
 {{end}}
 
-{{/* The switch that turns a resource's encryption on or off. Without a
-     master password it is shown disabled with the reason; with one, sealed.js
-     enables it and asks for confirmation before doing anything. */}}
-{{define "seal-switch"}}<label class="sw" data-seal-switch{{if .HasKeyring}} data-ready{{else}} title="{{tr .Locale "seal_needs_keyring"}}"{{end}}{{if not .IsNew}}
+{{/* The switch that turns a resource's encryption on or off, on an account
+     with a master password; sealed.js enables it and asks for confirmation
+     before doing anything. */}}
+{{define "seal-switch"}}<label class="sw" data-seal-switch{{if not .IsNew}}
   data-resource="{{.Resource.ID}}" data-version="{{.Resource.Version}}" data-history="{{.HistoryJSON}}"
   data-name="{{.Resource.Name}}" data-filename="{{.Resource.Filename}}" data-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}"{{end}}
   data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-unlock="{{tr .Locale "seal_unlock_first"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-progress="{{tr .Locale "seal_progress"}}">
-  <input type="checkbox" role="switch"{{if .Resource.Sealed}} checked{{end}} disabled aria-describedby="seal-switch-hint">
+  <input type="checkbox" role="switch"{{if .Resource.Sealed}} checked{{end}} disabled>
   <span class="sw-track" aria-hidden="true"><span class="sw-knob"></span></span><span>{{tr .Locale "e2ee_title"}}</span>
-</label>{{if not .HasKeyring}}<a class="txt" id="seal-switch-hint" href="/account#keyring">{{tr .Locale "seal_set_keyring"}}</a>{{end}}{{end}}
+</label>{{end}}
 
 {{/* An encrypted resource. The service sends nothing it could read: the
      page says the resource is encrypted, and sealed.js - once unlocked -
@@ -484,7 +485,7 @@
         <span class="msg">{{tr .Locale "sealed_locked"}}</span>
         <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
         <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
-        <a class="txt" href="/account#keyring">{{tr .Locale "keyring_forgot"}}</a>
+        <a class="txt" href="/account/security">{{tr .Locale "keyring_forgot"}}</a>
         <span class="err" data-sealed-error role="alert"></span>
       </form>
       <div class="panel ruled" data-sealed-placeholder>

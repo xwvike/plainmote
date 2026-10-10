@@ -43,7 +43,7 @@ docker image inspect ghcr.io/xwvike/plainmote:v1.2.3 \
 ```
 
 构建过程同时为 macOS、Linux 和 Windows 的 amd64 与 arm64 编译 `plainmote` 命令行，放在镜像的 `/cli` 目录中，
-由服务的 `/cli` 页面提供下载；版本号同时写入服务端与命令行，二者版本始终一致。命令行文件使镜像增加约
+由服务通过 `/cli` 和开发者页面 `/developers/cli` 提供下载；版本号同时写入服务端与命令行，二者版本始终一致。命令行文件使镜像增加约
 35 MiB。
 
 ### 发布版本
@@ -135,7 +135,7 @@ Google 登录为可选项，可与 GitHub 同时启用，也可单独使用。�
 4. **客户端（Clients）**：新建 Web 应用类型的客户端，已获授权的重定向 URI 为 `PLAINMOTE_PUBLIC_URL/auth/google/callback`。Client Secret 只在创建时显示，应当场保存。
 5. 可选：提交品牌验证，通过后同意页面显示应用名称。
 
-设置 `GOOGLE_CLIENT_ID` 与 `GOOGLE_CLIENT_SECRET`。账号以 Google 账号 ID（`sub`）识别；用 GitHub 和用 Google 创建的账号互相独立，所有者可以在账号页面绑定另一种登录方式。
+设置 `GOOGLE_CLIENT_ID` 与 `GOOGLE_CLIENT_SECRET`。账号以 Google 账号 ID（`sub`）识别；用 GitHub 和用 Google 创建的账号互相独立，所有者可以在设置中的“登录方式”页绑定另一种登录方式。
 
 ### 注册
 

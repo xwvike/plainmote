@@ -38,6 +38,7 @@
          people who look for it look for that name. */}}
     <a href="/llms.txt">llms.txt</a>
     {{end}}
+    <a href="{{.LocalePrefix}}/developers/cli"{{if eq .Active "developers"}} aria-current="page"{{end}}>{{tr .Locale "dev_title"}}</a>
     {{/* On every page, whatever else is configured: the AGPL has a deployment
          offer its users the source it runs. */}}
     {{if .SourceURL}}<a href="{{.SourceURL}}" rel="noopener">{{tr .Locale "source_code"}}</a>{{end}}

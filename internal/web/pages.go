@@ -81,7 +81,6 @@ func (a *App) templateSet() *template.Template {
 			return template.HTML(fmt.Sprintf(`<time datetime="%s" data-local-time="day">%s</time>`,
 				value.Format(time.RFC3339), value.Format("01-02")))
 		},
-		"cliLang":   cliLanguage,
 		"cliEdit":   cliEditCommand,
 		"bytesText": bytesText,
 		"hasPrefix": strings.HasPrefix,
@@ -113,6 +112,14 @@ func (a *App) templateSet() *template.Template {
 		"lockText":      lockText,
 		"b64":           func(value []byte) string { return base64.RawURLEncoding.EncodeToString(value) },
 		"sub":           func(a, b int) int { return a - b },
+		"providerName":  providerLabel,
+		// The first letter of a name, as the account's mark.
+		"initial": func(name string) string {
+			for _, r := range strings.TrimSpace(name) {
+				return strings.ToUpper(string(r))
+			}
+			return "?"
+		},
 		"sealedLink": func(data pageData, entry linkView, class string) sealedLinkView {
 			return sealedLinkView{Locale: data.Locale, Entry: entry, Class: class}
 		},

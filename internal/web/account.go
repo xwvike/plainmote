@@ -18,14 +18,33 @@ import (
 	"plainmote/internal/store"
 )
 
+// The settings, a page each: the account itself, how it signs in, its
+// master password, what is signed in to it, and its data.
 const (
-	accountPath       = "/account"
+	accountPath         = "/account"
+	accountSignInPath   = "/account/sign-in"
+	accountSecurityPath = "/account/security"
+	accountDevicesPath  = "/account/devices"
+	accountDataPath     = "/account/data"
+)
+
+// The forms those pages post to.
+const (
 	accountExportPath = "/account/export"
 	accountDeletePath = "/account/delete"
 	accountTokensPath = "/account/tokens"
 	// accountIdentitiesPath links and unlinks sign-in methods.
 	accountIdentitiesPath = "/account/identities"
 )
+
+// accountSections names each settings page by its path.
+var accountSections = map[string]string{
+	accountPath:         "account",
+	accountSignInPath:   "sign-in",
+	accountSecurityPath: "security",
+	accountDevicesPath:  "devices",
+	accountDataPath:     "data",
+}
 
 // exportWriteTimeout replaces the server's 30-second write timeout for the one
 // response that is a whole account: every body in the plan, over whatever
@@ -42,70 +61,96 @@ func (a *App) handleAccount(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	a.renderAccount(w, r, user, "", false, http.StatusOK)
+	a.renderAccount(w, r, user, accountSections[r.URL.Path], "", false, http.StatusOK)
 }
 
-func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, pageError string, deleteOpen bool, status int) {
-	account, err := a.db.Account(r.Context(), user.ID)
-	if err != nil {
-		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
+// renderAccount is one settings page, reading only what that page shows.
+func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, section, pageError string, deleteOpen bool, status int) {
+	ctx := r.Context()
 	now := time.Now().UTC()
-	allowance, err := a.db.ExportAllowance(r.Context(), user.ID, now)
-	if err != nil {
-		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
-	quota, err := a.db.QuotaForUser(r.Context(), user.ID, now)
+	account, err := a.db.Account(ctx, user.ID)
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
 	}
 	data := a.basePage(r, user)
 	data.Active = "account"
+	data.Section = section
 	data.Account = account
-	data.Export = allowance
-	data.Quota = quota
-	data.ExportLimit = store.ExportLimit
-	data.ExportWindow = int(store.ExportWindow / time.Hour)
 	data.Error = pageError
 	data.DeleteOpen = deleteOpen
-	data.KeyringLockChoices = store.KeyringLockChoices
-	data.SignIns = a.signIns(account.Identities)
-	if pageError == "" {
-		data.Notice, data.Error = identityFlash(r)
-	}
-	if sealed, err := a.db.SealedIndex(r.Context(), user.ID); err == nil {
-		data.SealedCount = len(sealed)
-		for _, entry := range sealed {
-			if entry.QuickShare {
-				data.SealedQuickShares++
+	switch section {
+	case "account":
+		if data.Quota, err = a.db.QuotaForUser(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if data.APITokens, err = a.db.ListAPITokens(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if data.Export, err = a.db.ExportAllowance(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+	case "sign-in":
+		data.SignIns = a.signIns(account.Identities)
+		if pageError == "" {
+			data.Notice, data.Error = identityFlash(r)
+		}
+	case "security":
+		data.KeyringLockChoices = store.KeyringLockChoices
+		if keyring, err := a.db.Keyring(ctx, user.ID); err == nil {
+			data.Keyring = &keyring
+		} else if !errors.Is(err, store.ErrNotFound) {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if !a.countSealed(w, r, user, &data) {
+			return
+		}
+	case "devices":
+		if data.APITokens, err = a.db.ListAPITokens(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		// The revoke dialog opens over the list, for a token that is still on it.
+		if id := r.URL.Query().Get("revoke"); id != "" {
+			for _, token := range data.APITokens {
+				if token.ID == id {
+					data.RevokeToken = token
+				}
 			}
 		}
-	} else {
-		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
-	if keyring, err := a.db.Keyring(r.Context(), user.ID); err == nil {
-		data.Keyring = &keyring
-	} else if !errors.Is(err, store.ErrNotFound) {
-		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
-	if data.APITokens, err = a.db.ListAPITokens(r.Context(), user.ID, now); err != nil {
-		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
-	// The revoke dialog opens over the list, for a token that is still on it.
-	if id := r.URL.Query().Get("revoke"); id != "" && !deleteOpen {
-		for _, token := range data.APITokens {
-			if token.ID == id {
-				data.RevokeToken = token
-			}
+	case "data":
+		if data.Export, err = a.db.ExportAllowance(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		data.ExportLimit = store.ExportLimit
+		data.ExportWindow = int(store.ExportWindow / time.Hour)
+		if !a.countSealed(w, r, user, &data) {
+			return
 		}
 	}
 	a.renderTemplate(w, r, status, "account.html", data)
+}
+
+// countSealed is how many encrypted resources the account has, and how many
+// of them are quick shares.
+func (a *App) countSealed(w http.ResponseWriter, r *http.Request, user User, data *pageData) bool {
+	sealed, err := a.db.SealedIndex(r.Context(), user.ID)
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return false
+	}
+	data.SealedCount = len(sealed)
+	for _, entry := range sealed {
+		if entry.QuickShare {
+			data.SealedQuickShares++
+		}
+	}
+	return true
 }
 
 // signInView is one row of the account's sign-in methods: a provider and the
@@ -190,11 +235,11 @@ func (a *App) handleAccountIdentities(w http.ResponseWriter, r *http.Request) {
 		err := a.db.UnlinkIdentity(r.Context(), user.ID, provider)
 		switch {
 		case err == nil:
-			http.Redirect(w, r, accountPath+"?unlinked="+url.QueryEscape(provider), http.StatusSeeOther)
+			http.Redirect(w, r, accountSignInPath+"?unlinked="+url.QueryEscape(provider), http.StatusSeeOther)
 		case errors.Is(err, store.ErrLastIdentity):
-			http.Redirect(w, r, accountPath+"?identity=last", http.StatusSeeOther)
+			http.Redirect(w, r, accountSignInPath+"?identity=last", http.StatusSeeOther)
 		case errors.Is(err, store.ErrNotFound):
-			http.Redirect(w, r, accountPath, http.StatusSeeOther)
+			http.Redirect(w, r, accountSignInPath, http.StatusSeeOther)
 		default:
 			a.serverError(w, "unlink identity", err)
 		}
@@ -228,7 +273,7 @@ func (a *App) handleAccountTokens(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, "revoke token", err)
 		return
 	}
-	http.Redirect(w, r, accountPath, http.StatusSeeOther)
+	http.Redirect(w, r, accountDevicesPath, http.StatusSeeOther)
 }
 
 // handleAccountDelete takes two steps: the username typed out, then a dialog
@@ -250,11 +295,11 @@ func (a *App) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !strings.EqualFold(strings.TrimSpace(r.FormValue("confirm")), user.Login) {
-		a.renderAccount(w, r, user, translate(requestLanguage(r).Locale, "delete_account_mismatch"), false, http.StatusBadRequest)
+		a.renderAccount(w, r, user, "data", translate(requestLanguage(r).Locale, "delete_account_mismatch"), false, http.StatusBadRequest)
 		return
 	}
 	if r.FormValue("final") != "1" {
-		a.renderAccount(w, r, user, "", true, http.StatusOK)
+		a.renderAccount(w, r, user, "data", "", true, http.StatusOK)
 		return
 	}
 	// Already gone is the outcome that was asked for: a second submission from
@@ -310,7 +355,7 @@ func (a *App) handleAccountExport(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	if _, err := a.db.ReserveExport(ctx, user.ID, now); err != nil {
 		if errors.Is(err, store.ErrExportLimit) {
-			a.renderAccount(w, r, user, translate(requestLanguage(r).Locale, "export_limit_reached"), false, http.StatusTooManyRequests)
+			a.renderAccount(w, r, user, "data", translate(requestLanguage(r).Locale, "export_limit_reached"), false, http.StatusTooManyRequests)
 			return
 		}
 		a.serverError(w, "reserve export", err)

@@ -100,7 +100,7 @@ func (a *App) serveHome(w http.ResponseWriter, r *http.Request) {
 	if route, ok := routeLocale(r); ok {
 		data.Canonical = route.prefix + "/"
 	}
-	data.Alternates = homeAlternates(data.BaseURL)
+	data.Alternates = localeAlternates(data.BaseURL, "/")
 	a.renderHome(w, r, data, http.StatusOK)
 }
 

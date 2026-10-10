@@ -76,10 +76,10 @@ func TestE2EESwitchInTheHomeBox(t *testing.T) {
 	client := signedIn(t, db, user)
 
 	page := client.do(http.MethodGet, "/", nil).Body.String()
-	if strings.Contains(page, "data-e2ee") || strings.Contains(page, "data-keylock") || !strings.Contains(page, `class="sw-off"`) || !strings.Contains(page, "/account#keyring") {
-		t.Fatal("without a master password the switch is offered disabled, pointing to where one is set")
+	if strings.Contains(page, "data-e2ee") || strings.Contains(page, "data-keylock") || strings.Contains(page, `role="switch"`) {
+		t.Fatal("without a master password the home box shows no encryption at all")
 	}
-	if account := client.do(http.MethodGet, accountPath, nil).Body.String(); strings.Contains(account, "/account/e2ee") || !strings.Contains(account, `data-keyring-open="setup"`) {
+	if account := client.do(http.MethodGet, accountSecurityPath, nil).Body.String(); strings.Contains(account, "/account/e2ee") || !strings.Contains(account, `data-keyring-open="setup"`) {
 		t.Fatal("the account page offers a master password and no quick share setting")
 	}
 

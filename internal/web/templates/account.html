@@ -2,7 +2,7 @@
 <html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
-  <title>{{tr .Locale "account"}} · PlainMote</title>
+  <title>{{template "account-title" .}} · PlainMote</title>
 </head>
 <body data-msg-keyring-failed="{{tr .Locale "keyring_failed"}}"
       data-msg-keyring-too-short="{{printf (tr .Locale "keyring_too_short") 8}}"
@@ -14,174 +14,16 @@
       data-msg-keyring-locked="{{tr .Locale "keyring_locked"}}"
       data-msg-keyring-no-storage="{{tr .Locale "keyring_no_storage"}}">
   {{template "topbar" .}}
-  <main class="page account">
-    <div class="ph"><h1>{{tr .Locale "account"}}</h1></div>
-    {{template "account-flash" .}}
-
-    <section class="panel ruled">
-      <div class="pt"><span class="sec">{{tr .Locale "account_info"}}</span></div>
-      <dl class="pb account-facts">
-        <div><dt>{{tr .Locale "account_login"}}</dt><dd>{{.Account.User.Login}}</dd></div>
-        <div><dt>{{tr .Locale "account_name"}}</dt><dd>{{if .Account.User.Name}}{{.Account.User.Name}}{{else}}<span class="mut">—</span>{{end}}</dd></div>
-        <div><dt>{{tr .Locale "account_created"}}</dt><dd>{{formatTime .Account.CreatedAt}}</dd></div>
-        <div><dt>{{tr .Locale "account_usage"}}</dt><dd>{{with storageMeter .Quota}}{{bytesText .Used}}/{{bytesText .Limit}}{{end}}</dd></div>
-      </dl>
-      {{/* One bar in three parts - what is kept, what the history has
-           borrowed, what is free - and under it a bracket over everything a
-           save may use, borrowed room included. */}}
-      {{with storageMeter .Quota}}
-      <div class="storage">
-        <div class="meter" style="{{.Style}}">
-          <span class="meter-bar" role="img" aria-label="{{printf (tr $.Locale "meter_title") (bytesText .Current) (bytesText .History) (bytesText .Free)}}"><span class="cur"></span><span class="his"></span></span>
-          <span class="avail"><span>{{printf (tr $.Locale "meter_available") (bytesText .Available)}}{{if .History}}{{if .Free}}{{printf (tr $.Locale "meter_lent") (bytesText .History)}}{{else}}{{tr $.Locale "meter_lent_all"}}{{end}}{{end}}</span></span>
-        </div>
-        <ul class="mlg">
-          <li><i class="cur"></i>{{tr $.Locale "meter_current"}}<b>{{bytesText .Current}}</b></li>
-          {{if .History}}<li><i class="his"></i>{{tr $.Locale "meter_history"}}<b>{{bytesText .History}}</b></li>{{end}}
-          <li><i class="free"></i>{{tr $.Locale "meter_free"}}<b>{{bytesText .Free}}</b></li>
-          <li class="tot">{{tr $.Locale "limit"}}<b>{{bytesText .Limit}}</b></li>
-        </ul>
-      </div>
-      {{end}}
-    </section>
-
-    {{/* Every provider the account signs in with, and those it could link.
-         Linking goes through the provider as a sign-in does; the last method
-         cannot be removed. */}}
-    <section class="panel ruled">
-      <div class="pt"><span class="sec">{{tr .Locale "signin_methods"}}</span></div>
-      <div class="pb">
-        <div class="kv-rows">
-          {{range .SignIns}}
-          <div><span class="k">{{.Label}}</span>
-            <span class="v">{{with .Identity}}{{.Login}}<span class="mut"> · {{tr $.Locale "identity_linked_on"}} {{formatMinute .CreatedAt}}</span>{{else}}<span class="mut">{{tr $.Locale "identity_none"}}</span>{{end}}</span>
-            <span class="a">{{if or .CanLink .CanUnlink}}<form method="post" action="/account/identities" class="inline">
-              <input type="hidden" name="csrf" value="{{$.CSRF}}">
-              <input type="hidden" name="provider" value="{{.Provider}}">
-              {{if .CanLink}}<button type="submit" name="action" value="link" class="txt">{{tr $.Locale "identity_link"}}</button>
-              {{else}}<button type="submit" name="action" value="unlink" class="txt danger">{{tr $.Locale "identity_unlink"}}</button>{{end}}
-            </form>{{end}}</span>
-          </div>
-          {{end}}
-        </div>
-      </div>
-    </section>
-
-    {{/* End-to-end encryption as one panel. Its header says the state the
-         master password is in - not set, locked, unlocked - and offers what
-         comes next in that state; the rows under it are the master password's
-         parts. Everything here happens in the browser, so its controls stay
-         disabled until keyring.js has loaded. */}}
-    <section class="panel ruled enc" id="keyring" data-keyring data-user="{{.User.ID}}"{{with .Keyring}} data-lock="{{.LockMinutes}}"{{end}}>
-      <div class="pt">
-        <span class="sec">{{tr .Locale "e2ee_title"}}</span>
-        <span class="sp enc-state">
-          {{if .Keyring}}
-          <span class="st off" data-keyring-status data-unlocked="{{printf (tr .Locale "keyring_unlocked") (lockText .Locale .Keyring.LockMinutes)}}"><i></i><span>{{tr .Locale "keyring_locked"}}</span></span>
-          <form class="enc-unlock" data-keyring-unlock hidden>
-            <input type="password" name="password" class="sm" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
-            <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
-            <button type="button" class="txt" data-keyring-open="recover">{{tr .Locale "keyring_forgot"}}</button>
-            <span class="err" data-keyring-error role="alert"></span>
-          </form>
-          <button type="button" class="sm" data-keyring-lock-now hidden>{{tr .Locale "keyring_lock_now"}}</button>
-          {{else}}
-          <span class="st off"><i></i><span>{{tr .Locale "keyring_none"}}</span></span>
-          {{end}}
-        </span>
-      </div>
-      <div class="pb enc-body">
-        <noscript><p class="hint">{{tr .Locale "keyring_needs_js"}}</p></noscript>
-        {{if .Keyring}}
-        <div class="kv-rows">
-          <div><span class="k">{{tr .Locale "keyring_password"}}</span><span class="v">{{tr .Locale "keyring_set_on"}} {{formatMinute .Keyring.PasswordAt}}</span><span class="a"><button type="button" class="txt" data-keyring-open="password" disabled>{{tr .Locale "enc_change"}}</button></span></div>
-          <div><span class="k">{{tr .Locale "keyring_recovery"}}</span><span class="v">{{tr .Locale "keyring_set_on"}} {{formatMinute .Keyring.RecoveryAt}}<span class="mut"> · {{tr .Locale "enc_recovery_use"}}</span></span><span class="a"><button type="button" class="txt" data-keyring-open="recovery" disabled>{{tr .Locale "keyring_regenerate"}}</button></span></div>
-          <div><span class="k">{{tr .Locale "keyring_autolock"}}</span>
-            {{/* Saved as soon as it is chosen; without scripts, by the button. */}}
-            <form class="v inline" method="post" action="/account/keyring" data-autolock>
-              <input type="hidden" name="csrf" value="{{.CSRF}}">
-              <input type="hidden" name="action" value="lock">
-              <select name="lock_minutes" class="sm" aria-label="{{tr .Locale "keyring_autolock"}}">{{range .KeyringLockChoices}}<option value="{{.}}"{{if eq . $.Keyring.LockMinutes}} selected{{end}}>{{lockText $.Locale .}}</option>{{end}}</select>
-              <noscript><button type="submit" class="sm">{{tr .Locale "apply"}}</button></noscript>
-              <span class="mut">{{tr .Locale "enc_autolock_hint"}}</span>
-            </form>
-            <span class="a"></span></div>
-          <div><span class="k">{{tr .Locale "enc_encrypted"}}</span><span class="v">{{if .SealedCount}}{{printf (tr .Locale "enc_encrypted_count") (sub .SealedCount .SealedQuickShares) .SealedQuickShares}}{{else}}<span class="mut">{{tr .Locale "enc_encrypted_none"}}</span>{{end}}</span><span class="a"></span></div>
-        </div>
-        {{else}}
-        <p class="hint">{{tr .Locale "enc_intro"}}</p>
-        <ul class="hint enc-points">
-          <li>{{tr .Locale "enc_point_scope"}}</li>
-          <li>{{tr .Locale "keyring_cost_where"}}</li>
-          <li>{{tr .Locale "keyring_cost_lost"}}</li>
-        </ul>
-        <p><button type="button" class="pri" data-keyring-open="setup" disabled>{{tr .Locale "keyring_setup"}}</button></p>
-        {{end}}
-        <details class="more">
-          <summary>{{tr .Locale "enc_details"}}</summary>
-          <div class="more-body">
-            <ul class="hint">
-              {{if .Keyring}}<li>{{tr .Locale "enc_point_scope"}}</li>
-              <li>{{tr .Locale "keyring_cost_where"}}</li>
-              <li>{{tr .Locale "keyring_cost_lost"}}</li>{{end}}
-              {{if .Anonymous}}<li>{{tr .Locale "e2ee_cost_pin"}}</li>{{end}}
-              <li>{{tr .Locale "e2ee_cost_meta"}}</li>
-              <li>{{tr .Locale "keyring_cost_storage"}}</li>
-              <li>{{tr .Locale "keyring_cost_code"}}</li>
-            </ul>
-          </div>
-        </details>
-      </div>
-    </section>
-    {{if .Keyring}}{{template "keyring-dialogs-set" .}}{{else}}{{template "keyring-dialogs-new" .}}{{end}}
-
-    {{/* One row per command line signed in to this account. The token itself
-         is not shown, and not kept: only what the command line said about
-         itself, when it signed in and when it was last used. */}}
-    <section class="panel ruled panel-dev">
-      <div class="pt"><span class="sec">{{tr .Locale "cli_section"}}</span>{{if .APITokens}}<span class="sp"><span class="counts"><b>{{len .APITokens}}</b> {{tr .Locale "cli_devices"}}</span></span>{{end}}</div>
-      <div class="pb">
-        {{if .APITokens}}
-        <div class="dev-list">
-          <div class="hd"><span>{{tr .Locale "cli_device"}}</span><span>{{tr .Locale "cli_scope"}}</span><span>{{tr .Locale "cli_signed_in"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
-          {{range .APITokens}}
-          <div><span class="nm"><b>{{or .DeviceName (tr $.Locale "cli_unnamed_device")}}</b><span>{{.DeviceOS}}{{if .ClientVersion}} · {{.ClientVersion}}{{end}}</span></span><span><span class="tag">{{if .CanWrite}}{{tr $.Locale "cli_scope_write"}}{{else}}{{tr $.Locale "cli_scope_read"}}{{end}}</span></span><span class="tm">{{formatMinute .CreatedAt}}</span><span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm">{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account?revoke={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
-          {{end}}
-        </div>
-        {{end}}
-        <div class="dev-foot"><span class="hint">{{tr .Locale "cli_install_hint"}}</span><code>curl -fsSL {{.BaseURL}}/cli/{{cliLang .Locale}} | sh</code><a class="txt" href="/cli">{{tr .Locale "cli_install_link"}}</a></div>
-      </div>
-    </section>
-
-    <div class="account-grid">
-    <section class="panel ruled">
-      <div class="pt"><span class="sec">{{tr .Locale "export_title"}}</span></div>
-      <div class="pb account-action">
-        <p class="hint">{{tr .Locale "export_body"}}</p>
-        <p class="hint">{{printf (tr .Locale "export_limit") .ExportWindow .ExportLimit}}{{if .Export.Remaining}}{{printf (tr .Locale "export_remaining") .Export.Remaining}}{{end}}</p>
-        {{if .SealedCount}}<p class="hint" data-export-note>{{tr .Locale "export_sealed_locked"}}</p>{{end}}
-        <form method="post" action="/account/export" class="inline"{{if .SealedCount}} data-sealed="{{.SealedCount}}"
-              data-msg-locked="{{tr .Locale "export_sealed_locked"}}" data-msg-unlocked="{{tr .Locale "export_sealed_unlocked"}}" data-msg-failed="{{tr .Locale "export_sealed_failed"}}"{{end}}>
-          <input type="hidden" name="csrf" value="{{.CSRF}}">
-          <button type="submit"{{if not .Export.Remaining}} disabled{{end}}>{{tr .Locale "export_download"}}</button>
-        </form>
-        {{if not .Export.Remaining}}<p class="hint">{{tr .Locale "export_next"}}{{formatTime .Export.NextAt}}</p>{{end}}
-      </div>
-    </section>
-
-    <section class="panel ruled account-danger">
-      <div class="pt"><span class="sec">{{tr .Locale "delete_account_title"}}</span></div>
-      <div class="pb account-action">
-        <p class="hint">{{tr .Locale "delete_account_body"}}</p>
-        <form method="post" action="/account/delete" class="account-confirm" data-parts>
-          <input type="hidden" name="csrf" value="{{.CSRF}}">
-          <label><span>{{tr .Locale "delete_account_label"}}</span>
-            <input type="text" name="confirm" required autocomplete="off" spellcheck="false">
-          </label>
-          <button type="submit" class="bad">{{tr .Locale "delete_account_button"}}</button>
-        </form>
-      </div>
-    </section>
+  <main class="page settings">
+    {{template "side-nav" .}}
+    <div class="settings-body">
+      <div class="lede"><h1>{{template "account-title" .}}</h1><p>{{template "account-lede" .}}</p></div>
+      {{template "account-flash" .}}
+      {{if eq .Section "sign-in"}}{{template "account-sign-in" .}}
+      {{else if eq .Section "security"}}{{template "account-security" .}}
+      {{else if eq .Section "devices"}}{{template "account-devices" .}}
+      {{else if eq .Section "data"}}{{template "account-data" .}}
+      {{else}}{{template "account-overview" .}}{{end}}
     </div>
   </main>
 
@@ -189,10 +31,235 @@
   {{template "account-dialog" .}}
   {{template "footer" .}}
   <script type="module" src="{{asset "parts.js"}}"></script>
-  <script type="module" src="{{asset "keyring.js"}}"></script>
-  {{if .SealedCount}}<script type="module" src="{{asset "export.js"}}"></script>{{end}}
+  {{if eq .Section "security"}}<script type="module" src="{{asset "keyring.js"}}"></script>{{end}}
+  {{if eq .Section "devices"}}{{template "copy-status" .}}{{end}}
+  {{if and (eq .Section "data") .SealedCount}}<script type="module" src="{{asset "export.js"}}"></script>{{end}}
 </body>
 </html>{{end}}
+
+{{define "account-title"}}{{if eq .Section "sign-in"}}{{tr .Locale "signin_methods"}}{{else if eq .Section "security"}}{{tr .Locale "security_title"}}{{else if eq .Section "devices"}}{{tr .Locale "devices_title"}}{{else if eq .Section "data"}}{{tr .Locale "data_title"}}{{else}}{{tr .Locale "account"}}{{end}}{{end}}
+{{define "account-lede"}}{{if eq .Section "sign-in"}}{{tr .Locale "signin_lede"}}{{else if eq .Section "security"}}{{tr .Locale "security_lede"}}{{else if eq .Section "devices"}}{{tr .Locale "devices_lede"}}{{else if eq .Section "data"}}{{tr .Locale "data_lede"}}{{else}}{{tr .Locale "account_lede"}}{{end}}{{end}}
+
+{{/* Who the account is, how much room it uses, and where each setting
+     stands, every row leading to the page that changes it. */}}
+{{define "account-overview"}}
+      <section class="panel profile">
+        <span class="av" aria-hidden="true">{{initial (or .Account.User.Name .Account.User.Login)}}</span>
+        <div class="profile-id">
+          <b>{{or .Account.User.Name .Account.User.Login}}</b>
+          <span>{{with .Account.User.Name}}{{if ne . $.Account.User.Login}}{{$.Account.User.Login}} · {{end}}{{end}}{{tr .Locale "account_created"}} {{formatTime .Account.CreatedAt}}</span>
+        </div>
+      </section>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "account_usage"}}</span><span class="sp"><span class="counts">{{printf (tr .Locale "resources_count") .Quota.Usage.Resources .Quota.Limit.Resources}}</span></span></div>
+        {{/* One bar in three parts - what is kept, what the history has
+             borrowed, what is free - and under it a bracket over everything a
+             save may use, borrowed room included. */}}
+        {{with storageMeter .Quota}}
+        <div class="storage">
+          <div class="meter" style="{{.Style}}">
+            <span class="meter-bar" role="img" aria-label="{{printf (tr $.Locale "meter_title") (bytesText .Current) (bytesText .History) (bytesText .Free)}}"><span class="cur"></span><span class="his"></span></span>
+            <span class="avail"><span>{{printf (tr $.Locale "meter_available") (bytesText .Available)}}{{if .History}}{{if .Free}}{{printf (tr $.Locale "meter_lent") (bytesText .History)}}{{else}}{{tr $.Locale "meter_lent_all"}}{{end}}{{end}}</span></span>
+          </div>
+          <ul class="mlg">
+            <li><i class="cur"></i>{{tr $.Locale "meter_current"}}<b>{{bytesText .Current}}</b></li>
+            {{if .History}}<li><i class="his"></i>{{tr $.Locale "meter_history"}}<b>{{bytesText .History}}</b></li>{{end}}
+            <li><i class="free"></i>{{tr $.Locale "meter_free"}}<b>{{bytesText .Free}}</b></li>
+            <li class="tot">{{tr $.Locale "limit"}}<b>{{bytesText .Limit}}</b></li>
+          </ul>
+        </div>
+        {{end}}
+      </section>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "overview_title"}}</span></div>
+        <div class="pb">
+          <div class="kv-rows">
+            <div><span class="k">{{tr .Locale "signin_methods"}}</span>
+              <span class="v">{{range $i, $id := .Account.Identities}}{{if $i}}<span class="mut">·</span>{{end}}{{providerName $id.Provider}}{{end}}</span>
+              <span class="a"><a class="txt" href="/account/sign-in">{{tr .Locale "overview_manage"}}</a></span></div>
+            <div><span class="k">{{tr .Locale "e2ee_title"}}</span>
+              <span class="v">{{if .HasKeyring}}<span class="st on"><i></i><span>{{tr .Locale "state_on"}}</span></span>{{else}}<span class="st off"><i></i><span>{{tr .Locale "state_off"}}</span></span>{{end}}</span>
+              <span class="a"><a class="txt" href="/account/security">{{tr .Locale "overview_manage"}}</a></span></div>
+            <div><span class="k">{{tr .Locale "devices_title"}}</span>
+              <span class="v">{{if .APITokens}}{{printf (tr .Locale "overview_devices") (len .APITokens)}}{{else}}<span class="mut">{{tr .Locale "overview_none"}}</span>{{end}}</span>
+              <span class="a"><a class="txt" href="/account/devices">{{tr .Locale "overview_manage"}}</a></span></div>
+            <div><span class="k">{{tr .Locale "export_title"}}</span>
+              <span class="v">{{if .Export.Remaining}}{{printf (tr .Locale "overview_exports") .Export.Remaining}}{{else}}<span class="mut">{{tr .Locale "export_next"}}{{formatTime .Export.NextAt}}</span>{{end}}</span>
+              <span class="a"><a class="txt" href="/account/data">{{tr .Locale "overview_manage"}}</a></span></div>
+          </div>
+        </div>
+      </section>
+{{end}}
+
+{{/* Every provider the account signs in with, and those it could link.
+     Linking goes through the provider as a sign-in does; the last method
+     cannot be removed. */}}
+{{define "account-sign-in"}}
+      <section class="panel">
+        <ul class="idl">
+          {{range .SignIns}}
+          <li>
+            <span class="idl-mark">{{template "provider-icon" .Provider}}</span>
+            <span class="idl-name"><b>{{.Label}}</b>{{with .Identity}}<span class="st on"><i></i><span>{{tr $.Locale "identity_on"}}</span></span>{{else}}<span class="st off"><i></i><span>{{tr $.Locale "identity_none"}}</span></span>{{end}}</span>
+            <span class="idl-info">{{with .Identity}}<span>{{.Login}}</span><span class="mut">{{tr $.Locale "identity_linked_on"}} {{formatMinute .CreatedAt}}{{with .LastUsedAt}} · {{tr $.Locale "signin_last_used"}} {{formatMinute .}}{{end}}</span>{{end}}</span>
+            <span class="idl-act">{{if or .CanLink .CanUnlink}}<form method="post" action="/account/identities" class="inline">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <input type="hidden" name="provider" value="{{.Provider}}">
+              {{if .CanLink}}<button type="submit" name="action" value="link" class="sm">{{tr $.Locale "identity_link"}}</button>
+              {{else}}<button type="submit" name="action" value="unlink" class="txt danger">{{tr $.Locale "identity_unlink"}}</button>{{end}}
+            </form>{{else if .Identity}}<span class="hint">{{tr $.Locale "signin_only"}}</span>{{end}}</span>
+          </li>
+          {{end}}
+        </ul>
+        <div class="pf"><span class="hint">{{tr .Locale "signin_note"}}</span></div>
+      </section>
+{{end}}
+
+{{/* End-to-end encryption. The card says the state the master password is
+     in - not set, locked, unlocked - and offers what comes next; the rows
+     under it are the master password's parts. Everything here happens in the
+     browser, so its controls stay disabled until keyring.js has loaded, and
+     keyring.js finds them all inside [data-keyring]. */}}
+{{define "account-security"}}
+      <div class="enc" id="keyring" data-keyring data-user="{{.User.ID}}"{{with .Keyring}} data-lock="{{.LockMinutes}}"{{end}}>
+        <section class="panel enc-card">
+          <div class="enc-head">
+            <div class="enc-what">
+              <b>{{if .Keyring}}{{tr .Locale "enc_on_title"}}{{else}}{{tr .Locale "enc_off_title"}}{{end}}</b>
+              {{if .Keyring}}<span class="st off" data-keyring-status data-unlocked="{{printf (tr .Locale "keyring_unlocked") (lockText .Locale .Keyring.LockMinutes)}}"><i></i><span>{{tr .Locale "keyring_locked"}}</span></span>
+              {{else}}<span class="st off"><i></i><span>{{tr .Locale "keyring_none"}}</span></span>{{end}}
+            </div>
+            {{if .Keyring}}
+            <div class="enc-acts">
+              <form class="enc-unlock" data-keyring-unlock hidden>
+                <input type="password" name="password" class="sm" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+                <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+                <button type="button" class="txt" data-keyring-open="recover">{{tr .Locale "keyring_forgot"}}</button>
+                <span class="err" data-keyring-error role="alert"></span>
+              </form>
+              <button type="button" class="sm" data-keyring-lock-now hidden>{{tr .Locale "keyring_lock_now"}}</button>
+            </div>
+            {{else}}
+            <div class="enc-acts"><button type="button" class="pri" data-keyring-open="setup" disabled>{{tr .Locale "keyring_setup"}}</button></div>
+            {{end}}
+          </div>
+          <p class="hint">{{tr .Locale "enc_intro"}}</p>
+          <noscript><p class="hint">{{tr .Locale "keyring_needs_js"}}</p></noscript>
+        </section>
+
+        {{if .Keyring}}
+        <section class="panel ruled">
+          <div class="pt"><span class="sec">{{tr .Locale "keyring_password"}}</span></div>
+          <div class="pb">
+            <div class="kv-rows">
+              <div><span class="k">{{tr .Locale "keyring_password"}}</span><span class="v">{{tr .Locale "keyring_set_on"}} {{formatMinute .Keyring.PasswordAt}}</span><span class="a"><button type="button" class="txt" data-keyring-open="password" disabled>{{tr .Locale "enc_change"}}</button></span></div>
+              <div><span class="k">{{tr .Locale "keyring_recovery"}}</span><span class="v">{{tr .Locale "keyring_set_on"}} {{formatMinute .Keyring.RecoveryAt}}<span class="mut"> · {{tr .Locale "enc_recovery_use"}}</span></span><span class="a"><button type="button" class="txt" data-keyring-open="recovery" disabled>{{tr .Locale "keyring_regenerate"}}</button></span></div>
+              <div><span class="k">{{tr .Locale "keyring_autolock"}}</span>
+                {{/* Saved as soon as it is chosen; without scripts, by the button. */}}
+                <form class="v inline" method="post" action="/account/keyring" data-autolock>
+                  <input type="hidden" name="csrf" value="{{.CSRF}}">
+                  <input type="hidden" name="action" value="lock">
+                  <select name="lock_minutes" class="sm" aria-label="{{tr .Locale "keyring_autolock"}}">{{range .KeyringLockChoices}}<option value="{{.}}"{{if eq . $.Keyring.LockMinutes}} selected{{end}}>{{lockText $.Locale .}}</option>{{end}}</select>
+                  <noscript><button type="submit" class="sm">{{tr .Locale "apply"}}</button></noscript>
+                  <span class="mut">{{tr .Locale "enc_autolock_hint"}}</span>
+                </form>
+                <span class="a"></span></div>
+              <div><span class="k">{{tr .Locale "enc_encrypted"}}</span><span class="v">{{if .SealedCount}}{{printf (tr .Locale "enc_encrypted_count") (sub .SealedCount .SealedQuickShares) .SealedQuickShares}}{{else}}<span class="mut">{{tr .Locale "enc_encrypted_none"}}</span>{{end}}</span><span class="a"></span></div>
+            </div>
+          </div>
+        </section>
+        {{end}}
+
+        <section class="panel ruled">
+          <div class="pt"><span class="sec">{{if .Keyring}}{{tr .Locale "enc_details"}}{{else}}{{tr .Locale "enc_before"}}{{end}}</span></div>
+          <div class="pb">
+            <ul class="points">
+              <li>{{tr .Locale "enc_point_scope"}}</li>
+              <li>{{tr .Locale "keyring_cost_where"}}</li>
+              <li><b>{{tr .Locale "keyring_cost_lost"}}</b></li>
+            </ul>
+            <details class="more">
+              <summary>{{if .Keyring}}{{tr .Locale "enc_limits"}}{{else}}{{tr .Locale "enc_details"}}{{end}}</summary>
+              <div class="more-body">
+                <ul class="points">
+                  {{if .Anonymous}}<li>{{tr .Locale "e2ee_cost_pin"}}</li>{{end}}
+                  <li>{{tr .Locale "e2ee_cost_meta"}}</li>
+                  <li>{{tr .Locale "keyring_cost_storage"}}</li>
+                  <li>{{tr .Locale "keyring_cost_code"}}</li>
+                </ul>
+              </div>
+            </details>
+          </div>
+        </section>
+      </div>
+      {{if .Keyring}}{{template "keyring-dialogs-set" .}}{{else}}{{template "keyring-dialogs-new" .}}{{end}}
+{{end}}
+
+{{/* One row per command line signed in to this account. The token itself
+     is not shown, and not kept: only what the command line said about
+     itself, when it signed in and when it was last used. With none, the page
+     says how to sign one in. */}}
+{{define "account-devices"}}
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "cli_title"}}</span>{{if .APITokens}}<span class="sp"><span class="counts"><b>{{len .APITokens}}</b> {{tr .Locale "cli_devices"}}</span></span>{{end}}</div>
+        {{if .APITokens}}
+        <div class="pb dev-sheet">
+          <div class="dev-list">
+            <div class="hd"><span>{{tr .Locale "cli_device"}}</span><span>{{tr .Locale "cli_scope"}}</span><span>{{tr .Locale "cli_signed_in"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
+            {{range .APITokens}}
+            <div><span class="nm"><b>{{or .DeviceName (tr $.Locale "cli_unnamed_device")}}</b><span>{{.DeviceOS}}{{if .ClientVersion}} · {{.ClientVersion}}{{end}}</span></span><span><span class="tag">{{if .CanWrite}}{{tr $.Locale "cli_scope_write"}}{{else}}{{tr $.Locale "cli_scope_read"}}{{end}}</span></span><span class="tm">{{formatMinute .CreatedAt}}</span><span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm">{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account/devices?revoke={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
+            {{end}}
+          </div>
+        </div>
+        {{else}}
+        <div class="pb first-run">
+          <b>{{tr .Locale "devices_empty_title"}}</b>
+          <p class="hint">{{tr .Locale "devices_empty_body"}}</p>
+          <div class="cli-edit"><code><b>$</b> plainmote login</code><button type="button" class="sm" data-copy="plainmote login">{{template "copy-label" .}}</button></div>
+          <p class="hint">{{tr .Locale "devices_empty_install"}} <a href="/developers/cli">{{tr .Locale "devices_install"}} →</a></p>
+        </div>
+        {{end}}
+      </section>
+      <p class="hint">{{tr .Locale "devices_note"}}</p>
+{{end}}
+
+{{/* What leaves with an export and what goes with a deletion, one above the
+     other: the second is the one nothing can undo. */}}
+{{define "account-data"}}
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "export_title"}}</span></div>
+        <div class="pb account-action">
+          <p>{{tr .Locale "export_body"}}</p>
+          <div class="kv-rows">
+            <div><span class="k">{{tr .Locale "export_allowance"}}</span>
+              <span class="v">{{printf (tr .Locale "export_limit") .ExportWindow .ExportLimit}}{{if .Export.Remaining}}<span class="mut">{{printf (tr .Locale "export_remaining") .Export.Remaining}}</span>{{else}}<span class="mut">{{tr .Locale "export_next"}}{{formatTime .Export.NextAt}}</span>{{end}}</span>
+              <span class="a"></span></div>
+          </div>
+          {{if .SealedCount}}<p class="hint" data-export-note>{{tr .Locale "export_sealed_locked"}}</p>{{end}}
+          <form method="post" action="/account/export" class="inline"{{if .SealedCount}} data-sealed="{{.SealedCount}}"
+                data-msg-locked="{{tr .Locale "export_sealed_locked"}}" data-msg-unlocked="{{tr .Locale "export_sealed_unlocked"}}" data-msg-failed="{{tr .Locale "export_sealed_failed"}}"{{end}}>
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <button type="submit" class="pri"{{if not .Export.Remaining}} disabled{{end}}>{{tr .Locale "export_download"}}</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel ruled account-danger">
+        <div class="pt"><span class="sec">{{tr .Locale "delete_account_title"}}</span></div>
+        <div class="pb account-action">
+          <p>{{tr .Locale "delete_account_body"}}</p>
+          <form method="post" action="/account/delete" class="account-confirm" data-parts>
+            <input type="hidden" name="csrf" value="{{.CSRF}}">
+            <label><span>{{tr .Locale "delete_account_label"}}</span>
+              <input type="text" name="confirm" required autocomplete="off" spellcheck="false">
+            </label>
+            <button type="submit" class="bad">{{tr .Locale "delete_account_button"}}</button>
+          </form>
+        </div>
+      </section>
+{{end}}
 
 
 {{define "account-flash"}}<div data-part="flash">{{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}{{if .Error}}<p class="err">{{.Error}}</p>{{end}}</div>{{end}}
@@ -202,13 +269,13 @@
   <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{tr .Locale "delete_account_title"}} <q>{{.Account.User.Login}}</q></b>
-      <a class="x" href="/account" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="/account/data" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       <p class="ro">{{tr .Locale "delete_account_body"}}</p>
     </div>
     <footer>
-      <a class="btn" href="/account" data-close autofocus>{{tr .Locale "cancel"}}</a>
+      <a class="btn" href="/account/data" data-close autofocus>{{tr .Locale "cancel"}}</a>
       <form method="post" action="/account/delete" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="confirm" value="{{.Account.User.Login}}">
@@ -222,13 +289,13 @@
   <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{tr .Locale "revoke"}} <q>{{or .RevokeToken.DeviceName (tr .Locale "cli_unnamed_device")}}</q></b>
-      <a class="x" href="/account" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="/account/devices" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       <p class="ro">{{tr .Locale "cli_revoke_body"}}</p>
     </div>
     <footer>
-      <a class="btn" href="/account" data-close autofocus>{{tr .Locale "cancel"}}</a>
+      <a class="btn" href="/account/devices" data-close autofocus>{{tr .Locale "cancel"}}</a>
       <form method="post" action="/account/tokens" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="action" value="revoke">

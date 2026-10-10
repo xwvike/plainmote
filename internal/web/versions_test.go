@@ -271,7 +271,7 @@ func TestDialogsOpenAsParts(t *testing.T) {
 	if body := confirm.Body.String(); confirm.Code != http.StatusOK || !strings.Contains(body, `data-part="dialog"`) || !strings.Contains(body, `name="final" value="1"`) {
 		t.Fatalf("the right name answers with the confirmation: %d %q", confirm.Code, body)
 	}
-	if page := client.page("/account"); !strings.Contains(page, "data-parts") || !strings.Contains(page, assetPath("parts.js")) {
+	if page := client.page("/account/data"); !strings.Contains(page, "data-parts") || !strings.Contains(page, assetPath("parts.js")) {
 		t.Fatal("the account form is sent through parts.js")
 	}
 

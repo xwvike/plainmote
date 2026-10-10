@@ -43,7 +43,7 @@
       <h1 class="signin-name">{{printf (tr .Locale "device_done_title") (or .DeviceGrant.DeviceName (tr .Locale "cli_unnamed_device"))}}</h1>
       <p class="hint signin-lede">{{tr .Locale "device_done_body"}}</p>
       <div class="rule"></div>
-      <a class="btn signin-go" href="/account">{{tr .Locale "device_manage"}}</a>
+      <a class="btn signin-go" href="/account/devices">{{tr .Locale "device_manage"}}</a>
       {{else if eq .DeviceStep "denied"}}
       <h1 class="signin-name">{{tr .Locale "device_denied_title"}}</h1>
       <p class="hint signin-lede">{{tr .Locale "device_denied_body"}}</p>

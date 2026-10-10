@@ -107,12 +107,12 @@ func TestKeyringEndpoint(t *testing.T) {
 	}
 }
 
-// The account page shows the state the keyring is in, and every page tells
+// The security page shows the state the keyring is in, and every page tells
 // lock.js whose key may stay - and, signed out, that none may.
 func TestKeyringOnTheAccountPage(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	client := newVersionClient(t, db, user)
-	page := client.do(http.MethodGet, accountPath, nil).Body.String()
+	page := client.do(http.MethodGet, accountSecurityPath, nil).Body.String()
 	if !strings.Contains(page, `data-keyring-open="setup" disabled`) || !strings.Contains(page, `data-keyring-dialog="setup"`) ||
 		!strings.Contains(page, `<meta name="plainmote-user" content="`+user.ID+`">`) || !strings.Contains(page, assetPath("keyring.js")) {
 		t.Fatal("the account page without a master password")
@@ -123,7 +123,7 @@ func TestKeyringOnTheAccountPage(t *testing.T) {
 	}, nowUTC()); err != nil {
 		t.Fatal(err)
 	}
-	page = client.do(http.MethodGet, accountPath, nil).Body.String()
+	page = client.do(http.MethodGet, accountSecurityPath, nil).Body.String()
 	for _, want := range []string{`data-keyring-unlock`, `data-keyring-dialog="recover"`, `data-keyring-dialog="password"`, `<option value="15" selected>15 minutes</option>`, `Unlocked · locks after 15 minutes idle`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the account page with a master password lacks %q", want)

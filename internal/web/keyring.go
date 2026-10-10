@@ -82,7 +82,7 @@ func (a *App) handleAccountKeyring(w http.ResponseWriter, r *http.Request) {
 			a.serverError(w, "set keyring lock", err)
 			return
 		}
-		http.Redirect(w, r, accountPath+"#keyring", http.StatusSeeOther)
+		http.Redirect(w, r, accountSecurityPath, http.StatusSeeOther)
 		return
 	}
 

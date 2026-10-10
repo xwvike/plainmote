@@ -62,8 +62,12 @@ func TestResourcePageOffersTheEditCommand(t *testing.T) {
 		return response.Body.String()
 	}
 	command := "plainmote edit " + text.ID[:8] + " --server https://cfg.test"
+	if strings.Contains(page("/resources/"+text.ID), `class="cli-edit"`) {
+		t.Fatal("the edit command is offered before any command line is signed in")
+	}
+	issueToken(t, db, user, "read")
 	body := page("/resources/" + text.ID)
-	if !strings.Contains(body, "<code><b>$</b> "+command+"</code>") || !strings.Contains(body, `data-copy="`+command+`"`) || !strings.Contains(body, `<a class="txt" href="/cli">`) {
+	if !strings.Contains(body, "<code><b>$</b> "+command+"</code>") || !strings.Contains(body, `data-copy="`+command+`"`) || !strings.Contains(body, `<a class="txt" href="/developers/cli">`) {
 		t.Fatal("a text resource does not offer its edit command and the way to the command line")
 	}
 	for _, path := range []string{"/resources/" + picture.ID, "/resources/" + remote.ID, "/resources/" + banned.ID, "/resources/new"} {

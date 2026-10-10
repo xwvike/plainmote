@@ -1,0 +1,195 @@
+{{define "developers.html"}}<!doctype html>
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
+<head>
+  {{template "htmlhead" .}}
+  <title>{{template "dev-title" .}} · {{tr .Locale "dev_title"}} · PlainMote</title>
+  <meta name="description" content="{{template "dev-lede" .}}">
+  {{if .Indexable}}<link rel="canonical" href="{{.BaseURL}}{{.Canonical}}">
+  {{template "alternates" .}}{{end}}
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page settings">
+    {{template "side-nav" .}}
+    <div class="settings-body">
+    <div class="lede"><h1>{{template "dev-title" .}}{{if and (eq .Section "dev-cli") .CLIBinaries .CLIVersion}} <span class="tag">{{.CLIVersion}}</span>{{end}}</h1><p>{{template "dev-lede" .}}</p></div>
+    {{if eq .Section "dev-api"}}
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_api_auth_title"}}</span></div>
+        <div class="pb">
+          <ol class="steps">
+            <li><p>{{tr .Locale "dev_api_step_code"}}</p>
+              <code class="term-block"><b>$</b> curl -X POST -H 'Content-Type: application/json' \
+    -d '{"scope": "read", "device": "my-script"}' {{.BaseURL}}/api/v1/device/code</code></li>
+            <li><p>{{printf (tr .Locale "dev_api_step_approve") (print .BaseURL "/cli/device")}}</p></li>
+            <li><p>{{tr .Locale "dev_api_step_token"}}</p>
+              <code class="term-block"><b>$</b> curl -X POST -H 'Content-Type: application/json' \
+    -d '{"device_code": "…"}' {{.BaseURL}}/api/v1/device/token</code></li>
+            <li><p>{{tr .Locale "dev_api_step_call"}}</p>
+              <code class="term-block"><b>$</b> curl -H "Authorization: Bearer $PLAINMOTE_TOKEN" {{.BaseURL}}/api/v1/resources</code></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_api_endpoints"}}</span></div>
+        <div class="pb dev-sheet">
+          <div class="table-scroll"><table class="api-table">
+            <thead><tr><th>{{tr .Locale "dev_api_request"}}</th><th>{{tr .Locale "cli_scope"}}</th><th>{{tr .Locale "dev_api_purpose"}}</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">POST /api/v1/device/code</td><td><span class="mut">{{tr .Locale "dev_api_no_token"}}</span></td><td>{{tr .Locale "dev_api_code"}}</td></tr>
+              <tr><td class="mono">POST /api/v1/device/token</td><td><span class="mut">{{tr .Locale "dev_api_no_token"}}</span></td><td>{{tr .Locale "dev_api_token"}}</td></tr>
+              <tr><td class="mono">GET /api/v1/me</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_me"}}</td></tr>
+              <tr><td class="mono">GET /api/v1/keyring</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_keyring"}}</td></tr>
+              <tr><td class="mono">GET /api/v1/resources</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_list"}}</td></tr>
+              <tr><td class="mono">GET /api/v1/resources/{id}</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_get"}}</td></tr>
+              <tr><td class="mono">GET /api/v1/resources/{id}/content</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_read"}}</td></tr>
+              <tr><td class="mono">PUT /api/v1/resources/{id}/content</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_save"}}</td></tr>
+              <tr><td class="mono">POST /api/v1/resources</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_create"}}</td></tr>
+              {{if .Anonymous}}<tr><td class="mono">POST /api/v1/quick-shares</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_quick"}}</td></tr>{{end}}
+              <tr><td class="mono">DELETE /api/v1/token</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_revoke"}}</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_api_rules"}}</span></div>
+        <div class="pb">
+          <div class="kv-rows">
+            <div><span class="k">{{tr .Locale "dev_api_rule_format"}}</span><span class="v">{{tr .Locale "dev_api_rule_format_v"}}</span><span class="a"></span></div>
+            <div><span class="k">{{tr .Locale "dev_api_rule_errors"}}</span><span class="v"><code class="mono">{"error": "&lt;code&gt;", "message": "…"}</code></span><span class="a"></span></div>
+            <div><span class="k">{{tr .Locale "dev_api_rule_token"}}</span><span class="v">{{tr .Locale "dev_api_rule_token_v"}}</span><span class="a"></span></div>
+            <div><span class="k">{{tr .Locale "dev_api_rule_limit"}}</span><span class="v">{{tr .Locale "dev_api_rule_limit_v"}}</span><span class="a"></span></div>
+            <div><span class="k">{{tr .Locale "dev_api_rule_sealed"}}</span><span class="v">{{tr .Locale "dev_api_rule_sealed_v"}}</span><span class="a"></span></div>
+            <div><span class="k">{{tr .Locale "dev_api_rule_not"}}</span><span class="v">{{tr .Locale "dev_api_rule_not_v"}}</span><span class="a"></span></div>
+          </div>
+          {{if .APIDocsURL}}<p class="hint">{{tr .Locale "dev_api_docs"}} <a href="{{.APIDocsURL}}" rel="noopener">docs/api.md</a></p>{{end}}
+        </div>
+      </section>
+    {{else if eq .Section "dev-curl"}}
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_curl_examples"}}</span></div>
+        <div class="pb">
+          <div class="ex"><p>{{tr .Locale "dev_curl_ex_pipe"}}</p><code class="term-block"><b>$</b> tail -n 200 app.log | curl -F 'content=&lt;-' {{.BaseURL}}/paste</code></div>
+          <div class="ex"><p>{{tr .Locale "dev_curl_ex_file"}}</p><code class="term-block"><b>$</b> curl -F content=@app.log {{.BaseURL}}/paste</code></div>
+          <div class="ex"><p>{{tr .Locale "dev_curl_ex_raw"}}</p><code class="term-block"><b>$</b> curl --data-binary @app.log '{{.BaseURL}}/paste?ttl=1d&amp;filename=app.log'</code></div>
+        </div>
+      </section>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_curl_params"}}</span></div>
+        <div class="pb">
+          <div class="kv-rows">
+            <div><span class="k mono">ttl</span><span class="v">{{printf (tr .Locale "dev_curl_ttl") .PasteTTL}}</span><span class="a"></span></div>
+            <div><span class="k mono">filename</span><span class="v">{{tr .Locale "dev_curl_filename"}}</span><span class="a"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_curl_response"}}</span></div>
+        <div class="pb">
+          <div class="kv-rows">
+            <div><span class="k"><span class="tag">201</span></span><span class="v">{{tr .Locale "dev_curl_ok"}}</span><span class="a"></span></div>
+            <div><span class="k"><span class="tag">400</span></span><span class="v">{{tr .Locale "dev_curl_refused"}}</span><span class="a"></span></div>
+            <div><span class="k">{{tr .Locale "dev_curl_size"}}</span><span class="v">{{printf (tr .Locale "dev_curl_size_v") (bytesText .MaxPaste)}}</span><span class="a"></span></div>
+            <div><span class="k">{{tr .Locale "dev_curl_type"}}</span><span class="v">{{tr .Locale "dev_curl_type_v"}}</span><span class="a"></span></div>
+          </div>
+          <p class="hint">{{tr .Locale "dev_curl_hint"}}</p>
+        </div>
+      </section>
+    {{else if eq .Section "dev-ai"}}
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">llms.txt</span></div>
+        <div class="pb inst">
+          <code class="term-block"><b>$</b> curl {{.BaseURL}}/llms.txt</code>
+          <p class="hint">{{tr .Locale "dev_ai_hint"}}</p>
+        </div>
+      </section>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_ai_cli_title"}}</span></div>
+        <div class="pb inst">
+          <p>{{tr .Locale "dev_ai_cli_body"}}</p>
+          <code class="term-block"><b>$</b> plainmote login --read-only
+<b>$</b> plainmote ls
+<b>$</b> plainmote cat nginx.conf</code>
+          <div class="warnbox"><span>{{tr .Locale "dev_ai_cli_secret"}}</span></div>
+          <p class="hint"><a href="{{.LocalePrefix}}/developers/cli">{{tr .Locale "devices_install"}} →</a></p>
+        </div>
+      </section>
+    {{else}}
+      {{if .CLIBinaries}}
+      {{/* The one command for the system the page was opened on; the other,
+           the downloads and how to read the script first are folded below. */}}
+      {{$unix := ne .CLIPlatform "windows"}}
+      {{$windows := or (eq .CLIPlatform "windows") (not .CLIPlatform)}}
+      <div class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "cli_install"}}{{if eq .CLIPlatform "macos"}} · macOS{{else if eq .CLIPlatform "linux"}} · Linux{{else if eq .CLIPlatform "windows"}} · Windows{{end}}</span></div>
+        <div class="pb inst">
+          {{if $unix}}{{if not .CLIPlatform}}<h3>macOS / Linux</h3>{{end}}
+          <code class="term-block"><b>$</b> curl -fsSL {{.BaseURL}}/cli/{{.CLILang}} | sh</code>{{end}}
+          {{if $windows}}{{if not .CLIPlatform}}<h3>Windows (PowerShell)</h3>{{end}}
+          <code class="term-block"><b>&gt;</b> irm {{.BaseURL}}/cli/{{.CLILang}}.ps1 | iex</code>{{end}}
+          <p class="hint">{{tr .Locale "cli_install_short"}}</p>
+          <details class="more">
+            <summary>{{tr .Locale "cli_more"}}</summary>
+            <div class="inst inst-more">
+              {{if eq .CLIPlatform "windows"}}<h3>macOS / Linux</h3>
+              <code class="term-block"><b>$</b> curl -fsSL {{.BaseURL}}/cli/{{.CLILang}} | sh</code>
+              {{else if .CLIPlatform}}<h3>Windows (PowerShell)</h3>
+              <code class="term-block"><b>&gt;</b> irm {{.BaseURL}}/cli/{{.CLILang}}.ps1 | iex</code>{{end}}
+              <h3>{{tr .Locale "cli_install_review"}}</h3>
+              <code class="term-block"><b>$</b> curl -fsSL {{.BaseURL}}/cli/{{.CLILang}} | less</code>
+              <h3>{{tr .Locale "cli_downloads"}}</h3>
+              <div class="dl">
+                {{range .CLIBinaries}}
+                <div><a href="/cli/download/{{.OS}}-{{.Arch}}" download="{{.File}}">{{.Platform}} {{.Arch}}</a><span>{{bytesText .Size}}</span></div>
+                {{end}}
+              </div>
+              <p class="hint">{{tr .Locale "cli_download_note"}} <a href="/cli/checksums.txt">checksums.txt</a></p>
+            </div>
+          </details>
+        </div>
+      </div>
+      {{else}}
+      <p class="notice">{{tr .Locale "cli_unavailable"}}</p>
+      {{end}}
+      <div class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "cli_usage"}}</span></div>
+        <div class="pb">
+          <dl class="cmds">
+            <dt>plainmote login</dt><dd>{{tr .Locale "cli_cmd_login"}}</dd>
+            <dt>plainmote ls [{{tr .Locale "cli_arg_query"}}] [--decrypt]</dt><dd>{{tr .Locale "cli_cmd_ls"}}</dd>
+            <dt>plainmote edit &lt;{{tr .Locale "cli_arg_resource"}}&gt;</dt><dd>{{tr .Locale "cli_cmd_edit"}}</dd>
+            <dt>plainmote cat &lt;{{tr .Locale "cli_arg_resource"}}&gt;</dt><dd>{{tr .Locale "cli_cmd_cat"}}</dd>
+            <dt>plainmote push &lt;{{tr .Locale "cli_arg_file"}}&gt; [--to &lt;{{tr .Locale "cli_arg_resource"}}&gt;] [--encrypt]</dt><dd>{{tr .Locale "cli_cmd_push"}}</dd>
+            {{if .Anonymous}}<dt>plainmote share &lt;{{tr .Locale "cli_arg_file"}}&gt; [--ttl 1d] [--encrypt]</dt><dd>{{tr .Locale "cli_cmd_share"}}</dd>{{end}}
+            <dt>plainmote config</dt><dd>{{tr .Locale "cli_cmd_config"}}</dd>
+            <dt>plainmote logout</dt><dd>{{tr .Locale "cli_cmd_logout"}}</dd>
+          </dl>
+        </div>
+      </div>
+      {{/* Choosing the editor is the one setting worth knowing ahead: the rest
+           the command line asks for when it needs it. */}}
+      <div class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "cli_tips"}}</span></div>
+        <div class="pb inst">
+          {{if ne .CLIPlatform "windows"}}<p>{{tr .Locale "cli_tip_editor_unix"}}</p>
+          <code class="term-block"><b>$</b> export EDITOR="code"</code>{{end}}
+          {{if or (eq .CLIPlatform "windows") (not .CLIPlatform)}}<p>{{tr .Locale "cli_tip_editor_windows"}}</p>
+          <code class="term-block"><b>&gt;</b> [Environment]::SetEnvironmentVariable("EDITOR", "code", "User")</code>{{end}}
+          <p class="hint">{{tr .Locale "cli_tip_editor_more"}}</p>
+          <p class="hint">{{tr .Locale "cli_tip_encrypted"}}</p>
+        </div>
+      </div>
+    {{end}}
+    </div>
+  </main>
+  {{template "footer" .}}
+</body>
+</html>{{end}}
+
+{{define "dev-title"}}{{if eq .Section "dev-api"}}{{tr .Locale "dev_api_title"}}{{else if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_title"}}{{else if eq .Section "dev-ai"}}{{tr .Locale "dev_llms_title"}}{{else}}{{tr .Locale "cli_title"}}{{end}}{{end}}
+{{define "dev-lede"}}{{if eq .Section "dev-api"}}{{tr .Locale "dev_api_lede"}}{{else if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_lede"}}{{else if eq .Section "dev-ai"}}{{tr .Locale "dev_llms_body"}}{{else}}{{tr .Locale "cli_lede"}}{{end}}{{end}}

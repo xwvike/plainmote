@@ -425,6 +425,19 @@ ORDER BY created_at DESC
 	return tokens, nil
 }
 
+// HasAPITokens is whether any command line is signed in to the account.
+func (d *Store) HasAPITokens(ctx context.Context, userID string, now time.Time) (bool, error) {
+	if !validUUIDs(userID) {
+		return false, ErrNotFound
+	}
+	var has bool
+	err := d.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM api_tokens WHERE user_id = $1 AND expires_at > $2)`, userID, now).Scan(&has)
+	if err != nil {
+		return false, fmt.Errorf("check tokens: %w: %w", ErrInternal, err)
+	}
+	return has, nil
+}
+
 // APITokenForOwner reads one live token of an account, for the revoke dialog.
 func (d *Store) APITokenForOwner(ctx context.Context, userID, tokenID string, now time.Time) (APIToken, error) {
 	tokens, err := d.ListAPITokens(ctx, userID, now)

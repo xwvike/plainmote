@@ -108,16 +108,22 @@ type pageData struct {
 	CLIVersion  string
 	CLIPlatform string
 	CLILang     string
+	APIDocsURL  string
 	DeviceStep  string
 	DeviceGrant store.DeviceGrant
 	DeviceCode  string
 	// APITokens are the account page's signed-in command lines, and
-	// RevokeToken the one its revoke dialog is about.
+	// RevokeToken the one its revoke dialog is about. CLIDevices is whether
+	// there are any, which is when a resource page offers its edit command.
 	APITokens   []store.APIToken
 	RevokeToken store.APIToken
+	CLIDevices  bool
 	// SignIns are the account page's sign-in methods: every provider the
 	// account has or could link.
 	SignIns []signInView
+	// Section is which page of the settings, or of the developer pages, this
+	// is; the side navigation marks it.
+	Section string
 	// E2EE is whether this account's quick shares are encrypted in the browser.
 	E2EE bool
 	// Keyring is the account's master password, if it has one, and
@@ -322,7 +328,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/theme", a.handleTheme)
 	mux.HandleFunc("/resources/", a.handleResources)
 	mux.HandleFunc("/logs", a.handleLogs)
-	mux.HandleFunc(accountPath, a.handleAccount)
+	for path := range accountSections {
+		mux.HandleFunc(path, a.handleAccount)
+	}
 	mux.HandleFunc(accountExportPath, a.handleAccountExport)
 	mux.HandleFunc(accountDeletePath, a.handleAccountDelete)
 	mux.HandleFunc(accountTokensPath, a.handleAccountTokens)
@@ -330,6 +338,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(accountIdentitiesPath, a.handleAccountIdentities)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc(apiPrefix, a.handleAPI)
+	mux.HandleFunc(developersPath, a.handleDevelopers)
+	mux.HandleFunc(developersPath+"/", a.handleDevelopers)
 	mux.HandleFunc(cliPath, a.handleCLI)
 	mux.HandleFunc(cliPath+"/", a.handleCLIFiles)
 	mux.HandleFunc(cliPowerShell, a.handleCLIPowerShell)
@@ -369,11 +379,16 @@ func (a *App) routes() http.Handler {
 
 // indexablePages are the paths meant to be found: the home page, where it is a
 // page - with the box off it redirects into the half of the service that needs
-// an account - and the about, privacy, terms and contact pages where they
-// exist. Everything else needs a session or is somebody's secret. robots.txt,
-// the sitemap and the X-Robots-Tag header are all derived from this list, so
-// they cannot disagree about what may be indexed.
+// an account - the about, privacy, terms and contact pages where they exist,
+// and the developer page where either does: a deployment with nothing public
+// stays out of search entirely. Everything else needs a session or is
+// somebody's secret. robots.txt, the sitemap and the X-Robots-Tag header are
+// all derived from this list, so they cannot disagree about what may be
+// indexed.
 func (a *App) indexablePages() []string {
+	if !a.hasPublicPages() {
+		return nil
+	}
 	var pages []string
 	if a.cfg.AnonymousEnabled {
 		pages = append(pages, "/")
@@ -383,7 +398,14 @@ func (a *App) indexablePages() []string {
 			pages = append(pages, "/"+page)
 		}
 	}
+	for _, page := range a.developerPages() {
+		pages = append(pages, developersPath+"/"+page)
+	}
 	return append(pages, a.localizedPaths()...)
+}
+
+func (a *App) hasPublicPages() bool {
+	return a.cfg.AnonymousEnabled || a.cfg.ContactEmail != ""
 }
 
 func (a *App) indexable(path string) bool {

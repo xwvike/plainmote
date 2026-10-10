@@ -94,7 +94,7 @@ func TestExportDecryptsInTheBrowser(t *testing.T) {
 			t.Fatalf("%s holds plaintext", name)
 		}
 	}
-	page := client.do(http.MethodGet, "/account", nil).Body.String()
+	page := client.do(http.MethodGet, "/account/data", nil).Body.String()
 	if !strings.Contains(page, `data-sealed="1"`) || !strings.Contains(page, assetPath("export.js")) {
 		t.Fatal("the account page must offer to decrypt the export")
 	}

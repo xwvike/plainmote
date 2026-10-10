@@ -39,7 +39,7 @@ docker image inspect ghcr.io/xwvike/plainmote:v1.2.3 \
   --format '{{json .Config.Labels}}'
 ```
 
-The build also compiles the `plainmote` command line for macOS, Linux and Windows on amd64 and arm64 into the image's `/cli` directory, from which the service's `/cli` page offers them for download. The version is stamped into both the service and the command line, so their versions always match. The command line builds add about 35 MiB to the image.
+The build also compiles the `plainmote` command line for macOS, Linux and Windows on amd64 and arm64 into the image's `/cli` directory, from which the service offers them for download at `/cli` and on its developer pages, at `/developers/cli`. The version is stamped into both the service and the command line, so their versions always match. The command line builds add about 35 MiB to the image.
 
 ### Publishing a release
 
@@ -123,7 +123,7 @@ Google sign-in is optional, beside or instead of GitHub. In the Google Cloud Con
 4. **Clients**: a Web application client with the authorized redirect URI `PLAINMOTE_PUBLIC_URL/auth/google/callback`. The client secret is shown only when it is created; keep it in that moment.
 5. Optionally, submit the branding for verification, after which the consent screen shows the application's name.
 
-Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. An account signs in with a Google account by its ID (`sub`); accounts made with GitHub and with Google are separate, and their owner can link the other method on the account page.
+Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. An account signs in with a Google account by its ID (`sub`); accounts made with GitHub and with Google are separate, and their owner can link the other method in the settings under Sign-in methods.
 
 ### Registration
 

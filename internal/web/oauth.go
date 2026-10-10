@@ -206,17 +206,17 @@ func (a *App) finishOAuth(w http.ResponseWriter, r *http.Request, p oauthProvide
 func (a *App) finishLink(w http.ResponseWriter, r *http.Request, identity store.Identity) {
 	user, _, ok := a.currentUser(r)
 	if !ok {
-		http.Redirect(w, r, "/login?next="+url.QueryEscape(accountPath), http.StatusSeeOther)
+		http.Redirect(w, r, "/login?next="+url.QueryEscape(accountSignInPath), http.StatusSeeOther)
 		return
 	}
 	err := a.db.LinkIdentity(r.Context(), user.ID, identity)
 	switch {
 	case err == nil:
-		http.Redirect(w, r, accountPath+"?linked="+url.QueryEscape(identity.Provider), http.StatusSeeOther)
+		http.Redirect(w, r, accountSignInPath+"?linked="+url.QueryEscape(identity.Provider), http.StatusSeeOther)
 	case errors.Is(err, store.ErrIdentityTaken):
-		http.Redirect(w, r, accountPath+"?identity=taken", http.StatusSeeOther)
+		http.Redirect(w, r, accountSignInPath+"?identity=taken", http.StatusSeeOther)
 	case errors.Is(err, store.ErrProviderLinked):
-		http.Redirect(w, r, accountPath+"?identity=linked", http.StatusSeeOther)
+		http.Redirect(w, r, accountSignInPath+"?identity=linked", http.StatusSeeOther)
 	default:
 		a.serverError(w, "link identity", err)
 	}

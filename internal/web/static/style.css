@@ -163,7 +163,6 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .theme-switch svg { width: 15px; height: 15px; }
 /* The master password's lock: an icon that shows its state, opening onto a
    small panel to unlock or lock in place. */
-.sw-off { display: inline-flex; align-items: center; gap: 8px; }
 .keylock { position: relative; }
 .keylock > summary { display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r); color: var(--ink3); cursor: pointer; list-style: none; }
 .keylock > summary::-webkit-details-marker { display: none; }
@@ -993,7 +992,7 @@ a.who:hover, a.who[aria-current] { color: var(--ink); }
 .big-code { margin-top: 4px; font: 500 22px var(--mono); letter-spacing: .14em; color: var(--ink); }
 
 /* the account page's signed-in command lines */
-.panel-dev > .pb { padding: 0; gap: 0; }
+.dev-sheet { padding: 0; gap: 0; overflow: hidden; }
 .dev-list > div { display: grid; grid-template-columns: minmax(0, 1.4fr) 64px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, .9fr) 48px; gap: 12px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12.5px; }
 .dev-list > div:first-child { border-top: 0; }
 .dev-list > .hd { font-size: 11.5px; color: var(--ink3); background: var(--head); border-radius: var(--r) var(--r) 0 0; }
@@ -1011,11 +1010,70 @@ a.who:hover, a.who[aria-current] { color: var(--ink); }
 .cli-edit code { min-width: 0; box-sizing: border-box; height: 24px; padding: 0 9px; overflow-x: auto; border: 1px solid var(--term-line); border-radius: var(--r); background: var(--term); color: var(--term-ink); font: 400 11px/22px var(--mono); white-space: nowrap; }
 .cli-edit code b { font-weight: 400; color: var(--sand-l); }
 .cli-edit .txt { margin-left: auto; }
-.dev-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 9px 12px; }
-.dev-list + .dev-foot { border-top: 1px dashed var(--line2); background: var(--head); border-radius: 0 0 var(--r) var(--r); }
-.dev-foot code { min-width: 0; overflow-wrap: anywhere; font: 400 11px var(--mono); color: var(--ink); background: var(--sunk); padding: 1px 6px; border-radius: 2px; }
 
-/* the install page */
+/* the settings and developer pages: a side navigation, held below the
+   sticky top bar, beside the page */
+.page.settings { grid-template-columns: 184px minmax(0, 1fr); gap: 14px 28px; align-items: start; }
+.settings-body { display: grid; gap: 14px; min-width: 0; align-content: start; }
+.settings-body .lede h1 { display: flex; align-items: baseline; gap: 10px; }
+.settings-body .pb > .hint { margin-top: 10px; }
+.side { position: sticky; top: 63px; display: grid; gap: 1px; font-size: 13px; }
+.side-h { padding: 14px 10px 4px; font-size: 11.5px; font-weight: 600; color: var(--ink3); }
+.side-h:first-child { padding-top: 6px; }
+.side a { padding: 5px 10px; border-radius: var(--r); color: var(--ink2); }
+.side a:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
+.side a.on { background: var(--sunk); color: var(--ink); font-weight: 600; }
+@media (max-width: 760px) {
+  .page.settings { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; display: flex; gap: 2px; overflow-x: auto; padding-bottom: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .side-h { display: none; }
+}
+
+/* the settings pages' own parts */
+.profile { display: flex; align-items: center; gap: 12px; padding: 12px; }
+.av { display: grid; flex: none; place-items: center; width: 36px; height: 36px; border-radius: var(--r); background: var(--accent-s); color: var(--accent); font: 600 16px var(--mono); }
+.profile-id { display: grid; gap: 2px; min-width: 0; }
+.profile-id b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-id span { font: 400 11px var(--mono); color: var(--ink3); }
+.idl { margin: 0; padding: 0; list-style: none; }
+.idl > li { display: grid; grid-template-columns: 20px 150px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 52px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.idl > li:first-child { border-top: 0; }
+.idl-mark { display: grid; place-items: center; color: var(--ink); }
+.idl-mark svg { width: 18px; height: 18px; }
+.idl-name { display: grid; gap: 3px; justify-items: start; }
+.idl-name b { font-size: 13px; font-weight: 600; }
+.idl-info { display: grid; gap: 1px; min-width: 0; font-size: 12.5px; }
+.idl-info > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.idl-info .mut { font: 400 10.5px var(--mono); }
+.idl-act { justify-self: end; }
+.enc-card { display: grid; gap: 10px; padding: 12px; }
+.enc-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.enc-what { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
+.enc-what b { font-size: 13.5px; font-weight: 600; }
+.enc-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.points { display: grid; gap: 5px; margin: 0; padding-left: 1.2em; font-size: 12.5px; line-height: 1.55; color: var(--ink2); }
+.points b { color: var(--ink); font-weight: 600; }
+.more-body .points { margin-top: 8px; }
+.first-run { justify-items: start; gap: 8px; padding: 20px 16px; }
+.first-run > b { font-size: 13.5px; font-weight: 600; }
+.first-run .cli-edit { padding: 2px 0; }
+.first-run .cli-edit .txt { margin-left: 0; }
+.steps { display: grid; gap: 14px; margin: 0; padding-left: 1.4em; font-size: 12.5px; }
+.steps > li { display: grid; gap: 6px; padding-left: 2px; }
+.steps > li::marker { font: 600 12px var(--mono); color: var(--ink3); }
+.steps p { color: var(--ink2); }
+.api-table th { background: var(--head); font-weight: 500; color: var(--ink3); }
+.api-table td.mono { font: 400 11.5px var(--mono); white-space: nowrap; }
+.api-table td:last-child { color: var(--ink2); }
+.ex { display: grid; gap: 6px; }
+.ex > p { font-size: 12.5px; color: var(--ink2); }
+@media (max-width: 760px) {
+  .idl > li { grid-template-columns: 20px minmax(0, 1fr) auto; }
+  .idl-act { grid-row: 1; grid-column: 3; }
+  .idl-info { grid-row: 2; grid-column: 2 / -1; }
+}
+
+/* the install section */
 .inst h3 { font-size: 12px; font-weight: 600; color: var(--ink2); }
 .term-block { display: block; padding: 9px 12px; overflow-x: auto; border: 1px solid var(--term-line); border-radius: var(--r); background: var(--term); color: var(--term-ink); font: 400 12px/1.75 var(--mono); white-space: pre; }
 .term-block b { font-weight: 400; color: var(--sand-l); }

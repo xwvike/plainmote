@@ -25,7 +25,7 @@ With `Content-Type: application/json` and the body:
 | Field | Description |
 | --- | --- |
 | `scope` | `read` (read-only) or `write` (read-write) |
-| `device` | Device name, shown on the confirmation page and the Account page; at most 64 characters |
+| `device` | Device name, shown on the confirmation page and in the settings under Devices and apps; at most 64 characters |
 | `os` | System and architecture, such as `darwin/arm64`; at most 64 characters |
 | `version` | Client version; at most 64 characters |
 
@@ -71,7 +71,7 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 - Tokens begin with `pmt_` and are accepted only in the `Authorization: Bearer <token>` header. Tokens in the address and cookies are never accepted.
 - A token is valid for 90 days from sign-in; using it does not extend that. After it expires, a new token must be obtained.
 - A read-only token can call the reading endpoints and receives `403` from the writing ones.
-- The service stores only a digest of each token. The account owner can see each token's device, access, sign-in time and last use on the Account page and revoke it at any time; a token can also revoke itself with `DELETE /api/v1/token`. When an account is suspended, all of its tokens are deleted.
+- The service stores only a digest of each token. The account owner can see each token's device, access, sign-in time and last use in the settings under Devices and apps and revoke it at any time; a token can also revoke itself with `DELETE /api/v1/token`. When an account is suspended, all of its tokens are deleted.
 - The `plainmote` command line keeps its token in the `credentials` file of its configuration directory (mode 600) and also reads the `PLAINMOTE_TOKEN` environment variable.
 
 ## Conventions

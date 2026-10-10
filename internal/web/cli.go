@@ -117,8 +117,8 @@ func (a *App) cliBinary(os, arch string) (cliBinary, bool) {
 	return cliBinary{}, false
 }
 
-// handleCLI is the install page for a browser and the install script for
-// everything else: the same address works in an address bar and after curl.
+// handleCLI is the install script, and for a browser the developer page on
+// the command line: the same address works in an address bar and after curl.
 func (a *App) handleCLI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
@@ -127,21 +127,7 @@ func (a *App) handleCLI(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Add("Vary", "Accept")
 	if strings.Contains(r.Header.Get("Accept"), "text/html") {
-		w.Header().Add("Vary", "User-Agent")
-		w.Header().Add("Vary", "Sec-CH-UA-Platform")
-		data := a.basePage(r, User{})
-		data.SignedIn = false
-		data.Active = "cli"
-		if user, _, ok := a.currentUser(r); ok {
-			data = a.basePage(r, user)
-			data.Active = "cli"
-		}
-		data.CLIBinaries = a.cliBinaries()
-		data.CLIVersion = a.cfg.Version
-		data.CLIPlatform = clientPlatform(r)
-		data.CLILang = cliLanguage(requestLanguage(r).Locale)
-		data.Indexable = false
-		a.renderTemplate(w, r, http.StatusOK, "cli.html", data)
+		http.Redirect(w, r, developersPath+"/cli", http.StatusFound)
 		return
 	}
 	a.writeScript(w, r, installScript)

@@ -165,11 +165,6 @@
             <button type="button" data-pin-drop>{{tr .Locale "e2ee_pin_drop"}}</button>
           </span>
         </span>
-        {{else if .SignedIn}}
-        <span class="sw-off"><label class="sw" title="{{tr .Locale "seal_needs_keyring"}}">
-          <input type="checkbox" role="switch" disabled>
-          <span class="sw-track" aria-hidden="true"><span class="sw-knob"></span></span><span>{{tr .Locale "e2ee_title"}}</span>
-        </label><a class="txt" href="/account#keyring">{{tr .Locale "seal_set_keyring"}}</a></span>
         {{end}}
         {{/* The action ends the row: choose the terms, then send. */}}
         <button type="submit" class="pri end">{{tr .Locale "create_share_link"}}</button>
@@ -181,7 +176,7 @@
         <span class="lock-ic" aria-hidden="true"></span>
         <span class="msg">{{tr .Locale "e2ee_unlock_first"}}</span>
         <input type="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}">
-        <a class="txt" href="/account#keyring">{{tr .Locale "keyring_forgot"}}</a>
+        <a class="txt" href="/account/security">{{tr .Locale "keyring_forgot"}}</a>
       </div>
       <p class="err" data-e2ee-error role="alert" hidden></p>
       <noscript><p class="err">{{tr .Locale "e2ee_needs_js"}}</p></noscript>
@@ -204,7 +199,7 @@
       <section>
         <h2>{{tr .Locale "example_cli_title"}}</h2>
         <code class="cli"><b>$</b> tail -n 200 app.log | curl -F <span>'content=&lt;-'</span> <span>{{.BaseURL}}/paste</span></code>
-        <p class="hint"><a href="/cli">{{tr .Locale "home_cli_link"}} →</a></p>
+        <p class="hint"><a href="{{.LocalePrefix}}/developers/curl">{{tr .Locale "dev_curl_more"}} →</a></p>
       </section>
       {{else}}
       <section>

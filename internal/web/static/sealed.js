@@ -392,7 +392,6 @@ async function unsealResource(dialog) {
 
 function startToggle() {
   const input = toggle.querySelector("input");
-  if (!toggle.hasAttribute("data-ready")) return;
   input.disabled = false;
   if (!toggle.dataset.resource) return startNew(input);
   const sealed = input.checked;

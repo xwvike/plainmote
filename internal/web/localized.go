@@ -57,14 +57,15 @@ type alternate struct {
 	URL      string
 }
 
-// homeAlternates are the home page in every language, and x-default, the
-// address for a reader none of them matches.
-func homeAlternates(base string) []alternate {
-	links := []alternate{{"en", base + "/"}}
+// localeAlternates are a page written in every language - the home page, the
+// developer page - at each of its addresses, and x-default, the address for
+// a reader none of them matches.
+func localeAlternates(base, path string) []alternate {
+	links := []alternate{{"en", base + path}}
 	for _, public := range publicLocales {
-		links = append(links, alternate{public.locale, base + public.prefix + "/"})
+		links = append(links, alternate{public.locale, base + public.prefix + path})
 	}
-	return append(links, alternate{"x-default", base + "/"})
+	return append(links, alternate{"x-default", base + path})
 }
 
 // legalAlternates are a legal page in the two languages it is written in.
@@ -76,8 +77,9 @@ func legalAlternates(base, page string) []alternate {
 	}
 }
 
-// handleLocalized serves /<language>/ and, for Chinese, /zh-cn/<legal page>.
-// Anything else under a language prefix does not exist.
+// handleLocalized serves /<language>/, /<language>/developers/<page> and,
+// for Chinese, /zh-cn/<legal page>. Anything else under a language prefix does
+// not exist.
 func (a *App) handleLocalized(w http.ResponseWriter, r *http.Request) {
 	for _, public := range publicLocales {
 		rest, ok := strings.CutPrefix(r.URL.Path, public.prefix)
@@ -88,6 +90,9 @@ func (a *App) handleLocalized(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case rest == "/" && a.cfg.AnonymousEnabled:
 			a.serveHome(w, withLocale(r, route))
+			return
+		case (rest == developersPath || strings.HasPrefix(rest, developersPath+"/")) && a.hasPublicPages():
+			a.handleDevelopers(w, withLocale(r, route))
 			return
 		case public.prefix == legalChinesePrefix && a.cfg.ContactEmail != "" && isLegalPage(strings.TrimPrefix(rest, "/")):
 			a.serveLegal(w, withLocale(r, route), strings.TrimPrefix(rest, "/"))
@@ -109,11 +114,16 @@ func isLegalPage(page string) bool {
 
 // pageAlternates are the language versions of an indexable path.
 func (a *App) pageAlternates(base, path string) []alternate {
-	page := strings.Trim(strings.TrimPrefix(path, legalChinesePrefix), "/")
-	if isLegalPage(page) {
+	for _, public := range publicLocales {
+		if rest, ok := strings.CutPrefix(path, public.prefix); ok && strings.HasPrefix(rest, "/") {
+			path = rest
+			break
+		}
+	}
+	if page := strings.Trim(path, "/"); isLegalPage(page) {
 		return legalAlternates(base, page)
 	}
-	return homeAlternates(base)
+	return localeAlternates(base, path)
 }
 
 // localizedPaths are the language addresses of the pages meant to be found,
@@ -128,6 +138,11 @@ func (a *App) localizedPaths() []string {
 	if a.cfg.ContactEmail != "" {
 		for _, page := range legalPages {
 			paths = append(paths, legalChinesePrefix+"/"+page)
+		}
+	}
+	for _, public := range publicLocales {
+		for _, page := range a.developerPages() {
+			paths = append(paths, public.prefix+developersPath+"/"+page)
 		}
 	}
 	return paths

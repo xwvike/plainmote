@@ -471,6 +471,10 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
 		}
+		if data.CLIDevices, err = a.db.HasAPITokens(r.Context(), user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
 		if !resource.Remote() && !resource.QuickShare() {
 			if data.HistoryJSON, err = a.historyJSON(r, user.ID, resource.ID); err != nil {
 				a.renderError(w, http.StatusInternalServerError, err)
