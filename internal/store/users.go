@@ -81,6 +81,22 @@ func (d *Store) SessionCSRF(ctx context.Context, sessionID, csrf string) bool {
 	return err == nil && hash == hashToken(csrf)
 }
 
+// RenewSessionCSRF gives a live session a new CSRF token in place of the old
+// one, and says until when the session lasts.
+func (d *Store) RenewSessionCSRF(ctx context.Context, sessionID string) (string, time.Time, error) {
+	csrf, err := randomSecret(24)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("create csrf token: %w", err)
+	}
+	var expires time.Time
+	err = d.db.QueryRow(ctx, `UPDATE sessions SET csrf_hash = $2 WHERE id = $1 AND expires_at > $3 RETURNING expires_at`,
+		sessionID, hashToken(csrf), time.Now().UTC()).Scan(&expires)
+	if err != nil {
+		return "", time.Time{}, translateNotFound(err)
+	}
+	return csrf, expires, nil
+}
+
 func (d *Store) DeleteSession(ctx context.Context, sessionID string) error {
 	_, err := d.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, sessionID)
 	return err

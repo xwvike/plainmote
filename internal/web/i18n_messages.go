@@ -157,6 +157,7 @@ var messageTable = map[string][6]string{
 	"signin_methods":            {"Sign-in methods", "登录方式", "登入方式", "ログイン方法", "Méthodes de connexion", "Anmeldemethoden"},
 	"login_with":                {"Continue with %s", "使用 %s 登录", "使用 %s 登入", "%sで続行", "Continuer avec %s", "Mit %s fortfahren"},
 	"logout":                    {"Sign out", "退出登录", "登出", "ログアウト", "Se déconnecter", "Abmelden"},
+	"logout_confirm":            {"This sign-out request could not be verified. Confirm to sign out of this account.", "退出请求未能通过验证，请确认是否退出当前账号。", "登出請求未能通過驗證，請確認是否登出目前帳號。", "ログアウトの要求を確認できませんでした。このアカウントからログアウトするには確認してください。", "Cette demande de déconnexion n’a pas pu être vérifiée. Confirmez pour vous déconnecter de ce compte.", "Diese Abmeldung konnte nicht bestätigt werden. Bestätigen Sie, um sich von diesem Konto abzumelden."},
 	"logs_retained":             {"Existing access history is retained.", "已有访问记录会保留。", "既有存取記錄會保留。", "既存のアクセス履歴は保持されます。", "L’historique d’accès existant sera conservé.", "Der bestehende Zugriffsverlauf bleibt erhalten."},
 	"name":                      {"Name", "名称", "名稱", "名前", "Nom", "Name"},
 	"name_filename_fallback":    {"Uses the filename when empty", "留空则使用文件名", "留空則使用檔名", "空欄の場合はファイル名を使用", "Le nom du fichier sera utilisé si vide", "Leer lassen, um den Dateinamen zu verwenden"},

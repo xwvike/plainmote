@@ -67,12 +67,20 @@ func (a *App) checkCSRF(r *http.Request, sessionID string) bool {
 func (a *App) setSessionCookies(w http.ResponseWriter, r *http.Request, session, csrf string, expires time.Time) {
 	secure := strings.HasPrefix(strings.ToLower(a.baseURL(r)), "https://")
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: session, Path: "/", Expires: expires, MaxAge: int(time.Until(expires).Seconds()), HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode})
-	http.SetCookie(w, &http.Cookie{Name: csrfCookie, Value: csrf, Path: "/", Expires: expires, MaxAge: int(time.Until(expires).Seconds()), Secure: secure, SameSite: http.SameSiteLaxMode})
+	a.setCSRFCookie(w, r, csrf, expires)
+}
+
+// setCSRFCookie keeps the session's CSRF token where the server reads it back
+// into each form. No script reads it, so none may write it either: a token
+// replaced from the page would refuse every form of the session.
+func (a *App) setCSRFCookie(w http.ResponseWriter, r *http.Request, csrf string, expires time.Time) {
+	secure := strings.HasPrefix(strings.ToLower(a.baseURL(r)), "https://")
+	http.SetCookie(w, &http.Cookie{Name: csrfCookie, Value: csrf, Path: "/", Expires: expires, MaxAge: int(time.Until(expires).Seconds()), HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode})
 }
 
 func (a *App) clearSessionCookies(w http.ResponseWriter) {
 	for _, name := range []string{sessionCookie, csrfCookie, stateCookie} {
-		http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: name != csrfCookie, SameSite: http.SameSiteLaxMode})
+		http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	}
 }
 

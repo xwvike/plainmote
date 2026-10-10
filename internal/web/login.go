@@ -21,14 +21,31 @@ func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	_, sessionID, ok := a.currentUser(r)
+	user, sessionID, ok := a.currentUser(r)
 	if ok {
 		if !a.checkCSRF(r, sessionID) {
-			writePlainError(w, http.StatusForbidden, "invalid csrf token")
+			a.confirmLogout(w, r, user, sessionID)
 			return
 		}
 		_ = a.db.DeleteSession(r.Context(), sessionID)
 	}
 	a.clearSessionCookies(w)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// confirmLogout answers a sign-out whose form token did not match: a stale
+// page, or a token changed in the browser. Signing out still needs this
+// site's own form, so another site cannot sign anyone out, but the session
+// is given a new token and a page to confirm with, rather than a refusal
+// that leaves it signed in with every form broken.
+func (a *App) confirmLogout(w http.ResponseWriter, r *http.Request, user User, sessionID string) {
+	csrf, expires, err := a.db.RenewSessionCSRF(r.Context(), sessionID)
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	a.setCSRFCookie(w, r, csrf, expires)
+	data := a.basePage(r, user)
+	data.CSRF = csrf
+	a.renderTemplate(w, r, http.StatusForbidden, "logout.html", data)
 }
