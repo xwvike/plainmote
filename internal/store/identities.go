@@ -49,6 +49,11 @@ func validIdentity(identity Identity) error {
 	if strings.TrimSpace(identity.Subject) == "" {
 		return errors.New("identity subject must not be empty")
 	}
+	// GitHub names an account by a number; anything else, such as the
+	// anonymous account's placeholder github_id, is no GitHub identity.
+	if identity.Provider == ProviderGitHub && strings.Trim(identity.Subject, "0123456789") != "" {
+		return errors.New("GitHub identity subject must be numeric")
+	}
 	return nil
 }
 
@@ -61,7 +66,8 @@ func lockIdentity(ctx context.Context, tx pgx.Tx, identity Identity) error {
 
 // identityOwner is the account an identity signs in to. A GitHub identity
 // written only to users.github_id - by a build from before identities, run
-// against this database after it - is found there and recorded.
+// against this database after it - is found there and recorded. The
+// anonymous account's github_id is a placeholder, never an identity.
 func identityOwner(ctx context.Context, tx pgx.Tx, identity Identity, now time.Time) (string, error) {
 	var userID string
 	err := tx.QueryRow(ctx, `SELECT user_id FROM user_identities WHERE provider = $1 AND subject = $2`,
@@ -69,7 +75,7 @@ func identityOwner(ctx context.Context, tx pgx.Tx, identity Identity, now time.T
 	if err == nil || !errors.Is(err, pgx.ErrNoRows) || identity.Provider != ProviderGitHub {
 		return userID, translateNotFound(err)
 	}
-	err = tx.QueryRow(ctx, `SELECT id FROM users WHERE github_id = $1`, identity.Subject).Scan(&userID)
+	err = tx.QueryRow(ctx, `SELECT id FROM users WHERE github_id = $1 AND id <> $2`, identity.Subject, AnonymousUserID).Scan(&userID)
 	if err != nil {
 		return "", translateNotFound(err)
 	}
@@ -163,9 +169,9 @@ func (d *Store) IdentityUser(ctx context.Context, provider, subject string) (Use
 SELECT u.id, COALESCE(u.github_id, ''), u.login, u.name, u.avatar_url, u.suspended_at IS NOT NULL, u.suspended_reason
 FROM users u
 WHERE u.id = (SELECT user_id FROM user_identities WHERE provider = $1 AND subject = $2)
-   OR ($1 = 'github' AND u.github_id = $2)
+   OR ($1 = 'github' AND u.github_id = $2 AND u.id <> $3)
 LIMIT 1
-`, provider, subject).Scan(&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL, &user.Suspended, &user.SuspendedReason)
+`, provider, subject, AnonymousUserID).Scan(&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL, &user.Suspended, &user.SuspendedReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrNotFound
 	}

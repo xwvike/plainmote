@@ -230,7 +230,7 @@ func (a *App) handleAccountIdentities(w http.ResponseWriter, r *http.Request) {
 			writePlainError(w, http.StatusBadRequest, "unknown provider")
 			return
 		}
-		a.beginOAuth(w, r, p, "", true)
+		a.beginOAuth(w, r, p, "", user.ID)
 	case "unlink":
 		err := a.db.UnlinkIdentity(r.Context(), user.ID, provider)
 		switch {

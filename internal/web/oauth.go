@@ -18,8 +18,9 @@ import (
 const oauthPrefix = "/auth/"
 
 // linkCookie marks a flow started from the account page to add a sign-in
-// method rather than to sign in. Only that page's form sets it, behind its
-// CSRF check.
+// method rather than to sign in, and holds the account it was started for.
+// Only that page's form sets it, behind its CSRF check, and the callback
+// links only to that same account, still signed in.
 const linkCookie = "plainmote_oauth_link"
 
 // oauthProvider is one way to sign in, as the handlers see it.
@@ -109,10 +110,12 @@ func (a *App) handleOAuth(w http.ResponseWriter, r *http.Request) {
 		a.finishOAuth(w, r, p)
 		return
 	}
-	a.beginOAuth(w, r, p, safeNext(r.URL.Query().Get("next")), false)
+	a.beginOAuth(w, r, p, safeNext(r.URL.Query().Get("next")), "")
 }
 
-func (a *App) beginOAuth(w http.ResponseWriter, r *http.Request, p oauthProvider, next string, link bool) {
+// beginOAuth starts a sign-in with a provider or, given linkFor, a link of
+// that provider to the account linkFor names.
+func (a *App) beginOAuth(w http.ResponseWriter, r *http.Request, p oauthProvider, next, linkFor string) {
 	flow, err := auth.NewFlow()
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
@@ -129,11 +132,7 @@ func (a *App) beginOAuth(w http.ResponseWriter, r *http.Request, p oauthProvider
 	}
 	set(stateCookie, flow.Encode())
 	set(nextCookie, next)
-	if link {
-		set(linkCookie, "1")
-	} else {
-		set(linkCookie, "")
-	}
+	set(linkCookie, linkFor)
 	http.Redirect(w, r, p.authorize(a.baseURL(r)+path+"/callback", flow), http.StatusFound)
 }
 
@@ -164,8 +163,8 @@ func (a *App) finishOAuth(w http.ResponseWriter, r *http.Request, p oauthProvide
 		return
 	}
 	identity := store.Identity{Provider: p.name, Subject: profile.ID, Login: profile.Login, Name: profile.Name, AvatarURL: profile.AvatarURL}
-	if cookie, err := r.Cookie(linkCookie); err == nil && cookie.Value == "1" {
-		a.finishLink(w, r, identity)
+	if cookie, err := r.Cookie(linkCookie); err == nil && cookie.Value != "" {
+		a.finishLink(w, r, identity, cookie.Value)
 		return
 	}
 	admitted, err := a.identityAdmitted(r.Context(), p.name, profile.ID)
@@ -201,11 +200,14 @@ func (a *App) finishOAuth(w http.ResponseWriter, r *http.Request, p oauthProvide
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
-// finishLink adds the identity to the signed-in account. One that already
-// signs in to another account stays there: accounts are never merged.
-func (a *App) finishLink(w http.ResponseWriter, r *http.Request, identity store.Identity) {
+// finishLink adds the identity to the account the link was started for,
+// which must still be the one signed in: a browser that changed hands in
+// between would otherwise give one person's sign-in to another's account.
+// An identity that already signs in to another account stays there:
+// accounts are never merged.
+func (a *App) finishLink(w http.ResponseWriter, r *http.Request, identity store.Identity, startedFor string) {
 	user, _, ok := a.currentUser(r)
-	if !ok {
+	if !ok || subtle.ConstantTimeCompare([]byte(user.ID), []byte(startedFor)) != 1 {
 		http.Redirect(w, r, "/login?next="+url.QueryEscape(accountSignInPath), http.StatusSeeOther)
 		return
 	}
