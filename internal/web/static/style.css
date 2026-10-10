@@ -705,6 +705,8 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .signin-go { width: 100%; height: 32px; }
 .signin-go + .signin-go { margin-top: 8px; }
 .signin-note { margin-top: 11px; }
+.signin-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.signin-acts .signin-go { margin: 0; }
 
 /* The editor mounts beside its textarea, and .cm-source is put on that
    textarea by editor.js once the editor is actually up. Hiding it from the

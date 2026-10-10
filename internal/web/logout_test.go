@@ -56,7 +56,7 @@ func TestSignOutWithAStaleTokenAsksAgain(t *testing.T) {
 			}
 		}
 	}
-	match := regexp.MustCompile(`action="/logout">\s*<input type="hidden" name="csrf" value="([^"]+)"`).FindStringSubmatch(asked.Body.String())
+	match := regexp.MustCompile(`action="/logout"[^>]*>\s*<input type="hidden" name="csrf" value="([^"]+)"`).FindStringSubmatch(asked.Body.String())
 	if renewed == "" || match == nil || match[1] != renewed || renewed == client.csrf {
 		t.Fatalf("no new token to confirm with: cookie %q, page %v", renewed, match)
 	}

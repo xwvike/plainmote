@@ -11,11 +11,11 @@
       <h1 class="signin-name">{{tr .Locale "logout"}}</h1>
       <p class="hint signin-lede">{{tr .Locale "logout_confirm"}}</p>
       <div class="rule"></div>
-      <form method="post" action="/logout">
+      <form method="post" action="/logout" class="signin-acts">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <a class="btn signin-go" href="/">{{tr .Locale "cancel"}}</a>
         <button type="submit" class="pri signin-go">{{tr .Locale "logout"}}</button>
       </form>
-      <a class="txt" href="/">{{tr .Locale "cancel"}}</a>
     </div>
   </main>
 </body>
