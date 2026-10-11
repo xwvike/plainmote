@@ -78,3 +78,21 @@ FROM resources r
 	}
 	return resources, nil
 }
+
+// ShareLinkResource is the resource one of the owner's own share links leads
+// to, found without using the link up. A link to another account's resource
+// is not found, the same as a link that does not exist.
+func (d *Store) ShareLinkResource(ctx context.Context, ownerID, token string) (Resource, error) {
+	if !validUUIDs(ownerID) || token == "" || len(token) > 256 {
+		return Resource{}, ErrNotFound
+	}
+	resource, err := scanResource(d.db.QueryRow(ctx, `
+SELECT `+resourceColumns+`
+FROM links l JOIN resources r ON r.id = l.resource_id
+WHERE l.token_hash = $1 AND r.owner_id = $2 AND `+liveResource+`
+`, hashToken(token), ownerID))
+	if err != nil {
+		return Resource{}, translateNotFound(err)
+	}
+	return resource, nil
+}

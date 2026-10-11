@@ -350,6 +350,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(accountIdentitiesPath, a.handleAccountIdentities)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc(apiPrefix, a.handleAPI)
+	mux.HandleFunc(mcpPath, a.handleMCP)
 	mux.HandleFunc(wellKnownResource, a.handleResourceMetadata)
 	mux.HandleFunc(wellKnownResource+mcpPath, a.handleResourceMetadata)
 	mux.HandleFunc(wellKnownAuthServer, a.handleAuthServerMetadata)
