@@ -48,7 +48,10 @@
            the actions. Both states are on the page from the start; the
            stylesheet swaps them when the time comes. */}}
       <li style="{{endStyle .Link.ExpiresAt}}">
-        <span class="lbl ends{{if not .Link.Name}} mut{{end}}">{{or .Link.Name (tr $.Locale "untitled_share")}}</span>
+        {{/* A link an MCP app made says so, named in full on hover and in its
+             settings: the owner should be able to tell which links they
+             made and which an app made for them. */}}
+        <span class="lbl ends{{if not .Link.Name}} mut{{end}}">{{if .Link.CreatedByApp}}<b class="via" title="{{tr $.Locale "share_created_by"}} {{.Link.CreatedByApp}}">MCP</b>{{end}}{{or .Link.Name (tr $.Locale "untitled_share")}}</span>
         {{if .Link.Unreadable}}
         {{/* Still live for whoever holds the address - delivery never decrypts -
              so it stays in the list and stays revocable. */}}

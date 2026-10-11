@@ -175,6 +175,9 @@ ALTER TABLE links ADD COLUMN IF NOT EXISTS terms_at TIMESTAMPTZ;
 -- link key wrapped by the account key, so its owner can show it again.
 ALTER TABLE links ADD COLUMN IF NOT EXISTS sealed_key BYTEA;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS owner_key BYTEA;
+-- The MCP app a link was made by, as it was named when it made it; empty for
+-- a link made on the site or from the command line.
+ALTER TABLE links ADD COLUMN IF NOT EXISTS created_by_app TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS links_resource_idx ON links(resource_id);
 
 -- A quick share made without signing in may be kept by whoever made it, once

@@ -528,6 +528,7 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .shl > li:hover { background: var(--zebra); }
 .shl > li > .lbl { grid-column: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; }
 .shl > li > .lbl.mut { font-weight: 400; }
+.shl .lbl .via { margin-right: 6px; padding: 0 4px; border: 1px solid var(--line); border-radius: 2px; font: 600 9.5px var(--mono); letter-spacing: .04em; color: var(--ink2); vertical-align: 1px; }
 .shl > li > .addr, .shl > li > .unreadable, .shl > li > .addr-cell { grid-column: 2; width: 100%; }
 .shl > li > .left { grid-column: 3; }
 .shl > li > .uses { grid-column: 4; }

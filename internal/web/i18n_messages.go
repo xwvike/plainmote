@@ -693,6 +693,8 @@ var messageTable = map[string][6]string{
 	"mcp_authorized":              {"Authorized", "授权于", "授權於", "認可日時", "Autorisée le", "Autorisiert"},
 	"mcp_self_registered":         {"self-registered", "自行注册", "自行註冊", "自己登録", "auto-enregistrée", "selbst registriert"},
 	"mcp_revoke_body":             {"This app can no longer reach your resources and must be authorized again. Content already saved is not affected.", "该应用将立即无法访问你的资源，需要重新授权。已保存的内容不受影响。", "此應用程式將立即無法存取你的資源，需要重新授權。已儲存的內容不受影響。", "このアプリはただちにリソースにアクセスできなくなり、再度の認可が必要になります。保存済みの内容には影響しません。", "Cette application ne pourra plus accéder à vos ressources et devra être autorisée de nouveau. Le contenu déjà enregistré n’est pas affecté.", "Diese App kann nicht mehr auf Ihre Ressourcen zugreifen und muss erneut autorisiert werden. Bereits gespeicherte Inhalte sind nicht betroffen."},
+	"share_created_by":            {"Created by", "创建者", "建立者", "作成元", "Créé par", "Erstellt von"},
+	"mcp_app_kind":                {"MCP app", "MCP 应用", "MCP 應用程式", "MCP アプリ", "application MCP", "MCP-App"},
 }
 
 var messageCatalogs = func() map[string]map[string]string {

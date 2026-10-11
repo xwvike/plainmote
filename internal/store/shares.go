@@ -25,6 +25,8 @@ type Link struct {
 	RevokedAt  *time.Time
 	LastUsedAt *time.Time
 	CreatedAt  time.Time
+	// CreatedByApp names the MCP app that made the link, or is empty.
+	CreatedByApp string
 	// TermsAt is when the current expiry and use limit were set: the link's
 	// creation, or the last change to its terms. ExpiresAt counts from here.
 	TermsAt time.Time
@@ -101,17 +103,17 @@ func (d *Store) insertLink(ctx context.Context, q storeQuerier, link *Link, now 
 	_, err = q.Exec(ctx, `
 INSERT INTO links(
   id, resource_id, name, token_ciphertext, token_hash, max_uses, used_count,
-  expires_at, revoked_at, last_used_at, created_at, sealed_key, owner_key
+  expires_at, revoked_at, last_used_at, created_at, sealed_key, owner_key, created_by_app
 )
-VALUES($1, $2, $3, $4, $5, $6, 0, $7, NULL, NULL, $8, $9, $10)
-`, link.ID, link.ResourceID, link.Name, ciphertext, hashToken(token), link.MaxUses, link.ExpiresAt, now, link.SealedKey, link.OwnerKey)
+VALUES($1, $2, $3, $4, $5, $6, 0, $7, NULL, NULL, $8, $9, $10, $11)
+`, link.ID, link.ResourceID, link.Name, ciphertext, hashToken(token), link.MaxUses, link.ExpiresAt, now, link.SealedKey, link.OwnerKey, link.CreatedByApp)
 	if err != nil {
 		return fmt.Errorf("create link: %w", err)
 	}
 	return nil
 }
 
-const linkColumns = `id, resource_id, name, token_ciphertext, max_uses, used_count, expires_at, revoked_at, last_used_at, created_at, COALESCE(terms_at, created_at), sealed_key, owner_key`
+const linkColumns = `id, resource_id, name, token_ciphertext, max_uses, used_count, expires_at, revoked_at, last_used_at, created_at, COALESCE(terms_at, created_at), sealed_key, owner_key, created_by_app`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -129,7 +131,7 @@ func (d *Store) scanLink(row rowScanner) (Link, error) {
 	var expires, revoked, lastUsed pgtype.Timestamptz
 	if err := row.Scan(
 		&link.ID, &link.ResourceID, &link.Name, &ciphertext, &link.MaxUses,
-		&link.UsedCount, &expires, &revoked, &lastUsed, &link.CreatedAt, &link.TermsAt, &link.SealedKey, &link.OwnerKey,
+		&link.UsedCount, &expires, &revoked, &lastUsed, &link.CreatedAt, &link.TermsAt, &link.SealedKey, &link.OwnerKey, &link.CreatedByApp,
 	); err != nil {
 		return Link{}, err
 	}
@@ -182,6 +184,12 @@ func shareExpiry(now time.Time, ttl time.Duration) *time.Time {
 var ErrTakenDown = refusal("此资源已被下架，不能创建分享链接")
 
 func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name string, ttl time.Duration, maxUses int) (Link, error) {
+	return d.CreateAppShare(ctx, ownerID, resourceID, name, ttl, maxUses, "")
+}
+
+// CreateAppShare makes a link as CreateShare does, recording the MCP app
+// that asked for it so its owner can tell it apart.
+func (d *Store) CreateAppShare(ctx context.Context, ownerID, resourceID, name string, ttl time.Duration, maxUses int, app string) (Link, error) {
 	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {
 		return Link{}, err
 	}
@@ -205,7 +213,7 @@ func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name strin
 		return Link{}, err
 	}
 	now := time.Now().UTC()
-	link := Link{ResourceID: resourceID, Name: name, MaxUses: maxUses, ExpiresAt: shareExpiry(now, ttl)}
+	link := Link{ResourceID: resourceID, Name: name, MaxUses: maxUses, ExpiresAt: shareExpiry(now, ttl), CreatedByApp: oauthText(app)}
 	err := d.insertLink(ctx, d.db, &link, now)
 	return link, err
 }

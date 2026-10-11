@@ -74,11 +74,16 @@ func (o mcpOutcome) result() map[string]any {
 var readOnlyTool = map[string]any{"readOnlyHint": true, "openWorldHint": false}
 
 var resourceRefSchema = map[string]any{
-	"type":        "string",
-	"description": "The resource: its id, the address of its page or of one of its share links on this server, or its exact name or filename.",
+	"type": "string",
+	"description": "The resource: its id, the address of its page or of one of its share links on this server, or its exact name or filename. " +
+		"A share link's address only names the resource: using it here neither uses the link up nor needs it to still work.",
 }
 
-var mcpTools = []*mcpTool{
+// The tools in the order they are listed: reading, then writing, then
+// sharing.
+var mcpTools = append(append(mcpReadTools, mcpWriteTools...), mcpShareTools...)
+
+var mcpReadTools = []*mcpTool{
 	{
 		Name:  "list_resources",
 		Title: "List resources",
@@ -156,7 +161,7 @@ func (a *App) mcpCallTool(w http.ResponseWriter, x mcpExchange, req rpcRequest, 
 		w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope", scope="`+wanted+
 			`", resource_metadata="`+a.baseURL(x.r)+wellKnownResource+mcpPath+`"`)
 		a.mcpFail(w, req, http.StatusForbidden, rpcInsufficientScope,
-			"This app was not allowed to "+tool.Title+"; it needs the "+tool.scope+" permission.", nil)
+			"This app was not given the "+tool.scope+" permission that "+tool.Name+" needs. Its user can allow it by connecting the app again.", nil)
 		return
 	}
 	outcome, err := tool.run(a, x, params.Arguments)

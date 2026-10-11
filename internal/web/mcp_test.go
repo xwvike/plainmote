@@ -160,7 +160,7 @@ func TestMCPAcceptsOnlyItsOwnAccessTokens(t *testing.T) {
 	}
 
 	list.token = tokens.AccessToken
-	if response, answer := list.send(app); response.Code != http.StatusOK || len(answer["result"].(map[string]any)["tools"].([]any)) != 3 {
+	if response, answer := list.send(app); response.Code != http.StatusOK || len(answer["result"].(map[string]any)["tools"].([]any)) != len(mcpTools) {
 		t.Fatalf("a good token: %d %s", response.Code, response.Body)
 	}
 	// The MCP token is no key to the command line's API either.
@@ -245,7 +245,7 @@ func TestMCPTransport(t *testing.T) {
 	if _, answer := (mcpRequest{token: token, method: "initialize", params: map[string]any{"protocolVersion": "2024-11-05"}}).send(app); answer["result"].(map[string]any)["protocolVersion"] != mcpLegacyVersion {
 		t.Fatal("an old version is not offered the one this server speaks")
 	}
-	if response, answer := (mcpRequest{token: token, version: mcpLegacyVersion, method: "tools/list"}).send(app); response.Code != http.StatusOK || len(answer["result"].(map[string]any)["tools"].([]any)) != 3 {
+	if response, answer := (mcpRequest{token: token, version: mcpLegacyVersion, method: "tools/list"}).send(app); response.Code != http.StatusOK || len(answer["result"].(map[string]any)["tools"].([]any)) != len(mcpTools) {
 		t.Fatalf("legacy tools/list: %d %s", response.Code, response.Body)
 	}
 	if response, answer := (mcpRequest{token: token, version: mcpLegacyVersion, method: "tools/call", params: map[string]any{"name": "list_resources"}}).send(app); response.Code != http.StatusOK || answer["result"].(map[string]any)["structuredContent"] == nil {

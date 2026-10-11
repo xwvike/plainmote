@@ -304,6 +304,7 @@
           </span>
         </label>
         <dl class="fg">
+          {{if .FocusShare.Link.CreatedByApp}}<dt>{{tr .Locale "share_created_by"}}</dt><dd>{{.FocusShare.Link.CreatedByApp}} · {{tr .Locale "mcp_app_kind"}}</dd>{{end}}
           <dt>{{tr .Locale "note"}}</dt>
           <dd><input type="text" name="name" value="{{.FocusShare.Link.Name}}" placeholder="{{tr .Locale "note_optional"}}"></dd>
           <dt>{{tr .Locale "lifetime"}}</dt>

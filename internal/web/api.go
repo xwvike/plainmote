@@ -43,9 +43,11 @@ type apiLimits struct {
 	// per address.
 	registrations   *windowLimiter
 	clientDocuments *windowLimiter
-	// MCP calls, per authorization and per address.
+	// MCP calls, per authorization and per address, and the share links
+	// an authorization makes.
 	mcpCalls     *windowLimiter
 	mcpAddresses *windowLimiter
+	mcpShares    *windowLimiter
 }
 
 func newAPILimits() *apiLimits {
@@ -60,6 +62,7 @@ func newAPILimits() *apiLimits {
 		clientDocuments: newWindowLimiter(30, 10*time.Minute),
 		mcpCalls:        newWindowLimiter(300, time.Minute),
 		mcpAddresses:    newWindowLimiter(600, time.Minute),
+		mcpShares:       newWindowLimiter(30, time.Hour),
 	}
 }
 
