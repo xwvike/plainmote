@@ -146,7 +146,9 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .nav a:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
 .nav a.on { border-bottom-color: var(--sand); color: var(--ink); }
 .top .rt { margin-left: auto; display: flex; flex: none; min-width: 0; align-items: center; gap: 14px; }
-.who { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11.5px var(--mono); color: var(--ink2); }
+.who { display: inline-flex; align-items: center; gap: 7px; max-width: 200px; height: 26px; padding: 0 10px 0 3px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); font: 500 11.5px var(--mono); color: var(--ink2); }
+.who-av { display: grid; flex: none; place-items: center; width: 20px; height: 20px; border-radius: 2px; background: var(--accent-s); color: var(--accent); font: 600 11px var(--mono); }
+.who-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Signing out is a word in the bar, not a button beside the name. */
 .top .rt > form button { height: auto; padding: 0; border: 0; background: none; box-shadow: none; font: 500 12px var(--sans); color: var(--ink3); }
 .top .rt > form button:hover { background: none; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
@@ -783,7 +785,7 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .notice { padding: 7px 10px; border-left: 2px solid var(--ok); border-radius: 0 var(--r) var(--r) 0; background: color-mix(in oklab, var(--ok) 9%, var(--panel)); color: var(--ok); font-size: 12.5px; }
 .signin-card .notice { width: 100%; margin-bottom: 12px; text-align: left; }
 a.who { color: var(--ink2); }
-a.who:hover, a.who[aria-current] { color: var(--ink); }
+a.who:hover, a.who[aria-current] { border-color: var(--line-on); color: var(--ink); text-decoration: none; }
 
 /* Long-form text: the about, privacy, terms and contact pages. Same column as
    the rest of the site, with a larger body size: the interface is a dense
@@ -955,7 +957,9 @@ a.who:hover, a.who[aria-current] { color: var(--ink); }
   .top { height: auto; }
   .topin { height: auto; min-height: 42px; flex-wrap: wrap; gap: 4px 10px; padding: 5px 0 0; }
   .topin .nav { order: 3; flex-basis: 100%; max-width: 100%; overflow-x: auto; min-height: 34px; }
-  .who { display: none; }
+  /* The settings stay reachable on a phone: the mark alone. */
+  .who { padding: 0 2px; }
+  .who-n { display: none; }
   .ph { flex-wrap: wrap; }
   .ph h1 { flex: 1 1 180px; }
   .filters .pick { flex: 1 1 100%; min-width: 0; }

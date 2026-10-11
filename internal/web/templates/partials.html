@@ -61,7 +61,9 @@
       {{template "language-switch" .}}
       {{if .SignedIn}}
       {{if .HasKeyring}}{{template "keylock" .}}{{end}}
-      <a class="who" href="/account"{{if eq .Active "account"}} aria-current="page"{{end}}>{{.User.Login}}</a>
+      {{/* The way into the settings, where everything beyond sharing and
+           keeping resources is found: shaped as a control, not as text. */}}
+      <a class="who" href="/account" title="{{tr .Locale "settings_title"}}"{{if eq .Active "account"}} aria-current="page"{{end}}><span class="who-av" aria-hidden="true">{{initial (or .User.Name .User.Login)}}</span><span class="who-n">{{.User.Login}}</span></a>
       <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="sm">{{tr .Locale "logout"}}</button></form>
       {{else}}
       <a class="btn sm" href="{{if .SignInURL}}{{.SignInURL}}{{else}}/login{{end}}">{{tr .Locale "login"}}</a>
