@@ -198,11 +198,11 @@ docker compose logs --tail=100 plainmote
 
 ## 5. Public entry point
 
-PlainMote serves HTTP and does not terminate TLS. Use Nginx, Caddy or Cloudflare Tunnel to forward the public HTTPS origin to `127.0.0.1:8964`, preserving `Host`, `X-Forwarded-Proto` and the client IP headers.
+PlainMote serves HTTP and does not terminate TLS. Put it behind Cloudflare with Cloudflare Tunnel, which forwards the public HTTPS origin to `127.0.0.1:8964`, preserving `Host` and `X-Forwarded-Proto`. The service takes the client IP from the `CF-Connecting-IP` header Cloudflare sets, so no other proxy may stand in front of it: a proxy that passes client headers through would let visitors choose the IP that is recorded and rate-limited.
 
 Only addresses of proxies that connect to the service directly may be listed in `PLAINMOTE_TRUSTED_PROXIES`. Do not trust a whole range merely because it is private. When the variable is empty, no forwarding header is read and every source IP in the access history is the proxy's own address. With Docker or a tunnel, the address the service sees may be the bridge gateway: after deploying, open a share link; the source IP recorded in the access history is the value to set. Open the link again afterwards to confirm the record now shows the real client IP.
 
-With Cloudflare, also:
+In Cloudflare, also:
 
 1. Rate-limit writes to paths beginning with `/paste` (including `/paste/encrypted`). This is required when anonymous sharing is enabled.
 2. Rate-limit `/api/v1/device/`. The service already limits code requests and polling per IP; a limit at the entry point stops the traffic before it reaches the service.

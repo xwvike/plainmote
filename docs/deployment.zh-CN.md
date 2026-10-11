@@ -215,14 +215,15 @@ docker compose logs --tail=100 plainmote
 
 ## 5. 公网入口
 
-PlainMote 自身提供 HTTP，不终止 TLS。使用 Nginx、Caddy 或 Cloudflare Tunnel 将公网 HTTPS origin 转发到
-`127.0.0.1:8964`，并保留 `Host`、`X-Forwarded-Proto` 和真实客户端 IP 头。
+PlainMote 自身提供 HTTP，不终止 TLS。请通过 Cloudflare Tunnel 接入 Cloudflare，由其将公网 HTTPS origin 转发到
+`127.0.0.1:8964`，并保留 `Host` 和 `X-Forwarded-Proto`。应用从 Cloudflare 设置的 `CF-Connecting-IP` 请求头读取客户端 IP，
+因此不得在应用前放置其他代理：会原样转发客户端请求头的代理，会让访问者自行决定被记录和被限流的 IP。
 
 只有确实与应用直接连接的代理地址才能写入 `PLAINMOTE_TRUSTED_PROXIES`。不要因为某个网段是私网就整体信任它。
 留空时不读取任何转发头，访问记录中的来源 IP 全部是代理自身的地址。
 Docker 或 Tunnel 场景下，应用看到的直连地址可能是网桥网关；部署后访问一个分享地址，访问记录中出现的来源 IP 就是应填写的值，填写后再访问一次，确认记录变为真实客户端 IP。
 
-使用 Cloudflare 时还需要：
+在 Cloudflare 中还需要：
 
 1. 对以 `/paste` 开头的路径（包括 `/paste/encrypted`）设置写入限流；开放匿名分享时这是必须项。
 2. 对 `/api/v1/device/` 设置限流。应用自身已按 IP 限制申请验证码与轮询的频率，入口层限流可以在流量到达应用前拦截。

@@ -19,7 +19,7 @@ func (a *App) baseURL(r *http.Request) string {
 	if a.cfg.PublicURL != "" {
 		return strings.TrimRight(a.cfg.PublicURL, "/")
 	}
-	// TLS is terminated at the proxy in both documented deployments, so r.TLS
+	// TLS is terminated at the edge in the documented deployment, so r.TLS
 	// is nil even though the visitor is on https. Setting public_url is still
 	// the reliable answer; this only keeps the fallback from being wrong.
 	scheme := "http"
