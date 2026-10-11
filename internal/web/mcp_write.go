@@ -22,11 +22,15 @@ import (
 // its address can open what it points at. So the tool says so in its
 // description and annotations, which lead clients to ask before calling it;
 // it refuses encrypted resources, whose key it does not have; it is limited
-// per authorization; and every link it makes carries the app's name, which
-// the resource page shows beside it.
+// per authorization; every link it makes carries the app's name, which the
+// resource page shows beside it; and every one ends within mcpShareMax. An app
+// can be talked into a call by what it reads, and a link that never ends
+// would keep handing out every later save to whoever got it. A link without
+// an end is made on the resource's page.
 const (
 	mcpNameMaxRunes  = 200
 	mcpShareDefault  = 7 * 24 * time.Hour
+	mcpShareMax      = 30 * 24 * time.Hour
 	mcpShareMaxUses  = 1_000_000
 	mcpShareNameRune = 100
 )
@@ -84,13 +88,14 @@ var mcpShareTools = []*mcpTool{
 		Title: "Create a share link",
 		Description: "Create a public share link for a resource. ANYONE who gets the address can open the content, without signing in, " +
 			"until the link expires, is used up or is revoked. Only do this when the user has asked for a link. " +
-			"Encrypted resources cannot be shared here. Links expire after 7 days unless expires_in says otherwise.",
+			"Encrypted resources cannot be shared here. Links expire after 7 days unless expires_in says otherwise, and after 30 days at most; " +
+			"a link that never expires can only be made by the owner on the resource's page.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"resource":   resourceRefSchema,
 				"name":       map[string]any{"type": "string", "description": "A note for the owner's list of links, such as who it is for."},
-				"expires_in": map[string]any{"type": "string", "description": "How long the link works, such as 1h, 24h or 30d (at most 365d), or never. 7d if left out."},
+				"expires_in": map[string]any{"type": "string", "description": "How long the link works, such as 1h, 24h or 7d, at most 30d. 7d if left out."},
 				"max_uses":   map[string]any{"type": "integer", "minimum": 0, "description": "How many times it can be opened; 0 or left out for no limit."},
 			},
 			"required":             []string{"resource"},
@@ -262,11 +267,11 @@ func (a *App) mcpShareResource(x mcpExchange, args json.RawMessage) (mcpOutcome,
 	switch value := strings.ToLower(strings.TrimSpace(in.ExpiresIn)); value {
 	case "":
 	case "never":
-		ttl = 0
+		return mcpProblem("A link made by an app lasts at most 30 days. A link that never expires can only be made by the owner, on the resource's page.")
 	default:
 		parsed, err := parseShareDuration(value)
-		if err != nil || parsed <= 0 || parsed > 365*24*time.Hour {
-			return mcpProblem("Invalid arguments: expires_in must be a duration such as 1h, 24h or 30d, at most 365d, or never.")
+		if err != nil || parsed <= 0 || parsed > mcpShareMax {
+			return mcpProblem("Invalid arguments: expires_in must be a duration such as 1h, 24h or 7d, at most 30d.")
 		}
 		ttl = parsed
 	}

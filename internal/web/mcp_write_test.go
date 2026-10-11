@@ -162,11 +162,14 @@ func TestMCPShareTools(t *testing.T) {
 		t.Fatal("the link's settings do not name the app")
 	}
 
-	forever := toolCall(t, app, token, "share_resource", map[string]any{"resource": example.ID, "expires_in": "never", "max_uses": 2})
-	if forever.isError || forever.structured["expires_at"] != nil || forever.structured["max_uses"].(float64) != 2 {
-		t.Fatalf("a lasting link: %v", forever.structured)
+	month := toolCall(t, app, token, "share_resource", map[string]any{"resource": example.ID, "expires_in": "30d", "max_uses": 2})
+	if month.isError || month.structured["expires_at"] == nil || month.structured["max_uses"].(float64) != 2 {
+		t.Fatalf("a month's link: %v", month.structured)
 	}
+	// An app's link always ends: one without an end is the owner's to make.
 	for name, args := range map[string]map[string]any{
+		"never":        {"resource": example.ID, "expires_in": "never"},
+		"past a month": {"resource": example.ID, "expires_in": "30d1h"},
 		"too long":     {"resource": example.ID, "expires_in": "400d"},
 		"not duration": {"resource": example.ID, "expires_in": "soon"},
 		"negative use": {"resource": example.ID, "max_uses": -1},
@@ -186,7 +189,7 @@ func TestMCPShareTools(t *testing.T) {
 	if again := toolCall(t, app, token, "unshare_resource", map[string]any{"resource": example.ID, "link": address}); !again.isError {
 		t.Fatal("a revoked link was revoked again")
 	}
-	if gone := toolCall(t, app, token, "unshare_resource", map[string]any{"resource": example.ID, "link": forever.structured["link_id"]}); gone.isError {
+	if gone := toolCall(t, app, token, "unshare_resource", map[string]any{"resource": example.ID, "link": month.structured["link_id"]}); gone.isError {
 		t.Fatalf("unshare by id: %v", gone.texts)
 	}
 	toolCall(t, app, token, "share_resource", map[string]any{"resource": example.ID})
