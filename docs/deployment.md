@@ -205,7 +205,7 @@ Only addresses of proxies that connect to the service directly may be listed in 
 In Cloudflare, also:
 
 1. Rate-limit writes to paths beginning with `/paste` (including `/paste/encrypted`). This is required when anonymous sharing is enabled.
-2. Rate-limit `/api/v1/device/`. The service already limits code requests and polling per IP; a limit at the entry point stops the traffic before it reaches the service.
+2. Rate-limit `/api/v1/device/`, `/oauth/register`, `/oauth/token` and `/mcp`. The service already limits these per IP, counting an IPv6 client by its /64, and the MCP endpoint also per authorization; a limit at the entry point stops the traffic before it reaches the service.
 3. Rate-limit `/d/*` if needed, but never enable `Cache Everything`.
 4. Keep the `Cache-Control: no-store` the service sends, so that revocations and use limits cannot be bypassed by an edge cache.
 5. Do not also publish the container port to the internet; that would create an entry point that bypasses the tunnel and the rate limits.
@@ -233,7 +233,7 @@ The database schema currently carries no backward compatibility guarantee. If th
 - Compose limits container logs to 3 files of 10 MiB each, so Docker's JSON logs cannot fill the host's disk.
 - On SIGTERM, the service takes at most 10 seconds to shut down HTTP; Compose allows 15 seconds to exit.
 - Replicas must share PostgreSQL, S3/R2 and the same `PLAINMOTE_TOKEN_KEY`.
-- The following state is held only in the memory of a single process: the rate-limit counts of the command line API and device authorization, the admin interface's authentication failure counts, and the nonces of admin requests already used. With several replicas, rate limits are counted per replica, and a signed admin request could be replayed to another replica within its validity window. If several replicas are needed, add rate limits at the entry point and route `/_admin/` requests to a single replica.
+- The following state is held only in the memory of a single process: the rate-limit counts of the command line API, device authorization, app authorization and the MCP endpoint, the admin interface's authentication failure counts, and the nonces of admin requests already used. With several replicas, rate limits are counted per replica, and a signed admin request could be replayed to another replica within its validity window. If several replicas are needed, add rate limits at the entry point and route `/_admin/` requests to a single replica.
 - The service does not provide edge rate limiting; protection of anonymous writes and public delivery must be configured at the entry point.
 - `/d/*`, the sign-in pages and resource pages must not be cached by a CDN.
 

@@ -141,7 +141,7 @@ func (a *App) handleOAuthRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	ip := a.clientIP(r)
-	if !a.limits.registrations.allow(ip, now) {
+	if !a.limits.registrations.allow(addressKey(ip), now) {
 		a.oauthFail(w, http.StatusTooManyRequests, "invalid_request", "too many registrations from this address; try again later")
 		return
 	}
@@ -225,7 +225,7 @@ func (a *App) oauthClient(ctx context.Context, r *http.Request, id string) (stor
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return store.OAuthClient{}, err
 	}
-	if !a.limits.clientDocuments.allow(a.clientIP(r), now) {
+	if !a.limits.clientDocuments.allow(addressKey(a.clientIP(r)), now) {
 		return store.OAuthClient{}, errClientLimited
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -478,7 +478,7 @@ func (a *App) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	ip := a.clientIP(r)
-	if a.limits.authFailures.blocked(ip, now) {
+	if a.limits.authFailures.blocked(addressKey(ip), now) {
 		a.oauthFail(w, http.StatusTooManyRequests, "invalid_request", "too many failed attempts; try again in a minute")
 		return
 	}
@@ -508,7 +508,7 @@ func (a *App) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case errors.Is(err, store.ErrOAuthGrant):
-		a.limits.authFailures.allow(ip, now)
+		a.limits.authFailures.allow(addressKey(ip), now)
 		a.oauthFail(w, http.StatusBadRequest, "invalid_grant", "the code or refresh token is invalid, expired, used, or was issued to another client")
 		return
 	case errors.Is(err, store.ErrOAuthScope):

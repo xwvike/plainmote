@@ -166,7 +166,7 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 func (a *App) apiUser(w http.ResponseWriter, r *http.Request) (User, store.APIToken, bool) {
 	now := time.Now().UTC()
 	ip := a.clientIP(r)
-	if a.limits.authFailures.blocked(ip, now) {
+	if a.limits.authFailures.blocked(addressKey(ip), now) {
 		a.apiFail(w, http.StatusTooManyRequests, "rate_limited", "too many failed attempts; try again in a minute")
 		return User{}, store.APIToken{}, false
 	}
@@ -179,7 +179,7 @@ func (a *App) apiUser(w http.ResponseWriter, r *http.Request) (User, store.APITo
 	}
 	user, token, err := a.db.TokenUser(r.Context(), value, ip, now)
 	if errors.Is(err, store.ErrNotFound) {
-		a.limits.authFailures.allow(ip, now)
+		a.limits.authFailures.allow(addressKey(ip), now)
 		w.Header().Set("WWW-Authenticate", `Bearer realm="plainmote", error="invalid_token"`)
 		a.apiFail(w, http.StatusUnauthorized, "unauthorized", "this sign-in has expired or was revoked; run `plainmote login`")
 		return User{}, store.APIToken{}, false
@@ -515,7 +515,7 @@ func (a *App) handleDeviceCode(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	ip := a.clientIP(r)
-	if !a.limits.deviceCodes.allow(ip, now) {
+	if !a.limits.deviceCodes.allow(addressKey(ip), now) {
 		a.apiFail(w, http.StatusTooManyRequests, "rate_limited", "too many sign-ins started from this address; try again later")
 		return
 	}
@@ -555,7 +555,7 @@ func (a *App) handleDeviceToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	if !a.limits.devicePolls.allow(a.clientIP(r), now) {
+	if !a.limits.devicePolls.allow(addressKey(a.clientIP(r)), now) {
 		a.writeAPI(w, http.StatusTooManyRequests, apiError{Error: store.DeviceSlowDown, Interval: store.DevicePollInterval * 2})
 		return
 	}

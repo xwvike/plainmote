@@ -1,9 +1,27 @@
 package web
 
 import (
+	"net/netip"
 	"sync"
 	"time"
 )
+
+// addressKey is what a limit counts a client address as. An IPv6 client
+// holds a whole /64 - one is handed to each home or phone, and any address in
+// it is the client's to use - so counting addresses one by one would give it
+// endless fresh starts. IPv4 addresses, and anything that does not parse, are
+// counted as they are.
+func addressKey(ip string) string {
+	address, err := netip.ParseAddr(ip)
+	if err != nil || address.Unmap().Is4() {
+		return ip
+	}
+	prefix, err := address.Prefix(64)
+	if err != nil {
+		return ip
+	}
+	return prefix.String()
+}
 
 // windowLimiter counts attempts per key in fixed windows: at most limit in
 // each window. It lives in memory, which is enough for one process; a restart
@@ -13,9 +31,11 @@ type windowLimiter struct {
 	limit  int
 	window time.Duration
 	// maxKeys bounds the memory a flood of distinct keys can take. Past it,
-	// finished windows are dropped, and if that is not enough the counts
-	// start over: a brake that sometimes forgets beats a process that runs
-	// out of memory.
+	// finished windows are dropped, then keys still within their limit; a key
+	// over its limit is kept until its window ends, so a flood of new keys
+	// cannot buy a blocked one a fresh start. With every slot held by a
+	// blocked key, a new key goes uncounted: a brake that sometimes forgets
+	// beats a process that runs out of memory.
 	maxKeys int
 
 	mu    sync.Mutex
@@ -38,19 +58,36 @@ func (l *windowLimiter) allow(key string, now time.Time) bool {
 	defer l.mu.Unlock()
 	l.sweep(now)
 	entry := l.hits[key]
-	if entry == nil || now.Sub(entry.since) >= l.window {
-		if len(l.hits) >= l.maxKeys {
-			l.swept = time.Time{}
-			l.sweep(now)
-			if len(l.hits) >= l.maxKeys {
-				clear(l.hits)
-			}
+	switch {
+	case entry != nil && now.Sub(entry.since) >= l.window:
+		entry.count, entry.since = 0, now
+	case entry == nil:
+		if len(l.hits) >= l.maxKeys && !l.makeRoom(now) {
+			return true
 		}
 		entry = &windowCount{since: now}
 		l.hits[key] = entry
 	}
 	entry.count++
 	return entry.count <= l.limit
+}
+
+// makeRoom frees a slot for a new key: a finished window if there is one,
+// otherwise a key still within its limit. It reports false when every key
+// held is over its limit.
+func (l *windowLimiter) makeRoom(now time.Time) bool {
+	l.swept = time.Time{}
+	l.sweep(now)
+	if len(l.hits) < l.maxKeys {
+		return true
+	}
+	for key, entry := range l.hits {
+		if entry.count < l.limit {
+			delete(l.hits, key)
+			return true
+		}
+	}
+	return false
 }
 
 // blocked reports whether key has used up its window, without counting.

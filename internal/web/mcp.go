@@ -299,7 +299,7 @@ func (a *App) mcpChallenge(w http.ResponseWriter, r *http.Request, invalid bool,
 func (a *App) mcpUser(w http.ResponseWriter, r *http.Request) (User, store.OAuthAccess, bool) {
 	now := time.Now().UTC()
 	ip := a.clientIP(r)
-	if a.limits.authFailures.blocked(ip, now) {
+	if a.limits.authFailures.blocked(addressKey(ip), now) {
 		w.Header().Set("Retry-After", "60")
 		a.writeAPI(w, http.StatusTooManyRequests, oauthError{Error: "rate_limited", Description: "too many failed attempts; try again in a minute"})
 		return User{}, store.OAuthAccess{}, false
@@ -311,7 +311,7 @@ func (a *App) mcpUser(w http.ResponseWriter, r *http.Request) (User, store.OAuth
 	}
 	user, access, err := a.db.OAuthAccessUser(r.Context(), strings.TrimSpace(header[7:]), ip, now)
 	if errors.Is(err, store.ErrNotFound) || (err == nil && access.Resource != a.mcpResource(r)) {
-		a.limits.authFailures.allow(ip, now)
+		a.limits.authFailures.allow(addressKey(ip), now)
 		a.mcpChallenge(w, r, true, "the access token is not valid here, has expired or was revoked")
 		return User{}, store.OAuthAccess{}, false
 	}
@@ -320,7 +320,7 @@ func (a *App) mcpUser(w http.ResponseWriter, r *http.Request) (User, store.OAuth
 		writePlainError(w, http.StatusInternalServerError, "the service could not complete this request")
 		return User{}, store.OAuthAccess{}, false
 	}
-	if !a.limits.mcpCalls.allow(access.GrantID, now) || !a.limits.mcpAddresses.allow(ip, now) {
+	if !a.limits.mcpCalls.allow(access.GrantID, now) || !a.limits.mcpAddresses.allow(addressKey(ip), now) {
 		w.Header().Set("Retry-After", "60")
 		a.writeAPI(w, http.StatusTooManyRequests, oauthError{Error: "rate_limited", Description: "too many requests; slow down"})
 		return User{}, store.OAuthAccess{}, false

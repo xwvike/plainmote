@@ -309,11 +309,11 @@ func (a *App) handleDevicePage(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
 	refuse := func() {
 		a.limits.codeFailures.allow(user.ID, now)
-		a.limits.codeAddress.allow(ip, now)
+		a.limits.codeAddress.allow(addressKey(ip), now)
 		data.Error = translate(locale, "device_code_invalid")
 		render(http.StatusBadRequest)
 	}
-	if a.limits.codeFailures.blocked(user.ID, now) || a.limits.codeAddress.blocked(ip, now) {
+	if a.limits.codeFailures.blocked(user.ID, now) || a.limits.codeAddress.blocked(addressKey(ip), now) {
 		data.Error = translate(locale, "device_code_locked")
 		render(http.StatusTooManyRequests)
 		return

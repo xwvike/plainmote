@@ -77,11 +77,11 @@ func newAdminGate(keys []ed25519.PublicKey, origins []string) *adminGate {
 
 // throttled reports a source that has failed too often in the last minute.
 func (g *adminGate) throttled(ip string, now time.Time) bool {
-	return g.failures.blocked(ip, now)
+	return g.failures.blocked(addressKey(ip), now)
 }
 
 func (g *adminGate) fail(ip string, now time.Time) {
-	g.failures.allow(ip, now)
+	g.failures.allow(addressKey(ip), now)
 }
 
 // useNonce records a nonce, and reports false if it was already used.
