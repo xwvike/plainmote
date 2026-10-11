@@ -256,8 +256,10 @@ func TestMCPAuthorization(t *testing.T) {
 	}
 }
 
-// Where the client or its return address cannot be trusted, the answer stays
-// here; once they can, a problem goes back to the client.
+// A request that cannot be granted is answered here, never by a redirect: a
+// client's return address is whatever its registration says, and sending a
+// malformed request there at once would make this site a redirector for
+// anyone. Only the owner's own decision on the consent page goes back.
 func TestAuthorizeAnswersOnlyTrustedReturns(t *testing.T) {
 	db, alice, _ := testDatabase(t)
 	client := signedIn(t, db, alice)
@@ -266,35 +268,47 @@ func TestAuthorizeAnswersOnlyTrustedReturns(t *testing.T) {
 	clientID := registerClient(t, app, redirect)
 	_, challenge := testPKCE()
 
-	for name, query := range map[string]url.Values{
+	queries := map[string]url.Values{
 		"unknown client":   authorizeQueryFor("pmc_nobody", redirect, challenge, ""),
 		"another redirect": authorizeQueryFor(clientID, "https://evil.test/cb", challenge, ""),
 		"no redirect":      authorizeQueryFor(clientID, "", challenge, ""),
 		"http document":    authorizeQueryFor("http://app.test/client.json", redirect, challenge, ""),
-	} {
-		response := client.do(http.MethodGet, oauthAuthorizePath+"?"+query.Encode(), nil)
-		if response.Code != http.StatusBadRequest || response.Header().Get("Location") != "" {
-			t.Errorf("%s: %d %s", name, response.Code, response.Header().Get("Location"))
-		}
 	}
-
-	for name, tc := range map[string]struct {
-		change func(url.Values)
-		error  string
-	}{
-		"no PKCE":       {func(q url.Values) { q.Del("code_challenge") }, "invalid_request"},
-		"plain PKCE":    {func(q url.Values) { q.Set("code_challenge_method", "plain") }, "invalid_request"},
-		"implicit":      {func(q url.Values) { q.Set("response_type", "token") }, "unsupported_response_type"},
-		"unknown scope": {func(q url.Values) { q.Set("scope", "read admin") }, "invalid_scope"},
-		"other target":  {func(q url.Values) { q.Set("resource", "https://other.test/mcp") }, "invalid_target"},
+	for name, change := range map[string]func(url.Values){
+		"no PKCE":       func(q url.Values) { q.Del("code_challenge") },
+		"plain PKCE":    func(q url.Values) { q.Set("code_challenge_method", "plain") },
+		"implicit":      func(q url.Values) { q.Set("response_type", "token") },
+		"no type":       func(q url.Values) { q.Del("response_type") },
+		"unknown scope": func(q url.Values) { q.Set("scope", "read admin") },
+		"other target":  func(q url.Values) { q.Set("resource", "https://other.test/mcp") },
+		"long state":    func(q url.Values) { q.Set("state", strings.Repeat("s", oauthStateMaxBytes+1)) },
 	} {
 		query := authorizeQueryFor(clientID, redirect, challenge, "")
-		tc.change(query)
-		response := client.do(http.MethodGet, oauthAuthorizePath+"?"+query.Encode(), nil)
-		back, _ := url.Parse(response.Header().Get("Location"))
-		if response.Code != http.StatusFound || back.Host != "app.test" || back.Query().Get("error") != tc.error || back.Query().Get("state") != "st-1" {
-			t.Errorf("%s: %d %s", name, response.Code, response.Header().Get("Location"))
+		change(query)
+		queries[name] = query
+	}
+	anonymous := func(method, target string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(method, target, nil)
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, request)
+		return response
+	}
+	for name, query := range queries {
+		target := oauthAuthorizePath + "?" + query.Encode()
+		for who, response := range map[string]*httptest.ResponseRecorder{
+			"signed in":  client.do(http.MethodGet, target, nil),
+			"signed out": anonymous(http.MethodGet, target),
+		} {
+			if response.Code != http.StatusBadRequest || response.Header().Get("Location") != "" {
+				t.Errorf("%s, %s: %d %s", name, who, response.Code, response.Header().Get("Location"))
+			}
 		}
+	}
+	// A request that can be granted sends a visitor to sign in, not anywhere
+	// the client named.
+	valid := anonymous(http.MethodGet, oauthAuthorizePath+"?"+authorizeQueryFor(clientID, redirect, challenge, "").Encode())
+	if location := valid.Header().Get("Location"); valid.Code != http.StatusSeeOther || !strings.HasPrefix(location, "/login?next=") {
+		t.Errorf("signed out, valid: %d %s", valid.Code, location)
 	}
 
 	deny := authorizeQueryFor(clientID, redirect, challenge, "")

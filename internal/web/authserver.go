@@ -269,9 +269,8 @@ func clientDocumentURL(id string) bool {
 	return true
 }
 
-// authorizeRequest is an authorization request once its client and redirect
-// URI are known to belong together - the point from which a problem can be
-// reported back to the client rather than shown here.
+// authorizeRequest is an authorization request whose client and redirect URI
+// are known to belong together.
 type authorizeRequest struct {
 	Client      store.OAuthClient
 	RedirectURI string
@@ -281,16 +280,14 @@ type authorizeRequest struct {
 	Resource    string
 }
 
-// authorizeProblem is what is wrong with a request. A page problem is shown
-// here: the client or its redirect URI cannot be trusted with an answer. Any
-// other goes back to the client as OAuth says.
-type authorizeProblem struct {
-	page        string
-	code        string
-	description string
-}
-
-func (a *App) readAuthorize(r *http.Request) (authorizeRequest, *authorizeProblem) {
+// readAuthorize checks a request and names what is wrong with it, as a key of
+// the message to show. A problem is always shown here and never sent back to
+// the client: anyone can register a client, or publish a metadata document,
+// with a return address of their choosing, and answering a malformed request
+// by redirecting there at once would make this site a redirector to it for
+// whoever links to it. The answer goes back only after the owner has seen the
+// consent page, with its return address, and allowed or denied.
+func (a *App) readAuthorize(r *http.Request) (authorizeRequest, string) {
 	form := r.URL.Query()
 	if r.Method == http.MethodPost {
 		form = r.PostForm
@@ -298,45 +295,31 @@ func (a *App) readAuthorize(r *http.Request) (authorizeRequest, *authorizeProble
 	client, err := a.oauthClient(r.Context(), r, form.Get("client_id"))
 	switch {
 	case errors.Is(err, errClientLimited):
-		return authorizeRequest{}, &authorizeProblem{page: "oauth_busy"}
+		return authorizeRequest{}, "oauth_busy"
 	case errors.Is(err, errClientUnknown):
-		return authorizeRequest{}, &authorizeProblem{page: "oauth_bad_client"}
+		return authorizeRequest{}, "oauth_bad_client"
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "oauth client: %v\n", err)
-		return authorizeRequest{}, &authorizeProblem{page: "oauth_bad_client"}
+		return authorizeRequest{}, "oauth_bad_client"
 	}
 	request := authorizeRequest{Client: client, RedirectURI: form.Get("redirect_uri"), State: form.Get("state")}
 	if request.RedirectURI == "" || !client.RedirectURI(request.RedirectURI) {
-		return authorizeRequest{}, &authorizeProblem{page: "oauth_bad_redirect"}
-	}
-	fail := func(code, description string) (authorizeRequest, *authorizeProblem) {
-		return request, &authorizeProblem{code: code, description: description}
-	}
-	if len(request.State) > oauthStateMaxBytes {
-		request.State = ""
-		return fail("invalid_request", "state is too long")
-	}
-	if form.Get("response_type") != "code" {
-		return fail("unsupported_response_type", "only the code response type is supported")
+		return authorizeRequest{}, "oauth_bad_redirect"
 	}
 	request.Challenge = form.Get("code_challenge")
-	if form.Get("code_challenge_method") != oauthChallengeMethodS256 || !store.ValidCodeChallenge(request.Challenge) {
-		return fail("invalid_request", "PKCE with code_challenge_method S256 is required")
-	}
-	scope, ok := store.NormalizeOAuthScope(form.Get("scope"))
-	if !ok {
-		return fail("invalid_scope", "the scopes are read, write and share")
-	}
+	scope, scopeOK := store.NormalizeOAuthScope(form.Get("scope"))
 	request.Scope = scope
 	// Without a resource the MCP endpoint is meant: it is the only one.
 	request.Resource = form.Get("resource")
 	if request.Resource == "" {
 		request.Resource = a.mcpResource(r)
 	}
-	if request.Resource != a.mcpResource(r) {
-		return fail("invalid_target", "the resource must be this server's MCP endpoint")
+	if len(request.State) > oauthStateMaxBytes || form.Get("response_type") != "code" ||
+		form.Get("code_challenge_method") != oauthChallengeMethodS256 || !store.ValidCodeChallenge(request.Challenge) ||
+		!scopeOK || request.Resource != a.mcpResource(r) {
+		return authorizeRequest{}, "oauth_bad_request"
 	}
-	return request, nil
+	return request, ""
 }
 
 // replyTo sends the browser back to the client with the outcome. iss names
@@ -389,12 +372,8 @@ func (a *App) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request, problem := a.readAuthorize(r)
-	if problem != nil && problem.page != "" {
-		a.renderAuthorizeError(w, r, problem.page)
-		return
-	}
-	if problem != nil {
-		a.replyTo(w, r, request, url.Values{"error": {problem.code}, "error_description": {problem.description}}, http.StatusFound)
+	if problem != "" {
+		a.renderAuthorizeError(w, r, problem)
 		return
 	}
 	user, sessionID, ok := a.currentUser(r)
