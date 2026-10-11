@@ -126,14 +126,14 @@ func TestPublicPagesAreIndexable(t *testing.T) {
 	}
 	want := []string{
 		"https://plainmote.link/", "https://plainmote.link/about", "https://plainmote.link/privacy", "https://plainmote.link/terms", "https://plainmote.link/contact",
-		"https://plainmote.link/developers/cli", "https://plainmote.link/developers/api", "https://plainmote.link/developers/curl", "https://plainmote.link/developers/ai",
+		"https://plainmote.link/developers/cli", "https://plainmote.link/developers/api", "https://plainmote.link/developers/curl", "https://plainmote.link/developers/mcp",
 		"https://plainmote.link/zh-cn/", "https://plainmote.link/zh-tw/", "https://plainmote.link/ja/", "https://plainmote.link/fr/", "https://plainmote.link/de/",
 		"https://plainmote.link/zh-cn/about", "https://plainmote.link/zh-cn/privacy", "https://plainmote.link/zh-cn/terms", "https://plainmote.link/zh-cn/contact",
-		"https://plainmote.link/zh-cn/developers/cli", "https://plainmote.link/zh-cn/developers/api", "https://plainmote.link/zh-cn/developers/curl", "https://plainmote.link/zh-cn/developers/ai",
-		"https://plainmote.link/zh-tw/developers/cli", "https://plainmote.link/zh-tw/developers/api", "https://plainmote.link/zh-tw/developers/curl", "https://plainmote.link/zh-tw/developers/ai",
-		"https://plainmote.link/ja/developers/cli", "https://plainmote.link/ja/developers/api", "https://plainmote.link/ja/developers/curl", "https://plainmote.link/ja/developers/ai",
-		"https://plainmote.link/fr/developers/cli", "https://plainmote.link/fr/developers/api", "https://plainmote.link/fr/developers/curl", "https://plainmote.link/fr/developers/ai",
-		"https://plainmote.link/de/developers/cli", "https://plainmote.link/de/developers/api", "https://plainmote.link/de/developers/curl", "https://plainmote.link/de/developers/ai",
+		"https://plainmote.link/zh-cn/developers/cli", "https://plainmote.link/zh-cn/developers/api", "https://plainmote.link/zh-cn/developers/curl", "https://plainmote.link/zh-cn/developers/mcp",
+		"https://plainmote.link/zh-tw/developers/cli", "https://plainmote.link/zh-tw/developers/api", "https://plainmote.link/zh-tw/developers/curl", "https://plainmote.link/zh-tw/developers/mcp",
+		"https://plainmote.link/ja/developers/cli", "https://plainmote.link/ja/developers/api", "https://plainmote.link/ja/developers/curl", "https://plainmote.link/ja/developers/mcp",
+		"https://plainmote.link/fr/developers/cli", "https://plainmote.link/fr/developers/api", "https://plainmote.link/fr/developers/curl", "https://plainmote.link/fr/developers/mcp",
+		"https://plainmote.link/de/developers/cli", "https://plainmote.link/de/developers/api", "https://plainmote.link/de/developers/curl", "https://plainmote.link/de/developers/mcp",
 	}
 	if strings.Join(locs, " ") != strings.Join(want, " ") {
 		t.Fatalf("sitemap lists %v, want %v", locs, want)
@@ -265,9 +265,15 @@ func TestLLMsTextFollowsTheDeployment(t *testing.T) {
 		"Default `1h`.", "At most 10 MiB, stored byte for byte", "up to 4 MiB each",
 		"`https://plainmote.link/d/<token>/<filename>`",
 		"- [Privacy Policy](https://plainmote.link/privacy)",
+		"`https://plainmote.link/mcp` is a remote MCP server",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("llms.txt is missing %q", want)
+		}
+	}
+	for _, tool := range mcpTools {
+		if !strings.Contains(body, "`"+tool.Name+"`") {
+			t.Errorf("llms.txt does not name the MCP tool %s", tool.Name)
 		}
 	}
 	noBox := get(Config{ContactEmail: "ops@example.com"}, "/llms.txt").Body.String()

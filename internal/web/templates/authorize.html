@@ -37,11 +37,10 @@
         {{if .Request.State}}<input type="hidden" name="state" value="{{.Request.State}}">{{end}}
         <div class="scope">
           <b>{{tr $.Locale "device_can"}}</b>
-          <label class="oauth-scope"><input type="checkbox" checked disabled><span>{{tr $.Locale "oauth_can_read"}}</span></label>
-          <label class="oauth-scope"><input type="checkbox" name="write" value="1"{{if .AskWrite}} checked{{end}}><span>{{tr $.Locale "oauth_can_write"}}</span></label>
-          <label class="oauth-scope"><input type="checkbox" name="share" value="1"><span>{{tr $.Locale "oauth_can_share"}}{{if .AskShare}} <em class="mut">{{tr $.Locale "oauth_asked"}}</em>{{end}}</span></label>
+          <ul><li>{{tr $.Locale "oauth_can_read"}}</li><li>{{tr $.Locale "oauth_can_write"}}</li><li>{{tr $.Locale "oauth_can_share"}}</li></ul>
           <b>{{tr $.Locale "device_cannot"}}</b>
           <ul><li>{{tr $.Locale "oauth_cannot"}}</li></ul>
+          <p class="hint">{{tr $.Locale "oauth_data_note"}}</p>
         </div>
         <div class="device-acts">
           <button type="submit" name="decision" value="deny">{{tr $.Locale "device_deny"}}</button>

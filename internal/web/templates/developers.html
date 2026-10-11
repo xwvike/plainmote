@@ -99,26 +99,47 @@
           <p class="hint">{{tr .Locale "dev_curl_hint"}}</p>
         </div>
       </section>
-    {{else if eq .Section "dev-ai"}}
+    {{else if eq .Section "dev-mcp"}}
+      {{/* One app at a time, folded: each takes the address its own way, and
+           every one of them then opens this site to be authorized. */}}
       <section class="panel ruled">
-        <div class="pt"><span class="sec">llms.txt</span></div>
-        <div class="pb inst">
-          <code class="term-block"><b>$</b> curl {{.BaseURL}}/llms.txt</code>
-          <p class="hint">{{tr .Locale "dev_ai_hint"}}</p>
+        <div class="pt"><span class="sec">{{tr .Locale "dev_mcp_clients"}}</span></div>
+        <div class="pb dev-sheet clients">
+          {{range .MCPClients}}
+          <details>
+            <summary>{{.Name}}</summary>
+            <div class="inst">
+              {{range .Parts}}
+              {{if .Note}}<p>{{tr $.Locale .Note}}</p>{{end}}
+              {{if .Link}}<p><a class="btn sm" href="{{.Link}}" rel="noopener">{{tr $.Locale "dev_mcp_cursor_install"}}</a></p>{{end}}
+              {{if .Code}}<div class="snip"><code class="term-block">{{if .Shell}}<b>$</b> {{end}}{{.Code}}</code><button type="button" class="sm" data-copy="{{.Code}}">{{template "copy-label" $}}</button></div>{{end}}
+              {{end}}
+            </div>
+          </details>
+          {{end}}
+        </div>
+      </section>
+      <p class="hint">{{tr .Locale "dev_mcp_address_hint"}}</p>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_mcp_tools"}}</span></div>
+        <div class="pb dev-sheet">
+          <div class="table-scroll"><table class="api-table">
+            <thead><tr><th>{{tr .Locale "dev_mcp_tool"}}</th><th>{{tr .Locale "dev_api_purpose"}}</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">list_resources</td><td>{{tr .Locale "dev_mcp_tool_list"}}</td></tr>
+              <tr><td class="mono">read_resource</td><td>{{tr .Locale "dev_mcp_tool_read"}}</td></tr>
+              <tr><td class="mono">list_versions</td><td>{{tr .Locale "dev_mcp_tool_versions"}}</td></tr>
+              <tr><td class="mono">create_resource</td><td>{{tr .Locale "dev_mcp_tool_create"}}</td></tr>
+              <tr><td class="mono">update_resource</td><td>{{tr .Locale "dev_mcp_tool_update"}}</td></tr>
+              <tr><td class="mono">share_resource</td><td>{{tr .Locale "dev_mcp_tool_share"}}</td></tr>
+              <tr><td class="mono">unshare_resource</td><td>{{tr .Locale "dev_mcp_tool_unshare"}}</td></tr>
+            </tbody>
+          </table></div>
         </div>
       </section>
 
-      <section class="panel ruled">
-        <div class="pt"><span class="sec">{{tr .Locale "dev_ai_cli_title"}}</span></div>
-        <div class="pb inst">
-          <p>{{tr .Locale "dev_ai_cli_body"}}</p>
-          <code class="term-block"><b>$</b> plainmote login --read-only
-<b>$</b> plainmote ls
-<b>$</b> plainmote cat nginx.conf</code>
-          <div class="warnbox"><span>{{tr .Locale "dev_ai_cli_secret"}}</span></div>
-          <p class="hint"><a href="{{.LocalePrefix}}/developers/cli">{{tr .Locale "devices_install"}} →</a></p>
-        </div>
-      </section>
+      {{template "copy-status" .}}
     {{else}}
       {{if .CLIBinaries}}
       {{/* The one command for the system the page was opened on; the other,
@@ -191,5 +212,5 @@
 </body>
 </html>{{end}}
 
-{{define "dev-title"}}{{if eq .Section "dev-api"}}{{tr .Locale "dev_api_title"}}{{else if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_title"}}{{else if eq .Section "dev-ai"}}{{tr .Locale "dev_llms_title"}}{{else}}{{tr .Locale "cli_title"}}{{end}}{{end}}
-{{define "dev-lede"}}{{if eq .Section "dev-api"}}{{tr .Locale "dev_api_lede"}}{{else if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_lede"}}{{else if eq .Section "dev-ai"}}{{tr .Locale "dev_llms_body"}}{{else}}{{tr .Locale "cli_lede"}}{{end}}{{end}}
+{{define "dev-title"}}{{if eq .Section "dev-api"}}{{tr .Locale "dev_api_title"}}{{else if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_title"}}{{else if eq .Section "dev-mcp"}}{{tr .Locale "dev_mcp_title"}}{{else}}{{tr .Locale "cli_title"}}{{end}}{{end}}
+{{define "dev-lede"}}{{if eq .Section "dev-api"}}{{tr .Locale "dev_api_lede"}}{{else if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_lede"}}{{else if eq .Section "dev-mcp"}}{{tr .Locale "dev_mcp_lede"}}{{else}}{{tr .Locale "cli_lede"}}{{end}}{{end}}

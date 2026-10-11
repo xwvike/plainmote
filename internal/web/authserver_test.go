@@ -140,7 +140,9 @@ func TestMCPAuthorization(t *testing.T) {
 	verifier, challenge := testPKCE()
 	// A desktop app on another port than it registered: loopback ports vary.
 	used := "http://127.0.0.1:50123/callback"
-	query := authorizeQueryFor(clientID, used, challenge, "read write share")
+	// Asking for less than everything changes nothing: an app is allowed all
+	// it can do or nothing.
+	query := authorizeQueryFor(clientID, used, challenge, "read")
 
 	// Signed out: to the sign-in page, which comes back here.
 	signedOut := call(app, http.MethodGet, oauthAuthorizePath+"?"+query.Encode(), "", "")
@@ -154,8 +156,8 @@ func TestMCPAuthorization(t *testing.T) {
 	if page.Code != http.StatusOK || !strings.Contains(body, "Test App") || !strings.Contains(body, `name="client_id" value="`+clientID+`"`) {
 		t.Fatalf("consent page: %d", page.Code)
 	}
-	if !strings.Contains(body, `name="write" value="1" checked`) || strings.Contains(body, `name="share" value="1" checked`) {
-		t.Fatal("the consent page should tick write as asked and leave share unticked")
+	if strings.Contains(body, `type="checkbox"`) || !strings.Contains(body, "Create and revoke share links") {
+		t.Fatal("the consent page should list everything the app may do, with nothing to tick")
 	}
 	if !strings.Contains(body, "127.0.0.1:50123") || !strings.Contains(body, "oauth-warn") {
 		t.Fatal("the consent page does not say the answer goes to this machine")
@@ -169,7 +171,6 @@ func TestMCPAuthorization(t *testing.T) {
 		consent[key] = values
 	}
 	consent.Set("decision", "allow")
-	consent.Set("write", "1")
 	if forged := client.do(http.MethodPost, oauthAuthorizePath, consent); forged.Code != http.StatusForbidden {
 		t.Fatalf("a consent without the CSRF token: %d", forged.Code)
 	}
@@ -199,13 +200,13 @@ func TestMCPAuthorization(t *testing.T) {
 	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("exchange: %d %v", response.Code, tokens)
 	}
-	// Share was asked for and not ticked: it is not granted.
-	if tokens["scope"] != "read write" || tokens["token_type"] != "Bearer" {
+	// Only read was asked for, and everything is granted.
+	if tokens["scope"] != "read write share" || tokens["token_type"] != "Bearer" {
 		t.Fatalf("tokens %v", tokens)
 	}
 	access, refresh := tokens["access_token"].(string), tokens["refresh_token"].(string)
 	user, granted, err := db.OAuthAccessUser(context.Background(), access, "", time.Now().UTC())
-	if err != nil || user.ID != alice.ID || granted.Resource != testMCPResource || granted.Has(store.OAuthScopeShare) {
+	if err != nil || user.ID != alice.ID || granted.Resource != testMCPResource || !granted.Has(store.OAuthScopeShare) {
 		t.Fatalf("the access token reads as %+v %+v %v", user, granted, err)
 	}
 	// Not a token for the command line's interface.
@@ -228,7 +229,6 @@ func TestMCPAuthorization(t *testing.T) {
 	}
 
 	// Again, with a fresh consent, to the authorized apps page and out.
-	consent.Set("share", "1")
 	allowed = client.do(http.MethodPost, oauthAuthorizePath, consent)
 	back, _ = url.Parse(allowed.Header().Get("Location"))
 	exchange.Set("code", back.Query().Get("code"))

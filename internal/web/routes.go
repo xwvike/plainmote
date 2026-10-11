@@ -113,6 +113,8 @@ type pageData struct {
 	CLIPlatform string
 	CLILang     string
 	APIDocsURL  string
+	// The MCP server page: how to add the server to each app.
+	MCPClients  []mcpClient
 	DeviceStep  string
 	DeviceGrant store.DeviceGrant
 	DeviceCode  string

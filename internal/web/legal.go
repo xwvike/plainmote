@@ -17,7 +17,7 @@ var legalPages = []string{"about", "privacy", "terms", "contact"}
 
 // legalUpdated is the date printed at the top of the privacy policy and the
 // terms. Change it in the same commit as the text.
-const legalUpdated = "2026-10-09"
+const legalUpdated = "2026-10-11"
 
 // legalView is what the texts need to be true of this deployment rather than
 // of some deployment: every retention period and limit they state is read from
@@ -53,6 +53,8 @@ type legalView struct {
 	// request waits to be confirmed.
 	TokenLifetime time.Duration
 	DeviceWindow  time.Duration
+	// How long an authorized app may go unused before it lapses.
+	AppIdle time.Duration
 }
 
 func (a *App) handleLegal(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +107,7 @@ func (a *App) serveLegal(w http.ResponseWriter, r *http.Request, page string) {
 		HistoryRetention: store.HistoryRetention,
 		TokenLifetime:    store.TokenLifetime,
 		DeviceWindow:     store.DeviceGrantLifetime,
+		AppIdle:          store.OAuthRefreshLifetime,
 	}
 	a.renderTemplate(w, r, http.StatusOK, "legal.html", data)
 }

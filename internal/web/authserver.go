@@ -372,8 +372,6 @@ type oauthConsent struct {
 	Host         string
 	RedirectShow string
 	Loopback     bool
-	AskWrite     bool
-	AskShare     bool
 }
 
 func (a *App) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
@@ -416,17 +414,12 @@ func (a *App) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		a.replyTo(w, r, request, url.Values{"error": {"access_denied"}}, http.StatusSeeOther)
 		return
 	}
-	// What is granted is what was ticked, not what was asked for: the page
-	// leaves sharing unticked, and the account may say no to writing too.
-	granted := []string{store.OAuthScopeRead}
-	if r.PostForm.Get("write") == "1" {
-		granted = append(granted, store.OAuthScopeWrite)
-	}
-	if r.PostForm.Get("share") == "1" {
-		granted = append(granted, store.OAuthScopeShare)
-	}
+	// An app is allowed all it can do or nothing, whatever it asked for: the
+	// page offers no choice, and one that sent no scope works all the same.
+	// Nothing an app can do deletes anything; making a share link, the one
+	// step that reaches outside, is marked as such for the client to confirm.
 	code, err := a.db.CreateOAuthCode(r.Context(), store.OAuthAuthorization{
-		UserID: user.ID, Client: request.Client, Scope: strings.Join(granted, " "),
+		UserID: user.ID, Client: request.Client, Scope: strings.Join(store.OAuthScopes, " "),
 		Resource: request.Resource, RedirectURI: request.RedirectURI, CodeChallenge: request.Challenge,
 	}, time.Now().UTC())
 	if errors.Is(err, store.ErrNotFound) {
@@ -460,10 +453,8 @@ func authorizeQuery(request authorizeRequest, r *http.Request) string {
 
 func (a *App) renderConsent(w http.ResponseWriter, r *http.Request, user User, request authorizeRequest) {
 	consent := oauthConsent{
-		Request:  request,
-		Name:     request.Client.Name,
-		AskWrite: store.ScopeHas(request.Scope, store.OAuthScopeWrite),
-		AskShare: store.ScopeHas(request.Scope, store.OAuthScopeShare),
+		Request: request,
+		Name:    request.Client.Name,
 	}
 	if request.Client.Kind == store.OAuthClientDocument {
 		if parsed, err := url.Parse(request.Client.ID); err == nil {

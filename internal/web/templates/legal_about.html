@@ -11,6 +11,7 @@
   <li><strong>远程资源：</strong>可仅保存公网地址，每次访问时由服务器实时从源站获取内容。</li>
   {{if .Legal.Anonymous}}<li><strong>临时分享：</strong>无需登录，在首页粘贴文本或上传文件即可生成有效期最长 {{legalDuration true .Legal.AnonymousTTL}}的链接。</li>{{end}}
   <li><strong>命令行工具：</strong>可在终端中查看、编辑和上传资源，编辑时使用本机的编辑器，关闭后保存为新版本。</li>
+  <li><strong>连接 AI 应用：</strong>经您授权，Claude、ChatGPT 等 AI 应用可以通过 MCP 读取和编辑您的资源；加密内容对应用不可读。</li>
   <li><strong>端到端加密（可选）：</strong>登录用户设置主密码后，可为资源{{if .Legal.Anonymous}}和临时分享{{end}}开启端到端加密，内容在浏览器中加密，本服务仅保存密文，无法读取其内容；分享链接以 4 位口令代替密钥的，保护程度较低。</li>
 </ul>
 
@@ -38,6 +39,7 @@
   <li><strong>Remote resources:</strong> a resource can consist of a public URL only, with the content fetched live from the origin server by the Service on each access.</li>
   {{if .Legal.Anonymous}}<li><strong>Quick shares:</strong> paste text or upload a file on the home page, without signing in, to generate a link valid for up to {{legalDuration false .Legal.AnonymousTTL}}.</li>{{end}}
   <li><strong>Command line tool:</strong> resources can be viewed, edited and uploaded from a terminal, editing in the machine’s own editor and saving a new version when it is closed.</li>
+  <li><strong>AI apps:</strong> with your authorization, AI apps such as Claude and ChatGPT can read and edit your resources through MCP; encrypted content stays unreadable to them.</li>
   <li><strong>End-to-end encryption (optional):</strong> signed-in users who set a master password can turn it on for resources{{if .Legal.Anonymous}} and quick shares{{end}}; content is encrypted in the browser and the Service stores only the ciphertext and cannot read it; a share link opened with a four-character code in place of the key offers weaker protection.</li>
 </ul>
 

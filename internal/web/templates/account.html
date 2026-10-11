@@ -208,10 +208,10 @@
       <section class="panel ruled">
         <div class="pt"><span class="sec">{{tr .Locale "mcp_apps_title"}}</span><span class="sp"><span class="counts"><b>{{len .OAuthGrants}}</b> {{tr .Locale "mcp_apps_count"}}</span></span></div>
         <div class="pb dev-sheet">
-          <div class="dev-list">
-            <div class="hd"><span>{{tr .Locale "mcp_app"}}</span><span>{{tr .Locale "cli_scope"}}</span><span>{{tr .Locale "mcp_authorized"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
+          <div class="dev-list apps">
+            <div class="hd"><span>{{tr .Locale "mcp_app"}}</span><span>{{tr .Locale "mcp_authorized"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
             {{range .OAuthGrants}}
-            <div><span class="nm"><b>{{or .ClientName (tr $.Locale "oauth_unnamed")}}</b><span>{{grantSource $.Locale .}}</span></span><span><span class="tag">{{if .Has "write"}}{{tr $.Locale "cli_scope_write"}}{{else}}{{tr $.Locale "cli_scope_read"}}{{end}}</span>{{if .Has "share"}} <span class="tag">{{tr $.Locale "mcp_scope_share"}}</span>{{end}}</span><span class="tm">{{formatMinute .CreatedAt}}</span><span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm">{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account/devices?revoke_app={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
+            <div><span class="nm"><b>{{or .ClientName (tr $.Locale "oauth_unnamed")}}</b><span>{{grantSource $.Locale .}}</span></span><span class="tm">{{formatMinute .CreatedAt}}</span><span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm">{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account/devices?revoke_app={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
             {{end}}
           </div>
         </div>
@@ -238,6 +238,7 @@
         {{end}}
       </section>
       <p class="hint">{{tr .Locale "devices_note"}}</p>
+      {{if not .OAuthGrants}}<p class="hint">{{tr .Locale "devices_mcp_hint"}} <a href="/developers/mcp">{{tr .Locale "dev_mcp_title"}} →</a></p>{{end}}
 {{end}}
 
 {{/* What leaves with an export and what goes with a deletion, one above the

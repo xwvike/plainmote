@@ -997,16 +997,25 @@ a.who:hover, a.who[aria-current] { border-color: var(--line-on); color: var(--in
 .device-acts button { height: 32px; }
 .device-note { margin-top: 12px; }
 .oauth-form { display: grid; width: 100%; }
-.oauth-scope { display: flex; gap: 8px; align-items: flex-start; padding: 2px 0; cursor: pointer; }
-.oauth-scope input { flex: none; width: auto; height: auto; margin-top: 2px; accent-color: var(--accent); }
-.oauth-scope em { font-style: normal; }
 .oauth-form .scope ul { margin-top: 2px; }
 .oauth-warn { width: 100%; margin-top: 12px; text-align: left; border-left-color: var(--warn); background: color-mix(in oklab, var(--warn) 9%, var(--panel)); color: var(--ink2); }
 .big-code { margin-top: 4px; font: 500 22px var(--mono); letter-spacing: .14em; color: var(--ink); }
 
 /* the account page's signed-in command lines */
 .dev-sheet { padding: 0; gap: 0; overflow: hidden; }
+.clients details { border-top: 1px solid var(--line); }
+.clients details:first-child { border-top: 0; }
+.clients summary { display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
+.clients summary::-webkit-details-marker { display: none; }
+.clients summary::before { content: ""; width: 5px; height: 5px; border-right: 1.5px solid var(--ink3); border-bottom: 1.5px solid var(--ink3); transform: rotate(-45deg); transition: transform .12s; }
+.clients details[open] summary::before { transform: rotate(45deg); }
+.clients summary:hover { background: var(--zebra); }
+.clients .inst { display: grid; gap: 10px; padding: 4px 12px 14px 25px; }
+.snip { position: relative; }
+.snip .term-block { padding-right: 72px; }
+.snip > button { position: absolute; top: 6px; right: 6px; }
 .dev-list > div { display: grid; grid-template-columns: minmax(0, 1.4fr) 64px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, .9fr) 48px; gap: 12px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12.5px; }
+.dev-list.apps > div { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr) 48px; }
 .dev-list > div:first-child { border-top: 0; }
 .dev-list > .hd { font-size: 11.5px; color: var(--ink3); background: var(--head); border-radius: var(--r) var(--r) 0 0; }
 .dev-list .nm { display: grid; gap: 1px; min-width: 0; }
@@ -1101,7 +1110,7 @@ a.who:hover, a.who[aria-current] { border-color: var(--line-on); color: var(--in
 .cmds dd { color: var(--ink2); }
 @media (max-width: 760px) {
   .dev-list > .hd { display: none; }
-  .dev-list > div { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
+  .dev-list > div, .dev-list.apps > div { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
   .dev-list .tm { grid-column: 1; }
   .dev-list .act { grid-column: 2; grid-row: 1; }
   .cmds { grid-template-columns: minmax(0, 1fr); }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -447,5 +448,50 @@ func TestMCPToolsStayWithinTheAccount(t *testing.T) {
 	}
 	if used, err := db.ListShares(ctx, alice.ID, example.ID, time.Now().UTC()); err != nil || used[0].UsedCount != 0 {
 		t.Fatalf("bob's lookup used alice's link: %v %v", used, err)
+	}
+}
+
+// TestMCPServerPage fixes the developer page on the MCP server: the address
+// to add, set up for the apps it names, every tool the server offers, and the
+// page's earlier address leading to it.
+func TestMCPServerPage(t *testing.T) {
+	app := staticApp(t)
+	get := func(path string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("Accept", "text/html")
+		response := httptest.NewRecorder()
+		app.handler.ServeHTTP(response, request)
+		return response
+	}
+	page := get("/developers/mcp")
+	body := html.UnescapeString(page.Body.String())
+	if page.Code != http.StatusOK {
+		t.Fatalf("/developers/mcp: %d", page.Code)
+	}
+	for _, want := range []string{
+		`data-copy="https://cfg.test/mcp"`,
+		"claude mcp add --transport http --scope user plainmote https://cfg.test/mcp",
+		"codex mcp add plainmote --url https://cfg.test/mcp",
+		`code --add-mcp '{"name":"plainmote","type":"http","url":"https://cfg.test/mcp"}'`,
+		`"context_servers": {`, `"type": "remote",`, "opencode mcp auth plainmote",
+		`"serverUrl": "https://cfg.test/mcp"`,
+		`href="https://cursor.com/en/install-mcp?name=plainmote&config=eyJ1cmwiOiJodHRwczovL2NmZy50ZXN0L21jcCJ9"`,
+		`href="/developers/mcp" class="on" aria-current="page"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %s", want)
+		}
+	}
+	for _, tool := range mcpTools {
+		if !strings.Contains(body, `<td class="mono">`+tool.Name+`</td>`) {
+			t.Errorf("the page does not list %s", tool.Name)
+		}
+	}
+	// Locale prefixes exist only where there are public pages.
+	app.cfg.AnonymousEnabled = true
+	for from, to := range map[string]string{"/developers/ai": "/developers/mcp", "/zh-cn/developers/ai": "/zh-cn/developers/mcp"} {
+		if moved := get(from); moved.Code != http.StatusMovedPermanently || moved.Header().Get("Location") != to {
+			t.Fatalf("%s: %d %q", from, moved.Code, moved.Header().Get("Location"))
+		}
 	}
 }

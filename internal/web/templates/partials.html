@@ -90,7 +90,7 @@
   <a href="{{.LocalePrefix}}/developers/cli"{{if eq .Section "dev-cli"}} class="on" aria-current="page"{{end}}>{{tr .Locale "cli_title"}}</a>
   <a href="{{.LocalePrefix}}/developers/api"{{if eq .Section "dev-api"}} class="on" aria-current="page"{{end}}>{{tr .Locale "dev_api_title"}}</a>
   {{if .Anonymous}}<a href="{{.LocalePrefix}}/developers/curl"{{if eq .Section "dev-curl"}} class="on" aria-current="page"{{end}}>{{tr .Locale "dev_curl_title"}}</a>{{end}}
-  {{if or .Anonymous .LegalLinks}}<a href="{{.LocalePrefix}}/developers/ai"{{if eq .Section "dev-ai"}} class="on" aria-current="page"{{end}}>{{tr .Locale "dev_ai_nav"}}</a>{{end}}
+  <a href="{{.LocalePrefix}}/developers/mcp"{{if eq .Section "dev-mcp"}} class="on" aria-current="page"{{end}}>{{tr .Locale "dev_mcp_title"}}</a>
 </nav>{{end}}
 
 {{/* The master password's lock, on every page of an account that has one:

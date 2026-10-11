@@ -36,7 +36,7 @@ func (a *App) llmsText() string {
 	base := strings.TrimRight(a.cfg.PublicURL, "/")
 	var text strings.Builder
 	text.WriteString("# PlainMote\n\n")
-	text.WriteString("> PlainMote shares configs, logs and other files as links. Content is kept byte for byte as given; links can expire, be limited to a number of uses and be revoked, and every access is recorded. Accounts can encrypt content end to end and reach it through an HTTP API.\n\n")
+	text.WriteString("> PlainMote shares configs, logs and other files as links. Content is kept byte for byte as given; links can expire, be limited to a number of uses and be revoked, and every access is recorded. Accounts can encrypt content end to end and reach it through an HTTP API and an MCP server for AI apps.\n\n")
 
 	if a.cfg.AnonymousEnabled {
 		fmt.Fprintf(&text, `## Quick share (no account)
@@ -103,6 +103,15 @@ irm %[1]s/cli.ps1 | iex         # Windows PowerShell
 - The API cannot delete resources, manage share links or read access records. Encrypted content is returned as ciphertext, for the client to decrypt.
 - `+"`%[1]s/developers/cli`"+` and `+"`%[1]s/developers/api`"+` present the command line and the API to people.
 `, base, a.llmsQuickShareAPI())
+
+	fmt.Fprintf(&text, `
+## MCP server
+
+- `+"`%[1]s%[2]s`"+` is a remote MCP server over Streamable HTTP, for AI apps such as Claude, ChatGPT and Cursor. An app connecting to it is sent through OAuth authorization: the account owner signs in on this site and allows or denies it. An authorization covers every tool; none deletes anything. Apps register dynamically or by a client ID metadata document.
+- Tools: `+"`list_resources`"+`, `+"`read_resource`"+` and `+"`list_versions`"+` (read); `+"`create_resource`"+` and `+"`update_resource`"+` (write; an update names the version it was based on and is refused if the resource has moved on); `+"`share_resource`"+` and `+"`unshare_resource`"+` (share).
+- Encrypted resources appear only as placeholders: no tool decrypts them or asks for the master password. Unencrypted content an app reads is sent to that app and its model provider.
+- An authorization lasts until it goes unused for 30 days, and the owner can revoke it at any time. `+"`%[1]s/developers/mcp`"+` explains how to add the server to each app.
+`, base, mcpPath)
 
 	if a.cfg.ContactEmail != "" {
 		text.WriteString("\n## Pages\n\n")
