@@ -27,7 +27,7 @@
     </div>
   </main>
 
-  {{if or .DeleteOpen .RevokeToken.ID}}<div class="scrim"></div>{{end}}
+  {{if or .DeleteOpen .RevokeToken.ID .RevokeGrant.ID}}<div class="scrim"></div>{{end}}
   {{template "account-dialog" .}}
   {{template "footer" .}}
   <script type="module" src="{{asset "parts.js"}}"></script>
@@ -83,7 +83,7 @@
               <span class="v">{{if .HasKeyring}}<span class="st on"><i></i><span>{{tr .Locale "state_on"}}</span></span>{{else}}<span class="st off"><i></i><span>{{tr .Locale "state_off"}}</span></span>{{end}}</span>
               <span class="a"><a class="txt" href="/account/security">{{tr .Locale "overview_manage"}}</a></span></div>
             <div><span class="k">{{tr .Locale "devices_title"}}</span>
-              <span class="v">{{if .APITokens}}{{printf (tr .Locale "overview_devices") (len .APITokens)}}{{else}}<span class="mut">{{tr .Locale "overview_none"}}</span>{{end}}</span>
+              <span class="v">{{if or .APITokens .OAuthGrants}}{{printf (tr .Locale "overview_devices") (add (len .APITokens) (len .OAuthGrants))}}{{else}}<span class="mut">{{tr .Locale "overview_none"}}</span>{{end}}</span>
               <span class="a"><a class="txt" href="/account/devices">{{tr .Locale "overview_manage"}}</a></span></div>
             <div><span class="k">{{tr .Locale "export_title"}}</span>
               <span class="v">{{if .Export.Remaining}}{{printf (tr .Locale "overview_exports") .Export.Remaining}}{{else}}<span class="mut">{{tr .Locale "export_next"}}{{formatTime .Export.NextAt}}</span>{{end}}</span>
@@ -202,6 +202,21 @@
      itself, when it signed in and when it was last used. With none, the page
      says how to sign one in. */}}
 {{define "account-devices"}}
+      {{/* MCP apps appear once one has been authorized: until then the
+           command line is what this page is about. */}}
+      {{if .OAuthGrants}}
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "mcp_apps_title"}}</span><span class="sp"><span class="counts"><b>{{len .OAuthGrants}}</b> {{tr .Locale "mcp_apps_count"}}</span></span></div>
+        <div class="pb dev-sheet">
+          <div class="dev-list">
+            <div class="hd"><span>{{tr .Locale "mcp_app"}}</span><span>{{tr .Locale "cli_scope"}}</span><span>{{tr .Locale "mcp_authorized"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
+            {{range .OAuthGrants}}
+            <div><span class="nm"><b>{{or .ClientName (tr $.Locale "oauth_unnamed")}}</b><span>{{grantSource $.Locale .}}</span></span><span><span class="tag">{{if .Has "write"}}{{tr $.Locale "cli_scope_write"}}{{else}}{{tr $.Locale "cli_scope_read"}}{{end}}</span>{{if .Has "share"}} <span class="tag">{{tr $.Locale "mcp_scope_share"}}</span>{{end}}</span><span class="tm">{{formatMinute .CreatedAt}}</span><span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm">{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account/devices?revoke_app={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
+            {{end}}
+          </div>
+        </div>
+      </section>
+      {{end}}
       <section class="panel ruled">
         <div class="pt"><span class="sec">{{tr .Locale "cli_title"}}</span>{{if .APITokens}}<span class="sp"><span class="counts"><b>{{len .APITokens}}</b> {{tr .Locale "cli_devices"}}</span></span>{{end}}</div>
         {{if .APITokens}}
@@ -281,6 +296,26 @@
         <input type="hidden" name="confirm" value="{{.Account.User.Login}}">
         <input type="hidden" name="final" value="1">
         <button type="submit" class="bad">{{tr .Locale "delete_account_final"}}</button>
+      </form>
+    </footer>
+  </dialog>
+  {{end}}
+  {{if .RevokeGrant.ID}}
+  <dialog class="dlg" open data-part="dialog">
+    <header>
+      <b>{{tr .Locale "revoke"}} <q>{{or .RevokeGrant.ClientName (tr .Locale "oauth_unnamed")}}</q></b>
+      <a class="x" href="/account/devices" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+    </header>
+    <div class="body">
+      <p class="ro">{{tr .Locale "mcp_revoke_body"}}</p>
+    </div>
+    <footer>
+      <a class="btn" href="/account/devices" data-close autofocus>{{tr .Locale "cancel"}}</a>
+      <form method="post" action="/account/tokens" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="revoke_app">
+        <input type="hidden" name="grant" value="{{.RevokeGrant.ID}}">
+        <button type="submit" class="bad">{{tr .Locale "revoke"}}</button>
       </form>
     </footer>
   </dialog>

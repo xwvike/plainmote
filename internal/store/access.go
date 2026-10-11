@@ -367,6 +367,29 @@ WHERE id IN (SELECT id FROM device_grants WHERE expires_at < $1 ORDER BY expires
 `, now); err != nil {
 		return result, fmt.Errorf("prune device grants: %w", err)
 	}
+	if _, err = deleteInBatches(ctx, conn, `
+DELETE FROM oauth_tokens
+WHERE token_hash IN (SELECT token_hash FROM oauth_tokens WHERE expires_at < $1 ORDER BY expires_at LIMIT $2)
+`, now); err != nil {
+		return result, fmt.Errorf("prune oauth tokens: %w", err)
+	}
+	if _, err = deleteInBatches(ctx, conn, `
+DELETE FROM oauth_grants
+WHERE id IN (SELECT id FROM oauth_grants WHERE expires_at < $1 ORDER BY expires_at LIMIT $2)
+`, now); err != nil {
+		return result, fmt.Errorf("prune oauth grants: %w", err)
+	}
+	// A client nothing was granted to: a registration that never led to a
+	// consent, or a metadata document nobody uses any more.
+	if _, err = deleteInBatches(ctx, conn, `
+DELETE FROM oauth_clients
+WHERE id IN (
+  SELECT c.id FROM oauth_clients c
+  WHERE c.fetched_at < $1 AND NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.id)
+  ORDER BY c.fetched_at LIMIT $2)
+`, now.Add(-oauthClientIdle)); err != nil {
+		return result, fmt.Errorf("prune oauth clients: %w", err)
+	}
 
 	if _, err = deleteInBatches(ctx, conn, `
 DELETE FROM account_exports

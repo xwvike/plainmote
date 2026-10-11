@@ -1,0 +1,60 @@
+{{define "authorize.html"}}<!doctype html>
+<html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
+<head>
+  {{template "htmlhead" .}}
+  <title>{{tr .Locale "oauth_title"}} · PlainMote</title>
+</head>
+<body>
+  {{template "topbar" .}}
+  <main class="page device-page">
+    <div class="panel device-card">
+      <img class="signin-mark" src="{{asset "logo.png"}}" alt="" width="64" height="64" decoding="async">
+      {{with .OAuth}}
+      {{/* What the app calls itself is a claim. The host its metadata was
+           fetched from is not, and neither is where the answer goes: those
+           are what to check before allowing anything. */}}
+      <h1 class="signin-name">{{or .Name (tr $.Locale "oauth_unnamed")}}</h1>
+      <p class="hint signin-lede">{{tr $.Locale "oauth_lede"}}</p>
+      <div class="rule"></div>
+      <dl class="kv">
+        <dt>{{tr $.Locale "oauth_client"}}</dt><dd>{{if .Host}}{{.Host}} · {{tr $.Locale "oauth_verified"}}{{else}}{{tr $.Locale "oauth_self_registered"}}{{end}}</dd>
+        <dt>{{tr $.Locale "oauth_redirect"}}</dt><dd>{{.RedirectShow}}</dd>
+        <dt>{{tr $.Locale "device_account"}}</dt><dd>{{$.User.Login}}</dd>
+        <dt>{{tr $.Locale "device_lifetime"}}</dt><dd>{{tr $.Locale "oauth_lifetime_value"}}</dd>
+      </dl>
+      {{if .Loopback}}<p class="notice oauth-warn">{{tr $.Locale "oauth_loopback_warning"}}</p>
+      {{else if not .Host}}<p class="notice oauth-warn">{{tr $.Locale "oauth_unverified_warning"}}</p>{{end}}
+      <div class="rule"></div>
+      <form method="post" action="/oauth/authorize" class="oauth-form">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+        <input type="hidden" name="response_type" value="code">
+        <input type="hidden" name="client_id" value="{{.Request.Client.ID}}">
+        <input type="hidden" name="redirect_uri" value="{{.Request.RedirectURI}}">
+        <input type="hidden" name="code_challenge" value="{{.Request.Challenge}}">
+        <input type="hidden" name="code_challenge_method" value="S256">
+        <input type="hidden" name="scope" value="{{.Request.Scope}}">
+        <input type="hidden" name="resource" value="{{.Request.Resource}}">
+        {{if .Request.State}}<input type="hidden" name="state" value="{{.Request.State}}">{{end}}
+        <div class="scope">
+          <b>{{tr $.Locale "device_can"}}</b>
+          <label class="oauth-scope"><input type="checkbox" checked disabled><span>{{tr $.Locale "oauth_can_read"}}</span></label>
+          <label class="oauth-scope"><input type="checkbox" name="write" value="1"{{if .AskWrite}} checked{{end}}><span>{{tr $.Locale "oauth_can_write"}}</span></label>
+          <label class="oauth-scope"><input type="checkbox" name="share" value="1"><span>{{tr $.Locale "oauth_can_share"}}{{if .AskShare}} <em class="mut">{{tr $.Locale "oauth_asked"}}</em>{{end}}</span></label>
+          <b>{{tr $.Locale "device_cannot"}}</b>
+          <ul><li>{{tr $.Locale "oauth_cannot"}}</li></ul>
+        </div>
+        <div class="device-acts">
+          <button type="submit" name="decision" value="deny">{{tr $.Locale "device_deny"}}</button>
+          <button type="submit" name="decision" value="allow" class="pri">{{tr $.Locale "device_allow"}}</button>
+        </div>
+      </form>
+      <p class="hint device-note">{{tr $.Locale "oauth_revoke_later"}}</p>
+      {{else}}
+      <h1 class="signin-name">{{tr .Locale "oauth_error_title"}}</h1>
+      <p class="hint signin-lede">{{.Error}}</p>
+      {{end}}
+    </div>
+  </main>
+  {{template "footer" .}}
+</body>
+</html>{{end}}

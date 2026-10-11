@@ -141,6 +141,8 @@ func (a *App) templateSet() *template.Template {
 		"legalBytes":         legalBytes,
 		"storageMeter":       storageMeter,
 		"inc":                func(n int) int { return n + 1 },
+		"add":                func(a, b int) int { return a + b },
+		"grantSource":        grantSource,
 	}).ParseFS(webAssets, "templates/*.html"))
 }
 
@@ -588,6 +590,24 @@ func (a *App) basePageWithError(r *http.Request, user User, message string) page
 	data := a.basePage(r, user)
 	data.Error = message
 	return data
+}
+
+// grantSource is where an MCP app comes from, as the authorized apps list
+// shows it: the host its metadata document is served from, or - for one that
+// registered itself - where it is sent back to.
+func grantSource(locale string, grant store.OAuthGrant) string {
+	if grant.ClientKind == store.OAuthClientDocument {
+		if parsed, err := url.Parse(grant.ClientID); err == nil {
+			return parsed.Host
+		}
+	}
+	where := ""
+	if parsed, err := url.Parse(grant.RedirectURI); err == nil {
+		if where = parsed.Host; where == "" {
+			where = parsed.Scheme + ":"
+		}
+	}
+	return translate(locale, "mcp_self_registered") + " · " + where
 }
 
 // resourceLabel is what a resource is called in a list: its name, or for

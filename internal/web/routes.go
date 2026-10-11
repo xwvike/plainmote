@@ -14,20 +14,24 @@ import (
 
 	"plainmote/internal/auth"
 	"plainmote/internal/store"
+	"plainmote/internal/upstream"
 )
 
 type App struct {
-	cfg       Config
-	db        *store.Store
-	upstream  upstreamFetcher
-	github    *auth.GitHub
-	google    *auth.Google
-	templates *template.Template
-	handler   http.Handler
-	probes    probeLog
-	admin     *adminGate
-	limits    *apiLimits
-	cli       *cliIndex
+	cfg      Config
+	db       *store.Store
+	upstream upstreamFetcher
+	// clientDocs fetches MCP clients' metadata documents: small, and only
+	// from public addresses.
+	clientDocs upstreamFetcher
+	github     *auth.GitHub
+	google     *auth.Google
+	templates  *template.Template
+	handler    http.Handler
+	probes     probeLog
+	admin      *adminGate
+	limits     *apiLimits
+	cli        *cliIndex
 }
 
 type upstreamFetcher interface {
@@ -118,6 +122,11 @@ type pageData struct {
 	APITokens   []store.APIToken
 	RevokeToken store.APIToken
 	CLIDevices  bool
+	// OAuthGrants are the MCP apps the account let in, and RevokeGrant the
+	// one its revoke dialog is about. OAuth is the consent page's request.
+	OAuthGrants []store.OAuthGrant
+	RevokeGrant store.OAuthGrant
+	OAuth       *oauthConsent
 	// SignIns are the account page's sign-in methods: every provider the
 	// account has or could link.
 	SignIns []signInView
@@ -317,6 +326,9 @@ func (a *App) routes() http.Handler {
 	if a.cli == nil {
 		a.cli = &cliIndex{}
 	}
+	if a.clientDocs == nil {
+		a.clientDocs = upstream.New(clientDocumentMaxBytes)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/static/", a.handleStatic)
 	mux.HandleFunc(faviconPath, a.handleFavicon)
@@ -338,6 +350,13 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(accountIdentitiesPath, a.handleAccountIdentities)
 	mux.HandleFunc(deliveryPrefix, a.handlePublic)
 	mux.HandleFunc(apiPrefix, a.handleAPI)
+	mux.HandleFunc(wellKnownResource, a.handleResourceMetadata)
+	mux.HandleFunc(wellKnownResource+mcpPath, a.handleResourceMetadata)
+	mux.HandleFunc(wellKnownAuthServer, a.handleAuthServerMetadata)
+	mux.HandleFunc(oauthAuthorizePath, a.handleOAuthAuthorize)
+	mux.HandleFunc(oauthTokenPath, a.handleOAuthToken)
+	mux.HandleFunc(oauthRegisterPath, a.handleOAuthRegister)
+	mux.HandleFunc(oauthRevokePath, a.handleOAuthRevoke)
 	mux.HandleFunc(developersPath, a.handleDevelopers)
 	mux.HandleFunc(developersPath+"/", a.handleDevelopers)
 	mux.HandleFunc(cliPath, a.handleCLI)

@@ -39,16 +39,22 @@ type apiLimits struct {
 	codeAddress  *windowLimiter // and per address
 	authFailures *windowLimiter // bad tokens, per address
 	requests     *windowLimiter // calls, per token
+	// MCP clients registering themselves, and metadata documents fetched,
+	// per address.
+	registrations   *windowLimiter
+	clientDocuments *windowLimiter
 }
 
 func newAPILimits() *apiLimits {
 	return &apiLimits{
-		deviceCodes:  newWindowLimiter(10, 10*time.Minute),
-		devicePolls:  newWindowLimiter(120, time.Minute),
-		codeFailures: newWindowLimiter(5, 15*time.Minute),
-		codeAddress:  newWindowLimiter(20, 15*time.Minute),
-		authFailures: newWindowLimiter(30, time.Minute),
-		requests:     newWindowLimiter(300, time.Minute),
+		deviceCodes:     newWindowLimiter(10, 10*time.Minute),
+		devicePolls:     newWindowLimiter(120, time.Minute),
+		codeFailures:    newWindowLimiter(5, 15*time.Minute),
+		codeAddress:     newWindowLimiter(20, 15*time.Minute),
+		authFailures:    newWindowLimiter(30, time.Minute),
+		requests:        newWindowLimiter(300, time.Minute),
+		registrations:   newWindowLimiter(20, time.Hour),
+		clientDocuments: newWindowLimiter(30, 10*time.Minute),
 	}
 }
 

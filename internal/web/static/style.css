@@ -995,6 +995,12 @@ a.who:hover, a.who[aria-current] { border-color: var(--line-on); color: var(--in
 .device-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 14px; }
 .device-acts button { height: 32px; }
 .device-note { margin-top: 12px; }
+.oauth-form { display: grid; width: 100%; }
+.oauth-scope { display: flex; gap: 8px; align-items: flex-start; padding: 2px 0; cursor: pointer; }
+.oauth-scope input { flex: none; width: auto; height: auto; margin-top: 2px; accent-color: var(--accent); }
+.oauth-scope em { font-style: normal; }
+.oauth-form .scope ul { margin-top: 2px; }
+.oauth-warn { width: 100%; margin-top: 12px; text-align: left; border-left-color: var(--warn); background: color-mix(in oklab, var(--warn) 9%, var(--panel)); color: var(--ink2); }
 .big-code { margin-top: 4px; font: 500 22px var(--mono); letter-spacing: .14em; color: var(--ink); }
 
 /* the account page's signed-in command lines */

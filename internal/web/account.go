@@ -89,6 +89,10 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, s
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
 		}
+		if data.OAuthGrants, err = a.db.ListOAuthGrants(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
 		if data.Export, err = a.db.ExportAllowance(ctx, user.ID, now); err != nil {
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
@@ -114,11 +118,23 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, s
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
 		}
-		// The revoke dialog opens over the list, for a token that is still on it.
+		if data.OAuthGrants, err = a.db.ListOAuthGrants(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		// The revoke dialog opens over the list, for a token or an app that
+		// is still on it.
 		if id := r.URL.Query().Get("revoke"); id != "" {
 			for _, token := range data.APITokens {
 				if token.ID == id {
 					data.RevokeToken = token
+				}
+			}
+		}
+		if id := r.URL.Query().Get("revoke_app"); id != "" {
+			for _, grant := range data.OAuthGrants {
+				if grant.ID == id {
+					data.RevokeGrant = grant
 				}
 			}
 		}
@@ -264,13 +280,20 @@ func (a *App) handleAccountTokens(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, http.StatusForbidden, "invalid csrf token")
 		return
 	}
-	if r.FormValue("action") != "revoke" {
-		writePlainError(w, http.StatusBadRequest, "unknown action")
-		return
-	}
 	// Already gone is what was asked for: another tab may have revoked it.
-	if err := a.db.RevokeAPIToken(r.Context(), user.ID, r.FormValue("token")); err != nil && !errors.Is(err, store.ErrNotFound) {
-		a.serverError(w, "revoke token", err)
+	switch r.FormValue("action") {
+	case "revoke":
+		if err := a.db.RevokeAPIToken(r.Context(), user.ID, r.FormValue("token")); err != nil && !errors.Is(err, store.ErrNotFound) {
+			a.serverError(w, "revoke token", err)
+			return
+		}
+	case "revoke_app":
+		if err := a.db.RevokeOAuthGrant(r.Context(), user.ID, r.FormValue("grant")); err != nil && !errors.Is(err, store.ErrNotFound) {
+			a.serverError(w, "revoke app", err)
+			return
+		}
+	default:
+		writePlainError(w, http.StatusBadRequest, "unknown action")
 		return
 	}
 	http.Redirect(w, r, accountDevicesPath, http.StatusSeeOther)

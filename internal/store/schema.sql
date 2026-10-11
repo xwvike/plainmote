@@ -391,3 +391,61 @@ CREATE TABLE IF NOT EXISTS device_grants (
   poll_interval INTEGER NOT NULL DEFAULT 5
 );
 CREATE INDEX IF NOT EXISTS device_grants_expiry_idx ON device_grants(expires_at);
+
+-- The authorization server for MCP clients (OAuth 2.1). A client is either
+-- one that registered itself (RFC 7591), id 'pmc_...', or one named by the
+-- https address of its metadata document, kept here as fetched and read
+-- again once the copy is old. Neither kind has a secret: every client is
+-- public and proves itself with PKCE.
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  client_uri TEXT NOT NULL DEFAULT '',
+  redirect_uris TEXT[] NOT NULL,
+  request_ip TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS oauth_clients_created_idx ON oauth_clients(created_at);
+
+-- One consent: an account let one client in, with these scopes, for this
+-- resource. Each consent is its own grant, so two installs of one client
+-- are two rows, revoked one at a time. The grant carries its one
+-- authorization code (as a hash) until it is exchanged; expires_at follows
+-- its refresh token.
+CREATE TABLE IF NOT EXISTS oauth_grants (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+  client_name TEXT NOT NULL DEFAULT '',
+  scope TEXT NOT NULL,
+  resource TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  code_hash TEXT UNIQUE,
+  code_challenge TEXT NOT NULL,
+  code_expires_at TIMESTAMPTZ NOT NULL,
+  code_used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  last_used_at TIMESTAMPTZ,
+  last_used_ip TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS oauth_grants_user_idx ON oauth_grants(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS oauth_grants_client_idx ON oauth_grants(client_id);
+CREATE INDEX IF NOT EXISTS oauth_grants_expiry_idx ON oauth_grants(expires_at);
+
+-- The tokens of a grant, as hashes. kind is 'access' or 'refresh'. A refresh
+-- token is used once: the row stays, marked, until it would have expired, so
+-- that presenting it again is seen as the theft it is and ends the grant.
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  token_hash TEXT PRIMARY KEY,
+  grant_id UUID NOT NULL REFERENCES oauth_grants(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS oauth_tokens_grant_idx ON oauth_tokens(grant_id);
+CREATE INDEX IF NOT EXISTS oauth_tokens_expiry_idx ON oauth_tokens(expires_at);
