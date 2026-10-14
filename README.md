@@ -114,7 +114,7 @@ curl https://plainmote.link/paste    # prints usage
 PlainMote is a single stateless Go service with the following dependencies:
 
 - PostgreSQL
-- S3-compatible object storage (such as Cloudflare R2 or MinIO)
+- S3-compatible object storage (such as Cloudflare R2 or RustFS)
 - A GitHub OAuth App or a Google OAuth client (for sign-in; both may be enabled)
 
 The image is published as `ghcr.io/xwvike/plainmote` for amd64 and arm64, built in GitHub Actions with a signed build provenance attestation. The server needs only `compose.yaml` and `.env`:
@@ -182,13 +182,13 @@ When `PLAINMOTE_CONTACT_EMAIL` is set, the service provides an about page, a pri
 
 ## Development
 
-The development environment comprises PostgreSQL, MinIO and the application with live reload:
+The development environment comprises PostgreSQL, RustFS and the application with live reload:
 
 ```bash
 docker compose -f compose.dev.yaml up --build
 ```
 
-The application is served at `http://localhost:8964` and the MinIO console at `http://localhost:9001`. Sign-in requires the GitHub or Google OAuth settings in `.env`.
+The application is served at `http://localhost:8964` and the RustFS console at `http://localhost:9001/rustfs/console/` (user `plainmote`, password `plainmote-secret`). Sign-in requires the GitHub or Google OAuth settings in `.env`.
 
 Running the tests:
 

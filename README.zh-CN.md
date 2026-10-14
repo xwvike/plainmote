@@ -114,7 +114,7 @@ curl https://plainmote.link/paste    # 输出用法说明
 PlainMote 为单个无状态的 Go 服务，依赖以下组件：
 
 - PostgreSQL
-- S3 兼容对象存储（例如 Cloudflare R2、MinIO）
+- S3 兼容对象存储（例如 Cloudflare R2、RustFS）
 - GitHub OAuth App 或 Google OAuth 客户端（用于登录，可同时启用）
 
 镜像以 `ghcr.io/xwvike/plainmote` 发布，包含 amd64 与 arm64，在 GitHub Actions 中构建并附带经签名的构建来源证明。服务器只需要 `compose.yaml` 与 `.env`：
@@ -182,13 +182,13 @@ docker compose up -d
 
 ## 开发
 
-开发环境包含 PostgreSQL、MinIO 及支持热更新的应用：
+开发环境包含 PostgreSQL、RustFS 及支持热更新的应用：
 
 ```bash
 docker compose -f compose.dev.yaml up --build
 ```
 
-应用地址为 `http://localhost:8964`，MinIO 控制台地址为 `http://localhost:9001`。登录功能需在 `.env` 中配置 GitHub 或 Google 的 OAuth 参数。
+应用地址为 `http://localhost:8964`，RustFS 控制台地址为 `http://localhost:9001/rustfs/console/`（用户名 `plainmote`，密码 `plainmote-secret`）。登录功能需在 `.env` 中配置 GitHub 或 Google 的 OAuth 参数。
 
 运行测试：
 
