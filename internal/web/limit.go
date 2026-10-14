@@ -1,27 +1,14 @@
 package web
 
 import (
-	"net/netip"
 	"sync"
 	"time"
+
+	"plainmote/internal/store"
 )
 
-// addressKey is what a limit counts a client address as. An IPv6 client
-// holds a whole /64 - one is handed to each home or phone, and any address in
-// it is the client's to use - so counting addresses one by one would give it
-// endless fresh starts. IPv4 addresses, and anything that does not parse, are
-// counted as they are.
-func addressKey(ip string) string {
-	address, err := netip.ParseAddr(ip)
-	if err != nil || address.Unmap().Is4() {
-		return ip
-	}
-	prefix, err := address.Prefix(64)
-	if err != nil {
-		return ip
-	}
-	return prefix.String()
-}
+// addressKey is what a limit counts a client address as: see store.AddressKey.
+func addressKey(ip string) string { return store.AddressKey(ip) }
 
 // windowLimiter counts attempts per key in fixed windows: at most limit in
 // each window. It lives in memory, which is enough for one process; a restart

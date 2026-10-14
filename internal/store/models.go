@@ -165,7 +165,8 @@ type ConsumeResult struct {
 	LinkName string
 	Reason   string
 	// AccessID is the log row an allowed use was recorded under, for the
-	// delivery to correct once it knows how it ended.
+	// delivery to correct once it knows how it ended. Empty for an answered
+	// use, which has nothing left to go wrong.
 	AccessID string
 	// LinkSealedKey is, for an encrypted resource, the content key wrapped
 	// by the key in the link's address.

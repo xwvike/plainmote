@@ -271,10 +271,10 @@ CREATE TABLE IF NOT EXISTS access_logs (
   -- resource_name/resource_file say what was reached, so deleting a resource
   -- does not take its history with it.
   owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  resource_id UUID REFERENCES resources(id) ON DELETE SET NULL,
+  resource_id UUID,
   resource_name TEXT NOT NULL DEFAULT '',
   resource_file TEXT NOT NULL DEFAULT '',
-  link_id UUID REFERENCES links(id) ON DELETE SET NULL,
+  link_id UUID,
   link_name TEXT NOT NULL DEFAULT '',
   outcome TEXT NOT NULL,
   remote_ip TEXT NOT NULL DEFAULT '',
@@ -294,9 +294,10 @@ CREATE TABLE IF NOT EXISTS access_logs (
   path TEXT NOT NULL,
   status SMALLINT NOT NULL,
   detail TEXT NOT NULL DEFAULT '',
-  -- A refusal repeated by the same caller folds into one row rather than
-  -- dropping: hits counts the attempts and first_at holds when the run began,
-  -- so occurred_at stays the most recent one.
+  -- A refusal repeated by the same caller, or a run of answers that sent no
+  -- content, folds into one row rather than dropping: hits counts the
+  -- attempts and first_at holds when the run began, so occurred_at stays the
+  -- most recent one.
   hits INTEGER NOT NULL DEFAULT 1 CHECK (hits > 0),
   first_at TIMESTAMPTZ NOT NULL,
   occurred_at TIMESTAMPTZ NOT NULL,
@@ -314,10 +315,20 @@ ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS resource_version INTEGER;
 ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS country TEXT NOT NULL DEFAULT '';
 ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS region TEXT NOT NULL DEFAULT '';
 ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
+-- What the caller's address counts as when rows are folded: an IPv4 address,
+-- or the /64 of an IPv6 one. Empty on rows from before it was kept.
+ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS remote_key TEXT NOT NULL DEFAULT '';
+-- resource_id and link_id once cascaded to NULL when what they name was
+-- deleted, which rewrote every row a resource had ever been reached through,
+-- in one statement. The rows carry their own names and owner, and an id that
+-- names nothing any more joins to nothing, so the references are plain ids.
+ALTER TABLE access_logs DROP CONSTRAINT IF EXISTS access_logs_resource_id_fkey;
+ALTER TABLE access_logs DROP CONSTRAINT IF EXISTS access_logs_link_id_fkey;
 -- Which version each link last delivered. Partial, so rows from before
 -- versions were recorded, and refusals, cost it nothing.
 CREATE INDEX IF NOT EXISTS access_logs_delivered_idx ON access_logs(link_id, occurred_at DESC) WHERE resource_version IS NOT NULL;
-CREATE INDEX IF NOT EXISTS access_logs_fold_idx ON access_logs(link_id, outcome, remote_ip, occurred_at DESC) WHERE link_id IS NOT NULL;
+DROP INDEX IF EXISTS access_logs_fold_idx;
+CREATE INDEX IF NOT EXISTS access_logs_fold_key_idx ON access_logs(link_id, remote_key, occurred_at DESC) WHERE link_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS access_logs_owner_idx ON access_logs(owner_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_resource_idx ON access_logs(resource_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS access_logs_time_idx ON access_logs(occurred_at DESC);

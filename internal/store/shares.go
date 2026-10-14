@@ -373,7 +373,23 @@ func (d *Store) collectLinks(rows pgx.Rows, keep func(Link) bool) ([]Link, error
 	return links, rows.Err()
 }
 
-func (d *Store) ConsumeToken(ctx context.Context, token string, meta RequestMeta, now time.Time) (result ConsumeResult, err error) {
+// Answer is how a use will be answered when the resource alone settles it,
+// before any content is read: a 304, or the headers of a HEAD. The zero
+// Answer is a delivery of the content.
+type Answer struct {
+	Status int
+	Detail string
+}
+
+func (d *Store) ConsumeToken(ctx context.Context, token string, meta RequestMeta, now time.Time) (ConsumeResult, error) {
+	return d.ConsumeTokenAnswering(ctx, token, meta, now, nil)
+}
+
+// ConsumeTokenAnswering spends one use of a link and records it. answer,
+// given the resource, says whether the use sends no content; such a use is
+// recorded as answered and may fold into the caller's earlier row, so there
+// is no row of its own for the delivery to amend.
+func (d *Store) ConsumeTokenAnswering(ctx context.Context, token string, meta RequestMeta, now time.Time, answer func(Resource) Answer) (result ConsumeResult, err error) {
 	hash := hashToken(token)
 	err = d.withTx(ctx, func(tx pgx.Tx) error {
 		var linkID, linkName, resourceID string
@@ -411,15 +427,22 @@ RETURNING l.id, l.resource_id, l.name, l.sealed_key
 			ResourceName: resource.Name, ResourceFile: resource.Filename,
 			LinkID: linkID, LinkName: linkName,
 			Outcome: OutcomeSuccess, Status: httpStatusOK, Detail: "link accepted",
+			Version: resource.Version,
 		}
-		event.Version = resource.Version
+		if answer != nil {
+			if reply := answer(resource); reply.Status != 0 {
+				event.Status, event.Detail, event.Answered = reply.Status, reply.Detail, true
+			}
+		}
 		if err := insertAccessTx(ctx, tx, event, meta, now); err != nil {
 			return err
 		}
 		result.Resource = resource
 		result.LinkID = linkID
 		result.LinkName = linkName
-		result.AccessID = event.ID
+		if !event.Answered {
+			result.AccessID = event.ID
+		}
 		result.Allowed = true
 		result.Reason = OutcomeSuccess
 		return nil

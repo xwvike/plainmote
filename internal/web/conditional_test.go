@@ -73,13 +73,15 @@ func TestSharesAnswerConditionalRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	notModified := 0
+	// One caller's 304s fold into one row, which counts both.
+	notModified, rows := 0, 0
 	for _, entry := range logs {
 		if entry.Status == http.StatusNotModified {
-			notModified++
+			notModified += entry.Hits
+			rows++
 		}
 	}
-	if notModified != 2 {
-		t.Fatalf("both 304s must be in the access history, found %d", notModified)
+	if notModified != 2 || rows != 1 {
+		t.Fatalf("both 304s must be counted in one row of the access history, found %d in %d", notModified, rows)
 	}
 }

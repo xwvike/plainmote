@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -43,17 +44,49 @@ var AccessOutcomes = []string{OutcomeSuccess, OutcomeExpired, OutcomeExhausted, 
 // into the row already there instead of adding another.
 const accessFoldWindow = time.Minute
 
-// foldable reports whether an outcome may be folded. Only refusals are: a dead
-// link can be hit forever by anyone who has the address, and the thousandth
-// attempt from one caller in a minute says nothing the first did not. A
-// delivery is not folded - the owner published a live link and every hit on it
-// is something they asked to see.
-func foldable(outcome string) bool {
-	switch outcome {
-	case OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeTakenDown, OutcomeSuspended:
-		return true
+// answeredFoldSpan is how long a run of answers that sent no content - a
+// 304, or the headers of a HEAD - may fold into one row. A program watching a
+// link for changes asks every few seconds or minutes; one row an hour for
+// each caller and version says everything those asks did.
+const answeredFoldSpan = time.Hour
+
+// foldWindow reports whether an event may fold into an earlier row, and
+// which: one touched since recent, whose run began since begun. Refusals
+// fold - a dead link can be hit forever by anyone who has the address, and
+// the thousandth attempt from one caller in a minute says nothing the first
+// did not - and so do answers that sent no content. A delivery of the
+// content never folds: every one is something the owner asked to see.
+func foldWindow(event AccessEvent, now time.Time) (recent, begun time.Time, ok bool) {
+	if event.LinkID == "" {
+		return time.Time{}, time.Time{}, false
 	}
-	return false
+	switch event.Outcome {
+	case OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeTakenDown, OutcomeSuspended:
+		return now.Add(-accessFoldWindow), time.Time{}, true
+	case OutcomeSuccess:
+		if event.Answered {
+			start := now.Add(-answeredFoldSpan)
+			return start, start, true
+		}
+	}
+	return time.Time{}, time.Time{}, false
+}
+
+// AddressKey is what one caller's address counts as. An IPv6 client holds a
+// whole /64 - one is handed to each home or phone, and any address in it is
+// the client's to use - so telling its addresses apart would give it endless
+// fresh starts. IPv4 addresses, and anything that does not parse, are taken
+// as they are.
+func AddressKey(ip string) string {
+	address, err := netip.ParseAddr(ip)
+	if err != nil || address.Unmap().Is4() {
+		return ip
+	}
+	prefix, err := address.Prefix(64)
+	if err != nil {
+		return ip
+	}
+	return prefix.String()
 }
 
 const (
@@ -126,25 +159,30 @@ type AccessEvent struct {
 	Detail       string
 	// Version is the content version delivered; 0 when nothing stored was.
 	Version int
+	// Answered is a success that sent no content: a 304, or a HEAD.
+	Answered bool
 }
 
 func insertAccessTx(ctx context.Context, tx pgx.Tx, event AccessEvent, meta RequestMeta, now time.Time) error {
 	meta = limitRequestMeta(meta)
+	remoteKey := AddressKey(meta.RemoteIP)
 	// Folding keeps the count, which is what the earlier sampling attempt got
 	// wrong: it decided whether to write at all, so the attempts it skipped
-	// left no trace. The row is only reused for the same link, the same
-	// outcome and the same caller, so a second party probing the same dead
-	// link still gets a row of their own.
-	if foldable(event.Outcome) && event.LinkID != "" {
+	// left no trace. The row is only reused for the same link, outcome,
+	// answer, method, version and caller, so a second party probing the same
+	// dead link still gets a row of their own.
+	if recent, begun, ok := foldWindow(event, now); ok {
 		tag, err := tx.Exec(ctx, `
 UPDATE access_logs SET hits = hits + 1, occurred_at = $1
 WHERE id = (
   SELECT id FROM access_logs
-  WHERE link_id = $2 AND outcome = $3 AND remote_ip = $4 AND occurred_at >= $5
+  WHERE link_id = $2 AND outcome = $3 AND remote_key = $4 AND status = $5 AND method = $6
+    AND resource_version IS NOT DISTINCT FROM NULLIF($7::integer, 0)
+    AND occurred_at >= $8 AND first_at >= $9
   ORDER BY occurred_at DESC
   LIMIT 1
 )
-`, now, event.LinkID, event.Outcome, meta.RemoteIP, now.Add(-accessFoldWindow))
+`, now, event.LinkID, event.Outcome, remoteKey, event.Status, meta.Method, event.Version, recent, begun)
 		if err != nil {
 			return err
 		}
@@ -164,21 +202,21 @@ WHERE id = (
 	_, err := tx.Exec(ctx, `
 INSERT INTO access_logs(
   id, owner_id, resource_id, resource_name, resource_file, link_id, link_name, outcome,
-  remote_ip, remote_addr, host, query, proto,
+  remote_ip, remote_key, remote_addr, host, query, proto,
   user_agent, referer, forwarded, x_forwarded_for, cf_connecting_ip, cf_ray,
   content_length, tls, method, path, status, detail, hits, first_at, occurred_at, resource_version,
   country, region, city
 )
 VALUES(
   $1, $2, $3, $4, $5, $6, $7, $8,
-  $9, $10, $11, $12, $13,
-  $14, $15, $16, $17, $18, $19,
-  $20, $21, $22, $23, $24, $25, 1, $26, $26, NULLIF($27, 0),
-  $28, $29, $30
+  $9, $10, $11, $12, $13, $14,
+  $15, $16, $17, $18, $19, $20,
+  $21, $22, $23, $24, $25, $26, 1, $27, $27, NULLIF($28, 0),
+  $29, $30, $31
 )
 `, event.ID, optionalUUID(event.OwnerID), optionalUUID(event.ResourceID),
 		event.ResourceName, event.ResourceFile, optionalUUID(event.LinkID), event.LinkName, event.Outcome,
-		meta.RemoteIP, meta.RemoteAddr, meta.Host, meta.Query, meta.Proto,
+		meta.RemoteIP, remoteKey, meta.RemoteAddr, meta.Host, meta.Query, meta.Proto,
 		meta.UserAgent, meta.Referer, meta.Forwarded, meta.XForwardedFor, meta.CFConnectingIP, meta.CFRay,
 		meta.ContentLength, meta.TLS, meta.Method, meta.Path, event.Status, event.Detail, now, event.Version,
 		meta.Location.Country, meta.Location.Region, meta.Location.City)
@@ -192,7 +230,7 @@ func (d *Store) RecordAccess(ctx context.Context, event AccessEvent, meta Reques
 }
 
 // AmendAccess corrects the row a delivery was recorded under once its end is
-// known: a 304, a body that could not be read. The
+// known: a body that could not be read. The
 // row itself is written with the use it records (see ConsumeToken), so this
 // only ever narrows what it says; delivered=false clears the version, since
 // no content went out.
@@ -243,7 +281,7 @@ WHERE owner_id = $1
 	// row recorded at the time.
 	rows, err := d.db.Query(ctx, `
 SELECT
-  a.id, COALESCE(a.resource_id::text, ''),
+  a.id, COALESCE(r.id::text, ''),
   COALESCE(NULLIF(r.name, ''), a.resource_name), COALESCE(NULLIF(r.filename, ''), a.resource_file),
   COALESCE(a.link_id::text, ''), a.link_name, a.outcome, a.remote_ip, a.remote_addr,
   a.host, a.query, a.proto, a.user_agent, a.referer, a.forwarded, a.x_forwarded_for,

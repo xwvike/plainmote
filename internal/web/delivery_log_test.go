@@ -90,7 +90,7 @@ func TestNoDeliveryWithoutARecord(t *testing.T) {
 	// The log cannot be written: nothing may be delivered, nothing spent.
 	if _, err := pool.Exec(ctx, `
 CREATE FUNCTION refuse_access_log() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'access log unavailable'; END $$;
-CREATE TRIGGER refuse_access_log BEFORE INSERT ON access_logs FOR EACH ROW EXECUTE FUNCTION refuse_access_log();
+CREATE TRIGGER refuse_access_log BEFORE INSERT OR UPDATE ON access_logs FOR EACH ROW EXECUTE FUNCTION refuse_access_log();
 `); err != nil {
 		t.Fatal(err)
 	}

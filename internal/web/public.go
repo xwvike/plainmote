@@ -128,7 +128,10 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	meta := a.requestMetadata(r)
-	result, err := a.db.ConsumeToken(r.Context(), token, meta, time.Now().UTC())
+	result, err := a.db.ConsumeTokenAnswering(r.Context(), token, meta, time.Now().UTC(), func(resource store.Resource) store.Answer {
+		_, _, answer := deliveryAnswer(r, resource)
+		return answer
+	})
 	if err != nil {
 		a.serverError(w, "consume token", err)
 		return
@@ -143,13 +146,11 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	// From here the use is spent and recorded as delivered; each way the
 	// delivery can still end without sending the content corrects that row.
 	resource := result.Resource
-	contentType := store.ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding)
-	etag, modified := storedETag(resource, contentType), resource.UpdatedAt
+	contentType, etag, answer := deliveryAnswer(r, resource)
 	w.Header().Set("ETag", etag)
-	w.Header().Set("Last-Modified", modified.UTC().Format(http.TimeFormat))
+	w.Header().Set("Last-Modified", resource.UpdatedAt.UTC().Format(http.TimeFormat))
 	w.Header().Set("Cache-Control", "no-store")
-	if notModified(r, etag, modified) {
-		a.amendAccess(r, result, store.OutcomeSuccess, http.StatusNotModified, "not modified", true)
+	if answer.Status == http.StatusNotModified {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
@@ -203,12 +204,31 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// amendAccess corrects the row ConsumeToken wrote for this use. A 304
-// confirms the caller holds this version; anything else means no content
+// deliveryAnswer is how a use of a link to resource is answered: the type it
+// goes out as, its validator, and whether the answer sends no content - a
+// 304 when the caller already holds this version, or the headers of a HEAD.
+// It reads the resource row alone, so it can be settled before the use is
+// recorded.
+func deliveryAnswer(r *http.Request, resource store.Resource) (string, string, store.Answer) {
+	contentType := store.ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding)
+	etag := storedETag(resource, contentType)
+	switch {
+	case notModified(r, etag, resource.UpdatedAt):
+		return contentType, etag, store.Answer{Status: http.StatusNotModified, Detail: "not modified"}
+	case r.Method == http.MethodHead:
+		return contentType, etag, store.Answer{Status: http.StatusOK, Detail: "headers only"}
+	}
+	return contentType, etag, store.Answer{}
+}
+
+// amendAccess corrects the row ConsumeToken wrote for this use: no content
 // went out. The correction is made even if the caller has gone - it is the
 // record that must be right - and a failure leaves the row overstating the
 // delivery, never missing it.
 func (a *App) amendAccess(r *http.Request, result store.ConsumeResult, outcome string, status int, detail string, delivered bool) {
+	if result.AccessID == "" {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 	defer cancel()
 	if err := a.db.AmendAccess(ctx, result.AccessID, outcome, status, detail, delivered); err != nil {
