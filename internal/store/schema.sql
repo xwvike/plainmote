@@ -94,7 +94,6 @@ CREATE TABLE IF NOT EXISTS resources (
   content_size BIGINT NOT NULL DEFAULT 0 CHECK (content_size >= 0),
   content_type TEXT NOT NULL,
   content_encoding TEXT NOT NULL DEFAULT '',
-  origin_url TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL
 );
@@ -125,6 +124,17 @@ CREATE INDEX IF NOT EXISTS resources_expiry_idx ON resources(expires_at) WHERE e
 -- empty and its content is ciphertext the service cannot read.
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_key BYTEA;
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_meta BYTEA;
+-- Remote resources - an address fetched again on every access, with no
+-- content of their own - are no longer kept. Those left are removed with
+-- their links; their access log stays, as it does for any deleted resource.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = current_schema() AND table_name = 'resources' AND column_name = 'origin_url') THEN
+    DELETE FROM resources WHERE origin_url <> '';
+    ALTER TABLE resources DROP COLUMN origin_url;
+  END IF;
+END $$;
 
 -- What a resource held before, one row per replaced version. Kept whole rather
 -- than as changes against the next one, so any version can be read, compared
@@ -290,9 +300,8 @@ CREATE TABLE IF NOT EXISTS access_logs (
   hits INTEGER NOT NULL DEFAULT 1 CHECK (hits > 0),
   first_at TIMESTAMPTZ NOT NULL,
   occurred_at TIMESTAMPTZ NOT NULL,
-  -- Which version of the content was delivered. Only a delivery of stored
-  -- content has one: a refusal delivered nothing, and a remote resource is
-  -- whatever its origin returned.
+  -- Which version of the content was delivered. A refusal delivered nothing
+  -- and has none.
   resource_version INTEGER,
   -- Where the caller was, as the proxy in front estimated it from their IP
   -- at the time: an address changes hands, so it cannot be looked up later.

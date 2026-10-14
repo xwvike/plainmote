@@ -791,11 +791,11 @@ function enhance(textarea) {
   }
 }
 
-// A remote resource has no editable body - the bytes live upstream and are
-// fetched fresh for the page - but it reads like one, so it gets the same
-// surface with editing taken out: line numbers, highlighting and search stay,
-// the document cannot be changed, and nothing is wired to the form. Kept apart
-// from enhance() because every path in there is about producing bytes to post.
+// Text that cannot be edited here - a quick share, an earlier version - still
+// reads like the editor, so it gets the same surface with editing taken out:
+// line numbers, highlighting and search stay, the document cannot be changed,
+// and nothing is wired to the form. Kept apart from enhance() because every
+// path in there is about producing bytes to post.
 function preview(textarea) {
   const host = document.createElement("div");
   host.className = "cm-host";

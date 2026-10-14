@@ -52,7 +52,6 @@ var (
 	errSealedShape     = refusal("加密内容格式无法识别")
 	errSealedNeedsKey  = refusal("加密资源的分享链接需要在浏览器中创建")
 	errSealedInBrowser = refusal("加密资源需要在浏览器中解锁后修改")
-	errSealedRemote    = refusal("远程资源不能加密")
 	errSealedVersions  = refusal("历史版本已变化，请刷新页面后重试")
 	errSealedCopy      = refusal("加密资源的历史版本需要在浏览器中另存为新资源")
 )
@@ -112,9 +111,9 @@ func (d *Store) CreateSealedResource(ctx context.Context, ownerID, id string, pa
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
 		tag, err := tx.Exec(ctx, `
-INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url,
+INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding,
                       created_at, updated_at, version, version_at, content_sha256, sealed_key, sealed_meta)
-VALUES($1, $2, '', '', $3, $4, $5, '', '', $6, $6, 1, $6, $7, $8, $9)
+VALUES($1, $2, '', '', $3, $4, $5, '', $6, $6, 1, $6, $7, $8, $9)
 ON CONFLICT (id) DO NOTHING
 `, id, ownerID, resource.ContentKey, resource.ContentSize, SealedContentType, now, resource.ContentSHA256, sealedKey, part.Meta)
 		if err != nil {
@@ -279,8 +278,6 @@ func (d *Store) SealResource(ctx context.Context, ownerID, id string, baseVersio
 	switch {
 	case resource.Sealed():
 		return 0, errSealedShape
-	case resource.Remote():
-		return 0, errSealedRemote
 	case resource.TakenDown:
 		return 0, ErrTakenDown
 	}
@@ -369,7 +366,7 @@ func (d *Store) UnsealResource(ctx context.Context, ownerID, id string, baseVers
 	if resource.TakenDown {
 		return ErrTakenDown
 	}
-	head, err := normalizeResourceInput(current.Name, current.Filename, current.Content, "", "")
+	head, err := normalizeResourceInput(current.Name, current.Filename, current.Content, "")
 	if err != nil {
 		return err
 	}
@@ -379,7 +376,7 @@ func (d *Store) UnsealResource(ctx context.Context, ownerID, id string, baseVers
 		if number <= 0 {
 			return errSealedShape
 		}
-		input, err := normalizeResourceInput(part.Filename, part.Filename, part.Content, "", "")
+		input, err := normalizeResourceInput(part.Filename, part.Filename, part.Content, "")
 		if err != nil {
 			return err
 		}

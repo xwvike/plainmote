@@ -175,9 +175,9 @@ func (d *Store) insertPaste(ctx context.Context, creatorID, filename string, con
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
 		if _, err := tx.Exec(ctx, `
-INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url,
+INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding,
                       created_at, updated_at, version, version_at, content_sha256)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, '', $9, $9, 1, $9, $10)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
 `, resource.ID, resource.OwnerID, resource.Name, resource.Filename, resource.ContentKey,
 			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, contentSHA256(content)); err != nil {
 			return fmt.Errorf("create paste: %w: %w", ErrInternal, err)

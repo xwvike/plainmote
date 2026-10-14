@@ -16,25 +16,24 @@
   <main class="page{{if not .IsNew}} resource-detail{{end}}">
     {{template "resource-crumb" .}}
     {{if .IsNew}}
-    <div class="ph"><h1>{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}</h1>
-      {{if and .HasKeyring (ne .NewKind "remote")}}<span class="sp">{{template "seal-switch" .}}</span>{{end}}</div>
+    <div class="ph"><h1>{{tr .Locale "new_resource"}}</h1>
+      {{if .HasKeyring}}<span class="sp">{{template "seal-switch" .}}</span>{{end}}</div>
     {{else}}
     <div class="ph">
       <h1 data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{resourceLabel .Locale .Resource}}</h1>
       {{if .Resource.QuickShare}}<span class="tag qs">{{tr .Locale "quick_share"}}</span>{{end}}
       {{if .Resource.Sealed}}<span class="tag enc">{{tr .Locale "encrypted"}}</span>{{end}}
       <span class="sp">
-        {{if and .HasKeyring (not (or .Resource.Remote .Resource.QuickShare .Resource.TakenDown))}}{{template "seal-switch" .}}{{end}}
+        {{if and .HasKeyring (not (or .Resource.QuickShare .Resource.TakenDown))}}{{template "seal-switch" .}}{{end}}
         {{/* Beside the one other thing done to the resource as a whole. Shown
              with nothing in it too: the page behind it says how it fills. */}}
-        {{if not (or .Resource.Remote .Resource.QuickShare)}}{{template "resource-hist" .}}{{end}}
+        {{if not .Resource.QuickShare}}{{template "resource-hist" .}}{{end}}
         <a class="txt danger" href="/resources/{{.Resource.ID}}?delete=1" data-dialog>{{tr .Locale "delete"}}</a>
       </span>
     </div>
     {{end}}
     {{template "resource-notices" .}}
-    {{$remote := or .Resource.Remote (eq .NewKind "remote")}}
-    {{if and .IsNew (not $remote) .HasKeyring}}
+    {{if and .IsNew .HasKeyring}}
     <form class="unlock-bar" data-new-unlock hidden>
       <span class="lock-ic" aria-hidden="true"></span>
       <span class="msg">{{tr .Locale "seal_unlock_first"}}</span>
@@ -52,24 +51,18 @@
     {{else}}
 
     {{/* An edit is saved in place, the editor left as it is, unless it
-         carries a chosen file or the resource is a reference: what comes
-         back then is a page of a different shape. */}}
-    <form class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}"{{if and (not .IsNew) (not .Resource.Remote)}} data-parts{{end}}>
+         carries a chosen file: what comes back then is a page of a
+         different shape. */}}
+    <form class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}"{{if not .IsNew}} data-parts{{end}}>
       <input type="hidden" name="csrf" value="{{.CSRF}}">
-      {{if .IsNew}}<input type="hidden" name="kind" value="{{.NewKind}}">{{else}}{{template "resource-base" .}}{{end}}
+      {{if not .IsNew}}{{template "resource-base" .}}{{end}}
 
         <div class="panel ruled panel-ed">
           <div class="pt">
-            {{/* While creating a reference the panel is the address; once it
-                 exists the panel is what that address returns. */}}
-            <span class="sec">{{if and .IsNew $remote}}{{tr .Locale "remote_url"}}{{else}}{{tr .Locale "content"}}{{end}}</span>
-            {{if and $remote (not .IsNew)}}<span class="tag">{{tr .Locale "read_only"}}</span>{{end}}
-            {{if not $remote}}
+            <span class="sec">{{tr .Locale "content"}}</span>
             {{/* Said out loud only when something goes wrong with a chosen file. */}}
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
-            {{end}}
             <span class="sp">
-              {{if not $remote}}
               {{/* How the text is stored, shown and kept: the encoding and line
                    endings are detected from the bytes, and a save writes them
                    back the same way. Not a choice - this is not an editor for
@@ -84,14 +77,11 @@
                   <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>
                 </select>
               </span>
-              {{end}}
               <em class="content-meta" data-content-meta>
-                {{if $remote}}{{if .UpstreamTextPreview}}{{tr .Locale "from_upstream"}} · {{bytesText (len .UpstreamText)}}{{else if .UpstreamType}}{{.UpstreamType}}{{else if .UpstreamError}}{{tr .Locale "upstream_unavailable"}}{{else if not .IsNew}}{{tr .Locale "enter_url_fetch"}}{{end}}
-                {{else if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / {{tr .Locale "limit"}} {{bytesText .MaxContent}}
+                {{if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / {{tr .Locale "limit"}} {{bytesText .MaxContent}}
                 {{else if .IsNew}}{{tr .Locale "limit"}} {{bytesText .MaxContent}}
                 {{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}}
               </em>
-              {{if not $remote}}
               {{/* The way content gets in ends the row. A key, not the browser's
                    picker, so it says what it does - load into an empty
                    resource, replace a stored one - and not which file was
@@ -100,30 +90,11 @@
                 <input type="file" name="upload" class="sr" data-upload data-max-bytes="{{.MaxContent}}">
                 {{if .IsNew}}{{tr .Locale "load_from_file"}}{{else}}{{tr .Locale "replace_file"}}{{end}}
               </label>
-              {{end}}
             </span>
           </div>
           <div class="pb" data-content-body>
-            {{if not $remote}}<div class="media-stage upload-preview" data-upload-preview hidden></div>{{end}}
-            {{if $remote}}
-              {{if .IsNew}}
-              <div class="f">
-                <span class="fl">
-                  <input id="origin_url" type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" placeholder="https://example.com/clash.yaml" required autofocus>
-                  <button type="submit" name="action" value="preview" formnovalidate title="{{tr .Locale "fetch_title"}}">{{tr .Locale "fetch"}}</button>
-                </span>
-              </div>
-              <input type="hidden" name="filename" value="{{.Resource.Filename}}">
-              {{end}}
-              {{if .UpstreamError}}<p class="err">{{.UpstreamError}}</p>{{end}}
-              {{if .UpstreamTextPreview}}
-              <textarea rows="18" spellcheck="false" disabled aria-label="{{tr .Locale "resource_content"}}" data-preview data-filename="{{.Resource.Filename}}" data-content-type="{{.UpstreamType}}">{{.UpstreamText}}</textarea>
-              {{else if .UpstreamType}}
-              <p class="ro">{{tr .Locale "no_text_preview"}}</p>
-              {{else if not .UpstreamError}}
-              <p class="ro">{{tr .Locale "fetch_to_preview"}}</p>
-              {{end}}
-            {{else if .Resource.Editable}}
+            <div class="media-stage upload-preview" data-upload-preview hidden></div>
+            {{if .Resource.Editable}}
             <textarea name="content" rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
             {{else if .IsNew}}
             {{/* Carries ContentText, because this is also the page a refused
@@ -161,16 +132,12 @@
         {{if .IsNew}}
         <a class="txt" href="/resources/">{{tr .Locale "cancel"}}</a>
         <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "optional"}}" style="width:140px"></label>
-        {{if not $remote}}
         <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
-        {{end}}
-        <span class="hint live">{{if $remote}}<a href="/resources/new">{{tr .Locale "switch_direct_edit"}}</a>{{else}}<a href="/resources/new?kind=remote">{{tr .Locale "switch_remote"}}</a>{{end}}</span>
         {{else}}
         {{if .Conflict}}<a class="txt show" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_mine"}}</a>
         {{else}}<a class="txt" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>{{end}}
         <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "name_filename_fallback"}}" style="width:140px"></label>
         <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
-        {{if .Resource.Remote}}<label class="pick"><span>{{tr .Locale "remote_url"}}</span><input type="url" name="origin_url" class="mpath" value="{{.Resource.OriginURL}}" style="width:220px" required></label>{{end}}
         {{/* Appears with the first change and goes with the save: the page
              after a save is the confirmation. */}}
         <span class="unsaved{{if .Conflict}} show{{end}}" data-unsaved>{{tr .Locale "unsaved"}}</span>
@@ -178,7 +145,7 @@
       </div>
     </form>
 
-    {{if and .CLIDevices (not .IsNew) .Resource.Editable (not .Resource.Remote) (not .Resource.TakenDown)}}
+    {{if and .CLIDevices (not .IsNew) .Resource.Editable (not .Resource.TakenDown)}}
     {{/* The same edit from a terminal, saved the same way: as a new version,
          refused if this one moved on meanwhile. Offered once the account has
          a command line signed in. */}}
@@ -207,13 +174,13 @@
   {{template "resource-dialogs" .}}
   {{if not .IsNew}}{{template "seal-dialogs" .}}{{end}}
 
-  {{if not $remote}}<script type="module" src="{{asset "upload.js"}}"></script>{{end}}
+  <script type="module" src="{{asset "upload.js"}}"></script>
   {{if not .IsNew}}<script type="module" src="{{asset "resource.js"}}"></script>
   <script type="module" src="{{asset "parts.js"}}"></script>{{end}}
-  {{if or .Resource.Editable .UpstreamTextPreview (and .IsNew (ne .NewKind "remote"))}}
+  {{if or .Resource.Editable .IsNew}}
   <script type="module" src="{{asset "editor.js"}}"></script>
   {{end}}
-  {{if or .Resource.Sealed (not (or .Resource.Remote .Resource.QuickShare (eq .NewKind "remote")))}}<script type="module" src="{{asset "sealed.js"}}"></script>{{end}}
+  {{if or .Resource.Sealed (not .Resource.QuickShare)}}<script type="module" src="{{asset "sealed.js"}}"></script>{{end}}
   {{template "copy-status" .}}
 </body>
 </html>{{end}}
@@ -221,7 +188,7 @@
 
 {{define "resource-doc-title"}}<title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{resourceLabel .Locale .Resource}}{{end}} · PlainMote</title>{{end}}
 
-{{define "resource-crumb"}}<div class="crumb" data-part="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{if eq .NewKind "remote"}}{{tr .Locale "reference_url"}}{{else}}{{tr .Locale "new_resource"}}{{end}}{{else}}{{resourceLabel .Locale .Resource}}{{end}}</span></div>{{end}}
+{{define "resource-crumb"}}<div class="crumb" data-part="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{resourceLabel .Locale .Resource}}{{end}}</span></div>{{end}}
 
 {{define "resource-hist"}}<a class="hist" href="/resources/{{.Resource.ID}}/versions" data-part="hist">{{tr .Locale "history"}}<b>{{.HistoryCount}}</b></a>{{end}}
 
@@ -231,7 +198,7 @@
 
 {{define "resource-submit"}}<button type="submit" class="pri" data-part="submit">{{if .IsNew}}{{tr .Locale "create_resource"}}{{else if .Conflict}}{{printf (tr .Locale "save_anyway") (inc .Conflict.Current)}}{{else}}{{tr .Locale "save"}}{{end}}</button>{{end}}
 
-{{define "resource-meta"}}<p class="meta" data-part="meta">{{.Resource.ID}} · {{if .Resource.Remote}}{{tr .Locale "reference"}} · {{originHost .Resource.OriginURL}}{{else}}{{if .Resource.Encrypted}}{{tr .Locale "encrypted"}}{{else}}{{.Resource.ContentType}}{{end}} · {{bytesText .Resource.ContentSize}} · v{{.Resource.Version}}{{end}} · {{tr .Locale "created"}} {{formatTime .Resource.CreatedAt}} · {{tr .Locale "updated"}} {{formatTime .Resource.UpdatedAt}}</p>{{end}}
+{{define "resource-meta"}}<p class="meta" data-part="meta">{{.Resource.ID}} · {{if .Resource.Encrypted}}{{tr .Locale "encrypted"}}{{else}}{{.Resource.ContentType}}{{end}} · {{bytesText .Resource.ContentSize}} · v{{.Resource.Version}} · {{tr .Locale "created"}} {{formatTime .Resource.CreatedAt}} · {{tr .Locale "updated"}} {{formatTime .Resource.UpdatedAt}}</p>{{end}}
 
 {{/* Everything said about the last action, in one slot. A refused share
      action reopens the share it was about, and its message goes in that
@@ -242,7 +209,7 @@
     {{if .Created}}
     <div class="notice notice-row" role="status">
       <span>{{printf (tr .Locale "notice_created") (or .Resource.Name (tr .Locale "untitled_resource"))}}</span>
-      <a class="txt" href="/resources/new{{if .Resource.Remote}}?kind=remote{{end}}">{{tr .Locale "create_another"}}</a>
+      <a class="txt" href="/resources/new">{{tr .Locale "create_another"}}</a>
       <a class="txt" href="/resources/">{{tr .Locale "back_to_resources"}}</a>
     </div>
     {{else if .Sealed}}
@@ -370,7 +337,7 @@
 {{define "resource.html#parts"}}{{template "resource-doc-title" .}}
 {{template "resource-crumb" .}}
 <h1 data-part="title">{{or .Resource.Name (tr .Locale "untitled_resource")}}</h1>
-{{if not .Resource.Remote}}{{template "resource-hist" .}}{{end}}
+{{template "resource-hist" .}}
 {{template "resource-notices" .}}
 {{template "resource-base" .}}
 {{template "resource-submit" .}}

@@ -103,13 +103,13 @@ func TestDeleteMakesRoomForANewResource(t *testing.T) {
 	setPlanLimits(t, db, 1, 1<<20)
 
 	body := bytes.Repeat([]byte("a"), 64)
-	if _, err := db.CreateResource(ctx, user.ID, "第二个", "second.yaml", body, "", ""); !errors.Is(err, ErrQuotaExceeded) {
+	if _, err := db.CreateResource(ctx, user.ID, "第二个", "second.yaml", body, ""); !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("expected the plan to be full, got %v", err)
 	}
 	if err := db.DeleteResource(ctx, user.ID, resource.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, user.ID, "第二个", "second.yaml", body, "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, user.ID, "第二个", "second.yaml", body, ""); err != nil {
 		t.Fatalf("the freed slot must be usable, got %v", err)
 	}
 }

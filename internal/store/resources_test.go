@@ -46,7 +46,7 @@ func TestOneWayToReadAResource(t *testing.T) {
 func TestEveryReaderSeesTheWholeResource(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, "Example", "example.conf", []byte("answer=43\n"), "utf-8", ""); err != nil {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, "Example", "example.conf", []byte("answer=43\n"), "utf-8"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.AdminTakedown(ctx, AdminActor{KeyID: "test"}, resource.ID, "test", time.Now().UTC()); err != nil {

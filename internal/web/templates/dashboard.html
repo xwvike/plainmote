@@ -61,10 +61,9 @@
             {{range .Resources}}
             <tr>
               <td class="trunc"><a href="/resources/{{.ID}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</a></td>
-              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .Remote}}<span class="tag">{{tr $.Locale "remote"}}</span>{{end}}{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}</span></td>
+              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}</span></td>
               <td>
-                {{if .Remote}}<span class="fl"><span class="tag">{{tr $.Locale "upstream"}}</span><span class="mono trunc" title="{{.OriginURL}}">{{originHost .OriginURL}}</span></span>
-                {{else if or .Encrypted .Sealed}}<span class="mut">—</span>
+                {{if or .Encrypted .Sealed}}<span class="mut">—</span>
                 {{else}}<span class="mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
               </td>
               <td>

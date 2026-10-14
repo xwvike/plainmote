@@ -171,14 +171,6 @@ func TestAdminOverviewCarriesNoContent(t *testing.T) {
 			t.Fatalf("%s leaked content or a token: %s", target, body)
 		}
 	}
-	remote, err := db.CreateResource(ctx, user.ID, "upstream", "sub.yaml", nil, "", "https://example.com/private/path?key=secret")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, detail, body := client.call(http.MethodGet, "/_admin/v1/resources/"+remote.ID, nil)
-	if detail["origin_host"] != "example.com" || strings.Contains(body, "secret") || strings.Contains(body, "/private/") {
-		t.Fatalf("a reference is named by its host alone: %s", body)
-	}
 }
 
 func TestAdminSuspension(t *testing.T) {

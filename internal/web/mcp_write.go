@@ -149,7 +149,7 @@ func (a *App) mcpCreateResource(x mcpExchange, args json.RawMessage) (mcpOutcome
 	if problem := a.mcpTextProblem(*in.Content, in.Name); problem != "" {
 		return mcpProblem("%s", problem)
 	}
-	resource, err := a.db.CreateResource(x.r.Context(), x.user.ID, in.Name, in.Filename, []byte(*in.Content), "", "")
+	resource, err := a.db.CreateResource(x.r.Context(), x.user.ID, in.Name, in.Filename, []byte(*in.Content), "")
 	if err != nil {
 		return mcpStoreProblem(err)
 	}
@@ -201,8 +201,6 @@ func (a *App) mcpUpdateResource(x mcpExchange, args json.RawMessage) (mcpOutcome
 	switch {
 	case mcpEncrypted(resource):
 		return mcpProblem("%s", mcpEncryptedText)
-	case resource.Remote():
-		return mcpProblem("%s points at a remote address; it has no content of its own to save.", mcpLabel(resource))
 	case resource.QuickShare():
 		return mcpProblem("%s is a quick share, which is read only until it is kept as a resource on its page.", mcpLabel(resource))
 	case !store.TextLike(resource.ContentType):

@@ -5,13 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
-
-	"plainmote/internal/upstream"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -73,45 +70,34 @@ type resourceInput struct {
 	Filename    string
 	ContentType string
 	Encoding    string
-	OriginURL   string
 	Content     []byte
 }
 
-func normalizeResourceInput(name, filename string, content []byte, contentEncoding, originURL string) (resourceInput, error) {
+func normalizeResourceInput(name, filename string, content []byte, contentEncoding string) (resourceInput, error) {
 	filename = strings.TrimSpace(filename)
 	if err := validateFilename(filename); err != nil {
 		return resourceInput{}, err
 	}
-	originURL = strings.TrimSpace(originURL)
-	if originURL != "" {
-		parsed, err := url.Parse(originURL)
-		if err != nil {
-			return resourceInput{}, refusalf("parse remote link: %v", err)
-		}
-		if err := upstream.ValidateURL(parsed); err != nil {
-			return resourceInput{}, refusal(err.Error())
-		}
-		content = nil
-	} else if len(content) == 0 {
+	if len(content) == 0 {
 		return resourceInput{}, refusal("resource content must not be empty")
 	}
-	contentType := ""
-	detectedEncoding := ""
-	if originURL == "" {
-		contentType, detectedEncoding = DetectContent(filename, content, contentEncoding)
-	}
-	// An empty name falls back to the filename, and to nothing after that.
-	// The words for "untitled" belong to whoever is reading the page, so they
-	// are supplied when it is rendered rather than stored in one language.
-	name = strings.TrimSpace(name)
-	if name == "" {
-		name = filename
-	}
-	return resourceInput{Name: name, Filename: filename, ContentType: contentType, Encoding: detectedEncoding, OriginURL: originURL, Content: content}, nil
+	contentType, detectedEncoding := DetectContent(filename, content, contentEncoding)
+	return resourceInput{Name: resourceName(name, filename), Filename: filename, ContentType: contentType, Encoding: detectedEncoding, Content: content}, nil
 }
 
-func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename string, content []byte, contentEncoding, originURL string) (Resource, error) {
-	input, err := normalizeResourceInput(name, filename, content, contentEncoding, originURL)
+// resourceName is the name a resource is saved under. An empty name falls
+// back to the filename, and to nothing after that. The words for "untitled"
+// belong to whoever is reading the page, so they are supplied when it is
+// rendered rather than stored in one language.
+func resourceName(name, filename string) string {
+	if name = strings.TrimSpace(name); name != "" {
+		return name
+	}
+	return filename
+}
+
+func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename string, content []byte, contentEncoding string) (Resource, error) {
+	input, err := normalizeResourceInput(name, filename, content, contentEncoding)
 	if err != nil {
 		return Resource{}, err
 	}
@@ -119,7 +105,7 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 	resource := Resource{
 		ID: uuid.NewString(), OwnerID: ownerID, Name: input.Name, Filename: input.Filename,
 		ContentType: input.ContentType, ContentEncoding: input.Encoding,
-		OriginURL: input.OriginURL, CreatedAt: now, UpdatedAt: now,
+		CreatedAt: now, UpdatedAt: now,
 		Version: 1, VersionAt: now,
 	}
 
@@ -129,13 +115,11 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 	// failure this ordering leaves behind is an object no row points at, which
 	// the cleanup below removes; the other order leaves a row pointing at an
 	// object that does not exist.
-	if len(input.Content) > 0 {
-		resource.ContentKey = contentKey(resource.ID)
-		resource.ContentSize = int64(len(input.Content))
-		resource.ContentSHA256 = contentSHA256(input.Content)
-		if err := d.blobs.Put(ctx, resource.ContentKey, bytes.NewReader(input.Content), resource.ContentSize); err != nil {
-			return Resource{}, fmt.Errorf("store resource body: %w: %w", ErrInternal, err)
-		}
+	resource.ContentKey = contentKey(resource.ID)
+	resource.ContentSize = int64(len(input.Content))
+	resource.ContentSHA256 = contentSHA256(input.Content)
+	if err := d.blobs.Put(ctx, resource.ContentKey, bytes.NewReader(input.Content), resource.ContentSize); err != nil {
+		return Resource{}, fmt.Errorf("store resource body: %w: %w", ErrInternal, err)
 	}
 
 	var dropped []string
@@ -151,11 +135,11 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
 		_, err = tx.Exec(ctx, `
-INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url,
+INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding,
                       created_at, updated_at, version, version_at, content_sha256)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 1, $10, $11)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
 `, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
-			resource.ContentSize, resource.ContentType, resource.ContentEncoding, resource.OriginURL, now, resource.ContentSHA256)
+			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, resource.ContentSHA256)
 		if err != nil {
 			return fmt.Errorf("create resource: %w: %w", ErrInternal, err)
 		}
@@ -164,9 +148,7 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 1, $10, $11)
 		return err
 	})
 	if err != nil {
-		if resource.ContentKey != "" {
-			_ = d.blobs.Delete(ctx, resource.ContentKey)
-		}
+		_ = d.blobs.Delete(ctx, resource.ContentKey)
 		return Resource{}, err
 	}
 	d.dropObjects(ctx, dropped)
@@ -179,7 +161,7 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, 1, $10, $11)
 // not another - whether it is taken down, say - would otherwise read as its
 // zero value somewhere, and be trusted there.
 const resourceColumns = `r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size, r.content_type,
-       r.content_encoding, r.origin_url, r.created_at, r.updated_at,
+       r.content_encoding, r.created_at, r.updated_at,
        r.version, COALESCE(r.version_at, r.updated_at), COALESCE(r.restored_from, 0), r.content_sha256,
        r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key, r.sealed_meta`
 
@@ -193,7 +175,7 @@ func scanResource(row rowScanner, extra ...any) (Resource, error) {
 	var r Resource
 	err := row.Scan(append([]any{
 		&r.ID, &r.OwnerID, &r.Name, &r.Filename, &r.ContentKey, &r.ContentSize, &r.ContentType,
-		&r.ContentEncoding, &r.OriginURL, &r.CreatedAt, &r.UpdatedAt,
+		&r.ContentEncoding, &r.CreatedAt, &r.UpdatedAt,
 		&r.Version, &r.VersionAt, &r.RestoredFrom, &r.ContentSHA256,
 		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt, &r.SealedKey, &r.SealedMeta,
 	}, extra...)...)
@@ -294,14 +276,13 @@ type ResourceEdit struct {
 	Filename        string
 	Content         []byte
 	ContentEncoding string
-	OriginURL       string
 	BaseVersion     int
 }
 
 // UpdateResource saves without a base version: whatever is current is replaced.
-func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename string, content []byte, contentEncoding, originURL string) error {
+func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename string, content []byte, contentEncoding string) error {
 	_, err := d.SaveResource(ctx, ownerID, id, ResourceEdit{
-		Name: name, Filename: filename, Content: content, ContentEncoding: contentEncoding, OriginURL: originURL,
+		Name: name, Filename: filename, Content: content, ContentEncoding: contentEncoding,
 	})
 	return err
 }
@@ -322,7 +303,7 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 	}
 	content, contentEncoding := edit.Content, edit.ContentEncoding
 	replaceContent := content != nil
-	if !replaceContent && !current.Remote() && strings.TrimSpace(edit.OriginURL) == "" {
+	if !replaceContent {
 		content, err = d.ReadContent(ctx, current)
 		if err != nil {
 			return SaveResult{}, err
@@ -332,41 +313,35 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 		// the same object as an unrelated character set.
 		contentEncoding = current.ContentEncoding
 	}
-	input, err := normalizeResourceInput(edit.Name, edit.Filename, content, contentEncoding, edit.OriginURL)
+	input, err := normalizeResourceInput(edit.Name, edit.Filename, content, contentEncoding)
 	if err != nil {
 		return SaveResult{}, err
 	}
 
 	// The same bytes again are not a new version. The editor always posts its
 	// text, so without this every rename would file a copy of the content.
-	nextSHA := ""
-	if len(input.Content) > 0 {
-		nextSHA = contentSHA256(input.Content)
-	}
+	nextSHA := contentSHA256(input.Content)
 	storedSHA := current.ContentSHA256
-	if replaceContent && storedSHA == "" && current.ContentKey != "" && !current.Remote() {
+	if replaceContent && storedSHA == "" && current.ContentKey != "" {
 		// Written before hashes were kept. Read once; the save stores it.
 		if stored, err := d.ReadContent(ctx, current); err == nil {
 			storedSHA = contentSHA256(stored)
 		}
 	}
-	if replaceContent && input.OriginURL == "" && !current.Remote() && nextSHA == storedSHA && input.Encoding == current.ContentEncoding {
+	if replaceContent && nextSHA == storedSHA && input.Encoding == current.ContentEncoding {
 		replaceContent = false
 	}
 
 	// Same ordering as CreateResource: the object is written before the
 	// transaction, so no S3 round trip happens under the account lock.
 	nextKey, nextSize := "", int64(0)
-	wroteNewObject := false
-	if replaceContent && len(input.Content) > 0 {
+	if replaceContent {
 		nextKey = contentKey(id)
 		nextSize = int64(len(input.Content))
 		if err := d.blobs.Put(ctx, nextKey, bytes.NewReader(input.Content), nextSize); err != nil {
 			return SaveResult{}, fmt.Errorf("store resource body: %w: %w", ErrInternal, err)
 		}
-		wroteNewObject = true
 	}
-	toRemote := input.OriginURL != ""
 
 	now := time.Now().UTC()
 	var result SaveResult
@@ -390,34 +365,16 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 
 		next := locked
 		next.Type, next.Encoding = input.ContentType, input.Encoding
-		if locked.SHA256 == "" && !replaceContent && !toRemote {
+		if locked.SHA256 == "" && !replaceContent {
 			next.SHA256 = storedSHA
 		}
-		switch {
-		case toRemote:
-			// A reference has no content of its own, and so no versions:
-			// what the resource held goes, history and all.
-			next = currentContent{Version: locked.Version + 1, VersionAt: now, Remote: true}
-			if !locked.Remote {
-				rows, err := tx.Query(ctx, `DELETE FROM resource_versions WHERE resource_id = $1 RETURNING content_key`, id)
-				if err != nil {
-					return fmt.Errorf("drop history: %w: %w", ErrInternal, err)
-				}
-				keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
-				if err != nil {
-					return fmt.Errorf("drop history: %w: %w", ErrInternal, err)
-				}
-				dropped = append(keys, locked.Key)
-			} else {
-				next.Version = locked.Version
-			}
-		case wroteNewObject:
+		if replaceContent {
 			if err := retireTx(ctx, tx, id, locked, now); err != nil {
 				return err
 			}
 			next.Version = locked.Version + 1
 			next.Key, next.Size, next.SHA256 = nextKey, nextSize, nextSHA
-			next.VersionAt, next.RestoredFrom, next.Remote = now, 0, false
+			next.VersionAt, next.RestoredFrom = now, 0
 			result.NewVersion = true
 		}
 		if usage.StorageBytes+next.Size > limit.StorageBytes {
@@ -426,10 +383,10 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 		tag, err := tx.Exec(ctx, `
 UPDATE resources
 SET name = $1, filename = $2, content_key = $3, content_size = $4, content_type = $5, content_encoding = $6,
-    origin_url = $7, updated_at = $8, version = $9, version_at = $10, restored_from = NULLIF($11, 0), content_sha256 = $12
-WHERE id = $13 AND owner_id = $14
+    updated_at = $7, version = $8, version_at = $9, restored_from = NULLIF($10, 0), content_sha256 = $11
+WHERE id = $12 AND owner_id = $13
 `, input.Name, input.Filename, next.Key, next.Size, next.Type, next.Encoding,
-			input.OriginURL, now, next.Version, next.VersionAt, next.RestoredFrom, next.SHA256, id, ownerID)
+			now, next.Version, next.VersionAt, next.RestoredFrom, next.SHA256, id, ownerID)
 		if err != nil {
 			return fmt.Errorf("update resource: %w: %w", ErrInternal, err)
 		}
@@ -443,7 +400,7 @@ WHERE id = $13 AND owner_id = $14
 		return err
 	})
 	if err != nil {
-		if wroteNewObject {
+		if replaceContent {
 			_ = d.blobs.Delete(ctx, nextKey)
 		}
 		return SaveResult{}, err
@@ -494,10 +451,8 @@ DELETE FROM resources WHERE id = $1 AND owner_id = $2 RETURNING content_key
 	// The objects go last. An object left behind by a failure here costs
 	// storage; a row pointing at an object already gone costs a resource.
 	d.dropObjects(ctx, history)
-	if contentKey != "" {
-		if err := d.blobs.Delete(ctx, contentKey); err != nil {
-			return fmt.Errorf("delete resource body: %w: %w", ErrInternal, err)
-		}
+	if err := d.blobs.Delete(ctx, contentKey); err != nil {
+		return fmt.Errorf("delete resource body: %w: %w", ErrInternal, err)
 	}
 	return nil
 }

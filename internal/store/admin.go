@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -71,7 +70,6 @@ type AdminOverview struct {
 	} `json:"users"`
 	Resources struct {
 		Total           int64 `json:"total"`
-		Remote          int64 `json:"remote"`
 		TakenDown       int64 `json:"taken_down"`
 		CurrentBytes    int64 `json:"current_bytes"`
 		HistoryBytes    int64 `json:"history_bytes"`
@@ -107,14 +105,14 @@ FROM users WHERE id <> $1
 		return o, wrap(err)
 	}
 	if err := d.db.QueryRow(ctx, `
-SELECT COUNT(*), COUNT(*) FILTER (WHERE origin_url <> ''), COUNT(*) FILTER (WHERE taken_down_at IS NOT NULL),
+SELECT COUNT(*), COUNT(*) FILTER (WHERE taken_down_at IS NOT NULL),
        COALESCE(SUM(content_size), 0),
        (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v),
        (SELECT COUNT(*) FROM resource_versions),
        COUNT(*) FILTER (WHERE expires_at IS NOT NULL),
        COUNT(*) FILTER (WHERE sealed_key IS NOT NULL OR content_type = $2)
 FROM resources WHERE owner_id <> $1
-`, AnonymousUserID, EncryptedContentType).Scan(&o.Resources.Total, &o.Resources.Remote, &o.Resources.TakenDown,
+`, AnonymousUserID, EncryptedContentType).Scan(&o.Resources.Total, &o.Resources.TakenDown,
 		&o.Resources.CurrentBytes, &o.Resources.HistoryBytes, &o.Resources.HistoryVersions, &o.Resources.QuickShares, &o.Resources.Encrypted); err != nil {
 		return o, wrap(err)
 	}
@@ -539,10 +537,8 @@ type AdminResource struct {
 	} `json:"owner"`
 	Name            string    `json:"name"`
 	Filename        string    `json:"filename"`
-	Kind            string    `json:"kind"`
 	ContentType     string    `json:"content_type"`
 	Size            int64     `json:"size"`
-	OriginHost      string    `json:"origin_host"`
 	Version         int       `json:"version"`
 	HistoryVersions int64     `json:"history_versions"`
 	HistoryBytes    int64     `json:"history_bytes"`
@@ -568,7 +564,7 @@ const (
 )
 
 const adminResourceColumns = `
-  r.id, r.owner_id, u.login, r.name, r.filename, r.origin_url, r.content_type, r.content_size, r.version,
+  r.id, r.owner_id, u.login, r.name, r.filename, r.content_type, r.content_size, r.version,
   (SELECT COUNT(*) FROM resource_versions v WHERE v.resource_id = r.id),
   (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v WHERE v.resource_id = r.id),
   (SELECT COUNT(*) FROM links l WHERE l.resource_id = r.id AND l.revoked_at IS NULL
@@ -577,10 +573,9 @@ const adminResourceColumns = `
 
 func scanAdminResource(row rowScanner) (AdminResource, error) {
 	var r AdminResource
-	var origin string
 	var takenDown, sealed bool
 	var expires pgtype.Timestamptz
-	err := row.Scan(&r.ID, &r.Owner.ID, &r.Owner.Login, &r.Name, &r.Filename, &origin, &r.ContentType, &r.Size, &r.Version,
+	err := row.Scan(&r.ID, &r.Owner.ID, &r.Owner.Login, &r.Name, &r.Filename, &r.ContentType, &r.Size, &r.Version,
 		&r.HistoryVersions, &r.HistoryBytes, &r.LiveLinks, &r.CreatedAt, &r.UpdatedAt, &takenDown, &r.TakedownReason, &expires, &sealed)
 	r.ExpiresAt = timePointer(expires)
 	switch {
@@ -588,15 +583,6 @@ func scanAdminResource(row rowScanner) (AdminResource, error) {
 		r.Encrypted = AdminEncryptedMasterPassword
 	case r.ContentType == EncryptedContentType:
 		r.Encrypted = AdminEncryptedLinkKey
-	}
-	// A reference is named by its host alone: the full address is the owner's
-	// and may carry a path or query that says more than the operator needs.
-	r.Kind = "stored"
-	if origin != "" {
-		r.Kind = "remote"
-		if parsed, err := url.Parse(origin); err == nil {
-			r.OriginHost = parsed.Hostname()
-		}
 	}
 	r.Status = "active"
 	if takenDown {

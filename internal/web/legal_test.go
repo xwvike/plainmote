@@ -18,7 +18,7 @@ func legalApp(cfg Config) *App {
 	if cfg.MaxContent == 0 {
 		cfg.MaxContent = 4 << 20
 	}
-	return New(cfg, nil, nil, nil)
+	return New(cfg, nil, nil)
 }
 
 func getLegal(app *App, path, language string) *httptest.ResponseRecorder {

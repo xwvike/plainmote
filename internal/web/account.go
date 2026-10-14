@@ -483,17 +483,11 @@ func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Ac
 		return err
 	}
 
-	// Remote resources become small .url files. The export preserves the saved
-	// address without fetching an upstream on the owner's behalf.
 	for _, resource := range resources {
-		var err error
-		switch {
-		case resource.OriginURL != "":
-			err = writeExportRemote(archive, resource)
-		case resource.ContentKey != "":
-			err = a.writeExportBody(r, archive, resource)
+		if resource.ContentKey == "" {
+			continue
 		}
-		if err != nil {
+		if err := a.writeExportBody(r, archive, resource); err != nil {
 			return fmt.Errorf("resource %s: %w", resource.ID, err)
 		}
 	}
@@ -578,15 +572,6 @@ func writeExportAccount(archive *zip.Writer, account store.Account, now time.Tim
 	return nil
 }
 
-func writeExportRemote(archive *zip.Writer, resource Resource) error {
-	entry, err := archive.CreateHeader(&zip.FileHeader{Name: exportBodyPath(resource), Method: zip.Deflate, Modified: resource.UpdatedAt})
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(entry, "[InternetShortcut]\r\nURL=%s\r\n", exportText(resource.OriginURL))
-	return err
-}
-
 // exportBodyPath puts each body in a directory named after its resource so
 // duplicate filenames cannot overwrite each other.
 //
@@ -609,12 +594,7 @@ func exportBodyPath(resource Resource) string {
 		if name == "" {
 			name = "content"
 		}
-		if resource.OriginURL == "" {
-			name += exportExtension(resource.ContentType)
-		}
-	}
-	if resource.OriginURL != "" && !strings.HasSuffix(strings.ToLower(name), ".url") {
-		name += ".url"
+		name += exportExtension(resource.ContentType)
 	}
 	return "files/" + resource.ID + "/" + name
 }

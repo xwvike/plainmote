@@ -24,15 +24,6 @@ func storedETag(resource store.Resource, contentType string) string {
 	return `"` + hex.EncodeToString(sum[:12]) + `"`
 }
 
-// bodyETag names a remote resource by what the origin returned this time:
-// there is no saved version to go by, only the bytes.
-func bodyETag(contentType string, body []byte) string {
-	digest := sha256.New()
-	digest.Write([]byte(contentType + "\x00"))
-	digest.Write(body)
-	return `"` + hex.EncodeToString(digest.Sum(nil)[:12]) + `"`
-}
-
 // notModified evaluates If-None-Match, or failing that If-Modified-Since, the
 // way RFC 9110 has a GET or HEAD do it. modified is zero when the
 // representation has no date of its own.

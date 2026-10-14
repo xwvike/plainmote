@@ -18,12 +18,11 @@ import (
 )
 
 type App struct {
-	cfg      Config
-	db       *store.Store
-	upstream upstreamFetcher
+	cfg Config
+	db  *store.Store
 	// clientDocs fetches MCP clients' metadata documents: small, and only
 	// from public addresses.
-	clientDocs upstreamFetcher
+	clientDocs documentFetcher
 	github     *auth.GitHub
 	google     *auth.Google
 	templates  *template.Template
@@ -34,7 +33,7 @@ type App struct {
 	cli        *cliIndex
 }
 
-type upstreamFetcher interface {
+type documentFetcher interface {
 	Fetch(context.Context, string) ([]byte, string, error)
 }
 
@@ -72,8 +71,8 @@ type Config struct {
 	CLIDir string
 }
 
-func New(cfg Config, db *store.Store, source upstreamFetcher, github *auth.GitHub) *App {
-	app := &App{cfg: cfg, db: db, upstream: source, github: github, google: auth.NewGoogle(cfg.GoogleClientID, cfg.GoogleClientSecret)}
+func New(cfg Config, db *store.Store, github *auth.GitHub) *App {
+	app := &App{cfg: cfg, db: db, github: github, google: auth.NewGoogle(cfg.GoogleClientID, cfg.GoogleClientSecret)}
 	if len(cfg.AdminKeys) > 0 {
 		app.admin = newAdminGate(cfg.AdminKeys, cfg.AdminOrigins)
 	}
@@ -150,7 +149,6 @@ type pageData struct {
 	Quota             store.UserQuota
 	Pager             pager
 	IsNew             bool
-	NewKind           string
 	SignedIn          bool
 	// Indexable is set by the one page that is meant to be found. The response
 	// header carries the same exception; both have to agree or the meta tag
@@ -197,26 +195,22 @@ type pageData struct {
 	// ContentText is the body loaded for the editor. It is only filled in for
 	// a resource small and textual enough to show, so a large or non-text one is
 	// never pulled into memory just to render a page.
-	ContentText         string
-	ContentEncoding     string
-	ContentEOL          string
-	TextEncodings       []encodingOption
-	LogResource         string
-	LogOutcome          string
-	Outcomes            []string
-	Resource            Resource
-	MediaSource         string
-	MediaAutoSave       bool
-	Shares              []linkView
-	EndedShares         []linkView
-	ShareOpen           bool
-	DeleteOpen          bool
-	FocusShare          linkView
-	AccessLogs          []AccessLog
-	UpstreamType        string
-	UpstreamText        string
-	UpstreamTextPreview bool
-	UpstreamError       string
+	ContentText     string
+	ContentEncoding string
+	ContentEOL      string
+	TextEncodings   []encodingOption
+	LogResource     string
+	LogOutcome      string
+	Outcomes        []string
+	Resource        Resource
+	MediaSource     string
+	MediaAutoSave   bool
+	Shares          []linkView
+	EndedShares     []linkView
+	ShareOpen       bool
+	DeleteOpen      bool
+	FocusShare      linkView
+	AccessLogs      []AccessLog
 
 	// Version history. HistoryCount is the number of earlier versions;
 	// Versions the list, current first; HistoryGone the range of numbers the

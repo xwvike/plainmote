@@ -101,7 +101,6 @@
 | `401` | `unauthorized` | 缺少令牌，或令牌无效、已过期、已撤销；响应带有 `WWW-Authenticate: Bearer` |
 | `403` | `read_only` | 只读令牌不能进行写入 |
 | `404` | `not_found` | 资源或接口不存在，包括属于其他账号的资源 |
-| `409` | `reference` | 远程资源没有保存在本服务的内容 |
 | `412` | `conflict` | 保存所基于的版本已不是当前版本，`current_version` 为当前版本号 |
 | `413` | `too_large` | 内容超过大小上限 |
 | `413` | `quota` | 超出账号的资源数量或容量上限 |
@@ -138,7 +137,6 @@
 | `encoding` | string | 文本编码，例如 `utf-8`、`gb18030`；非文本内容省略 |
 | `version` | integer | 当前版本号 |
 | `updated_at` | time | 更新时间 |
-| `remote` | boolean | 是否为远程资源 |
 | `editable` | boolean | 是否为可以编辑的文本内容 |
 | `encrypted` | boolean | 是否为端到端加密的内容；否时省略 |
 | `sealed_key` | string | 仅以主密码加密的资源有此字段：经账号密钥封装的内容密钥，不带填充的 Base64URL。此类资源的 `name` 与 `filename` 为空，类型为 `application/vnd.plainmote.sealed` |
@@ -206,7 +204,7 @@
 | `X-PlainMote-Resource-Version` | 版本号，例如 `5` |
 | `X-PlainMote-Encoding` | 文本编码；非文本内容不返回 |
 
-远程资源返回 `409`（`reference`）。加密资源返回其密文，由客户端使用 `sealed_key` 解密。
+加密资源返回其密文，由客户端使用 `sealed_key` 解密。
 
 ### 保存为新版本
 

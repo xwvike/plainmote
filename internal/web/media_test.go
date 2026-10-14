@@ -22,7 +22,7 @@ func TestPublicDeliveryIgnoresRangeAndAlwaysCounts(t *testing.T) {
 			if ext == "bin" {
 				payload = []byte{0, 255, 254, 1}
 			}
-			resource, err := db.CreateResource(ctx, user.ID, "file", "file."+ext, payload, "", "")
+			resource, err := db.CreateResource(ctx, user.ID, "file", "file."+ext, payload, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -74,7 +74,7 @@ func TestSingleUseBrowserMediaFetch(t *testing.T) {
 			db, user, _ := testDatabase(t)
 			ctx := context.Background()
 			payload := []byte("01234\x0056789")
-			resource, err := db.CreateResource(ctx, user.ID, "media", filename, payload, "", "")
+			resource, err := db.CreateResource(ctx, user.ID, "media", filename, payload, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -133,7 +133,7 @@ func TestSingleUseBrowserMediaFetch(t *testing.T) {
 			if refreshed := get(source, "*/*"); refreshed.Code != http.StatusUnauthorized {
 				t.Fatalf("refresh bypass: %d", refreshed.Code)
 			}
-			if err := db.UpdateResource(ctx, user.ID, resource.ID, "replacement", resource.Filename, []byte("new\x00media"), "", ""); err != nil {
+			if err := db.UpdateResource(ctx, user.ID, resource.ID, "replacement", resource.Filename, []byte("new\x00media"), ""); err != nil {
 				t.Fatal(err)
 			}
 			if updated := get(source, "*/*"); updated.Code != http.StatusUnauthorized {
@@ -148,7 +148,7 @@ func TestBrowserMediaDownloadAndLifecycle(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			db, user, _ := testDatabase(t)
 			ctx := context.Background()
-			resource, err := db.CreateResource(ctx, user.ID, "media", "a.mp4", []byte("vid\x00eo"), "", "")
+			resource, err := db.CreateResource(ctx, user.ID, "media", "a.mp4", []byte("vid\x00eo"), "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -189,7 +189,7 @@ func TestBrowserMediaDownloadAndLifecycle(t *testing.T) {
 func TestMediaPlayerSavesDirectlyWithoutScriptForBrowsersOnly(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	resource, err := db.CreateResource(ctx, user.ID, "tone", "tone.mp3", []byte("01234\x0056789"), "", "")
+	resource, err := db.CreateResource(ctx, user.ID, "tone", "tone.mp3", []byte("01234\x0056789"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

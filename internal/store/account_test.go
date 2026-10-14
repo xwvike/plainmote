@@ -30,11 +30,11 @@ func TestDeleteAccountRemovesEverythingItOwns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept, err := db.CreateResource(ctx, other.ID, "Kept", "kept.txt", []byte("bob's"), "", "")
+	kept, err := db.CreateResource(ctx, other.ID, "Kept", "kept.txt", []byte("bob's"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, user.ID, "Second", "second.txt", []byte("more"), "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, user.ID, "Second", "second.txt", []byte("more"), ""); err != nil {
 		t.Fatal(err)
 	}
 	share, err := db.CreateShare(ctx, user.ID, resource.ID, "", time.Hour, 0)
@@ -111,7 +111,7 @@ func TestWriteAfterDeleteLeavesNoObject(t *testing.T) {
 		t.Fatal(err)
 	}
 	objects := blobs.Count()
-	if _, err := db.CreateResource(ctx, user.ID, "Late", "late.txt", []byte("late"), "", ""); !errors.Is(err, ErrNotFound) {
+	if _, err := db.CreateResource(ctx, user.ID, "Late", "late.txt", []byte("late"), ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("creating under a deleted account: %v", err)
 	}
 	if got := blobs.Count(); got != objects {
@@ -150,7 +150,7 @@ func TestExportReadsOnlyTheAccountsResourcesAndLogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, other.ID, "Not mine", "no.txt", []byte("x"), "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, other.ID, "Not mine", "no.txt", []byte("x"), ""); err != nil {
 		t.Fatal(err)
 	}
 	for _, owner := range []string{user.ID, other.ID} {
@@ -222,7 +222,7 @@ func TestUnnamedThingsAreStoredWithoutAPlaceholder(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	resource, err := db.CreateResource(ctx, user.ID, "", "", []byte("no name"), "", "")
+	resource, err := db.CreateResource(ctx, user.ID, "", "", []byte("no name"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

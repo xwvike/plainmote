@@ -14,7 +14,6 @@ import (
 	"plainmote/internal/blob"
 	"plainmote/internal/config"
 	"plainmote/internal/store"
-	"plainmote/internal/upstream"
 	"plainmote/internal/web"
 )
 
@@ -83,7 +82,7 @@ func Run() error {
 		Version:            Version,
 		Revision:           Revision,
 		StartedAt:          time.Now().UTC(),
-	}, db, upstream.New(cfg.MaxContent), auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
+	}, db, auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
 
 	fmt.Fprintf(os.Stderr, "listening on %s\n", cfg.Listen)
 	return serve(ctx, cfg.Listen, handler)

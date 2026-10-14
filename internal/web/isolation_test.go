@@ -25,10 +25,10 @@ func TestAnotherAccountCannotReachAResource(t *testing.T) {
 
 	// The owner's resource: a distinctive name, two versions with
 	// distinctive content, a live link with terms and an ended one.
-	if err := db.UpdateResource(ctx, owner.ID, resource.ID, "Owner Secret Name", "owner-secret.conf", []byte("OWNER-SECRET-V1\n"), "utf-8", ""); err != nil {
+	if err := db.UpdateResource(ctx, owner.ID, resource.ID, "Owner Secret Name", "owner-secret.conf", []byte("OWNER-SECRET-V1\n"), "utf-8"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.UpdateResource(ctx, owner.ID, resource.ID, "Owner Secret Name", "owner-secret.conf", []byte("OWNER-SECRET-V2\n"), "utf-8", ""); err != nil {
+	if err := db.UpdateResource(ctx, owner.ID, resource.ID, "Owner Secret Name", "owner-secret.conf", []byte("OWNER-SECRET-V2\n"), "utf-8"); err != nil {
 		t.Fatal(err)
 	}
 	live, err := db.CreateShare(ctx, owner.ID, resource.ID, "owner link note", time.Hour, 10)
@@ -48,7 +48,7 @@ func TestAnotherAccountCannotReachAResource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	own, err := db.CreateResource(ctx, intruder.ID, "Mallory's", "m.conf", []byte("mine\n"), "", "")
+	own, err := db.CreateResource(ctx, intruder.ID, "Mallory's", "m.conf", []byte("mine\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

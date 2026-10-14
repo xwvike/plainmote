@@ -35,7 +35,7 @@ func TestNoDeliveryWithoutARecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource, err := db.CreateResource(ctx, user.ID, "Secret", "secret.conf", []byte("SECRET-BODY\n"), "", "")
+	resource, err := db.CreateResource(ctx, user.ID, "Secret", "secret.conf", []byte("SECRET-BODY\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -147,7 +147,7 @@ func TestHistoryGivesWayToContent(t *testing.T) {
 	}
 
 	// 70 bytes of new content leaves 20 for history: the two newest survive.
-	if _, err := db.CreateResource(ctx, user.ID, "big", "big.txt", bytes.Repeat([]byte("x"), 70), "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, user.ID, "big", "big.txt", bytes.Repeat([]byte("x"), 70), ""); err != nil {
 		t.Fatalf("history must never be why a save is refused: %v", err)
 	}
 	versions, err := db.ListVersions(ctx, user.ID, resource.ID)
@@ -169,7 +169,7 @@ func TestHistoryGivesWayToContent(t *testing.T) {
 	}
 
 	// Content itself is still held to the limit.
-	_, err = db.CreateResource(ctx, user.ID, "too big", "too.txt", bytes.Repeat([]byte("x"), 20), "", "")
+	_, err = db.CreateResource(ctx, user.ID, "too big", "too.txt", bytes.Repeat([]byte("x"), 20), "")
 	if !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("content past the limit is refused as before, got %v", err)
 	}
@@ -310,25 +310,6 @@ func TestDeletingAccountTakesHistory(t *testing.T) {
 	}
 	if got := blobs.Count(); got != 0 {
 		t.Fatalf("an account's history goes with it; %d objects left", got)
-	}
-}
-
-func TestSwitchingToRemoteDropsHistory(t *testing.T) {
-	db, user, resource := testDatabase(t)
-	ctx := context.Background()
-	blobs := db.blobs.(*memoryBlobs)
-	save(t, db, user, resource, "answer=43\n")
-
-	if _, err := db.SaveResource(ctx, user.ID, resource.ID, ResourceEdit{
-		Name: resource.Name, Filename: resource.Filename, OriginURL: "https://example.com/app.conf",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if count, _ := db.HistoryCount(ctx, user.ID, resource.ID); count != 0 {
-		t.Fatalf("a reference keeps no versions, found %d", count)
-	}
-	if got := blobs.Count(); got != 0 {
-		t.Fatalf("nothing stored is left for a reference; %d objects", got)
 	}
 }
 

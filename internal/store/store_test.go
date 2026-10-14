@@ -270,7 +270,7 @@ func TestFilenameValidation(t *testing.T) {
 		"photo\u202Egnp.exe", "mark\u200Fname.yaml", "isolate\u2066name.yaml",
 		strings.Repeat("名", 129) + ".yaml",
 	} {
-		if _, err := db.CreateResource(ctx, user.ID, "bad", bad, []byte("x"), "", ""); err == nil {
+		if _, err := db.CreateResource(ctx, user.ID, "bad", bad, []byte("x"), ""); err == nil {
 			t.Errorf("filename %q should have been rejected", bad)
 		}
 	}
@@ -291,13 +291,13 @@ func TestFilenameValidation(t *testing.T) {
 		".env", "backup..2024.yaml", "trailing.",
 		"报告 📊.yaml",
 	} {
-		if _, err := db.CreateResource(ctx, user.ID, "ok", good, []byte("x"), "", ""); err != nil {
+		if _, err := db.CreateResource(ctx, user.ID, "ok", good, []byte("x"), ""); err != nil {
 			t.Errorf("filename %q should have been accepted: %v", good, err)
 		}
 	}
 	// Surrounding whitespace is trimmed rather than refused - it is almost
 	// always a paste artefact, and there is nothing to warn anyone about.
-	trimmed, err := db.CreateResource(ctx, user.ID, "ok", "  spaced.yaml  ", []byte("x"), "", "")
+	trimmed, err := db.CreateResource(ctx, user.ID, "ok", "  spaced.yaml  ", []byte("x"), "")
 	if err != nil || trimmed.Filename != "spaced.yaml" {
 		t.Errorf("surrounding whitespace should be trimmed, got %q: %v", trimmed.Filename, err)
 	}
@@ -311,10 +311,10 @@ func TestFilenamesMayCollideAcrossOwners(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, alice.ID, "clash", "shared.yaml", []byte("a: 1\n"), "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, alice.ID, "clash", "shared.yaml", []byte("a: 1\n"), ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, bob.ID, "clash", "shared.yaml", []byte("b: 2\n"), "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, bob.ID, "clash", "shared.yaml", []byte("b: 2\n"), ""); err != nil {
 		t.Fatalf("a second owner must be able to reuse a filename: %v", err)
 	}
 }

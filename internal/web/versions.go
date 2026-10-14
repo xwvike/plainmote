@@ -117,12 +117,10 @@ func (a *App) handleVersionList(w http.ResponseWriter, r *http.Request, user Use
 		}
 		return names
 	}
-	if !resource.Remote() {
-		data.Versions = append(data.Versions, versionRow{
-			Number: resource.Version, SavedAt: resource.VersionAt, Size: resource.ContentSize,
-			Current: true, RestoredFrom: resource.RestoredFrom, Links: linksOf(resource.Version),
-		})
-	}
+	data.Versions = append(data.Versions, versionRow{
+		Number: resource.Version, SavedAt: resource.VersionAt, Size: resource.ContentSize,
+		Current: true, RestoredFrom: resource.RestoredFrom, Links: linksOf(resource.Version),
+	})
 	for _, version := range versions {
 		data.HistoryBytes += version.ContentSize
 		data.Versions = append(data.Versions, versionRow{
@@ -137,7 +135,7 @@ func (a *App) handleVersionList(w http.ResponseWriter, r *http.Request, user Use
 	if len(versions) > 0 {
 		oldest = versions[len(versions)-1].Number
 	}
-	if oldest > 1 && !resource.Remote() {
+	if oldest > 1 {
 		data.HistoryGone = [2]int{1, oldest - 1}
 	}
 	if remove, err := strconv.Atoi(r.URL.Query().Get("remove")); err == nil {
@@ -377,10 +375,6 @@ const (
 func (a *App) handleCompare(w http.ResponseWriter, r *http.Request, user User, resource Resource) {
 	if r.Method != http.MethodGet {
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if resource.Remote() {
-		writePlainError(w, http.StatusNotFound, "a remote resource has no versions")
 		return
 	}
 	versions, err := a.db.ListVersions(r.Context(), user.ID, resource.ID)

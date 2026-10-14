@@ -24,11 +24,11 @@ func TestAllPagesRender(t *testing.T) {
 	// Enough to fill a second page at size 10, and no more: this test renders
 	// pages, so it has no business spending the account's resource quota.
 	for i := 0; i < 12; i++ {
-		if _, err := db.CreateResource(ctx, user.ID, fmt.Sprintf("填充资源 %d", i), fmt.Sprintf("fill-%d.yaml", i), []byte("a: 1\n"), "", ""); err != nil {
+		if _, err := db.CreateResource(ctx, user.ID, fmt.Sprintf("填充资源 %d", i), fmt.Sprintf("fill-%d.yaml", i), []byte("a: 1\n"), ""); err != nil {
 			t.Fatal(err)
 		}
 	}
-	remote, err := db.CreateResource(ctx, user.ID, "远程规则", "remote.yaml", nil, "", "https://upstream.example/rules.yaml")
+	unshared, err := db.CreateResource(ctx, user.ID, "规则", "rules.yaml", []byte("a: 1\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,9 +55,6 @@ func TestAllPagesRender(t *testing.T) {
 	app := &App{
 		db:     db,
 		github: auth.NewGitHub("client", "secret"),
-		upstream: upstreamFunc(func(_ context.Context, _ string) ([]byte, string, error) {
-			return []byte("rules:\n  - MATCH,PROXY\n"), "text/yaml; charset=utf-8", nil
-		}),
 		cfg: Config{
 			MaxContent:       4 << 20,
 			PublicURL:        "https://cfg.test",
@@ -98,14 +95,12 @@ func TestAllPagesRender(t *testing.T) {
 		{"logs", "/logs", "Successful"},
 		{"logs page 2", "/logs?size=20&page=2", `class="pgn on">2<`},
 		{"new resource", "/resources/new", "Load from file"},
-		{"new resource, remote", "/resources/new?kind=remote", "Remote URL"},
 		{"resource", "/resources/" + resource.ID, "New share"},
-		{"resource remote", "/resources/" + remote.ID, "Remote URL"},
 		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "Delete resource"},
 		// The save bar carries its unsaved marker, shown by the editor once
 		// something changes.
 		{"resource has an unsaved marker", "/resources/" + resource.ID, `<span class="unsaved" data-unsaved>Unsaved</span>`},
-		{"unshared resource says so", "/resources/" + remote.ID, "No active shares"},
+		{"unshared resource says so", "/resources/" + unshared.ID, "No active shares"},
 		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "Expired"},
 	} {
 		response := get(tc.path)

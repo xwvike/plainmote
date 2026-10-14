@@ -8,7 +8,6 @@ import (
 	"plainmote/internal/auth"
 	"plainmote/internal/store"
 	"plainmote/internal/testsupport"
-	"plainmote/internal/upstream"
 )
 
 type upstreamFunc func(context.Context, string) ([]byte, string, error)
@@ -29,7 +28,7 @@ func testDatabase(t *testing.T) (*store.Store, User, Resource) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource, err := db.CreateResource(ctx, user.ID, "Example", "example.conf", []byte("answer=42\n"), "", "")
+	resource, err := db.CreateResource(ctx, user.ID, "Example", "example.conf", []byte("answer=42\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +38,7 @@ func testDatabase(t *testing.T) (*store.Store, User, Resource) {
 func testDatabaseURL(t *testing.T) string { return testsupport.DatabaseURL(t) }
 
 func newTestApp(db *store.Store) *App {
-	app := &App{db: db, upstream: upstream.New(4 << 20), cfg: Config{
+	app := &App{db: db, cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test",
 		RegistrationMode: auth.RegistrationClosed, AnonymousEnabled: true,
 	}}

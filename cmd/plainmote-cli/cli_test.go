@@ -18,7 +18,6 @@ import (
 	"plainmote/internal/auth"
 	"plainmote/internal/store"
 	"plainmote/internal/testsupport"
-	"plainmote/internal/upstream"
 	"plainmote/internal/web"
 )
 
@@ -107,7 +106,7 @@ func newHarness(t *testing.T) *harness {
 		PublicURL: server.URL, MaxContent: 4 << 20, SessionTTL: time.Hour,
 		RegistrationMode: auth.RegistrationClosed, Version: "test",
 		AnonymousEnabled: true,
-	}, db, upstream.New(4<<20), nil)
+	}, db, nil)
 	handler = app.Handler()
 	return &harness{t: t, db: db, user: user, server: server, config: t.TempDir()}
 }
@@ -162,7 +161,7 @@ func (h *harness) signIn(scope string) {
 
 func (h *harness) resource(name, filename, body string) store.Resource {
 	h.t.Helper()
-	r, err := h.db.CreateResource(context.Background(), h.user.ID, name, filename, []byte(body), "", "")
+	r, err := h.db.CreateResource(context.Background(), h.user.ID, name, filename, []byte(body), "")
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -344,7 +343,7 @@ func TestEdit(t *testing.T) {
 	// Saved elsewhere while the editor was open, nobody at the terminal: the
 	// edit is kept, not lost and not forced.
 	elsewhere := func(path string) {
-		if err := h.db.UpdateResource(context.Background(), h.user.ID, conf.ID, "nginx", "nginx.conf", []byte("worker_processes 4;\n"), "utf-8", ""); err != nil {
+		if err := h.db.UpdateResource(context.Background(), h.user.ID, conf.ID, "nginx", "nginx.conf", []byte("worker_processes 4;\n"), "utf-8"); err != nil {
 			t.Fatal(err)
 		}
 		appendLine("mine;\n")(path)
@@ -364,7 +363,7 @@ func TestEdit(t *testing.T) {
 
 	// With someone there: save over.
 	c := editor(func(path string) {
-		_ = h.db.UpdateResource(context.Background(), h.user.ID, conf.ID, "nginx", "nginx.conf", []byte("worker_processes 8;\n"), "utf-8", "")
+		_ = h.db.UpdateResource(context.Background(), h.user.ID, conf.ID, "nginx", "nginx.conf", []byte("worker_processes 8;\n"), "utf-8")
 		appendLine("forced;\n")(path)
 	})
 	c.interactive, c.stdin = true, strings.NewReader("o\n")
@@ -381,7 +380,7 @@ func TestEdit(t *testing.T) {
 		round++
 		path := command[len(command)-1]
 		if round == 1 {
-			_ = h.db.UpdateResource(context.Background(), h.user.ID, conf.ID, "nginx", "nginx.conf", []byte("elsewhere;\n"), "utf-8", "")
+			_ = h.db.UpdateResource(context.Background(), h.user.ID, conf.ID, "nginx", "nginx.conf", []byte("elsewhere;\n"), "utf-8")
 			appendLine("first try;\n")(path)
 			return nil
 		}
@@ -451,14 +450,8 @@ func TestEditRefusesWhatIsNotText(t *testing.T) {
 	h := newHarness(t)
 	h.signIn("write")
 	h.resource("logo", "logo.png", "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
-	if _, err := h.db.CreateResource(context.Background(), h.user.ID, "remote", "", nil, "", "https://example.com/x"); err != nil {
-		t.Fatal(err)
-	}
 	if exit, _, errOut := h.run(nil, "edit", "logo.png"); exit != 1 || !strings.Contains(errOut, "not text") {
 		t.Fatalf("editing a picture: %d %s", exit, errOut)
-	}
-	if exit, _, errOut := h.run(nil, "edit", "remote"); exit != 1 || !strings.Contains(errOut, "remote address") {
-		t.Fatalf("editing a reference: %d %s", exit, errOut)
 	}
 }
 

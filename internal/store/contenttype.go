@@ -39,8 +39,8 @@ func executableType(contentType string) bool {
 	return false
 }
 
-// SafeContentType keeps an upstream response from becoming executable content
-// on the same origin as the signed-in interface. Known non-executable types
+// SafeContentType keeps a content type from becoming executable content on
+// the same origin as the signed-in interface. Known non-executable types
 // pass through unchanged; browser-executable or empty values become downloads.
 func SafeContentType(contentType string) string {
 	contentType = strings.TrimSpace(contentType)
@@ -324,8 +324,7 @@ var fallbackNames = map[string]string{
 }
 
 // subtypeRule is the shape a media subtype must have before it is used as a
-// file extension. It arrives in an upstream header rather than from the owner,
-// so it is held to a far narrower set than a filename is.
+// file extension. It is held to a far narrower set than a filename is.
 var subtypeRule = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
 
 // FallbackFilename names a resource whose owner left the filename empty, so
@@ -334,9 +333,8 @@ func FallbackFilename(contentType string) string {
 	if name, ok := fallbackNames[contentType]; ok {
 		return name
 	}
-	// A remote resource carries whatever the upstream said, which may be
-	// anything; take the type's own subtype as the extension when it looks
-	// usable, and fall back to plain text otherwise.
+	// A type outside the table takes its own subtype as the extension when
+	// it looks usable, and falls back to plain text otherwise.
 	base, _, _ := strings.Cut(contentType, ";")
 	_, subtype, found := strings.Cut(strings.TrimSpace(base), "/")
 	if found && subtypeRule.MatchString(subtype) {

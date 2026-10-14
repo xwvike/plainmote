@@ -30,7 +30,6 @@ type Resource struct {
 	// encoding for text. The editor uses it for lossless decode/edit/encode
 	// round-trips; it is separate from the HTTP media type on purpose.
 	ContentEncoding string
-	OriginURL       string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	LiveShares      int
@@ -85,13 +84,11 @@ type Version struct {
 	SealedMeta []byte
 }
 
-func (r Resource) Remote() bool { return r.OriginURL != "" }
-
 // Editable reports whether the content can be shown in a textarea. Bytes that
 // are not text must never go through a form: the browser rewrites whatever it
 // cannot represent, so saving would overwrite the file with a broken copy.
 func (r Resource) Editable() bool {
-	return !r.Remote() && TextLike(r.ContentType)
+	return TextLike(r.ContentType)
 }
 
 type AccessLog struct {

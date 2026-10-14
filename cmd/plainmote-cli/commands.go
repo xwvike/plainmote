@@ -301,9 +301,6 @@ func (c *cli) ls(ctx context.Context, args []string) error {
 			name = msg("untitled")
 		}
 		size := sizeText(r.Size)
-		if r.Remote {
-			size = msg("remote_mark")
-		}
 		version := fmt.Sprintf("v%d", r.Version)
 		if r.ExpiresAt != nil {
 			version = msg("quick_mark")
@@ -353,9 +350,6 @@ func (c *cli) cat(ctx context.Context, args []string) error {
 	target, err := api.resolve(ctx, args[0])
 	if err != nil {
 		return err
-	}
-	if target.Remote {
-		return fmt.Errorf("%s", msg("is_reference", target.label()))
 	}
 	terminal := false
 	if file, ok := c.stdout.(*os.File); ok && isTerminal(file) {

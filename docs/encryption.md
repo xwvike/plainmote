@@ -116,7 +116,6 @@ Not protected against:
 ## Limits
 
 - Encrypted resources can be decrypted only in a browser or the PlainMote command line; programs that read a share link directly receive ciphertext. Configuration meant to be read by programs should not be encrypted.
-- Remote resources cannot be encrypted.
 - Encrypted text is stored as UTF-8.
 - The operator cannot see encrypted content; abuse reports can be handled only from metadata or by taking content down.
 - Turning encryption on replaces a resource's plaintext, earlier versions included, but plaintext in database and storage backups remains until those backups expire.

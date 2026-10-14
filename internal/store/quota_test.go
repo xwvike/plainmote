@@ -27,10 +27,10 @@ func TestQuotaRefusalNamesTheLimit(t *testing.T) {
 	setPlanLimits(t, db, 2, 1<<20)
 
 	// testDatabase already created one; one more fills the plan.
-	if _, err := db.CreateResource(ctx, user.ID, "第二个", "second.yaml", []byte("a: 1\n"), "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, user.ID, "第二个", "second.yaml", []byte("a: 1\n"), ""); err != nil {
 		t.Fatal(err)
 	}
-	_, err := db.CreateResource(ctx, user.ID, "第三个", "third.yaml", []byte("a: 1\n"), "", "")
+	_, err := db.CreateResource(ctx, user.ID, "第三个", "third.yaml", []byte("a: 1\n"), "")
 	if !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("a full account must refuse with ErrQuotaExceeded, got %v", err)
 	}
@@ -43,7 +43,7 @@ func TestQuotaRefusalNamesTheLimit(t *testing.T) {
 	}
 
 	setPlanLimits(t, db, 10, 64)
-	_, err = db.CreateResource(ctx, user.ID, "大文件", "big.yaml", bytes.Repeat([]byte("a"), 128), "", "")
+	_, err = db.CreateResource(ctx, user.ID, "大文件", "big.yaml", bytes.Repeat([]byte("a"), 128), "")
 	if !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("an oversized body must refuse with ErrQuotaExceeded, got %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRefusedUploadLeavesNoObject(t *testing.T) {
 	setPlanLimits(t, db, 10, 64)
 
 	before := blobs.Count()
-	if _, err := db.CreateResource(ctx, user.ID, "大文件", "big.yaml", bytes.Repeat([]byte("a"), 128), "", ""); !errors.Is(err, ErrQuotaExceeded) {
+	if _, err := db.CreateResource(ctx, user.ID, "大文件", "big.yaml", bytes.Repeat([]byte("a"), 128), ""); !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("expected a quota refusal, got %v", err)
 	}
 	if after := blobs.Count(); after != before {
@@ -84,7 +84,7 @@ func TestQuotaHoldsUnderConcurrentUploads(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := db.CreateResource(ctx, user.ID, fmt.Sprintf("并发 %d", i), fmt.Sprintf("c-%d.yaml", i), []byte("a: 1\n"), "", "")
+			_, err := db.CreateResource(ctx, user.ID, fmt.Sprintf("并发 %d", i), fmt.Sprintf("c-%d.yaml", i), []byte("a: 1\n"), "")
 			created[i] = err == nil
 		}()
 	}
@@ -105,7 +105,7 @@ func TestUpdateIsMeasuredAgainstWhatItReplaces(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
 	body := bytes.Repeat([]byte("a"), 100)
-	resource, err := db.CreateResource(ctx, user.ID, "刚好", "exact.yaml", body, "", "")
+	resource, err := db.CreateResource(ctx, user.ID, "刚好", "exact.yaml", body, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,10 +116,10 @@ func TestUpdateIsMeasuredAgainstWhatItReplaces(t *testing.T) {
 	// Not one byte of headroom left.
 	setPlanLimits(t, db, 10, usage.StorageBytes)
 
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, "刚好", "exact.yaml", bytes.Repeat([]byte("b"), 100), "", ""); err != nil {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, "刚好", "exact.yaml", bytes.Repeat([]byte("b"), 100), ""); err != nil {
 		t.Fatalf("a same-size rewrite must fit, got %v", err)
 	}
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, "更大", "exact.yaml", bytes.Repeat([]byte("b"), 101), "", ""); !errors.Is(err, ErrQuotaExceeded) {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, "更大", "exact.yaml", bytes.Repeat([]byte("b"), 101), ""); !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("one byte over must be refused, got %v", err)
 	}
 }

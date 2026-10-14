@@ -82,7 +82,6 @@ type resource struct {
 	Encoding  string    `json:"encoding"`
 	Version   int       `json:"version"`
 	UpdatedAt time.Time `json:"updated_at"`
-	Remote    bool      `json:"remote"`
 	Editable  bool      `json:"editable"`
 	Encrypted bool      `json:"encrypted"`
 	TakenDown bool      `json:"taken_down"`

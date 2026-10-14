@@ -81,7 +81,7 @@ Tokens are stored only as digests. Suspending the account ends every authorizati
 - A `resource` is an ID, an ID prefix of at least six characters, an exact name or filename, or the address of the resource's page or of one of its share links. Naming a resource by a share link's address neither uses up the link nor requires it to still work.
 - `update_resource` is refused when `base_version` is no longer the current version, so newer content is never overwritten. The app should read again and redo its change. Text identical to the current text is not a conflict: it saves nothing.
 - `share_resource` takes `expires_in` as a duration such as `1h`, `24h` or `7d` (at most `30d`; default `7d`), and `max_uses` from `0` (no limit) to 1,000,000. An app cannot make a link that never expires; the owner can, on the resource's page. Links created by an app are marked in the resource's share list with the app's name.
-- Binary content is described rather than returned. Remote resources are not read through the server; the tool gives their origin address instead. Quick shares can be listed and read, but not updated or shared again.
+- Binary content is described rather than returned. Text longer than 256 KiB is returned in parts. Quick shares can be listed and read, but not updated or shared again.
 - A refusal, such as a conflict or a full quota, is returned as a tool result with `isError` set and a message the model can act on. A resource of another account is reported exactly as one that does not exist.
 
 ## Encrypted resources

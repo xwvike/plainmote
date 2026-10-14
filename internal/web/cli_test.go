@@ -30,15 +30,11 @@ func TestCLIEditCommand(t *testing.T) {
 func TestResourcePageOffersTheEditCommand(t *testing.T) {
 	db, user, text := testDatabase(t)
 	ctx := context.Background()
-	picture, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not\x00text"), "", "")
+	picture, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not\x00text"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	remote, err := db.CreateResource(ctx, user.ID, "Upstream", "remote.txt", nil, "", "https://example.com/remote.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	banned, err := db.CreateResource(ctx, user.ID, "Banned", "banned.txt", []byte("text\n"), "", "")
+	banned, err := db.CreateResource(ctx, user.ID, "Banned", "banned.txt", []byte("text\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +66,7 @@ func TestResourcePageOffersTheEditCommand(t *testing.T) {
 	if !strings.Contains(body, "<code><b>$</b> "+command+"</code>") || !strings.Contains(body, `data-copy="`+command+`"`) || !strings.Contains(body, `<a class="txt" href="/developers/cli">`) {
 		t.Fatal("a text resource does not offer its edit command and the way to the command line")
 	}
-	for _, path := range []string{"/resources/" + picture.ID, "/resources/" + remote.ID, "/resources/" + banned.ID, "/resources/new"} {
+	for _, path := range []string{"/resources/" + picture.ID, "/resources/" + banned.ID, "/resources/new"} {
 		if strings.Contains(page(path), `class="cli-edit"`) {
 			t.Errorf("%s offers an edit command the command line cannot carry out", path)
 		}

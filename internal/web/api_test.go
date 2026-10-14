@@ -246,14 +246,6 @@ func TestTheResourceAPI(t *testing.T) {
 		t.Fatalf("create: %d %+v", created.Code, made)
 	}
 
-	remote, err := db.CreateResource(context.Background(), user.ID, "remote", "", nil, "", "https://example.com/config")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ref := callAPI(t, app, apiCall{method: http.MethodGet, path: apiPrefix + "resources/" + remote.ID + "/content", token: token}); ref.Code != http.StatusConflict {
-		t.Fatalf("a reference has no content to read: %d", ref.Code)
-	}
-
 	if out := callAPI(t, app, apiCall{method: http.MethodDelete, path: apiPrefix + "token", token: token}); out.Code != http.StatusNoContent {
 		t.Fatalf("sign out: %d", out.Code)
 	}
@@ -350,7 +342,7 @@ func TestTheAPIOnlyTakesBearerTokens(t *testing.T) {
 func TestAnotherAccountsTokenReachesNothing(t *testing.T) {
 	db, owner, resource := testDatabase(t)
 	ctx := context.Background()
-	if err := db.UpdateResource(ctx, owner.ID, resource.ID, "Owner Secret Name", "owner-secret.conf", []byte("OWNER-SECRET\n"), "utf-8", ""); err != nil {
+	if err := db.UpdateResource(ctx, owner.ID, resource.ID, "Owner Secret Name", "owner-secret.conf", []byte("OWNER-SECRET\n"), "utf-8"); err != nil {
 		t.Fatal(err)
 	}
 	intruder, err := db.UpsertUser(ctx, "200", "mallory", "", "")

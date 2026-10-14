@@ -41,7 +41,7 @@ func TestParseByteRange(t *testing.T) {
 func TestOwnerPreviewServesByteRanges(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	resource, err := db.CreateResource(ctx, user.ID, "Audio", "sample.mp3", []byte("0123456789"), "", "")
+	resource, err := db.CreateResource(ctx, user.ID, "Audio", "sample.mp3", []byte("0123456789"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

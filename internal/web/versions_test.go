@@ -322,7 +322,7 @@ func TestSavingInPlace(t *testing.T) {
 	// Saved elsewhere meanwhile: the stale save is refused with the parts
 	// that say so and let the next save go over it.
 	form.Set("content", "answer=44\n")
-	if err := db.UpdateResource(context.Background(), user.ID, resource.ID, "Renamed", resource.Filename, []byte("answer=45\n"), "utf-8", ""); err != nil {
+	if err := db.UpdateResource(context.Background(), user.ID, resource.ID, "Renamed", resource.Filename, []byte("answer=45\n"), "utf-8"); err != nil {
 		t.Fatal(err)
 	}
 	form.Set("base_version", "2")
@@ -430,7 +430,7 @@ func TestFileVersionsAreShownNotDiffed(t *testing.T) {
 	ctx := context.Background()
 	client := newVersionClient(t, db, user)
 	first, second := pngOf(t, 12, 8, 40), pngOf(t, 30, 20, 200)
-	logo, err := db.CreateResource(ctx, user.ID, "logo", "logo.png", first, "", "")
+	logo, err := db.CreateResource(ctx, user.ID, "logo", "logo.png", first, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,7 +478,7 @@ func TestFileVersionsAreShownNotDiffed(t *testing.T) {
 	}
 
 	// Text against a file: each side as itself, nothing diffed.
-	mixed, err := db.CreateResource(ctx, user.ID, "mixed", "", []byte("plain: text\n"), "", "")
+	mixed, err := db.CreateResource(ctx, user.ID, "mixed", "", []byte("plain: text\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +511,7 @@ func TestReplacingAVideoWithAnImage(t *testing.T) {
 	client := newVersionClient(t, db, user)
 	video := []byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom\x00\x00\x00\x08free")
 	picture := pngOf(t, 16, 9, 90)
-	clip, err := db.CreateResource(ctx, user.ID, "clip", "movie.mp4", video, "", "")
+	clip, err := db.CreateResource(ctx, user.ID, "clip", "movie.mp4", video, "")
 	if err != nil || clip.ContentType != "video/mp4" {
 		t.Fatalf("a video starts as a video: %q %v", clip.ContentType, err)
 	}

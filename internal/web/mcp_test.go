@@ -300,11 +300,11 @@ func TestMCPReadTools(t *testing.T) {
 	token := mcpToken(t, db, alice, "read", testMCPResource).AccessToken
 
 	big := strings.Repeat("aé", 200_000) // 600 000 bytes; two-byte runes straddle every boundary
-	long, err := db.CreateResource(ctx, alice.ID, "Long log", "long.txt", []byte(big), "", "")
+	long, err := db.CreateResource(ctx, alice.ID, "Long log", "long.txt", []byte(big), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, alice.ID, "Logo", "logo.png", append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...), "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, alice.ID, "Logo", "logo.png", append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...), ""); err != nil {
 		t.Fatal(err)
 	}
 	sealedID := uuid.NewString()
@@ -416,7 +416,7 @@ func TestMCPToolsStayWithinTheAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateResource(ctx, bob.ID, "Bob's notes", "bob.txt", []byte("bob\n"), "", ""); err != nil {
+	if _, err := db.CreateResource(ctx, bob.ID, "Bob's notes", "bob.txt", []byte("bob\n"), ""); err != nil {
 		t.Fatal(err)
 	}
 	share, err := db.CreateShare(ctx, alice.ID, example.ID, "", time.Hour, 0)

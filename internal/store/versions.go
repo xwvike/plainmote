@@ -66,7 +66,6 @@ type currentContent struct {
 	Version      int
 	VersionAt    time.Time
 	RestoredFrom int
-	Remote       bool
 	Filename     string
 	SealedMeta   []byte
 }
@@ -78,11 +77,11 @@ func lockContentTx(ctx context.Context, tx pgx.Tx, ownerID, id string) (currentC
 	var current currentContent
 	err := tx.QueryRow(ctx, `
 SELECT content_key, content_size, content_type, content_encoding, content_sha256,
-       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), origin_url <> '', filename, sealed_meta
+       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), filename, sealed_meta
 FROM resources WHERE id = $1 AND owner_id = $2
 FOR UPDATE
 `, id, ownerID).Scan(&current.Key, &current.Size, &current.Type, &current.Encoding, &current.SHA256,
-		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Remote, &current.Filename, &current.SealedMeta)
+		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Filename, &current.SealedMeta)
 	if err != nil {
 		return currentContent{}, translateNotFound(err)
 	}
@@ -93,7 +92,7 @@ FOR UPDATE
 // not copied: the key simply moves from the resource row to the history row,
 // which is why a save no longer deletes the object it replaces.
 func retireTx(ctx context.Context, tx pgx.Tx, id string, current currentContent, now time.Time) error {
-	if current.Key == "" || current.Remote {
+	if current.Key == "" {
 		return nil
 	}
 	_, err := tx.Exec(ctx, `
@@ -311,9 +310,6 @@ func (d *Store) RestoreVersion(ctx context.Context, ownerID, resourceID string, 
 		if err != nil {
 			return err
 		}
-		if current.Remote {
-			return ErrNotFound
-		}
 		// Gone between the read above and the lock: deleted, or trimmed by a
 		// save that needed the room.
 		var still int
@@ -376,7 +372,7 @@ func (d *Store) CopyVersion(ctx context.Context, ownerID, resourceID string, num
 	if err != nil {
 		return Resource{}, fmt.Errorf("read version %d: %w: %w", number, ErrInternal, err)
 	}
-	return d.CreateResource(ctx, ownerID, name, RefitFilename(resource.Filename, source.Filename, body), body, source.ContentEncoding, "")
+	return d.CreateResource(ctx, ownerID, name, RefitFilename(resource.Filename, source.Filename, body), body, source.ContentEncoding)
 }
 
 // DeleteVersion removes one earlier version and its object for good - for a

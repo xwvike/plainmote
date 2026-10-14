@@ -15,9 +15,6 @@
       <span class="sp"><a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "back_to_resource"}}</a></span>
     </div>
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
-    {{if .Resource.Remote}}
-    <p class="ro">{{tr .Locale "history_remote"}}</p>
-    {{else}}
     <div class="panel">
       <div class="lh"><span>{{tr .Locale "col_version"}}</span><span>{{tr .Locale "col_saved"}}</span><span class="z">{{tr .Locale "size"}}</span><span>{{tr .Locale "col_last_delivered"}}</span><span></span></div>
       {{/* One row per version, current first. Which links last received a
@@ -51,7 +48,6 @@
       </ul>
       <div class="pf"><span class="hint">{{if .HistoryCount}}{{printf (tr .Locale "history_rules") (bytesText .HistoryBytes) .HistoryKeep .HistoryDays}}{{else}}{{printf (tr .Locale "history_empty") .HistoryKeep .HistoryDays}}{{end}}</span></div>
     </div>
-    {{end}}
   </main>
 
   {{if .RemoveVersion}}<div class="scrim"></div>{{end}}

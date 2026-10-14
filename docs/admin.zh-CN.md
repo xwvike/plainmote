@@ -19,7 +19,7 @@ PlainMote 不包含管理页面。运营者通过一组以 Ed25519 签名保护�
 
 管理接口有以下限制：
 
-- **不接触内容**：任何接口都不返回资源正文、历史版本正文、分享链接地址或访问记录中的访问者信息（IP 地址与客户端信息）。运营者只能看到元数据与汇总数字；远程资源只给出源地址的主机名。
+- **不接触内容**：任何接口都不返回资源正文、历史版本正文、分享链接地址或访问记录中的访问者信息（IP 地址与客户端信息）。运营者只能看到元数据与汇总数字。
 - **变更必须说明原因并留痕**：每一项变更都须附带原因，并写入只追加的审计记录，记录时间、所用密钥、操作、对象、原因及来源 IP。审计记录不能修改或删除，也不随访问记录的保留期清理。
 - **注册开关不在其中**：是否允许新账号注册由 `PLAINMOTE_REGISTRATION_MODE` 在启动时决定。
 
@@ -215,10 +215,8 @@ PLAINMOTE-ADMIN-V1
 | `owner.id`、`owner.login` | string | 所有者；未登录创建的快速分享 `owner.login` 为 `anonymous` |
 | `name` | string | 名称 |
 | `filename` | string | 文件名 |
-| `kind` | string | `stored`（保存在本服务的内容）或 `remote`（远程资源） |
 | `content_type` | string | 内容类型；端到端加密的资源为 `application/vnd.plainmote.sealed`，其 `name` 与 `filename` 为空 |
 | `size` | integer | 当前内容的大小 |
-| `origin_host` | string | 远程资源源地址的主机名；不返回完整地址 |
 | `version` | integer | 当前版本号 |
 | `history_versions` | integer | 历史版本数量 |
 | `history_bytes` | integer | 历史版本占用的容量 |
@@ -289,11 +287,11 @@ PLAINMOTE-ADMIN-V1
   },
   "health": { "database": "ok", "object_storage": "ok" },
   "users": { "total": 12, "suspended": 0, "signed_in_last_30d": 7, "master_password": 3 },
-  "resources": { "total": 84, "remote": 3, "taken_down": 0, "current_bytes": 5996544, "history_bytes": 8540160, "history_versions": 41, "quick_shares": 5, "encrypted": 9 },
+  "resources": { "total": 84, "taken_down": 0, "current_bytes": 5996544, "history_bytes": 8540160, "history_versions": 41, "quick_shares": 5, "encrypted": 9 },
   "links": { "live": 51, "ended_last_7d": 9 },
   "access": {
-    "last_24h": { "success": 120, "expired": 3, "exhausted": 1, "revoked": 0, "upstream_error": 0, "taken_down": 0, "suspended": 0 },
-    "last_7d": { "success": 902, "expired": 17, "exhausted": 4, "revoked": 2, "upstream_error": 0, "taken_down": 0, "suspended": 0 }
+    "last_24h": { "success": 120, "expired": 3, "exhausted": 1, "revoked": 0, "taken_down": 0, "suspended": 0 },
+    "last_7d": { "success": 902, "expired": 17, "exhausted": 4, "revoked": 2, "taken_down": 0, "suspended": 0 }
   },
   "anonymous": { "live_pastes": 6, "bytes": 81920, "limit_bytes": 21474836480 },
   "prune": { "last_run_at": "2026-10-03T04:00:00Z", "access_logs": 0, "sessions": 2, "pastes": 1, "versions": 0 }

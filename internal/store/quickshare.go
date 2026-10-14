@@ -121,9 +121,9 @@ func (d *Store) insertQuickShare(ctx context.Context, ownerID string, resource R
 		// An id chosen by the browser that is already taken is refused, as
 		// creating an encrypted resource under it would be.
 		tag, err := tx.Exec(ctx, `
-INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding, origin_url,
+INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding,
                       created_at, updated_at, version, version_at, content_sha256, expires_at, sealed_key, sealed_meta)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, '', $9, $9, 1, $9, $10, $11, $12, $13)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO NOTHING
 `, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
 			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, resource.ContentSHA256, resource.ExpiresAt,

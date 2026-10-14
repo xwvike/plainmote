@@ -412,9 +412,7 @@ RETURNING l.id, l.resource_id, l.name, l.sealed_key
 			LinkID: linkID, LinkName: linkName,
 			Outcome: OutcomeSuccess, Status: httpStatusOK, Detail: "link accepted",
 		}
-		if !resource.Remote() {
-			event.Version = resource.Version
-		}
+		event.Version = resource.Version
 		if err := insertAccessTx(ctx, tx, event, meta, now); err != nil {
 			return err
 		}
@@ -502,7 +500,7 @@ SELECT CASE
   WHEN r.content_type LIKE 'audio/%' OR r.content_type LIKE 'video/%' THEN 'media'
   ELSE '' END
 FROM links l JOIN resources r ON r.id = l.resource_id JOIN users u ON u.id = r.owner_id
-WHERE l.token_hash = $1 AND r.origin_url = '' AND r.taken_down_at IS NULL AND u.suspended_at IS NULL`, hashToken(token), EncryptedContentType).Scan(&shell)
+WHERE l.token_hash = $1 AND r.taken_down_at IS NULL AND u.suspended_at IS NULL`, hashToken(token), EncryptedContentType).Scan(&shell)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ShellNone, nil
 	}

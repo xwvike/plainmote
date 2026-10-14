@@ -205,7 +205,6 @@ type mcpResourceItem struct {
 	UpdatedAt  time.Time  `json:"updated_at"`
 	Kind       string     `json:"kind,omitempty"`
 	Text       bool       `json:"text,omitempty"`
-	Remote     bool       `json:"remote,omitempty"`
 	Encrypted  bool       `json:"encrypted,omitempty"`
 	TakenDown  bool       `json:"taken_down,omitempty"`
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
@@ -230,7 +229,7 @@ func (a *App) mcpResourceItem(r *http.Request, resource Resource) mcpResourceIte
 	return mcpResourceItem{
 		ID: resource.ID, Name: resource.Name, Filename: resource.Filename, Type: resource.ContentType,
 		Size: resource.ContentSize, Version: resource.Version, UpdatedAt: resource.UpdatedAt, Kind: kind,
-		Text: !resource.Remote() && store.TextLike(resource.ContentType), Remote: resource.Remote(),
+		Text:      store.TextLike(resource.ContentType),
 		TakenDown: resource.TakenDown, ExpiresAt: resource.ExpiresAt, ShareLinks: resource.LiveShares, URL: page,
 	}
 }
@@ -383,9 +382,6 @@ func (a *App) mcpReadResource(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 		return mcpProblem("%s", mcpEncryptedText)
 	}
 	page := a.baseURL(x.r) + "/resources/" + resource.ID
-	if resource.Remote() {
-		return mcpProblem("%s points at a remote address, %s; PlainMote keeps no copy of its content.", mcpLabel(resource), resource.OriginURL)
-	}
 	ctx := x.r.Context()
 	version, contentType, encoding, size := resource.Version, resource.ContentType, resource.ContentEncoding, resource.ContentSize
 	var stored []byte

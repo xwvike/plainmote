@@ -212,7 +212,6 @@ type apiResource struct {
 	Encoding  string    `json:"encoding,omitempty"`
 	Version   int       `json:"version"`
 	UpdatedAt time.Time `json:"updated_at"`
-	Remote    bool      `json:"remote"`
 	Editable  bool      `json:"editable"`
 	Encrypted bool      `json:"encrypted,omitempty"`
 	TakenDown bool      `json:"taken_down,omitempty"`
@@ -232,8 +231,8 @@ func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
 	return apiResource{
 		ID: resource.ID, Name: resource.Name, Filename: resource.Filename, Size: resource.ContentSize,
 		Type: resource.ContentType, Encoding: resource.ContentEncoding, Version: resource.Version,
-		UpdatedAt: resource.UpdatedAt, Remote: resource.Remote(), Encrypted: encrypted,
-		Editable:  resource.Editable() && !encrypted && !resource.Remote() && !resource.QuickShare(),
+		UpdatedAt: resource.UpdatedAt, Encrypted: encrypted,
+		Editable:  resource.Editable() && !encrypted && !resource.QuickShare(),
 		TakenDown: resource.TakenDown, ExpiresAt: resource.ExpiresAt, URL: a.baseURL(r) + "/resources/" + resource.ID,
 		SealedKey: b64url(resource.SealedKey), SealedMeta: b64url(resource.SealedMeta),
 	}
@@ -273,15 +272,11 @@ func (a *App) apiGetResource(w http.ResponseWriter, r *http.Request, user User, 
 func apiVersionTag(version int) string { return `"v` + strconv.Itoa(version) + `"` }
 
 // apiReadContent sends the stored bytes as they are, in the encoding they
-// were saved in, which the headers name. A reference has no stored bytes.
+// were saved in, which the headers name.
 func (a *App) apiReadContent(w http.ResponseWriter, r *http.Request, user User, id string) {
 	resource, err := a.db.ResourceForOwner(r.Context(), user.ID, id)
 	if err != nil {
 		a.apiRefused(w, "read content", err)
-		return
-	}
-	if resource.Remote() {
-		a.apiFail(w, http.StatusConflict, "reference", "this resource points at a remote address and has no stored content")
 		return
 	}
 	body, size, err := a.db.OpenContent(r.Context(), resource)
@@ -312,10 +307,6 @@ func (a *App) apiWriteContent(w http.ResponseWriter, r *http.Request, user User,
 	resource, err := a.db.ResourceForOwner(r.Context(), user.ID, id)
 	if err != nil {
 		a.apiRefused(w, "save content", err)
-		return
-	}
-	if resource.Remote() {
-		a.apiFail(w, http.StatusConflict, "reference", "this resource points at a remote address and has no stored content")
 		return
 	}
 	base := 0
@@ -421,7 +412,7 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	resource, err := a.db.CreateResource(r.Context(), user.ID, r.FormValue("name"), strings.TrimSpace(r.FormValue("filename")),
-		content, strings.TrimSpace(r.FormValue("encoding")), "")
+		content, strings.TrimSpace(r.FormValue("encoding")))
 	if err != nil {
 		a.apiRefused(w, "create resource", err)
 		return

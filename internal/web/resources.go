@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -64,27 +63,6 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleNewResource renders the same page as an existing resource, with empty
-// fields: creating and editing are one screen.
-// Resources come in two kinds, and which one you are making is settled by the
-// button you pressed rather than by a control inside the form: an upload keeps
-// a copy here, a remote link keeps only a reference.
-// A resource is either kept here or referenced elsewhere. Uploading is not a
-// third kind: a chosen file is read into the editor and saved from there, the
-// same as text that was typed, so it is a way of filling the box rather than a
-// thing to decide before opening it. "upload" is still accepted on the way in,
-// because links to the old form exist.
-const (
-	kindLocal  = "local"
-	kindRemote = "remote"
-)
-
-// actionPreview asks the server to read the address and show what comes back,
-// and to do nothing else. Pulling an upstream to look at it is not the same
-// intent as keeping it, and on the new-resource screen there is nothing to
-// keep yet - the form has not been filled in.
-const actionPreview = "preview"
-
 // actionDelete removes the resource for good. It is reached from a confirm
 // dialog rather than the save bar, because nothing here undoes it.
 const actionDelete = "delete"
@@ -92,18 +70,13 @@ const actionDelete = "delete"
 // actionKeep makes a quick share an ordinary resource.
 const actionKeep = "keep"
 
-func newResourceKind(value string) string {
-	if value == kindRemote {
-		return kindRemote
-	}
-	return kindLocal
-}
-
+// handleNewResource renders the same page as an existing resource, with empty
+// fields: creating and editing are one screen. A chosen file is read into the
+// editor and saved from there, the same as text that was typed.
 func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user User, sessionID string) {
 	if r.Method == http.MethodGet {
 		data := a.basePage(r, user)
 		data.IsNew = true
-		data.NewKind = newResourceKind(r.URL.Query().Get("kind"))
 		var err error
 		if data.HasKeyring, err = a.hasKeyring(r, user.ID); err != nil {
 			a.renderError(w, http.StatusInternalServerError, err)
@@ -117,18 +90,9 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	form, err := readResourceForm(w, r, a.cfg.MaxContent)
-	if err == nil && r.FormValue("action") == actionPreview {
-		data := a.basePage(r, user)
-		data.IsNew = true
-		data.NewKind = newResourceKind(r.FormValue("kind"))
-		data.Resource = Resource{Name: form.Name, Filename: form.Filename, OriginURL: form.OriginURL}
-		a.previewUpstream(r.Context(), &data, form.OriginURL)
-		a.renderTemplate(w, r, http.StatusOK, "resource.html", data)
-		return
-	}
 	if err == nil {
 		var resource Resource
-		resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.ContentEncoding, form.OriginURL)
+		resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.ContentEncoding)
 		if err == nil {
 			http.Redirect(w, r, "/resources/"+resource.ID+"?created=1", http.StatusSeeOther)
 			return
@@ -143,8 +107,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	}
 	data := a.basePageWithError(r, user, text)
 	data.IsNew = true
-	data.NewKind = newResourceKind(r.FormValue("kind"))
-	data.Resource = Resource{Name: form.Name, Filename: form.Filename, ContentSize: int64(len(form.Content)), ContentEncoding: form.ContentEncoding, OriginURL: form.OriginURL}
+	data.Resource = Resource{Name: form.Name, Filename: form.Filename, ContentSize: int64(len(form.Content)), ContentEncoding: form.ContentEncoding}
 	data.ContentEncoding = form.ContentEncoding
 	data.ContentEOL = form.ContentEOL
 	data.ContentText = body
@@ -172,10 +135,9 @@ func editableText(content []byte, filename, encoding string) (string, bool) {
 // resourceForm is one submission of the resource screen. An uploaded file wins
 // over the textarea, so picking a file and saving replaces the content.
 type resourceForm struct {
-	Name      string
-	Filename  string
-	OriginURL string
-	Content   []byte
+	Name     string
+	Filename string
+	Content  []byte
 	// ContentEncoding is the source file encoding selected or detected in the
 	// editor. Uploaded bytes already use it; textarea content is converted to
 	// it before reaching the store.
@@ -218,7 +180,6 @@ func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (r
 	form = resourceForm{
 		Name:            r.FormValue("name"),
 		Filename:        strings.TrimSpace(r.FormValue("filename")),
-		OriginURL:       strings.TrimSpace(r.FormValue("origin_url")),
 		Content:         []byte(r.FormValue("content")),
 		ContentEncoding: strings.TrimSpace(r.FormValue("content_encoding")),
 		ContentEOL:      store.NormalizeEOLName(r.FormValue("content_eol")),
@@ -236,7 +197,7 @@ func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (r
 			form.Filename = store.RefitFilename(form.Filename, uploadedAs, uploaded)
 		}
 	}
-	if form.OriginURL == "" && form.ContentGiven && !form.Uploaded {
+	if form.ContentGiven && !form.Uploaded {
 		// Line endings first: the submitted value has been through a textarea,
 		// which the browser normalises to CRLF on the way out no matter what
 		// the file actually used.
@@ -248,7 +209,7 @@ func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (r
 		form.Content = encoded
 		form.ContentEncoding = encodingName
 	}
-	if form.OriginURL == "" && int64(len(form.Content)) > maxBytes {
+	if int64(len(form.Content)) > maxBytes {
 		return form, errors.New("content is too large")
 	}
 	return form, nil
@@ -329,15 +290,6 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest, nil, nil)
 			return
 		}
-		if r.FormValue("action") == actionPreview {
-			// Render against what is in the form rather than what is stored, so
-			// a pasted address can be read before deciding to keep it. The
-			// stored row is untouched either way.
-			pending := resource
-			pending.Name, pending.Filename, pending.OriginURL = form.Name, form.Filename, form.OriginURL
-			a.renderResourcePage(w, r, user, pending, "", http.StatusOK, nil, nil)
-			return
-		}
 		content := form.Content
 		if !form.ContentGiven {
 			// A nil body tells the store to retain the current object.
@@ -346,7 +298,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		base := versionNumber(r.FormValue("base_version"))
 		result, err := a.db.SaveResource(r.Context(), user.ID, resourceID, store.ResourceEdit{
 			Name: form.Name, Filename: form.Filename, Content: content,
-			ContentEncoding: form.ContentEncoding, OriginURL: form.OriginURL, BaseVersion: base,
+			ContentEncoding: form.ContentEncoding, BaseVersion: base,
 		})
 		if conflict := (*store.VersionConflict)(nil); errors.As(err, &conflict) {
 			// Nothing was written, and nothing is lost: the page comes back
@@ -369,7 +321,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			// that cannot come back, and the page says so instead of quietly
 			// showing the old version in their place.
 			pending := resource
-			pending.Name, pending.Filename, pending.OriginURL = form.Name, form.Filename, form.OriginURL
+			pending.Name, pending.Filename = form.Name, form.Filename
 			pendingBody := content
 			if pendingBody != nil {
 				pending.ContentEncoding = form.ContentEncoding
@@ -381,7 +333,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			a.renderResourcePage(w, r, user, pending, text, status, pendingBody, nil)
 			return
 		}
-		// saved=0 is a save that changed only the name or the address: the
+		// saved=0 is a save that changed only the name: the
 		// content, and so the version, stayed where it was.
 		values := url.Values{"saved": {"0"}}
 		if result.NewVersion {
@@ -434,13 +386,11 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	data.Error = pageError
 	// A request from parts.js renders everything but the editor, so it does
 	// not read the body - except for a resource with no filename, whose body
-	// or upstream type is what names it in the addresses of its links.
+	// is what names it in the addresses of its links.
 	parts := wantsParts(r)
-	if !resource.Remote() {
-		if data.HistoryCount, err = a.db.HistoryCount(r.Context(), user.ID, resource.ID); err != nil {
-			a.renderError(w, http.StatusInternalServerError, err)
-			return
-		}
+	if data.HistoryCount, err = a.db.HistoryCount(r.Context(), user.ID, resource.ID); err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
 	}
 	query := r.URL.Query()
 	// The confirmations are read from the address the action redirected to,
@@ -458,7 +408,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	// numbered save while its version is still the current one.
 	data.Created = query.Get("created") == "1" && resource.Version == 1
 	if query.Has("saved") && data.RestoredFrom == 0 {
-		if saved := versionNumber(query.Get("saved")); saved == 0 || (saved == resource.Version && !resource.Remote()) {
+		if saved := versionNumber(query.Get("saved")); saved == 0 || saved == resource.Version {
 			data.Saved, data.SavedVersion = true, saved
 		}
 	}
@@ -475,17 +425,16 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
 		}
-		if !resource.Remote() && !resource.QuickShare() {
+		if !resource.QuickShare() {
 			if data.HistoryJSON, err = a.historyJSON(r, user.ID, resource.ID); err != nil {
 				a.renderError(w, http.StatusInternalServerError, err)
 				return
 			}
 		}
 	}
-	// Reconsider only old opaque local rows with an explicitly textual name.
-	// A known image whose filename happens to end in .txt, and remote resources
-	// with no stored body, must keep their existing handling.
-	recoverOpaqueText := !resource.Remote() && resource.ContentType == "application/octet-stream" && store.TextFilename(resource.Filename)
+	// Reconsider only old opaque rows with an explicitly textual name. A known
+	// image whose filename happens to end in .txt must keep its handling.
+	recoverOpaqueText := resource.ContentType == "application/octet-stream" && store.TextFilename(resource.Filename)
 	if (resource.Editable() || recoverOpaqueText) && (!parts || resource.Filename == "") {
 		text := pendingBody
 		if text == nil {
@@ -513,19 +462,8 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	data.Resource = resource
 	data.ContentEncoding = resource.ContentEncoding
 
-	// The type a request would be served with decides what an unnamed
-	// resource is called in its own address, so it has to be known before the
-	// links are rendered. For a remote resource that means asking upstream,
-	// which is the same fetch the preview needs.
-	servedType := resource.ContentType
-	if resource.Remote() && (!parts || resource.Filename == "") {
-		if fetched := a.previewUpstream(r.Context(), &data, resource.OriginURL); fetched != "" {
-			servedType = fetched
-		}
-	}
-
-	data.Shares = buildShareViews(data.BaseURL, resource, servedType, shares, now)
-	data.EndedShares = buildShareViews(data.BaseURL, resource, servedType, ended, now)
+	data.Shares = buildShareViews(data.BaseURL, resource, shares, now)
+	data.EndedShares = buildShareViews(data.BaseURL, resource, ended, now)
 
 	// The list is on the page, so the only thing left to open is one share's
 	// terms. A stale id opens nothing rather than an empty dialog.
@@ -563,13 +501,13 @@ func (a *App) listShares(ctx context.Context, userID, resourceID string, now tim
 	return live, ended, err
 }
 
-func buildShareViews(base string, resource Resource, servedType string, shares []Link, now time.Time) []linkView {
+func buildShareViews(base string, resource Resource, shares []Link, now time.Time) []linkView {
 	views := make([]linkView, 0, len(shares))
 	for _, share := range shares {
 		ttlChoice, ttlCustom := shareTTLForm(share, now)
 		address := ""
 		if !share.Unreadable {
-			address = base + shareAddress(share.Token, deliveryFilename(resource, servedType))
+			address = base + shareAddress(share.Token, deliveryFilename(resource, resource.ContentType))
 		}
 		ended, endedAt := share.Ending(now)
 		views = append(views, linkView{
@@ -626,33 +564,6 @@ func shareDurationInput(duration time.Duration) string {
 	return text.String()
 }
 
-// previewUpstream reads the address exactly as a public request would and fills
-// in whatever of it the page can show. Nothing is stored and nothing is cached:
-// this is a live read, and it is the only way the owner sees a remote body.
-// Returns the type the address would be served as, or "" if it could not be
-// read - callers keep their own fallback in that case.
-func (a *App) previewUpstream(ctx context.Context, data *pageData, originURL string) string {
-	if strings.TrimSpace(originURL) == "" {
-		data.UpstreamError = "请先填写远程地址。"
-		return ""
-	}
-	body, contentType, err := a.upstream.Fetch(ctx, originURL)
-	if err != nil {
-		data.UpstreamError = err.Error()
-		return ""
-	}
-	servedType := store.SafeContentType(contentType)
-	data.UpstreamType = servedType
-	if store.TextLike(servedType) {
-		_, parameters, _ := mime.ParseMediaType(servedType)
-		if decoded, _, decodeErr := store.DecodeText(body, parameters["charset"]); decodeErr == nil {
-			data.UpstreamText = decoded
-			data.UpstreamTextPreview = true
-		}
-	}
-	return servedType
-}
-
 // handleRawPreview serves a resource's own bytes to its owner, so the editing
 // page can show an image or play a sound without inlining megabytes of base64
 // into the HTML. It is signed-in only and never renders as anything a browser
@@ -670,10 +581,6 @@ func (a *App) handleRawPreview(w http.ResponseWriter, r *http.Request, user User
 	}
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
-		return
-	}
-	if resource.Remote() {
-		writePlainError(w, http.StatusNotFound, "remote resources have no stored bytes")
 		return
 	}
 	a.serveOwnedBytes(w, r,

@@ -84,13 +84,6 @@ func (a *App) templateSet() *template.Template {
 		"cliEdit":   cliEditCommand,
 		"bytesText": bytesText,
 		"hasPrefix": strings.HasPrefix,
-		"originHost": func(value string) string {
-			parsed, err := url.Parse(value)
-			if err != nil || parsed.Host == "" {
-				return value
-			}
-			return parsed.Host
-		},
 		"outcomeClass": func(outcome string) string {
 			// "invalid" and "missing_token" are no longer written - an
 			// unowned refusal has no reader - but rows from before still are.
@@ -482,7 +475,6 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	}
 	data.Locale = data.Language.Locale
 	data.Error = localizePageError(data.Locale, data.Error)
-	data.UpstreamError = localizePageError(data.Locale, data.UpstreamError)
 	w.Header().Add("Vary", "Accept-Language")
 	w.Header().Add("Vary", "Cookie")
 	w.Header().Add("Vary", partsHeader)

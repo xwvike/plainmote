@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"plainmote/internal/store"
-	"plainmote/internal/upstream"
 )
 
 // TestResourcePageStaysPostable is the guarantee the whole editor rests on: the
@@ -21,7 +20,7 @@ import (
 func TestResourcePageStaysPostable(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := &App{db: db, upstream: upstream.New(4 << 20), cfg: Config{
+	app := &App{db: db, cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test",
 	}}
 	app.templates = app.templateSet()
@@ -95,10 +94,7 @@ func TestResourcePageStaysPostable(t *testing.T) {
 			t.Error("the upload form must include an accessible preview status")
 		}
 	}
-	if remotePage := createPage("/resources/new?kind=remote"); strings.Contains(remotePage, assetPath("editor.js")) || strings.Contains(remotePage, assetPath("upload.js")) {
-		t.Error("the remote resource form must not load the editor")
-	}
-	opaque, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not\x00text"), "", "")
+	opaque, err := db.CreateResource(ctx, user.ID, "Image", "image.png", []byte("not\x00text"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +108,7 @@ func TestResourcePageStaysPostable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy, err := db.CreateResource(ctx, user.ID, "Legacy text", "legacy.yaml", legacyBytes, legacyEncoding, "")
+	legacy, err := db.CreateResource(ctx, user.ID, "Legacy text", "legacy.yaml", legacyBytes, legacyEncoding)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +143,7 @@ func TestLegacyTextKeepsBytesUntilEdited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource, err := db.CreateResource(ctx, user.ID, "Legacy", "legacy.yaml", original, encodingName, "")
+	resource, err := db.CreateResource(ctx, user.ID, "Legacy", "legacy.yaml", original, encodingName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +232,7 @@ func TestEditorSavesSelectedEncodingAndLineEnding(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
 	const text = "name: 示例\nstatus: enabled\n"
-	resource, err := db.CreateResource(ctx, user.ID, "Config", "config.yaml", []byte(text), "utf-8", "")
+	resource, err := db.CreateResource(ctx, user.ID, "Config", "config.yaml", []byte(text), "utf-8")
 	if err != nil {
 		t.Fatal(err)
 	}

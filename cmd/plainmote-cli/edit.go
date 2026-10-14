@@ -146,8 +146,6 @@ func (c *cli) edit(ctx context.Context, args []string) error {
 	}
 	var held contentStore = plainContent{api: api, id: target.ID}
 	switch {
-	case target.Remote:
-		return fmt.Errorf("%s", msg("is_reference", target.label()))
 	case target.isSealed():
 		// Decrypted here, edited in a file of this machine's own, and
 		// encrypted again before it leaves.

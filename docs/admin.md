@@ -19,7 +19,7 @@ The first part of this document describes what administration covers and how it 
 
 The interface has the following limits:
 
-- **No access to content**: no endpoint returns resource content, earlier versions, share link addresses or the visitor details (IP address and client information) in access records. Operators see metadata and aggregate figures only; for a remote resource, only the host name of its origin is given.
+- **No access to content**: no endpoint returns resource content, earlier versions, share link addresses or the visitor details (IP address and client information) in access records. Operators see metadata and aggregate figures only.
 - **Every change is justified and recorded**: each change requires a reason and is written to an append-only audit log with its time, key, operation, target, reason and source IP. Audit records cannot be modified or deleted, and are not removed with the access history.
 - **Registration excluded**: whether new accounts can register is set by `PLAINMOTE_REGISTRATION_MODE` at startup.
 
@@ -215,10 +215,8 @@ An authenticated request that fails receives `{"error": "<code>", "message": "<d
 | `owner.id`, `owner.login` | string | Owner; `owner.login` is `anonymous` for quick shares made without signing in |
 | `name` | string | Name |
 | `filename` | string | Filename |
-| `kind` | string | `stored` (content kept by the service) or `remote` (remote resource) |
 | `content_type` | string | Content type; `application/vnd.plainmote.sealed` for an end-to-end encrypted resource, whose `name` and `filename` are empty |
 | `size` | integer | Size of the current content |
-| `origin_host` | string | Host name of a remote resource's origin; the full address is never returned |
 | `version` | integer | Current version number |
 | `history_versions` | integer | Number of earlier versions |
 | `history_bytes` | integer | Storage used by earlier versions |
@@ -289,11 +287,11 @@ No endpoint returns a share link's token or address.
   },
   "health": { "database": "ok", "object_storage": "ok" },
   "users": { "total": 12, "suspended": 0, "signed_in_last_30d": 7, "master_password": 3 },
-  "resources": { "total": 84, "remote": 3, "taken_down": 0, "current_bytes": 5996544, "history_bytes": 8540160, "history_versions": 41, "quick_shares": 5, "encrypted": 9 },
+  "resources": { "total": 84, "taken_down": 0, "current_bytes": 5996544, "history_bytes": 8540160, "history_versions": 41, "quick_shares": 5, "encrypted": 9 },
   "links": { "live": 51, "ended_last_7d": 9 },
   "access": {
-    "last_24h": { "success": 120, "expired": 3, "exhausted": 1, "revoked": 0, "upstream_error": 0, "taken_down": 0, "suspended": 0 },
-    "last_7d": { "success": 902, "expired": 17, "exhausted": 4, "revoked": 2, "upstream_error": 0, "taken_down": 0, "suspended": 0 }
+    "last_24h": { "success": 120, "expired": 3, "exhausted": 1, "revoked": 0, "taken_down": 0, "suspended": 0 },
+    "last_7d": { "success": 902, "expired": 17, "exhausted": 4, "revoked": 2, "taken_down": 0, "suspended": 0 }
   },
   "anonymous": { "live_pastes": 6, "bytes": 81920, "limit_bytes": 21474836480 },
   "prune": { "last_run_at": "2026-10-03T04:00:00Z", "access_logs": 0, "sessions": 2, "pastes": 1, "versions": 0 }

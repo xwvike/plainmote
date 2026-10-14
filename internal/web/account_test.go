@@ -75,11 +75,7 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	note, err := db.CreateResource(ctx, user.ID, "Notes", "", []byte("remember this\n"), "utf-8", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	remote, err := db.CreateResource(ctx, user.ID, "Upstream", "remote.txt", nil, "", "https://example.com/remote.txt")
+	note, err := db.CreateResource(ctx, user.ID, "Notes", "", []byte("remember this\n"), "utf-8")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +95,7 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	video := []byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom\x00\x00\x00\x08free")
-	clip, err := db.CreateResource(ctx, user.ID, "Clip", "movie.mp4", video, "", "")
+	clip, err := db.CreateResource(ctx, user.ID, "Clip", "movie.mp4", video, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,9 +148,6 @@ func TestExportHoldsTheWholeAccount(t *testing.T) {
 	}
 	if body := string(files["files/"+note.ID+"/Notes.txt"]); body != "remember this\n" {
 		t.Fatalf("the editor resource did not receive a .txt filename: %q", body)
-	}
-	if shortcut := string(files["files/"+remote.ID+"/remote.txt.url"]); !strings.Contains(shortcut, "URL=https://example.com/remote.txt") {
-		t.Fatalf("the remote resource shortcut is %q", shortcut)
 	}
 	var logs []exportAccessLog
 	if err := json.Unmarshal(files["access_logs.json"], &logs); err != nil || len(logs) != 1 || logs[0].RemoteIP != "203.0.113.9" ||
@@ -264,7 +257,7 @@ func TestDeleteConfirmationDoesNotPrefillTheUsername(t *testing.T) {
 func TestUntitledNamesFollowTheReadersLanguage(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
-	resource, err := db.CreateResource(ctx, user.ID, "", "", []byte("no name"), "", "")
+	resource, err := db.CreateResource(ctx, user.ID, "", "", []byte("no name"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

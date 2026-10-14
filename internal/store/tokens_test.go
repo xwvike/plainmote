@@ -215,11 +215,11 @@ func TestDeviceSignInRefusals(t *testing.T) {
 func TestResolveResources(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	other, err := db.CreateResource(ctx, user.ID, "nginx", "nginx.conf", []byte("listen 80;\n"), "", "")
+	other, err := db.CreateResource(ctx, user.ID, "nginx", "nginx.conf", []byte("listen 80;\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	twin, err := db.CreateResource(ctx, user.ID, "example.conf", "twin.conf", []byte("x\n"), "", "")
+	twin, err := db.CreateResource(ctx, user.ID, "example.conf", "twin.conf", []byte("x\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestResolveResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreign, err := db.CreateResource(ctx, stranger.ID, "nginx", "nginx.conf", []byte("theirs\n"), "", "")
+	foreign, err := db.CreateResource(ctx, stranger.ID, "nginx", "nginx.conf", []byte("theirs\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

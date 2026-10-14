@@ -56,7 +56,7 @@ func TestSharesAnswerConditionalRequests(t *testing.T) {
 			head.Code, head.Body.Len(), head.Header().Get("Content-Length"))
 	}
 
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, resource.Name, resource.Filename, []byte("answer=43\n"), "", ""); err != nil {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, resource.Name, resource.Filename, []byte("answer=43\n"), ""); err != nil {
 		t.Fatal(err)
 	}
 	changed := fetch(http.MethodGet, map[string]string{"If-None-Match": etag})

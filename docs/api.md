@@ -101,7 +101,6 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | `401` | `unauthorized` | Missing token, or an invalid, expired or revoked one; the response carries `WWW-Authenticate: Bearer` |
 | `403` | `read_only` | A read-only token cannot write |
 | `404` | `not_found` | The resource or endpoint does not exist, including resources of other accounts |
-| `409` | `reference` | A remote resource has no content stored by the service |
 | `412` | `conflict` | The save was based on a version that is no longer current; `current_version` is the current version number |
 | `413` | `too_large` | The content exceeds the size limit |
 | `413` | `quota` | The account's resource or storage limit would be exceeded |
@@ -138,7 +137,6 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | `encoding` | string | Text encoding, such as `utf-8` or `gb18030`; omitted for content that is not text |
 | `version` | integer | Current version number |
 | `updated_at` | time | Update time |
-| `remote` | boolean | Whether it is a remote resource |
 | `editable` | boolean | Whether it is text that can be edited |
 | `encrypted` | boolean | Whether the content is end-to-end encrypted; omitted when false |
 | `sealed_key` | string | Present only on a resource encrypted under the master password: its content key wrapped by the account key, Base64URL without padding. Such a resource has an empty `name` and `filename` and the type `application/vnd.plainmote.sealed` |
@@ -206,7 +204,7 @@ Returns the current content as raw bytes, in the encoding and line endings it wa
 | `X-PlainMote-Resource-Version` | Version number, such as `5` |
 | `X-PlainMote-Encoding` | Text encoding; absent for content that is not text |
 
-A remote resource returns `409` (`reference`). An encrypted resource returns its ciphertext; it is decrypted on the client with its `sealed_key`.
+An encrypted resource returns its ciphertext; it is decrypted on the client with its `sealed_key`.
 
 ### Saving a new version
 

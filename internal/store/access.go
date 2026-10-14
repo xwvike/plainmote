@@ -20,10 +20,12 @@ const (
 // Access outcomes. Every value the public handler can record lives here so the
 // log filter and the store cannot drift apart.
 const (
-	OutcomeSuccess       = "success"
-	OutcomeExpired       = "expired"
-	OutcomeExhausted     = "exhausted"
-	OutcomeRevoked       = "revoked"
+	OutcomeSuccess   = "success"
+	OutcomeExpired   = "expired"
+	OutcomeExhausted = "exhausted"
+	OutcomeRevoked   = "revoked"
+	// OutcomeUpstreamError was a remote resource whose origin failed. None
+	// are recorded any more; rows from before keep it until they age out.
 	OutcomeUpstreamError = "upstream_error"
 	// The operator took the resource down, or suspended its owner.
 	OutcomeTakenDown = "taken_down"
@@ -35,7 +37,7 @@ const (
 )
 
 // AccessOutcomes are the stored outcomes, in the order the filter offers them.
-var AccessOutcomes = []string{OutcomeSuccess, OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError, OutcomeTakenDown, OutcomeSuspended}
+var AccessOutcomes = []string{OutcomeSuccess, OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeTakenDown, OutcomeSuspended}
 
 // accessFoldWindow is how long one caller's repeat of the same refusal folds
 // into the row already there instead of adding another.
@@ -48,7 +50,7 @@ const accessFoldWindow = time.Minute
 // is something they asked to see.
 func foldable(outcome string) bool {
 	switch outcome {
-	case OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeUpstreamError, OutcomeTakenDown, OutcomeSuspended:
+	case OutcomeExpired, OutcomeExhausted, OutcomeRevoked, OutcomeTakenDown, OutcomeSuspended:
 		return true
 	}
 	return false
@@ -190,7 +192,7 @@ func (d *Store) RecordAccess(ctx context.Context, event AccessEvent, meta Reques
 }
 
 // AmendAccess corrects the row a delivery was recorded under once its end is
-// known: a 304, an upstream that failed, a body that could not be read. The
+// known: a 304, a body that could not be read. The
 // row itself is written with the use it records (see ConsumeToken), so this
 // only ever narrows what it says; delivered=false clears the version, since
 // no content went out.

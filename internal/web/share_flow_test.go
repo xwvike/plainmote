@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"plainmote/internal/upstream"
 )
 
 // TestShareFlowThroughRouter walks the whole share feature the way a person
@@ -19,7 +17,7 @@ import (
 func TestShareFlowThroughRouter(t *testing.T) {
 	db, user, resource := testDatabase(t)
 	ctx := context.Background()
-	app := &App{db: db, upstream: upstream.New(4 << 20), cfg: Config{
+	app := &App{db: db, cfg: Config{
 		MaxContent: 4 << 20, PublicURL: "https://cfg.test",
 	}}
 	app.templates = app.templateSet()
@@ -322,7 +320,7 @@ func TestServedContentTypeIsDetected(t *testing.T) {
 		{"plain", "{\"a\":1}", "application/json"},
 		{"nginx.conf", "location / {}\n", "text/plain; charset=utf-8"},
 	} {
-		resource, err := db.CreateResource(ctx, user.ID, "r", tc.path, []byte(tc.body), "", "")
+		resource, err := db.CreateResource(ctx, user.ID, "r", tc.path, []byte(tc.body), "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -336,7 +334,7 @@ func TestServedContentTypeIsDetected(t *testing.T) {
 	}
 
 	// Renaming a resource re-derives the type from the new path.
-	resource, err := db.CreateResource(ctx, user.ID, "r", "renamed.txt", []byte("{\"a\":1}"), "", "")
+	resource, err := db.CreateResource(ctx, user.ID, "r", "renamed.txt", []byte("{\"a\":1}"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +345,7 @@ func TestServedContentTypeIsDetected(t *testing.T) {
 	if got := serve("renamed.txt", share.Token); got != "text/plain; charset=utf-8" {
 		t.Fatalf("before rename: %q", got)
 	}
-	if err := db.UpdateResource(ctx, user.ID, resource.ID, "r", "renamed.json", []byte("{\"a\":1}"), "", ""); err != nil {
+	if err := db.UpdateResource(ctx, user.ID, resource.ID, "r", "renamed.json", []byte("{\"a\":1}"), ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := serve("renamed.json", share.Token); got != "application/json" {

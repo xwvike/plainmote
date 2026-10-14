@@ -143,47 +143,24 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	// From here the use is spent and recorded as delivered; each way the
 	// delivery can still end without sending the content corrects that row.
 	resource := result.Resource
-	contentType := resource.ContentType
-	filenameType := contentType
-	body := io.NopCloser(bytes.NewReader(nil))
-	var size int64
-	var etag string
-	var modified time.Time
-	if resource.Remote() {
-		fetched, upstreamType, err := a.upstream.Fetch(r.Context(), resource.OriginURL)
-		if err != nil {
-			a.amendAccess(r, result, store.OutcomeUpstreamError, http.StatusBadGateway, err.Error(), false)
-			writePlainError(w, http.StatusBadGateway, "upstream unavailable")
-			return
-		}
-		contentType, size = store.SafeContentType(upstreamType), int64(len(fetched))
-		filenameType = contentType
-		etag = bodyETag(contentType, fetched)
-		body = io.NopCloser(bytes.NewReader(fetched))
-	} else {
-		contentType = store.ContentTypeWithEncoding(contentType, resource.ContentEncoding)
-		etag, modified = storedETag(resource, contentType), resource.UpdatedAt
-	}
+	contentType := store.ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding)
+	etag, modified := storedETag(resource, contentType), resource.UpdatedAt
 	w.Header().Set("ETag", etag)
-	if !modified.IsZero() {
-		w.Header().Set("Last-Modified", modified.UTC().Format(http.TimeFormat))
-	}
+	w.Header().Set("Last-Modified", modified.UTC().Format(http.TimeFormat))
 	w.Header().Set("Cache-Control", "no-store")
 	if notModified(r, etag, modified) {
 		a.amendAccess(r, result, store.OutcomeSuccess, http.StatusNotModified, "not modified", true)
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
-	if !resource.Remote() {
-		if r.Method == http.MethodHead {
-			size = resource.ContentSize
-		} else {
-			body, size, err = a.db.OpenContent(r.Context(), resource)
-			if err != nil {
-				a.amendAccess(r, result, store.OutcomeSuccess, http.StatusInternalServerError, "stored content could not be read", false)
-				a.serverError(w, "open content", err)
-				return
-			}
+	body := io.NopCloser(bytes.NewReader(nil))
+	size := resource.ContentSize
+	if r.Method != http.MethodHead {
+		body, size, err = a.db.OpenContent(r.Context(), resource)
+		if err != nil {
+			a.amendAccess(r, result, store.OutcomeSuccess, http.StatusInternalServerError, "stored content could not be read", false)
+			a.serverError(w, "open content", err)
+			return
 		}
 	}
 	// An encrypted resource goes out with what the address's key needs to
@@ -205,7 +182,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	}
 	defer body.Close()
 	w.Header().Set("Content-Type", contentType)
-	disposition := contentDisposition(deliveryFilename(resource, filenameType))
+	disposition := contentDisposition(deliveryFilename(resource, resource.ContentType))
 	if (!store.TextLike(contentType) && !strings.HasPrefix(contentType, "image/")) || r.URL.Query().Get("download") == "1" {
 		disposition = strings.Replace(disposition, "inline;", "attachment;", 1)
 	}

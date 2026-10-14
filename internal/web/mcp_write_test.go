@@ -94,7 +94,7 @@ func TestMCPWriteTools(t *testing.T) {
 	}
 
 	// A file with Windows line endings keeps them.
-	crlf, err := db.CreateResource(ctx, alice.ID, "", "win.ini", []byte("[a]\r\nb=1\r\n"), "", "")
+	crlf, err := db.CreateResource(ctx, alice.ID, "", "win.ini", []byte("[a]\r\nb=1\r\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestMCPWriteTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	logo, err := db.CreateResource(ctx, alice.ID, "Logo", "logo.png", append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...), "", "")
+	logo, err := db.CreateResource(ctx, alice.ID, "Logo", "logo.png", append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...), "")
 	if err != nil {
 		t.Fatal(err)
 	}
