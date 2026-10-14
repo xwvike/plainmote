@@ -206,7 +206,22 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		}
 		resource, link, err = a.db.CreateQuickShare(r.Context(), user.ID, filename, []byte(content), ttl, time.Now().UTC())
 	} else {
-		resource, link, err = a.db.CreateAnonymousPaste(r.Context(), filename, []byte(content), ttl, time.Now().UTC())
+		now, key := time.Now().UTC(), addressKey(a.clientIP(r))
+		limited := a.limits.pastes
+		if limited.allow(key, now) {
+			if limited = a.limits.pasteBytes; limited.spend(key, len(content), now) {
+				limited = nil
+			}
+		}
+		if limited != nil {
+			wait := limited.retryIn(key, now)
+			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
+			locale := requestLanguage(r).Locale
+			a.refusePasteWith(w, r, boxContent, filename, ttlValue,
+				fmt.Sprintf(translate(locale, "paste_rate_limited"), waitText(locale, wait)), http.StatusTooManyRequests)
+			return
+		}
+		resource, link, err = a.db.CreateAnonymousPaste(r.Context(), filename, []byte(content), ttl, now)
 	}
 	if err != nil {
 		if !store.IsRefusal(err) {
@@ -488,10 +503,21 @@ func parsePasteTTL(value string) (time.Duration, string) {
 	return store.AnonymousDefaultTTL, pasteDefaultTTL
 }
 
+// sameOriginPost refuses a post a browser says came from another site. A
+// request that says nothing - curl, an old browser - is not what that looks
+// like and is let through. "null" is not nothing: it is what a sandboxed
+// frame, a data: page or a redirect from elsewhere sends, and the pages here
+// that post set a referrer policy under which a browser names their origin.
 func (a *App) sameOriginPost(r *http.Request) bool {
+	if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+		return false
+	}
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
-	if origin == "" || origin == "null" {
+	switch origin {
+	case "":
 		return true
+	case "null":
+		return false
 	}
 	parsed, err := url.Parse(origin)
 	if err != nil {

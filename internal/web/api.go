@@ -48,6 +48,11 @@ type apiLimits struct {
 	mcpCalls     *windowLimiter
 	mcpAddresses *windowLimiter
 	mcpShares    *windowLimiter
+	// Quick shares made without an account, and the bytes they hold, per
+	// address. Every one of them comes out of a single pool the whole
+	// deployment shares, which one address must not be able to drain.
+	pastes     *windowLimiter
+	pasteBytes *windowLimiter
 }
 
 func newAPILimits() *apiLimits {
@@ -63,6 +68,8 @@ func newAPILimits() *apiLimits {
 		mcpCalls:        newWindowLimiter(300, time.Minute),
 		mcpAddresses:    newWindowLimiter(600, time.Minute),
 		mcpShares:       newWindowLimiter(30, time.Hour),
+		pastes:          newWindowLimiter(120, time.Hour),
+		pasteBytes:      newWindowLimiter(256<<20, 24*time.Hour),
 	}
 }
 

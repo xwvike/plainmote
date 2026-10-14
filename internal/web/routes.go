@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"plainmote/internal/auth"
@@ -31,6 +32,9 @@ type App struct {
 	admin      *adminGate
 	limits     *apiLimits
 	cli        *cliIndex
+	// untrustedProxy says once that a peer not trusted as a proxy sent the
+	// headers one would.
+	untrustedProxy sync.Once
 }
 
 type documentFetcher interface {

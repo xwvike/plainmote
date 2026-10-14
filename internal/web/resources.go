@@ -585,7 +585,7 @@ func (a *App) handleRawPreview(w http.ResponseWriter, r *http.Request, user User
 	}
 	a.serveOwnedBytes(w, r,
 		store.ContentTypeWithEncoding(resource.ContentType, resource.ContentEncoding),
-		`inline; filename="`+deliveryFilename(resource, resource.ContentType)+`"`,
+		contentDisposition(deliveryFilename(resource, resource.ContentType)),
 		resource.ContentSize,
 		func() (io.ReadCloser, int64, error) { return a.db.OpenContent(r.Context(), resource) },
 		func(start, end int64) (io.ReadCloser, int64, error) {
@@ -597,9 +597,12 @@ func (a *App) handleRawPreview(w http.ResponseWriter, r *http.Request, user User
 // or as one byte range - a video cannot be sought without ranges, and Safari
 // will not play one at all. The type comes from detection, which never
 // produces anything a browser would execute, and nosniff and the sandbox keep
-// it that way.
+// it that way. XML is saved rather than shown, as it is from a share link.
 func (a *App) serveOwnedBytes(w http.ResponseWriter, r *http.Request, contentType, disposition string, size int64,
 	open func() (io.ReadCloser, int64, error), openRange func(start, end int64) (io.ReadCloser, int64, error)) {
+	if xmlType(contentType) {
+		disposition = strings.Replace(disposition, "inline;", "attachment;", 1)
+	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", disposition)
 	w.Header().Set("X-Content-Type-Options", "nosniff")

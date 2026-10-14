@@ -13,12 +13,14 @@ import (
 	"time"
 )
 
-// defaultMaxBytes is used when a caller does not set a ceiling. It matches the
-// service's own default so the two limits agree out of the box.
+// defaultMaxBytes is used when a caller does not set a ceiling.
 const defaultMaxBytes = 4 << 20
 
-const maxRedirects = 3
-
+// Client fetches a document from a public address the caller was given by
+// someone else. It goes only where it was told: a redirect is answered as the
+// failure it is here, never followed, so what the document's address names
+// is what was read - a host vouching for a document cannot be made to by an
+// open redirect on it.
 type Client struct {
 	client   *http.Client
 	maxBytes int64
@@ -30,18 +32,15 @@ func New(maxBytes int64) *Client {
 	}
 	u := &Client{maxBytes: maxBytes}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	// A process-wide HTTP proxy would hide the actual upstream connection from
-	// the address check below. Upstream resources therefore connect directly.
+	// A process-wide HTTP proxy would hide the actual connection from the
+	// address check below, so fetches connect directly.
 	transport.Proxy = nil
 	transport.DialContext = validatedDialContext
 	u.client = &http.Client{
 		Timeout:   15 * time.Second,
 		Transport: transport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) > maxRedirects {
-				return errors.New("too many redirects")
-			}
-			return ValidateURL(req.URL)
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
 	}
 	return u
@@ -69,11 +68,19 @@ var additionalNonPublicPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("100.64.0.0/10"),
 	netip.MustParsePrefix("198.18.0.0/15"),
 	netip.MustParsePrefix("240.0.0.0/4"),
+	// IPv6 addresses that carry an IPv4 one inside and reach it: NAT64
+	// (RFC 6052, RFC 8215), 6to4 and Teredo. Through a NAT64 gateway,
+	// 64:ff9b::a9fe:a9fe is 169.254.169.254.
+	netip.MustParsePrefix("64:ff9b::/96"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("2002::/16"),
+	netip.MustParsePrefix("2001::/32"),
 }
 
-// IsPrivate only covers RFC 1918 and IPv6 ULA space. Upstream access also
-// rejects addresses that are commonly routed inside deployments despite not
-// carrying that label, including shared address space used by overlay networks.
+// IsPrivate only covers RFC 1918 and IPv6 ULA space. Fetches also reject
+// addresses that are commonly routed inside deployments despite not carrying
+// that label, including shared address space used by overlay networks, and
+// IPv6 addresses that lead to an IPv4 one.
 func isNonPublicIP(ip net.IP) bool {
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() {
 		return true
@@ -144,14 +151,7 @@ func (u *Client) Fetch(ctx context.Context, rawURL string) ([]byte, string, erro
 	if err != nil {
 		return nil, "", err
 	}
-	// Ask for the resource, not for a preferred shape of it. An Accept header
-	// that ranks text formats is content negotiation, and a server that honours
-	// it answers with something other than what the address returns by default
-	// - GitHub's API, for one, drops from indented JSON to a single compact
-	// line. This service forwards what an address serves; stating a preference
-	// here would put a different document in front of every consumer of the
-	// share link.
-	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept", "application/json")
 	resp, err := u.client.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("fetch upstream: %w", err)
@@ -166,7 +166,7 @@ func (u *Client) Fetch(ctx context.Context, rawURL string) ([]byte, string, erro
 		return nil, "", fmt.Errorf("read upstream response: %w", err)
 	}
 	if int64(len(body)) > u.maxBytes {
-		return nil, "", fmt.Errorf("上游内容超过 %d MiB 上限", u.maxBytes>>20)
+		return nil, "", fmt.Errorf("upstream response exceeds %d bytes", u.maxBytes)
 	}
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {

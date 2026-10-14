@@ -228,6 +228,15 @@ func addressParts(address string) [3]string {
 	return [3]string{head, rest, ""}
 }
 
+// waitText is how long until something may be tried again, rounded up to
+// whole minutes, or to whole hours past the first.
+func waitText(locale string, wait time.Duration) string {
+	if wait <= time.Hour {
+		return fmt.Sprintf(translate(locale, "wait_minutes"), max(int((wait+time.Minute-1)/time.Minute), 1))
+	}
+	return fmt.Sprintf(translate(locale, "wait_hours"), int((wait+time.Hour-1)/time.Hour))
+}
+
 // remainText renders how long a share has left in the terms a person thinks
 // in, rather than as an absolute timestamp.
 func remainText(locale string, value *time.Time) string {

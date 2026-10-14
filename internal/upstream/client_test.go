@@ -3,7 +3,6 @@ package upstream
 import (
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -14,54 +13,32 @@ func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) 
 	return f(request)
 }
 
-func redirectClient(t *testing.T) *Client {
-	t.Helper()
+func TestFetchFollowsNoRedirect(t *testing.T) {
 	client := New(1024)
+	calls := 0
 	client.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		remaining, err := strconv.Atoi(strings.TrimPrefix(request.URL.Path, "/"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		calls++
 		header := make(http.Header)
-		status := http.StatusOK
-		body := "done"
-		if remaining > 0 {
-			status = http.StatusFound
-			body = ""
-			header.Set("Location", "/"+strconv.Itoa(remaining-1))
-		} else {
-			header.Set("Content-Type", "text/plain; charset=utf-8")
-		}
+		header.Set("Location", "https://elsewhere.example/document.json")
 		return &http.Response{
-			StatusCode: status,
+			StatusCode: http.StatusFound,
 			Header:     header,
-			Body:       io.NopCloser(strings.NewReader(body)),
+			Body:       io.NopCloser(strings.NewReader("")),
 			Request:    request,
 		}, nil
 	})
-	return client
-}
-
-func TestFetchAllowsThreeRedirects(t *testing.T) {
-	client := redirectClient(t)
-	body, contentType, err := client.Fetch(t.Context(), "https://upstream.example/3")
-	if err != nil {
-		t.Fatal(err)
+	if _, _, err := client.Fetch(t.Context(), "https://upstream.example/start"); err == nil {
+		t.Fatal("a redirect was taken for the document")
 	}
-	if string(body) != "done" || contentType != "text/plain; charset=utf-8" {
-		t.Fatalf("unexpected response: %q %q", body, contentType)
-	}
-}
-
-func TestFetchRejectsFourthRedirect(t *testing.T) {
-	client := redirectClient(t)
-	if _, _, err := client.Fetch(t.Context(), "https://upstream.example/4"); err == nil || !strings.Contains(err.Error(), "too many redirects") {
-		t.Fatalf("four redirects returned %v", err)
+	if calls != 1 {
+		t.Fatalf("the redirect was followed: %d calls", calls)
 	}
 }
 
 func TestValidateURLRejectsPrivateAddresses(t *testing.T) {
 	for _, rawURL := range []string{
+		"http://[64:ff9b::a9fe:a9fe]/latest/meta-data",
+		"http://[2002:a9fe:a9fe::1]/resource",
 		"http://localhost/resource",
 		"http://service.localhost/resource",
 		"http://127.0.0.1/resource",

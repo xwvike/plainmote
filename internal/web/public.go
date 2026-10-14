@@ -184,7 +184,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	defer body.Close()
 	w.Header().Set("Content-Type", contentType)
 	disposition := contentDisposition(deliveryFilename(resource, resource.ContentType))
-	if (!store.TextLike(contentType) && !strings.HasPrefix(contentType, "image/")) || r.URL.Query().Get("download") == "1" {
+	if !shownInline(contentType) || r.URL.Query().Get("download") == "1" {
 		disposition = strings.Replace(disposition, "inline;", "attachment;", 1)
 	}
 	w.Header().Set("Content-Disposition", disposition)
@@ -219,6 +219,24 @@ func deliveryAnswer(r *http.Request, resource store.Resource) (string, string, s
 		return contentType, etag, store.Answer{Status: http.StatusOK, Detail: "headers only"}
 	}
 	return contentType, etag, store.Answer{}
+}
+
+// xmlType is XML in any of its media types. A browser renders the XHTML and
+// SVG an XML document may hold as pages of their own.
+func xmlType(contentType string) bool {
+	base, _, _ := strings.Cut(contentType, ";")
+	base = strings.ToLower(strings.TrimSpace(base))
+	return base == "application/xml" || base == "text/xml" || strings.HasSuffix(base, "+xml")
+}
+
+// shownInline is content a browser may display where the link is opened:
+// text and pictures. XML is text, but is saved rather than shown, so that
+// whatever page it holds is never rendered on this origin, sandboxed or not.
+func shownInline(contentType string) bool {
+	if xmlType(contentType) {
+		return false
+	}
+	return store.TextLike(contentType) || strings.HasPrefix(contentType, "image/")
 }
 
 // amendAccess corrects the row ConsumeToken wrote for this use: no content
@@ -358,6 +376,13 @@ func (a *App) behindTrustedProxy(r *http.Request) bool {
 func (a *App) clientIP(r *http.Request) string {
 	direct := remoteIP(r)
 	if !a.behindTrustedProxy(r) {
+		if r.Header.Get("CF-Connecting-IP") != "" || r.Header.Get("X-Forwarded-For") != "" {
+			a.untrustedProxy.Do(func() {
+				fmt.Fprintf(os.Stderr, "%s sent forwarding headers but is not in PLAINMOTE_TRUSTED_PROXIES: "+
+					"if it is the proxy in front of this service, every client is counted as that one address, "+
+					"by the rate limits and in the access history\n", direct)
+			})
+		}
 		return direct
 	}
 	if cf, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("CF-Connecting-IP"))); err == nil {

@@ -43,6 +43,45 @@ func newWindowLimiter(limit int, window time.Duration) *windowLimiter {
 func (l *windowLimiter) allow(key string, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	entry := l.current(key, now)
+	if entry == nil {
+		return true
+	}
+	entry.count++
+	return entry.count <= l.limit
+}
+
+// spend takes n from what key may use in its window and reports whether
+// there was that much left. What is refused is not taken, so a refused large
+// request leaves room for a smaller one.
+func (l *windowLimiter) spend(key string, n int, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	entry := l.current(key, now)
+	if entry == nil {
+		return true
+	}
+	if entry.count+n > l.limit {
+		return false
+	}
+	entry.count += n
+	return true
+}
+
+// retryIn is how long until key's window ends and its count starts afresh.
+func (l *windowLimiter) retryIn(key string, now time.Time) time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	entry := l.hits[key]
+	if entry == nil {
+		return 0
+	}
+	return max(entry.since.Add(l.window).Sub(now), 0)
+}
+
+// current is key's count in its current window, started afresh when the last
+// one has ended. It is nil when there is no room to count a new key.
+func (l *windowLimiter) current(key string, now time.Time) *windowCount {
 	l.sweep(now)
 	entry := l.hits[key]
 	switch {
@@ -50,13 +89,12 @@ func (l *windowLimiter) allow(key string, now time.Time) bool {
 		entry.count, entry.since = 0, now
 	case entry == nil:
 		if len(l.hits) >= l.maxKeys && !l.makeRoom(now) {
-			return true
+			return nil
 		}
 		entry = &windowCount{since: now}
 		l.hits[key] = entry
 	}
-	entry.count++
-	return entry.count <= l.limit
+	return entry
 }
 
 // makeRoom frees a slot for a new key: a finished window if there is one,
