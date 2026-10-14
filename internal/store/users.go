@@ -65,8 +65,9 @@ WHERE s.token_hash = $1 AND s.expires_at > $2 AND u.suspended_at IS NULL
 `, tokenHash, time.Now().UTC()).Scan(
 		&sessionID, &user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL,
 	)
+	// An expired session is left to the prune: deleting it here would make
+	// every request with a stale or made-up cookie a write.
 	if errors.Is(err, pgx.ErrNoRows) {
-		_, _ = d.db.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1 AND expires_at <= $2`, tokenHash, time.Now().UTC())
 		return User{}, "", ErrNotFound
 	}
 	if err != nil {

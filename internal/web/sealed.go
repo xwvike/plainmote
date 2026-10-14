@@ -54,6 +54,7 @@ func (a *App) readSealedForm(w http.ResponseWriter, r *http.Request, sessionID s
 		writePlainError(w, http.StatusForbidden, "cross-site post")
 		return false
 	}
+	allowUpload(w, a.sealedRequestLimit())
 	r.Body = http.MaxBytesReader(w, r.Body, a.sealedRequestLimit())
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		a.keyringFail(w, http.StatusRequestEntityTooLarge, "too_large", "")

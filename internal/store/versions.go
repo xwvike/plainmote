@@ -159,21 +159,66 @@ RETURNING v.content_key
 // dropObjects deletes objects no row points at any more. It runs after the
 // commit that let go of them, detached from the request: once the rows are
 // gone a client hanging up must not leave the objects behind. A failure costs
-// storage, not correctness, and is only logged.
+// storage, not correctness: the key is kept in blob_garbage and the prune
+// tries it again.
 func (d *Store) dropObjects(ctx context.Context, keys []string) {
 	if len(keys) == 0 {
 		return
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 	defer cancel()
+	var failed []string
 	for _, key := range keys {
 		if key == "" {
 			continue
 		}
 		if err := d.blobs.Delete(cleanupCtx, key); err != nil {
 			fmt.Fprintf(os.Stderr, "delete object %s: %v\n", key, err)
+			failed = append(failed, key)
 		}
 	}
+	if len(failed) == 0 {
+		return
+	}
+	recordCtx, cancelRecord := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancelRecord()
+	if _, err := d.db.Exec(recordCtx, `
+INSERT INTO blob_garbage(key, since) SELECT unnest($1::text[]), now()
+ON CONFLICT (key) DO NOTHING
+`, failed); err != nil {
+		fmt.Fprintf(os.Stderr, "keep %d undeleted objects for the prune: %v\n", len(failed), err)
+	}
+}
+
+// retryGarbage deletes again, a batch at a time, the objects whose delete
+// failed. A key a row still names was never garbage, and is only forgotten.
+func (d *Store) retryGarbage(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
+	if _, err := conn.Exec(ctx, `
+DELETE FROM blob_garbage g
+WHERE EXISTS (SELECT 1 FROM resources r WHERE r.content_key = g.key)
+   OR EXISTS (SELECT 1 FROM resource_versions v WHERE v.content_key = g.key)
+`); err != nil {
+		return 0, err
+	}
+	rows, err := conn.Query(ctx, `SELECT key FROM blob_garbage ORDER BY since LIMIT $1`, pruneBatch)
+	if err != nil {
+		return 0, err
+	}
+	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return 0, err
+	}
+	var deleted []string
+	for _, key := range keys {
+		if err := d.blobs.Delete(ctx, key); err == nil {
+			deleted = append(deleted, key)
+		}
+	}
+	if len(deleted) == 0 {
+		return 0, nil
+	}
+	tag, err := conn.Exec(ctx, `DELETE FROM blob_garbage WHERE key = ANY($1)`, deleted)
+	return tag.RowsAffected(), err
 }
 
 const versionColumns = `v.resource_id, v.version, v.content_key, v.content_size, v.content_type, v.content_encoding,
@@ -338,7 +383,7 @@ WHERE id = $10 AND owner_id = $11
 		return err
 	})
 	if err != nil {
-		_ = d.blobs.Delete(ctx, key)
+		d.dropObjects(ctx, []string{key})
 		return SaveResult{}, err
 	}
 	d.dropObjects(ctx, dropped)
@@ -393,9 +438,7 @@ RETURNING v.content_key
 	if err != nil {
 		return translateNotFound(err)
 	}
-	if err := d.blobs.Delete(ctx, key); err != nil {
-		return fmt.Errorf("delete version body: %w: %w", ErrInternal, err)
-	}
+	d.dropObjects(ctx, []string{key})
 	return nil
 }
 
@@ -470,9 +513,7 @@ RETURNING content_key
 		if err != nil {
 			return removed, err
 		}
-		for _, key := range keys {
-			_ = d.blobs.Delete(ctx, key)
-		}
+		d.dropObjects(ctx, keys)
 		removed += int64(len(keys))
 		if len(keys) < pruneBatch {
 			return removed, nil

@@ -198,7 +198,7 @@ VALUES($1, $2, $3)
 		return nil
 	})
 	if err != nil {
-		_ = d.blobs.Delete(ctx, resource.ContentKey)
+		d.dropObjects(ctx, []string{resource.ContentKey})
 		return Resource{}, Link{}, err
 	}
 	return resource, link, nil
@@ -370,11 +370,7 @@ RETURNING content_key
 		if err := rows.Err(); err != nil {
 			return removed, err
 		}
-		for _, key := range keys {
-			if key != "" {
-				_ = d.blobs.Delete(ctx, key)
-			}
-		}
+		d.dropObjects(ctx, keys)
 		removed += int64(len(keys))
 		if len(keys) < pruneBatch {
 			return removed, nil

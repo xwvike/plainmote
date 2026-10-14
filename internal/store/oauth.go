@@ -510,24 +510,25 @@ func (d *Store) OAuthAccessUser(ctx context.Context, token, ip string, now time.
 	var user User
 	var access OAuthAccess
 	var lastUsed pgtype.Timestamptz
-	var lastIP string
 	err := d.db.QueryRow(ctx, `
-SELECT t.scope, g.id, g.client_id, g.client_name, g.resource, g.last_used_at, g.last_used_ip,
+SELECT t.scope, g.id, g.client_id, g.client_name, g.resource, g.last_used_at,
        u.id, COALESCE(u.github_id, ''), u.login, u.name, u.avatar_url
 FROM oauth_tokens t
 JOIN oauth_grants g ON g.id = t.grant_id
 JOIN users u ON u.id = g.user_id
 WHERE t.token_hash = $1 AND t.kind = 'access' AND t.expires_at > $2 AND u.suspended_at IS NULL
 `, hashToken(token), now).Scan(&access.Scope, &access.GrantID, &access.ClientID, &access.ClientName, &access.Resource,
-		&lastUsed, &lastIP, &user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL)
+		&lastUsed, &user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, OAuthAccess{}, ErrNotFound
 	}
 	if err != nil {
 		return User{}, OAuthAccess{}, fmt.Errorf("read access token: %w: %w", ErrInternal, err)
 	}
+	// Written at most once a minute, the address with it: an app calling
+	// from a pool of addresses would otherwise write on nearly every call.
 	ip = limitAccessText(ip, accessIPMaxBytes)
-	if !lastUsed.Valid || now.Sub(lastUsed.Time) >= tokenTouchEvery || lastIP != ip {
+	if !lastUsed.Valid || now.Sub(lastUsed.Time) >= tokenTouchEvery {
 		if _, err := d.db.Exec(ctx, `UPDATE oauth_grants SET last_used_at = $2, last_used_ip = $3 WHERE id = $1`, access.GrantID, now, ip); err != nil {
 			return User{}, OAuthAccess{}, fmt.Errorf("record token use: %w: %w", ErrInternal, err)
 		}

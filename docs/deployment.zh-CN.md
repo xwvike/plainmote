@@ -256,6 +256,7 @@ curl --fail --silent --show-error http://127.0.0.1:8964/healthz
 - Compose 将容器日志限制为 3 个、每个 10 MiB，避免 Docker JSON 日志无限占用宿主机磁盘。
 - 收到 SIGTERM 后，服务最多使用 10 秒完成 HTTP 关闭；Compose 给出 15 秒退出时间。
 - 多副本必须共享 PostgreSQL、S3/R2 和同一份 `PLAINMOTE_TOKEN_KEY`。
+- 每个进程最多保持 max(4, CPU 核数) 个 PostgreSQL 连接；如需调整，在 `DATABASE_URL` 中加入 `pool_max_conns`，例如 `?pool_max_conns=10`。
 - 以下状态只保存在单个进程的内存中：命令行接口、设备授权、应用授权、MCP 端点与免登录快速分享的限流计数、管理接口的认证失败计数，以及管理请求已使用的
   nonce。多副本部署时，限流按副本分别计算；同一个已签名的管理请求在有效期内可能被重放到另一个副本。需要多副本时，
   应在入口层补充限流，并将 `/_admin/` 的请求固定路由到同一个副本。

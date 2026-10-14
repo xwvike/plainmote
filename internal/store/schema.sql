@@ -97,7 +97,6 @@ CREATE TABLE IF NOT EXISTS resources (
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL
 );
-CREATE INDEX IF NOT EXISTS resources_owner_idx ON resources(owner_id);
 -- The content a resource holds now is its current version. version counts the
 -- saves that changed the content; version_at is when this one was saved, which
 -- updated_at is not - that moves with a rename too. restored_from names the
@@ -118,12 +117,23 @@ ALTER TABLE resources ADD COLUMN IF NOT EXISTS takedown_reason TEXT NOT NULL DEF
 -- log stays. NULL for everything else, which is what keeping one sets it to.
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS resources_expiry_idx ON resources(expires_at) WHERE expires_at IS NOT NULL;
+-- An account's resources, with what its usage is summed from, so the sum
+-- every write takes under the account lock is read from the index alone.
+DROP INDEX IF EXISTS resources_owner_idx;
+CREATE INDEX IF NOT EXISTS resources_owner_usage_idx ON resources(owner_id) INCLUDE (id, content_size, expires_at);
 -- An end-to-end encrypted resource (docs/encryption.md): sealed_key is its
 -- content key wrapped by the account key, sealed_meta its name, filename and
 -- type encrypted with the content key. Its name and filename columns stay
 -- empty and its content is ciphertext the service cannot read.
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_key BYTEA;
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_meta BYTEA;
+-- Objects whose delete failed once no row pointed at them any more. The
+-- prune deletes them again. Keys are made new for every write, so none of
+-- these can come back into use.
+CREATE TABLE IF NOT EXISTS blob_garbage (
+  key TEXT PRIMARY KEY,
+  since TIMESTAMPTZ NOT NULL
+);
 -- Remote resources - an address fetched again on every access, with no
 -- content of their own - are no longer kept. Those left are removed with
 -- their links; their access log stays, as it does for any deleted resource.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -384,15 +385,11 @@ func (a *App) mcpReadResource(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 	page := a.baseURL(x.r) + "/resources/" + resource.ID
 	ctx := x.r.Context()
 	version, contentType, encoding, size := resource.Version, resource.ContentType, resource.ContentEncoding, resource.ContentSize
-	var stored []byte
-	if in.Version == 0 || in.Version == resource.Version {
-		if !store.TextLike(contentType) {
-			return a.mcpBinary(resource, version, contentType, size, page), nil
-		}
-		if stored, err = a.db.ReadContent(ctx, resource); err != nil {
-			return mcpOutcome{}, err
-		}
-	} else {
+	read := func() ([]byte, error) { return a.db.ReadContent(ctx, resource) }
+	openRange := func(start, end int64) (io.ReadCloser, int64, error) {
+		return a.db.OpenContentRange(ctx, resource, start, end)
+	}
+	if in.Version != 0 && in.Version != resource.Version {
 		earlier, err := a.db.VersionForOwner(ctx, x.user.ID, resource.ID, in.Version)
 		if errors.Is(err, store.ErrNotFound) {
 			return mcpProblem("%s has no version %d; list_versions shows the ones it has.", mcpLabel(resource), in.Version)
@@ -404,34 +401,37 @@ func (a *App) mcpReadResource(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 			return mcpProblem("%s", mcpEncryptedText)
 		}
 		version, contentType, encoding, size = earlier.Number, earlier.ContentType, earlier.ContentEncoding, earlier.ContentSize
-		if !store.TextLike(contentType) {
-			return a.mcpBinary(resource, version, contentType, size, page), nil
-		}
-		if stored, err = a.db.ReadVersion(ctx, earlier); err != nil {
-			return mcpOutcome{}, err
+		read = func() ([]byte, error) { return a.db.ReadVersion(ctx, earlier) }
+		openRange = func(start, end int64) (io.ReadCloser, int64, error) {
+			return a.db.OpenVersionRange(ctx, earlier, start, end)
 		}
 	}
-	text, encoding, err := store.DecodeText(stored, encoding)
-	if err != nil {
+	if !store.TextLike(contentType) {
 		return a.mcpBinary(resource, version, contentType, size, page), nil
 	}
-	length := int64(len(text))
-	if in.Offset > length {
-		return mcpProblem("offset %d is past the end: the text of this version is %d bytes long.", in.Offset, length)
+	part, ok, err := mcpUTF8Part(encoding, size, in.Offset, openRange)
+	if err != nil {
+		return mcpOutcome{}, err
 	}
-	start := in.Offset
-	for start < length && !utf8.RuneStart(text[start]) {
-		start++
+	if !ok {
+		stored, err := read()
+		if err != nil {
+			return mcpOutcome{}, err
+		}
+		text, decodedAs, err := store.DecodeText(stored, encoding)
+		if err != nil {
+			return a.mcpBinary(resource, version, contentType, size, page), nil
+		}
+		encoding = decodedAs
+		part = textPart(text, in.Offset)
 	}
-	end := min(start+mcpReadChunk, length)
-	for end < length && !utf8.RuneStart(text[end]) {
-		end--
+	if part.past {
+		return mcpProblem("offset %d is past the end: the text of this version is %d bytes long.", in.Offset, part.length)
 	}
-	part := text[start:end]
 	structured := map[string]any{
 		"id": resource.ID, "name": resource.Name, "filename": resource.Filename, "type": contentType,
 		"encoding": encoding, "version": version, "current_version": resource.Version,
-		"offset": start, "length": length, "text": part, "url": page,
+		"offset": part.start, "length": part.length, "text": part.text, "url": page,
 	}
 	header := fmt.Sprintf("%s · version %d", mcpLabel(resource), version)
 	if version == resource.Version {
@@ -439,14 +439,106 @@ func (a *App) mcpReadResource(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 	} else {
 		header += fmt.Sprintf(" (current is %d)", resource.Version)
 	}
-	if start > 0 || end < length {
-		header += fmt.Sprintf(" · bytes %d-%d of %d", start, end, length)
+	if part.start > 0 || part.end < part.length {
+		header += fmt.Sprintf(" · bytes %d-%d of %d", part.start, part.end, part.length)
 	}
-	if end < length {
-		structured["next_offset"] = end
-		header += fmt.Sprintf(" · to continue, read again with offset %d", end)
+	if part.end < part.length {
+		structured["next_offset"] = part.end
+		header += fmt.Sprintf(" · to continue, read again with offset %d", part.end)
 	}
-	return mcpOutcome{structured: structured, text: []string{header, part}}, nil
+	return mcpOutcome{structured: structured, text: []string{header, part.text}}, nil
+}
+
+// mcpTextPart is one part of a text as read_resource returns it: the bytes
+// from start to end of a text length bytes long, cut on character
+// boundaries. past is an offset beyond the end.
+type mcpTextPart struct {
+	text               string
+	start, end, length int64
+	past               bool
+}
+
+// textPart cuts the part of text that begins at offset.
+func textPart(text string, offset int64) mcpTextPart {
+	length := int64(len(text))
+	if offset > length {
+		return mcpTextPart{length: length, past: true}
+	}
+	start := offset
+	for start < length && !utf8.RuneStart(text[start]) {
+		start++
+	}
+	end := min(start+mcpReadChunk, length)
+	for end < length && !utf8.RuneStart(text[end]) {
+		end--
+	}
+	return mcpTextPart{text: text[start:end], start: start, end: end, length: length}
+}
+
+// utf8BOM is what a UTF-8 file may begin with. Decoding drops it, so the text
+// read_resource counts in is the stored bytes without it.
+const utf8BOM = "\xef\xbb\xbf"
+
+// mcpUTF8Part reads one part of a long UTF-8 text from storage alone, rather
+// than the whole of it for every part. The text of stored UTF-8 is its bytes
+// less a BOM, so a part is the same range of bytes, a few more fetched to
+// find the character boundaries. ok is false when there is no such shortcut
+// - a short text, another encoding, bytes that turn out not to be UTF-8 -
+// and the whole is then read and decoded instead.
+func mcpUTF8Part(encoding string, size, offset int64, openRange func(start, end int64) (io.ReadCloser, int64, error)) (mcpTextPart, bool, error) {
+	if !strings.EqualFold(encoding, "utf-8") || size <= mcpReadChunk {
+		return mcpTextPart{}, false, nil
+	}
+	read := func(start, end int64) ([]byte, error) {
+		body, _, err := openRange(start, end)
+		if err != nil {
+			return nil, err
+		}
+		defer body.Close()
+		return io.ReadAll(io.LimitReader(body, end-start+1))
+	}
+	head, err := read(0, int64(len(utf8BOM))-1)
+	if err != nil {
+		return mcpTextPart{}, false, err
+	}
+	skip := int64(0)
+	if string(head) == utf8BOM {
+		skip = int64(len(utf8BOM))
+	}
+	length := size - skip
+	if offset > length {
+		return mcpTextPart{length: length, past: true}, true, nil
+	}
+	if offset == length {
+		return mcpTextPart{start: length, end: length, length: length}, true, nil
+	}
+	// A part may begin up to three continuation bytes late and end on the
+	// byte after it, so that much more is read than the part itself.
+	last := min(offset+mcpReadChunk+utf8.UTFMax, length) - 1
+	window, err := read(skip+offset, skip+last)
+	if err != nil {
+		return mcpTextPart{}, false, err
+	}
+	if int64(len(window)) != last-offset+1 {
+		return mcpTextPart{}, false, nil
+	}
+	at := func(i int64) byte { return window[i-offset] }
+	start := offset
+	for start <= last && !utf8.RuneStart(at(start)) {
+		start++
+	}
+	if start > last && start < length {
+		return mcpTextPart{}, false, nil
+	}
+	end := min(start+mcpReadChunk, length)
+	for end < length && !utf8.RuneStart(at(end)) {
+		end--
+	}
+	text := window[start-offset : end-offset]
+	if !utf8.Valid(text) {
+		return mcpTextPart{}, false, nil
+	}
+	return mcpTextPart{text: string(text), start: start, end: end, length: length}, true, nil
 }
 
 // mcpBinary describes content that is not text, which no tool returns.

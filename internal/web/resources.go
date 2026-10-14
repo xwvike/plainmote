@@ -165,6 +165,7 @@ func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (r
 	// declares none, and ParseMultipartForm spills whatever does not fit in
 	// memory to a temporary file with no ceiling of its own - on /tmp, which
 	// is tmpfs in the production container. Bounding the reader bounds both.
+	allowUpload(w, limit)
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	multipartForm := strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data")
 	if multipartForm {
@@ -642,6 +643,7 @@ func (a *App) serveOwnedBytes(w http.ResponseWriter, r *http.Request, contentTyp
 		w.Header().Set("Content-Length", strconv.FormatInt(responseSize, 10))
 	}
 	w.WriteHeader(status)
+	allowTransfer(w, responseSize)
 	_, _ = io.Copy(w, body)
 }
 

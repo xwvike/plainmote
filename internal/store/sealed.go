@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"time"
 
@@ -126,7 +128,7 @@ ON CONFLICT (id) DO NOTHING
 		return err
 	})
 	if err != nil {
-		_ = d.blobs.Delete(ctx, resource.ContentKey)
+		d.dropObjects(ctx, []string{resource.ContentKey})
 		return Resource{}, err
 	}
 	d.dropObjects(ctx, dropped)
@@ -200,9 +202,7 @@ WHERE id = $9 AND owner_id = $10
 		return err
 	})
 	if err != nil {
-		if nextKey != "" {
-			_ = d.blobs.Delete(ctx, nextKey)
-		}
+		d.dropObjects(ctx, []string{nextKey})
 		return SaveResult{}, err
 	}
 	d.dropObjects(ctx, dropped)
@@ -254,9 +254,7 @@ func (d *Store) putParts(ctx context.Context, id string, contents map[int][]byte
 	for _, number := range numbers {
 		key := contentKey(id)
 		if err := d.blobs.Put(ctx, key, bytes.NewReader(contents[number]), int64(len(contents[number]))); err != nil {
-			for _, written := range keys {
-				_ = d.blobs.Delete(ctx, written)
-			}
+			d.dropObjects(ctx, slices.Collect(maps.Values(keys)))
 			return nil, fmt.Errorf("store body: %w: %w", ErrInternal, err)
 		}
 		keys[number] = key
@@ -342,9 +340,7 @@ WHERE id = $1 AND owner_id = $2
 		return nil
 	})
 	if err != nil {
-		for _, key := range keys {
-			_ = d.blobs.Delete(ctx, key)
-		}
+		d.dropObjects(ctx, slices.Collect(maps.Values(keys)))
 		return 0, err
 	}
 	d.dropObjects(ctx, dropped)
@@ -429,9 +425,7 @@ WHERE id = $1 AND owner_id = $2
 		return nil
 	})
 	if err != nil {
-		for _, key := range keys {
-			_ = d.blobs.Delete(ctx, key)
-		}
+		d.dropObjects(ctx, slices.Collect(maps.Values(keys)))
 		return err
 	}
 	d.dropObjects(ctx, dropped)

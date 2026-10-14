@@ -122,6 +122,7 @@ func (a *App) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := 2*a.cfg.MaxContent + 64<<10
+	allowUpload(w, limit)
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 	if err != nil {
 		var tooLarge *http.MaxBytesError

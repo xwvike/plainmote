@@ -148,7 +148,7 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
 		return err
 	})
 	if err != nil {
-		_ = d.blobs.Delete(ctx, resource.ContentKey)
+		d.dropObjects(ctx, []string{resource.ContentKey})
 		return Resource{}, err
 	}
 	d.dropObjects(ctx, dropped)
@@ -301,26 +301,38 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 	if current.Sealed() {
 		return SaveResult{}, errSealedInBrowser
 	}
-	content, contentEncoding := edit.Content, edit.ContentEncoding
-	replaceContent := content != nil
-	if !replaceContent {
-		content, err = d.ReadContent(ctx, current)
-		if err != nil {
+	replaceContent := edit.Content != nil
+	var input resourceInput
+	switch {
+	case replaceContent:
+		input, err = normalizeResourceInput(edit.Name, edit.Filename, edit.Content, edit.ContentEncoding)
+	case strings.TrimSpace(edit.Filename) == current.Filename:
+		// A new name alone: the bytes and the filename they were typed by
+		// are as they were, so the type is too, and nothing is read.
+		input = resourceInput{Name: resourceName(edit.Name, current.Filename), Filename: current.Filename,
+			ContentType: current.ContentType, Encoding: current.ContentEncoding}
+	default:
+		// A new filename can change the type, which is read from the bytes
+		// and the name together. Encoding describes the stored bytes and
+		// stays: a metadata-only request cannot change it without replacing
+		// them, or the next read may decode the object as another charset.
+		var stored []byte
+		if stored, err = d.ReadContent(ctx, current); err != nil {
 			return SaveResult{}, err
 		}
-		// Encoding describes the stored bytes. A metadata-only request cannot
-		// change it without replacing those bytes, or the next read may decode
-		// the same object as an unrelated character set.
-		contentEncoding = current.ContentEncoding
+		input, err = normalizeResourceInput(edit.Name, edit.Filename, stored, current.ContentEncoding)
+		input.Content = nil
 	}
-	input, err := normalizeResourceInput(edit.Name, edit.Filename, content, contentEncoding)
 	if err != nil {
 		return SaveResult{}, err
 	}
 
 	// The same bytes again are not a new version. The editor always posts its
 	// text, so without this every rename would file a copy of the content.
-	nextSHA := contentSHA256(input.Content)
+	nextSHA := ""
+	if replaceContent {
+		nextSHA = contentSHA256(input.Content)
+	}
 	storedSHA := current.ContentSHA256
 	if replaceContent && storedSHA == "" && current.ContentKey != "" {
 		// Written before hashes were kept. Read once; the save stores it.
@@ -401,7 +413,7 @@ WHERE id = $12 AND owner_id = $13
 	})
 	if err != nil {
 		if replaceContent {
-			_ = d.blobs.Delete(ctx, nextKey)
+			d.dropObjects(ctx, []string{nextKey})
 		}
 		return SaveResult{}, err
 	}
@@ -450,10 +462,7 @@ DELETE FROM resources WHERE id = $1 AND owner_id = $2 RETURNING content_key
 	}
 	// The objects go last. An object left behind by a failure here costs
 	// storage; a row pointing at an object already gone costs a resource.
-	d.dropObjects(ctx, history)
-	if err := d.blobs.Delete(ctx, contentKey); err != nil {
-		return fmt.Errorf("delete resource body: %w: %w", ErrInternal, err)
-	}
+	d.dropObjects(ctx, append(history, contentKey))
 	return nil
 }
 

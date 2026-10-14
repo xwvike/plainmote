@@ -200,6 +200,7 @@ func (a *App) handlePublic(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
+		allowTransfer(w, size)
 		_, _ = io.Copy(w, body)
 	}
 }

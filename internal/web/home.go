@@ -167,6 +167,7 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		a.refusePaste(w, r, "", "", tooLarge)
 		return
 	}
+	allowUpload(w, pasteFormMaxBytes)
 	r.Body = http.MaxBytesReader(w, r.Body, pasteFormMaxBytes)
 	form, err := readPasteForm(r)
 	if err != nil {

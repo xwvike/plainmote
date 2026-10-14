@@ -392,6 +392,9 @@ WHERE id IN (SELECT id FROM sessions WHERE expires_at < $1 ORDER BY expires_at L
 	if err != nil {
 		return result, fmt.Errorf("prune history: %w", err)
 	}
+	if _, err = d.retryGarbage(ctx, conn); err != nil {
+		return result, fmt.Errorf("retry undeleted objects: %w", err)
+	}
 
 	// Tokens and sign-in codes past their time are refused already; this
 	// only clears the rows.

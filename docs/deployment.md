@@ -233,6 +233,7 @@ The database schema currently carries no backward compatibility guarantee. If th
 - Compose limits container logs to 3 files of 10 MiB each, so Docker's JSON logs cannot fill the host's disk.
 - On SIGTERM, the service takes at most 10 seconds to shut down HTTP; Compose allows 15 seconds to exit.
 - Replicas must share PostgreSQL, S3/R2 and the same `PLAINMOTE_TOKEN_KEY`.
+- Each process keeps at most max(4, number of CPUs) PostgreSQL connections. To change it, add `pool_max_conns` to `DATABASE_URL`, such as `?pool_max_conns=10`.
 - The following state is held only in the memory of a single process: the rate-limit counts of the command line API, device authorization, app authorization, the MCP endpoint and quick shares made without an account, the admin interface's authentication failure counts, and the nonces of admin requests already used. With several replicas, rate limits are counted per replica, and a signed admin request could be replayed to another replica within its validity window. If several replicas are needed, add rate limits at the entry point and route `/_admin/` requests to a single replica.
 - The service does not provide edge rate limiting; protection of anonymous writes and public delivery must be configured at the entry point.
 - `/d/*`, the sign-in pages and resource pages must not be cached by a CDN.

@@ -144,7 +144,7 @@ ON CONFLICT (id) DO NOTHING
 		return err
 	})
 	if err != nil {
-		_ = d.blobs.Delete(ctx, resource.ContentKey)
+		d.dropObjects(ctx, []string{resource.ContentKey})
 		return Resource{}, Link{}, err
 	}
 	d.dropObjects(ctx, dropped)
@@ -257,8 +257,6 @@ RETURNING content_key
 	if err != nil {
 		return err
 	}
-	if contentKey != "" {
-		_ = d.blobs.Delete(ctx, contentKey)
-	}
+	d.dropObjects(ctx, []string{contentKey})
 	return nil
 }

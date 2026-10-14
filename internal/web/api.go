@@ -360,6 +360,7 @@ func (a *App) apiBody(w http.ResponseWriter, r *http.Request, limit int64) ([]by
 		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
 		return nil, false
 	}
+	allowUpload(w, limit)
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 	if err != nil {
 		var tooLarge *http.MaxBytesError
@@ -385,6 +386,7 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
 		return
 	}
+	allowUpload(w, limit)
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := r.ParseMultipartForm(a.cfg.MaxContent + 1); err != nil {
 		a.apiFail(w, http.StatusBadRequest, "bad_request", "could not read the form")
@@ -444,6 +446,7 @@ func (a *App) apiCreateQuickShare(w http.ResponseWriter, r *http.Request, user U
 		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
 		return
 	}
+	allowUpload(w, limit)
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := r.ParseMultipartForm(store.AnonymousMaxBytes + 1); err != nil {
 		a.apiFail(w, http.StatusBadRequest, "bad_request", "could not read the form")

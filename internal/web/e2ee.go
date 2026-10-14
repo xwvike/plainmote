@@ -83,6 +83,7 @@ func (a *App) handleSealedPaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := int64(store.AnonymousMaxBytes + 64<<10)
+	allowUpload(w, limit)
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := r.ParseMultipartForm(limit); err != nil {
 		writePlainError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf(translate(locale, "e2ee_too_large"), store.BytesText(store.AnonymousMaxBytes)))
