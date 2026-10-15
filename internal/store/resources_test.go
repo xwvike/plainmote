@@ -69,7 +69,7 @@ func TestEveryReaderSeesTheWholeResource(t *testing.T) {
 		t.Fatalf("ListResources: %v %v", listed, err)
 	}
 	check("ListResources", listed[0])
-	api, err := db.APIResources(ctx, user.ID, "")
+	api, err := db.APIResources(ctx, user.ID, "", "")
 	if err != nil || len(api) != 1 {
 		t.Fatalf("APIResources: %v %v", api, err)
 	}

@@ -15,13 +15,19 @@ Usage:
                                     sign this device in (confirm in a browser)
   plainmote logout                  revoke and forget this device's sign-in
   plainmote whoami                  show the account and server in use
-  plainmote ls [keyword] [--decrypt]
-                                    list resources; --decrypt shows encrypted names
+  plainmote ls [keyword] [--tag <tag>] [--decrypt]
+                                    list resources; --tag only those with that tag,
+                                    --decrypt shows encrypted names
   plainmote cat <resource>          print a resource's content
   plainmote edit <resource>         edit in $VISUAL/$EDITOR; closing it uploads a new version
-  plainmote push <file|-> [--to <resource>] [--name <name>] [--filename <file>] [--encrypt]
+  plainmote push <file|-> [--to <resource>] [--name <name>] [--filename <file>] [--tag <tag>]... [--encrypt]
                                     upload a new resource, or a new version of one;
-                                    --encrypt makes the new one end-to-end encrypted
+                                    --tag tags it, --encrypt makes the new one
+                                    end-to-end encrypted
+  plainmote tag <resource> <tag>... put tags on a resource
+  plainmote untag <resource> <tag>...
+                                    take tags off a resource
+  plainmote tags                    list the account's tags
   plainmote share <file|-> [--ttl 10m|1h|1d|7d|30d] [--filename <file>] [--encrypt]
                                     make a quick share and print its link;
                                     --encrypt encrypts it end to end
@@ -43,13 +49,18 @@ password, asked for each time or read from PLAINMOTE_MASTER_PASSWORD.
                                     登录这台设备（在浏览器中确认）
   plainmote logout                  撤销并删除这台设备上的登录
   plainmote whoami                  显示当前使用的账号和服务器
-  plainmote ls [关键词] [--decrypt]
-                                    列出资源；--decrypt 显示加密资源的名称
+  plainmote ls [关键词] [--tag <标签>] [--decrypt]
+                                    列出资源；--tag 只列出带该标签的资源，
+                                    --decrypt 显示加密资源的名称
   plainmote cat <资源>              输出资源内容
   plainmote edit <资源>             用 $VISUAL/$EDITOR 编辑，关闭后上传为新版本
-  plainmote push <文件|-> [--to <资源>] [--name <名称>] [--filename <文件名>] [--encrypt]
+  plainmote push <文件|-> [--to <资源>] [--name <名称>] [--filename <文件名>] [--tag <标签>]... [--encrypt]
                                     上传为新资源，或作为已有资源的新版本；
+                                    --tag 给它打标签（可重复），
                                     --encrypt 将新资源设为端到端加密
+  plainmote tag <资源> <标签>...    给资源打标签
+  plainmote untag <资源> <标签>...  去掉资源的标签
+  plainmote tags                    列出账号的所有标签
   plainmote share <文件|-> [--ttl 10m|1h|1d|7d|30d] [--filename <文件名>] [--encrypt]
                                     创建快速分享并输出链接；
                                     --encrypt 将其端到端加密
@@ -91,7 +102,11 @@ password, asked for each time or read from PLAINMOTE_MASTER_PASSWORD.
 	"not_found":              {"no resource matches %q", "找不到资源 %q"},
 	"ambiguous":              {"%q matches more than one resource; use the id:", "%q 匹配到多个资源，请改用 ID："},
 	"ls_empty":               {"No resources.", "没有资源。"},
-	"ls_header":              {"NAME\tFILE\tSIZE\tVER\tUPDATED\tID", "名称\t文件名\t大小\t版本\t更新时间\tID"},
+	"ls_header":              {"NAME\tFILE\tSIZE\tVER\tUPDATED\tID\tTAGS", "名称\t文件名\t大小\t版本\t更新时间\tID\t标签"},
+	"tag_done":               {"✓ %s is tagged %s", "✓ %s 的标签：%s"},
+	"tag_none":               {"✓ %s has no tags", "✓ %s 已没有标签"},
+	"tags_empty":             {"No tags.", "没有标签。"},
+	"tags_header":            {"TAG\tRESOURCES", "标签\t资源数"},
 	"untitled":               {"(untitled)", "（未命名）"},
 	"encrypted_name":         {"(encrypted)", "（已加密）"},
 	"master_password_prompt": {"Master password: ", "主密码："},

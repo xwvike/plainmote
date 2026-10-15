@@ -49,6 +49,7 @@ var mcpWriteTools = []*mcpTool{
 				"content":  map[string]any{"type": "string", "description": "The text to keep."},
 				"filename": map[string]any{"type": "string", "description": "A filename such as nginx.conf. Its extension decides how the text is typed."},
 				"name":     map[string]any{"type": "string", "description": "The name shown in lists. The filename if left out."},
+				"tags":     mcpTagsSchema("Tags to put on it, such as tmp."),
 			},
 			"required":             []string{"content"},
 			"additionalProperties": false,
@@ -80,6 +81,30 @@ var mcpWriteTools = []*mcpTool{
 		scope:       store.OAuthScopeWrite,
 		run:         (*App).mcpUpdateResource,
 	},
+	{
+		Name:  "tag_resource",
+		Title: "Tag a resource",
+		Description: "Add tags to a resource or remove them; its content and version stay as they are. " +
+			"A tag is free text of at most 24 characters; one differing only in case from a tag the account uses is that tag. " +
+			"Encrypted resources and quick shares can be tagged too.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"resource": resourceRefSchema,
+				"add":      mcpTagsSchema("Tags to put on it."),
+				"remove":   mcpTagsSchema("Tags to take off it."),
+			},
+			"required":             []string{"resource"},
+			"additionalProperties": false,
+		},
+		Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+		scope:       store.OAuthScopeWrite,
+		run:         (*App).mcpTagResource,
+	},
+}
+
+func mcpTagsSchema(description string) map[string]any {
+	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": description}
 }
 
 var mcpShareTools = []*mcpTool{
@@ -136,9 +161,10 @@ func mcpStoreProblem(err error) (mcpOutcome, error) {
 
 func (a *App) mcpCreateResource(x mcpExchange, args json.RawMessage) (mcpOutcome, error) {
 	var in struct {
-		Content  *string `json:"content"`
-		Filename string  `json:"filename"`
-		Name     string  `json:"name"`
+		Content  *string  `json:"content"`
+		Filename string   `json:"filename"`
+		Name     string   `json:"name"`
+		Tags     []string `json:"tags"`
 	}
 	if problem := mcpArguments(args, &in); problem != "" {
 		return mcpProblem("%s", problem)
@@ -149,9 +175,17 @@ func (a *App) mcpCreateResource(x mcpExchange, args json.RawMessage) (mcpOutcome
 	if problem := a.mcpTextProblem(*in.Content, in.Name); problem != "" {
 		return mcpProblem("%s", problem)
 	}
+	if err := checkTags(in.Tags); err != nil {
+		return mcpStoreProblem(err)
+	}
 	resource, err := a.db.CreateResource(x.r.Context(), x.user.ID, in.Name, in.Filename, []byte(*in.Content), "")
 	if err != nil {
 		return mcpStoreProblem(err)
+	}
+	if len(in.Tags) > 0 {
+		if resource.Tags, err = a.db.SetResourceTags(x.r.Context(), x.user.ID, resource.ID, in.Tags); err != nil {
+			return mcpStoreProblem(err)
+		}
 	}
 	item := a.mcpResourceItem(x.r, resource)
 	return mcpOutcome{structured: item, text: []string{fmt.Sprintf("Created %s (id %s) as version 1. It is private; its page is %s.",

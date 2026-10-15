@@ -146,6 +146,8 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if a.apiWritable(w, token) {
 			a.apiCreateResource(w, r, user)
 		}
+	case path == "tags" && r.Method == http.MethodGet:
+		a.apiListTags(w, r, user)
 	case path == "quick-shares" && r.Method == http.MethodPost:
 		if a.apiWritable(w, token) {
 			a.apiCreateQuickShare(w, r, user)
@@ -160,6 +162,10 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 		case len(rest) == 2 && rest[1] == "content" && r.Method == http.MethodPut:
 			if a.apiWritable(w, token) {
 				a.apiWriteContent(w, r, user, rest[0])
+			}
+		case len(rest) == 2 && rest[1] == "tags" && r.Method == http.MethodPatch:
+			if a.apiWritable(w, token) {
+				a.apiRetag(w, r, user, rest[0])
 			}
 		default:
 			a.apiFail(w, http.StatusNotFound, "not_found", "no such endpoint")
@@ -228,9 +234,10 @@ type apiResource struct {
 	// SealedKey and SealedMeta are set on an end-to-end encrypted resource:
 	// its content key wrapped by the account key, and its encrypted
 	// metadata (docs/encryption.md). Its content is ciphertext.
-	SealedKey  string `json:"sealed_key,omitempty"`
-	SealedMeta string `json:"sealed_meta,omitempty"`
-	URL        string `json:"url"`
+	SealedKey  string   `json:"sealed_key,omitempty"`
+	SealedMeta string   `json:"sealed_meta,omitempty"`
+	URL        string   `json:"url"`
+	Tags       []string `json:"tags"`
 }
 
 func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
@@ -242,6 +249,7 @@ func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
 		Editable:  resource.Editable() && !encrypted && !resource.QuickShare(),
 		TakenDown: resource.TakenDown, ExpiresAt: resource.ExpiresAt, URL: a.baseURL(r) + "/resources/" + resource.ID,
 		SealedKey: b64url(resource.SealedKey), SealedMeta: b64url(resource.SealedMeta),
+		Tags: append([]string{}, resource.Tags...),
 	}
 }
 
@@ -253,7 +261,7 @@ func (a *App) apiListResources(w http.ResponseWriter, r *http.Request, user User
 	if ref := r.URL.Query().Get("ref"); ref != "" {
 		resources, err = a.db.ResolveResources(r.Context(), user.ID, ref)
 	} else {
-		resources, err = a.db.APIResources(r.Context(), user.ID, r.URL.Query().Get("q"))
+		resources, err = a.db.APIResources(r.Context(), user.ID, r.URL.Query().Get("q"), r.URL.Query().Get("tag"))
 	}
 	if err != nil {
 		a.apiRefused(w, "list resources", err)
@@ -399,6 +407,11 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	defer file.Close()
+	tags := r.MultipartForm.Value["tag"]
+	if err := checkTags(tags); err != nil {
+		a.apiRefused(w, "create resource", err)
+		return
+	}
 	content, err := io.ReadAll(io.LimitReader(file, a.cfg.MaxContent+sealedOverhead+1))
 	if err != nil || int64(len(content)) > a.cfg.MaxContent+sealedOverhead {
 		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
@@ -413,7 +426,7 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 			a.apiRefused(w, "create sealed resource", err)
 			return
 		}
-		a.writeAPI(w, http.StatusCreated, a.apiResourceView(r, resource))
+		a.apiCreated(w, r, user, resource, tags)
 		return
 	}
 	if int64(len(content)) > a.cfg.MaxContent {
@@ -425,6 +438,18 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 	if err != nil {
 		a.apiRefused(w, "create resource", err)
 		return
+	}
+	a.apiCreated(w, r, user, resource, tags)
+}
+
+// apiCreated tags a resource just made, and answers with it.
+func (a *App) apiCreated(w http.ResponseWriter, r *http.Request, user User, resource Resource, tags []string) {
+	if len(tags) > 0 {
+		var err error
+		if resource.Tags, err = a.db.SetResourceTags(r.Context(), user.ID, resource.ID, tags); err != nil {
+			a.apiRefused(w, "tag resource", err)
+			return
+		}
 	}
 	a.writeAPI(w, http.StatusCreated, a.apiResourceView(r, resource))
 }

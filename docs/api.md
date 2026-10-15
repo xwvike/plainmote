@@ -123,6 +123,8 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | `GET` | `/api/v1/resources/{id}/content` | read | Read the content |
 | `PUT` | `/api/v1/resources/{id}/content` | write | Save as a new version |
 | `POST` | `/api/v1/resources` | write | Create a resource |
+| `PATCH` | `/api/v1/resources/{id}/tags` | write | Add and remove tags |
+| `GET` | `/api/v1/tags` | read | The account's tags |
 | `POST` | `/api/v1/quick-shares` | write | Make a quick share |
 
 ## Resource object
@@ -144,6 +146,7 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 | `taken_down` | boolean | Whether the operator has taken it down; omitted when false |
 | `expires_at` | time | Present only on a quick share: when it is deleted. A quick share is read only (`editable` is false) until it is converted into a resource on its page |
 | `url` | string | Address of the resource page |
+| `tags` | string array | Its tags, sorted; empty when it has none |
 
 ## Reference
 
@@ -177,9 +180,9 @@ Returns `204` on success.
 
 ### Listing resources
 
-`GET /api/v1/resources?q=`
+`GET /api/v1/resources?q=&tag=`
 
-Returns `{"resources": [<resource object>...]}`, most recently updated first, at most 500 items. `q` matches part of the name or filename, case-insensitively.
+Returns `{"resources": [<resource object>...]}`, most recently updated first, at most 500 items. `q` matches part of the name or filename, case-insensitively; `tag` keeps the resources carrying that tag, in any case.
 
 `GET /api/v1/resources?ref=`
 
@@ -248,10 +251,31 @@ The request body is `multipart/form-data`:
 | `name` | Optional name; the filename is used when omitted |
 | `filename` | Optional filename, used to recognise the content type |
 | `encoding` | Optional text encoding; detected by the service when omitted |
+| `tag` | Optional; a tag to put on it. Repeat the field for more |
 
-Returns `201` with the resource object on success.
+Returns `201` with the resource object on success. A tag that would be refused refuses the whole request before anything is created.
 
 An encrypted resource is created with the content encrypted on the client and three more fields instead of `name`, `filename` and `encoding`: `id`, the new resource's ID (a UUID chosen by the client, as its encryption is bound to it); `sealed_key`, its content key wrapped by the account key; and `sealed_meta`, its encrypted metadata, both Base64URL without padding.
+
+### Tags
+
+A tag is free text in any language, of at most 24 characters, without control or bidirectional control characters. An account has one spelling of each tag: a tag differing only in case from one already used takes that spelling. Tags are not encrypted, also on an encrypted resource. Changing tags is not an edit: the version and `updated_at` stay as they are, and quick shares can be tagged too.
+
+`PATCH /api/v1/resources/{id}/tags`
+
+```json
+{ "add": ["tmp"], "remove": ["surge"] }
+```
+
+Removes, then adds; removing matches in any case. Either list may be omitted. Returns the resource object with its tags.
+
+`GET /api/v1/tags`
+
+```json
+{ "tags": [{ "name": "surge", "count": 3 }, { "name": "tmp", "count": 1 }] }
+```
+
+Every tag on the account's resources, by name, with how many carry each. A tag exists while a resource carries it.
 
 ### Making a quick share
 

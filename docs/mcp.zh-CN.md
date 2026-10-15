@@ -70,23 +70,26 @@ Claude 和 ChatGPT 从其自身的服务器发起连接，因此部署须可从�
 
 | 工具 | 权限 | 参数 | 作用 |
 | --- | --- | --- | --- |
-| `list_resources` | `read` | `query`、`kind`（`resource` 或 `quick_share`）、`cursor` | 按更新时间从近到远列出资源，每页 50 个；`query` 匹配名称和文件名 |
+| `list_resources` | `read` | `query`、`kind`（`resource` 或 `quick_share`）、`tag`、`cursor` | 按更新时间从近到远列出资源及其标签，每页 50 个；`query` 匹配名称和文件名，`tag` 只保留带有该标签的资源 |
+| `list_tags` | `read` | 无 | 列出账号的所有标签及各自的资源数 |
 | `read_resource` | `read` | `resource`、`version`、`offset` | 返回当前版本或历史版本的文本，每次最多 256 KiB |
 | `list_versions` | `read` | `resource` | 列出资源的版本 |
-| `create_resource` | `write` | `content`、`filename`、`name` | 以文本新建资源 |
+| `create_resource` | `write` | `content`、`filename`、`name`、`tags` | 以文本新建资源 |
 | `update_resource` | `write` | `resource`、`base_version`、`content`、`name`、`filename` | 将文本保存为新版本，沿用资源原有的编码和换行符 |
+| `tag_resource` | `write` | `resource`、`add`、`remove` | 添加、移除标签；内容和版本不变 |
 | `share_resource` | `share` | `resource`、`name`、`expires_in`、`max_uses` | 创建分享链接并返回其地址 |
 | `unshare_resource` | `share` | `resource`、`link` | 撤销一条链接；省略 `link` 时撤销该资源的全部链接 |
 
 - `resource` 可以是 ID、至少 6 个字符的 ID 前缀、完整的名称或文件名，也可以是资源页面或其某条分享链接的地址。以分享链接地址指定资源时，不消耗该链接的使用次数，也不要求该链接仍然有效。
 - `base_version` 已不是当前版本时，`update_resource` 拒绝保存，因此不会覆盖较新的内容；应用应重新读取后再修改。与当前文本完全相同的文本不视为冲突，也不会保存任何内容。
 - `share_resource` 的 `expires_in` 为 `1h`、`24h`、`7d` 等时长（最长 `30d`，默认 `7d`）；`max_uses` 为 `0`（不限）至 1,000,000。应用不能创建永不过期的链接，所有者可在资源页面上创建。由应用创建的链接会在资源的分享列表中标注创建它的应用名称。
+- 标签是最长 24 个字符的自由文本；与账号已用标签仅大小写不同的标签视为同一个。加密资源和快速分享也可以打标签；标签不加密，因此会在列表中显示。
 - 二进制内容只返回说明，不返回内容。超过 256 KiB 的文本分段返回。快速分享可以列出和读取，但不能修改或再次分享。
 - 冲突、容量已满等拒绝情形以设置了 `isError` 的工具结果返回，并附带可供模型据以处理的说明。其他账号的资源与不存在的资源返回完全相同的结果。
 
 ## 加密资源
 
-服务器无法解密端到端加密的资源，也不会索取主密码。加密资源在列表中仅显示为占位项，附带 ID、大小、更新时间和地址，不提供名称和文件名。读取加密资源只返回提示，不返回内容；加密资源也不能通过 MCP 修改或分享。
+服务器无法解密端到端加密的资源，也不会索取主密码。加密资源在列表中仅显示为占位项，附带 ID、大小、更新时间、地址和标签，不提供名称和文件名。读取加密资源只返回提示，不返回内容；加密资源也不能通过 MCP 修改或分享。
 
 ## 限制
 

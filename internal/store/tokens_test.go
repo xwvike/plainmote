@@ -265,7 +265,7 @@ func TestResolveResources(t *testing.T) {
 	if got := ids("%"); len(got) != 0 {
 		t.Fatalf("a wildcard is not a reference: %v", got)
 	}
-	listed, err := db.APIResources(ctx, user.ID, "nginx")
+	listed, err := db.APIResources(ctx, user.ID, "nginx", "")
 	if err != nil || len(listed) != 1 || listed[0].ContentSize == 0 || listed[0].Version != 1 {
 		t.Fatalf("the listing carries size and version: %+v %v", listed, err)
 	}

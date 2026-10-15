@@ -11,17 +11,17 @@ const APIListLimit = 500
 
 // APIResources lists an account's resources for the command line, with what
 // it shows and needs to pick one: size, version, type. query narrows by name
-// or filename, as the resource list does.
-func (d *Store) APIResources(ctx context.Context, ownerID, query string) ([]Resource, error) {
+// or filename and tag to those carrying it, as the resource list does.
+func (d *Store) APIResources(ctx context.Context, ownerID, query, tag string) ([]Resource, error) {
 	if !validUUIDs(ownerID) {
 		return nil, ErrNotFound
 	}
 	query = strings.TrimSpace(query)
 	pattern := "%" + escapeLikePattern(query) + "%"
 	return d.apiResources(ctx, `
-WHERE r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename ILIKE $3 ESCAPE '\') AND `+liveResource+`
+WHERE `+resourceFilterSQL+`
 ORDER BY r.updated_at DESC, r.id
-LIMIT $4`, ownerID, query, pattern, APIListLimit)
+LIMIT $6`, ownerID, query, pattern, "", strings.TrimSpace(tag), APIListLimit)
 }
 
 // ResolveResources finds what a reference typed on the command line can mean:

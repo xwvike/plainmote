@@ -675,7 +675,7 @@ func TestAPIAuthorizationMatrix(t *testing.T) {
 	}
 
 	// What other accounts' tokens created stays theirs.
-	if theirs, _ := db.APIResources(ctx, owner.ID, ""); len(theirs) != 3 {
+	if theirs, _ := db.APIResources(ctx, owner.ID, "", ""); len(theirs) != 3 {
 		t.Fatalf("the owner has %d resources, want their own three", len(theirs))
 	}
 

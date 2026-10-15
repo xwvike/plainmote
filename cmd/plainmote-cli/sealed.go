@@ -329,7 +329,7 @@ func (s sealed) write(ctx context.Context, api *client, body []byte, base int) (
 // createSealed makes a new encrypted resource: a new id, a new content key
 // wrapped by the account key, and the content and metadata encrypted under
 // them.
-func (c *cli) createSealed(ctx context.Context, api *client, name, filename string, body []byte) (resource, error) {
+func (c *cli) createSealed(ctx context.Context, api *client, name, filename string, tags []string, body []byte) (resource, error) {
 	account, err := c.unlock(ctx, api)
 	if err != nil {
 		return resource{}, err
@@ -356,7 +356,7 @@ func (c *cli) createSealed(ctx context.Context, api *client, name, filename stri
 	}
 	return api.createWith(ctx, map[string]string{
 		"id": id, "sealed_key": base64.RawURLEncoding.EncodeToString(wrapped), "sealed_meta": base64.RawURLEncoding.EncodeToString(meta),
-	}, blob)
+	}, tags, blob)
 }
 
 // shareSealed makes an encrypted quick share as the home page's box does:

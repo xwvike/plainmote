@@ -46,6 +46,8 @@
               <tr><td class="mono">GET /api/v1/resources/{id}/content</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_read"}}</td></tr>
               <tr><td class="mono">PUT /api/v1/resources/{id}/content</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_save"}}</td></tr>
               <tr><td class="mono">POST /api/v1/resources</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_create"}}</td></tr>
+              <tr><td class="mono">PATCH /api/v1/resources/{id}/tags</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_retag"}}</td></tr>
+              <tr><td class="mono">GET /api/v1/tags</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_tags"}}</td></tr>
               {{if .Anonymous}}<tr><td class="mono">POST /api/v1/quick-shares</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_quick"}}</td></tr>{{end}}
               <tr><td class="mono">DELETE /api/v1/token</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_revoke"}}</td></tr>
             </tbody>
@@ -128,10 +130,12 @@
             <thead><tr><th>{{tr .Locale "dev_mcp_tool"}}</th><th>{{tr .Locale "dev_api_purpose"}}</th></tr></thead>
             <tbody>
               <tr><td class="mono">list_resources</td><td>{{tr .Locale "dev_mcp_tool_list"}}</td></tr>
+              <tr><td class="mono">list_tags</td><td>{{tr .Locale "dev_mcp_tool_tags"}}</td></tr>
               <tr><td class="mono">read_resource</td><td>{{tr .Locale "dev_mcp_tool_read"}}</td></tr>
               <tr><td class="mono">list_versions</td><td>{{tr .Locale "dev_mcp_tool_versions"}}</td></tr>
               <tr><td class="mono">create_resource</td><td>{{tr .Locale "dev_mcp_tool_create"}}</td></tr>
               <tr><td class="mono">update_resource</td><td>{{tr .Locale "dev_mcp_tool_update"}}</td></tr>
+              <tr><td class="mono">tag_resource</td><td>{{tr .Locale "dev_mcp_tool_tag"}}</td></tr>
               <tr><td class="mono">share_resource</td><td>{{tr .Locale "dev_mcp_tool_share"}}</td></tr>
               <tr><td class="mono">unshare_resource</td><td>{{tr .Locale "dev_mcp_tool_unshare"}}</td></tr>
             </tbody>
@@ -182,10 +186,13 @@
         <div class="pb">
           <dl class="cmds">
             <dt>plainmote login</dt><dd>{{tr .Locale "cli_cmd_login"}}</dd>
-            <dt>plainmote ls [{{tr .Locale "cli_arg_query"}}] [--decrypt]</dt><dd>{{tr .Locale "cli_cmd_ls"}}</dd>
+            <dt>plainmote ls [{{tr .Locale "cli_arg_query"}}] [--tag &lt;{{tr .Locale "cli_arg_tag"}}&gt;] [--decrypt]</dt><dd>{{tr .Locale "cli_cmd_ls"}}</dd>
             <dt>plainmote edit &lt;{{tr .Locale "cli_arg_resource"}}&gt;</dt><dd>{{tr .Locale "cli_cmd_edit"}}</dd>
             <dt>plainmote cat &lt;{{tr .Locale "cli_arg_resource"}}&gt;</dt><dd>{{tr .Locale "cli_cmd_cat"}}</dd>
-            <dt>plainmote push &lt;{{tr .Locale "cli_arg_file"}}&gt; [--to &lt;{{tr .Locale "cli_arg_resource"}}&gt;] [--encrypt]</dt><dd>{{tr .Locale "cli_cmd_push"}}</dd>
+            <dt>plainmote push &lt;{{tr .Locale "cli_arg_file"}}&gt; [--to &lt;{{tr .Locale "cli_arg_resource"}}&gt;] [--tag &lt;{{tr .Locale "cli_arg_tag"}}&gt;] [--encrypt]</dt><dd>{{tr .Locale "cli_cmd_push"}}</dd>
+            <dt>plainmote tag &lt;{{tr .Locale "cli_arg_resource"}}&gt; &lt;{{tr .Locale "cli_arg_tag"}}&gt;…</dt><dd>{{tr .Locale "cli_cmd_tag"}}</dd>
+            <dt>plainmote untag &lt;{{tr .Locale "cli_arg_resource"}}&gt; &lt;{{tr .Locale "cli_arg_tag"}}&gt;…</dt><dd>{{tr .Locale "cli_cmd_untag"}}</dd>
+            <dt>plainmote tags</dt><dd>{{tr .Locale "cli_cmd_tags"}}</dd>
             {{if .Anonymous}}<dt>plainmote share &lt;{{tr .Locale "cli_arg_file"}}&gt; [--ttl 1d] [--encrypt]</dt><dd>{{tr .Locale "cli_cmd_share"}}</dd>{{end}}
             <dt>plainmote config</dt><dd>{{tr .Locale "cli_cmd_config"}}</dd>
             <dt>plainmote logout</dt><dd>{{tr .Locale "cli_cmd_logout"}}</dd>

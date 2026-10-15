@@ -96,6 +96,12 @@ func (c *cli) run(ctx context.Context, args []string) int {
 		err = c.share(ctx, rest)
 	case "push":
 		err = c.push(ctx, rest)
+	case "tag":
+		err = c.tagCommand(ctx, rest, false)
+	case "untag":
+		err = c.tagCommand(ctx, rest, true)
+	case "tags":
+		err = c.tagsCommand(ctx, rest)
 	default:
 		fmt.Fprintln(c.stderr, msg("error_prefix")+msg("unknown_command", command))
 		return 2

@@ -88,13 +88,14 @@ var mcpReadTools = []*mcpTool{
 	{
 		Name:  "list_resources",
 		Title: "List resources",
-		Description: "List the resources in this PlainMote account, most recently updated first: name, filename, type, size, version and update time. " +
-			"Filter by words in the name or filename, or by kind. End-to-end encrypted resources appear as placeholders with only an id, size and time.",
+		Description: "List the resources in this PlainMote account, most recently updated first: name, filename, type, size, version, update time and tags. " +
+			"Filter by words in the name or filename, by kind, or by a tag. End-to-end encrypted resources appear as placeholders with only an id, size, time and tags.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"query":  map[string]any{"type": "string", "description": "Words to look for in the name or filename."},
 				"kind":   map[string]any{"type": "string", "enum": []string{"resource", "quick_share"}, "description": "Only resources, or only quick shares not yet kept."},
+				"tag":    map[string]any{"type": "string", "description": "Only resources carrying this tag, in any case."},
 				"cursor": map[string]any{"type": "string", "description": "The next_cursor of the previous page."},
 			},
 			"additionalProperties": false,
@@ -102,6 +103,15 @@ var mcpReadTools = []*mcpTool{
 		Annotations: readOnlyTool,
 		scope:       store.OAuthScopeRead,
 		run:         (*App).mcpListResources,
+	},
+	{
+		Name:        "list_tags",
+		Title:       "List tags",
+		Description: "List the tags on this account's resources, by name, with how many resources carry each.",
+		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+		Annotations: readOnlyTool,
+		scope:       store.OAuthScopeRead,
+		run:         (*App).mcpListTags,
 	},
 	{
 		Name:  "read_resource",
@@ -211,6 +221,7 @@ type mcpResourceItem struct {
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	ShareLinks int        `json:"share_links,omitempty"`
 	URL        string     `json:"url"`
+	Tags       []string   `json:"tags,omitempty"`
 }
 
 func mcpEncrypted(resource Resource) bool {
@@ -221,7 +232,7 @@ func (a *App) mcpResourceItem(r *http.Request, resource Resource) mcpResourceIte
 	page := a.baseURL(r) + "/resources/" + resource.ID
 	if mcpEncrypted(resource) {
 		return mcpResourceItem{ID: resource.ID, Name: mcpEncryptedName, Size: resource.ContentSize,
-			UpdatedAt: resource.UpdatedAt, Encrypted: true, URL: page}
+			UpdatedAt: resource.UpdatedAt, Encrypted: true, URL: page, Tags: resource.Tags}
 	}
 	kind := "resource"
 	if resource.QuickShare() {
@@ -232,6 +243,7 @@ func (a *App) mcpResourceItem(r *http.Request, resource Resource) mcpResourceIte
 		Size: resource.ContentSize, Version: resource.Version, UpdatedAt: resource.UpdatedAt, Kind: kind,
 		Text:      store.TextLike(resource.ContentType),
 		TakenDown: resource.TakenDown, ExpiresAt: resource.ExpiresAt, ShareLinks: resource.LiveShares, URL: page,
+		Tags: resource.Tags,
 	}
 }
 
@@ -252,6 +264,7 @@ func (a *App) mcpListResources(x mcpExchange, args json.RawMessage) (mcpOutcome,
 	var in struct {
 		Query  string `json:"query"`
 		Kind   string `json:"kind"`
+		Tag    string `json:"tag"`
 		Cursor string `json:"cursor"`
 	}
 	if problem := mcpArguments(args, &in); problem != "" {
@@ -275,7 +288,7 @@ func (a *App) mcpListResources(x mcpExchange, args json.RawMessage) (mcpOutcome,
 		}
 	}
 	query := clipText(strings.TrimSpace(in.Query), 200)
-	resources, total, err := a.db.ListResourcesBy(x.r.Context(), x.user.ID, store.ResourceFilter{Query: query, Kind: kind}, mcpListPage, offset)
+	resources, total, err := a.db.ListResourcesBy(x.r.Context(), x.user.ID, store.ResourceFilter{Query: query, Kind: kind, Tag: clipText(in.Tag, 200)}, mcpListPage, offset)
 	if err != nil {
 		return mcpOutcome{}, err
 	}

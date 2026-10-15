@@ -248,8 +248,10 @@ func (c *cli) serverCommand(args []string) error {
 
 func (c *cli) ls(ctx context.Context, args []string) error {
 	var decrypt bool
+	var tag string
 	args, server, err := c.flags("ls", args, func(set *flag.FlagSet) {
 		set.BoolVar(&decrypt, "decrypt", false, "show encrypted resources' names, asking for the master password")
+		set.StringVar(&tag, "tag", "", "only resources with this tag")
 	})
 	if err != nil {
 		return err
@@ -265,7 +267,7 @@ func (c *cli) ls(ctx context.Context, args []string) error {
 	if decrypt {
 		query = ""
 	}
-	resources, err := api.list(ctx, query)
+	resources, err := api.list(ctx, query, tag)
 	if err != nil {
 		return err
 	}
@@ -305,8 +307,8 @@ func (c *cli) ls(ctx context.Context, args []string) error {
 		if r.ExpiresAt != nil {
 			version = msg("quick_mark")
 		}
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n", clean(name), clean(r.Filename), size, version,
-			r.UpdatedAt.Local().Format("2006-01-02 15:04"), r.ID[:8])
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", clean(name), clean(r.Filename), size, version,
+			r.UpdatedAt.Local().Format("2006-01-02 15:04"), r.ID[:8], tagText(r.Tags))
 	}
 	return table.Flush()
 }
@@ -384,7 +386,9 @@ func (c *cli) cat(ctx context.Context, args []string) error {
 func (c *cli) push(ctx context.Context, args []string) error {
 	var to, name, filename string
 	var encrypt bool
+	var tags tagFlags
 	args, server, err := c.flags("push", args, func(set *flag.FlagSet) {
+		set.Var(&tags, "tag", "tag the resource; may be given more than once")
 		set.StringVar(&to, "to", "", "save as a new version of this resource")
 		set.StringVar(&name, "name", "", "name of a new resource")
 		set.StringVar(&filename, "filename", "", "filename of a new resource")
@@ -420,6 +424,13 @@ func (c *cli) push(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		// Tagged first: a tag refused leaves no new version behind.
+		var tagged resource
+		if len(tags) > 0 {
+			if tagged, err = api.retag(ctx, target.ID, tags, nil); err != nil {
+				return err
+			}
+		}
 		var result saveResult
 		if target.isSealed() {
 			// Encrypted here, under the resource's own key, with the name
@@ -443,10 +454,13 @@ func (c *cli) push(ctx context.Context, args []string) error {
 		} else {
 			fmt.Fprintln(c.stdout, msg("push_same", result.Version, api.host()))
 		}
+		if len(tags) > 0 {
+			c.sayTags(target, tagged.Tags)
+		}
 		return nil
 	}
 	if encrypt {
-		made, err := c.createSealed(ctx, api, name, filename, body)
+		made, err := c.createSealed(ctx, api, name, filename, tags, body)
 		if err != nil {
 			return err
 		}
@@ -457,7 +471,7 @@ func (c *cli) push(ctx context.Context, args []string) error {
 		fmt.Fprintln(c.stdout, msg("push_created_sealed", clean(label), api.host(), made.URL))
 		return nil
 	}
-	made, err := api.create(ctx, name, filename, body)
+	made, err := api.create(ctx, name, filename, tags, body)
 	if err != nil {
 		return err
 	}

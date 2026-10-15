@@ -88,9 +88,10 @@ type resource struct {
 	// ExpiresAt marks a quick share: read only until kept as a resource.
 	ExpiresAt *time.Time `json:"expires_at"`
 	// SealedKey and SealedMeta mark an end-to-end encrypted resource.
-	SealedKey  string `json:"sealed_key"`
-	SealedMeta string `json:"sealed_meta"`
-	URL        string `json:"url"`
+	SealedKey  string   `json:"sealed_key"`
+	SealedMeta string   `json:"sealed_meta"`
+	URL        string   `json:"url"`
+	Tags       []string `json:"tags"`
 }
 
 // isSealed is an end-to-end encrypted resource, which this command line
@@ -174,10 +175,40 @@ func (c *client) postJSON(ctx context.Context, path string, value, into any) err
 	return json.NewDecoder(response.Body).Decode(into)
 }
 
-func (c *client) list(ctx context.Context, query string) ([]resource, error) {
+func (c *client) list(ctx context.Context, query, tag string) ([]resource, error) {
 	var answer struct{ Resources []resource }
-	err := c.getJSON(ctx, "/api/v1/resources?q="+url.QueryEscape(query), &answer)
+	err := c.getJSON(ctx, "/api/v1/resources?"+url.Values{"q": {query}, "tag": {tag}}.Encode(), &answer)
 	return answer.Resources, err
+}
+
+type tagCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+func (c *client) tags(ctx context.Context) ([]tagCount, error) {
+	var answer struct{ Tags []tagCount }
+	err := c.getJSON(ctx, "/api/v1/tags", &answer)
+	return answer.Tags, err
+}
+
+// retag takes tags off a resource and puts others on, and returns it after.
+func (c *client) retag(ctx context.Context, id string, add, remove []string) (resource, error) {
+	data, err := json.Marshal(map[string][]string{"add": add, "remove": remove})
+	if err != nil {
+		return resource{}, err
+	}
+	response, err := c.do(ctx, http.MethodPatch, "/api/v1/resources/"+url.PathEscape(id)+"/tags", bytes.NewReader(data),
+		map[string]string{"Content-Type": "application/json"})
+	if err != nil {
+		return resource{}, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return resource{}, readError(response)
+	}
+	defer response.Body.Close()
+	var tagged resource
+	return tagged, json.NewDecoder(response.Body).Decode(&tagged)
 }
 
 // resolve finds the one resource a reference names. None is an error, and so
@@ -255,12 +286,15 @@ func (c *client) write(ctx context.Context, id string, body []byte, base int, en
 }
 
 // createWith makes a resource from a multipart form of the given fields and
-// a content file.
-func (c *client) createWith(ctx context.Context, fields map[string]string, body []byte) (resource, error) {
+// tags and a content file.
+func (c *client) createWith(ctx context.Context, fields map[string]string, tags []string, body []byte) (resource, error) {
 	var form bytes.Buffer
 	writer := multipart.NewWriter(&form)
 	for key, value := range fields {
 		_ = writer.WriteField(key, value)
+	}
+	for _, tag := range tags {
+		_ = writer.WriteField("tag", tag)
 	}
 	part, err := writer.CreateFormFile("content", "content")
 	if err != nil {
@@ -284,31 +318,8 @@ func (c *client) createWith(ctx context.Context, fields map[string]string, body 
 	return made, json.NewDecoder(response.Body).Decode(&made)
 }
 
-func (c *client) create(ctx context.Context, name, filename string, body []byte) (resource, error) {
-	var form bytes.Buffer
-	writer := multipart.NewWriter(&form)
-	_ = writer.WriteField("name", name)
-	_ = writer.WriteField("filename", filename)
-	part, err := writer.CreateFormFile("content", "content")
-	if err != nil {
-		return resource{}, err
-	}
-	if _, err := part.Write(body); err != nil {
-		return resource{}, err
-	}
-	if err := writer.Close(); err != nil {
-		return resource{}, err
-	}
-	response, err := c.do(ctx, http.MethodPost, "/api/v1/resources", &form, map[string]string{"Content-Type": writer.FormDataContentType()})
-	if err != nil {
-		return resource{}, err
-	}
-	if response.StatusCode != http.StatusCreated {
-		return resource{}, readError(response)
-	}
-	defer response.Body.Close()
-	var made resource
-	return made, json.NewDecoder(response.Body).Decode(&made)
+func (c *client) create(ctx context.Context, name, filename string, tags []string, body []byte) (resource, error) {
+	return c.createWith(ctx, map[string]string{"name": name, "filename": filename}, tags, body)
 }
 
 // quickShare is a quick share just made: the resource it is kept as, and

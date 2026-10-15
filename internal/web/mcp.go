@@ -426,7 +426,8 @@ func clipText(value string, max int) string {
 
 const mcpInstructions = "PlainMote keeps this account's resources - configuration files, logs, notes and other files - with their version history. " +
 	"Use list_resources to find a resource, read_resource to read its text (long text comes in parts: pass next_offset back as offset), " +
-	"and list_versions for its history. To change a resource, read it, then save the whole new text with update_resource and the " +
+	"and list_versions for its history. Resources carry the user's own tags, such as tmp or surge: list_tags shows them, list_resources " +
+	"filters by one, and tag_resource adds or removes them. To change a resource, read it, then save the whole new text with update_resource and the " +
 	"version you read as base_version; create_resource makes a new one. share_resource makes a public link that anyone with the " +
 	"address can open: make one only when the user asks for it. End-to-end encrypted resources appear only as placeholders: they can be decrypted in the browser " +
 	"or in PlainMote CLI, never through this server. Never ask the user for their master password."

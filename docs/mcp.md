@@ -70,23 +70,26 @@ Tokens are stored only as digests. Suspending the account ends every authorizati
 
 | Tool | Scope | Arguments | Does |
 | --- | --- | --- | --- |
-| `list_resources` | `read` | `query`, `kind` (`resource` or `quick_share`), `cursor` | Lists resources, most recently updated first, 50 to a page; `query` matches names and filenames |
+| `list_resources` | `read` | `query`, `kind` (`resource` or `quick_share`), `tag`, `cursor` | Lists resources with their tags, most recently updated first, 50 to a page; `query` matches names and filenames, `tag` keeps those carrying it |
+| `list_tags` | `read` | none | Lists the account's tags with how many resources carry each |
 | `read_resource` | `read` | `resource`, `version`, `offset` | Returns the text of the current version or an earlier one, in parts of up to 256 KiB |
 | `list_versions` | `read` | `resource` | Lists a resource's versions |
-| `create_resource` | `write` | `content`, `filename`, `name` | Creates a resource from text |
+| `create_resource` | `write` | `content`, `filename`, `name`, `tags` | Creates a resource from text |
 | `update_resource` | `write` | `resource`, `base_version`, `content`, `name`, `filename` | Saves the text as a new version, keeping the resource's encoding and line endings |
+| `tag_resource` | `write` | `resource`, `add`, `remove` | Adds and removes tags; the content and version stay as they are |
 | `share_resource` | `share` | `resource`, `name`, `expires_in`, `max_uses` | Creates a share link and returns its address |
 | `unshare_resource` | `share` | `resource`, `link` | Revokes one link, or every link of the resource when `link` is omitted |
 
 - A `resource` is an ID, an ID prefix of at least six characters, an exact name or filename, or the address of the resource's page or of one of its share links. Naming a resource by a share link's address neither uses up the link nor requires it to still work.
 - `update_resource` is refused when `base_version` is no longer the current version, so newer content is never overwritten. The app should read again and redo its change. Text identical to the current text is not a conflict: it saves nothing.
 - `share_resource` takes `expires_in` as a duration such as `1h`, `24h` or `7d` (at most `30d`; default `7d`), and `max_uses` from `0` (no limit) to 1,000,000. An app cannot make a link that never expires; the owner can, on the resource's page. Links created by an app are marked in the resource's share list with the app's name.
+- A tag is free text of at most 24 characters; one differing only in case from a tag the account uses is that tag. Encrypted resources and quick shares can be tagged, and their tags are listed, as tags are not encrypted.
 - Binary content is described rather than returned. Text longer than 256 KiB is returned in parts. Quick shares can be listed and read, but not updated or shared again.
 - A refusal, such as a conflict or a full quota, is returned as a tool result with `isError` set and a message the model can act on. A resource of another account is reported exactly as one that does not exist.
 
 ## Encrypted resources
 
-The server cannot decrypt end-to-end encrypted resources and does not ask for the master password. In lists they appear only as placeholders, with their ID, size, update time and address; their names and filenames are not given. Reading one returns a notice instead of content, and they cannot be updated or shared through MCP.
+The server cannot decrypt end-to-end encrypted resources and does not ask for the master password. In lists they appear only as placeholders, with their ID, size, update time, address and tags; their names and filenames are not given. Reading one returns a notice instead of content, and they cannot be updated or shared through MCP.
 
 ## Limits
 
