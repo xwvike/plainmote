@@ -52,6 +52,8 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 		a.handleResource(w, r, user, sessionID, resourceID)
 	case len(parts) == 2 && parts[1] == "raw":
 		a.handleRawPreview(w, r, user, resourceID)
+	case len(parts) == 2 && parts[1] == "tags":
+		a.handleResourceTags(w, r, user, sessionID, resourceID)
 	case len(parts) == 2 && parts[1] == "share":
 		a.handleShare(w, r, user, sessionID, resourceID)
 	case len(parts) == 2 && parts[1] == sealedPath:
@@ -462,6 +464,12 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 	data.Resource = resource
 	data.ContentEncoding = resource.ContentEncoding
+	tags, err := a.db.AccountTags(r.Context(), user.ID)
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	data.Tags = tagSuggestions(tags, resource.Tags)
 
 	data.Shares = buildShareViews(data.BaseURL, resource, shares, now)
 	data.EndedShares = buildShareViews(data.BaseURL, resource, ended, now)

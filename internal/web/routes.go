@@ -150,10 +150,13 @@ type pageData struct {
 	SealedQuickShares int
 	RegistrationMode  auth.RegistrationMode
 	Resources         []Resource
-	Quota             store.UserQuota
-	Pager             pager
-	IsNew             bool
-	SignedIn          bool
+	// Tags are the account's tags: filters on the resource list, and on a
+	// resource the ones it could still be given.
+	Tags     []tagChip
+	Quota    store.UserQuota
+	Pager    pager
+	IsNew    bool
+	SignedIn bool
 	// Indexable is set by the one page that is meant to be found. The response
 	// header carries the same exception; both have to agree or the meta tag
 	// quietly undoes it.
@@ -277,6 +280,7 @@ type pageData struct {
 type pager struct {
 	Query   string
 	Kind    string
+	Tag     string
 	Size    int
 	Sizes   []int
 	Total   int

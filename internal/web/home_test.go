@@ -208,11 +208,11 @@ func TestSignedInQuickShareIsTheCreatorsOwn(t *testing.T) {
 	if err != nil || !resource.QuickShare() || resource.ExpiresAt.Sub(resource.CreatedAt) != 5*time.Minute {
 		t.Fatalf("stored as %+v %v", resource, err)
 	}
-	quick, _, err := db.ListResourcesOfKind(ctx, user.ID, "", store.KindQuickShare, 10, 0)
+	quick, _, err := db.ListResourcesBy(ctx, user.ID, store.ResourceFilter{Kind: store.KindQuickShare}, 10, 0)
 	if err != nil || len(quick) != 1 || quick[0].ID != resourceID {
 		t.Fatalf("quick share list: %+v %v", quick, err)
 	}
-	kept, _, err := db.ListResourcesOfKind(ctx, user.ID, "", store.KindResource, 10, 0)
+	kept, _, err := db.ListResourcesBy(ctx, user.ID, store.ResourceFilter{Kind: store.KindResource}, 10, 0)
 	if err != nil || len(kept) != 1 || kept[0].QuickShare() {
 		t.Fatalf("resource list: %+v %v", kept, err)
 	}

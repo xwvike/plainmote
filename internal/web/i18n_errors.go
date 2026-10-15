@@ -19,6 +19,10 @@ var localizedErrorCodes = map[string]string{
 	"文件名不能包含路径分隔符":                       "error_filename_separator",
 	"文件名不能包含控制字符":                        "error_filename_control",
 	"文件名不能包含文字方向控制符":                     "error_filename_bidi",
+	"标签不能为空":                             "error_tag_empty",
+	"标签必须是有效的 UTF-8 文本":                  "error_tag_utf8",
+	"标签不能包含控制字符":                         "error_tag_control",
+	"标签不能包含文字方向控制符":                      "error_tag_bidi",
 	"编辑器内容不是有效的 Unicode 文本":              "error_editor_unicode",
 	"使用次数无法识别":                           "error_share_uses",
 	"此资源已被下架，不能创建分享链接":                   "error_taken_down",
@@ -50,6 +54,7 @@ var localizedErrorPatterns = []struct {
 }{
 	{regexp.MustCompile(`^内容最大 (.+)$`), "error_content_max"},
 	{regexp.MustCompile(`^文件名最长 ([0-9]+) 个字符$`), "error_filename_length"},
+	{regexp.MustCompile(`^标签最长 ([0-9]+) 个字符$`), "error_tag_length"},
 	{regexp.MustCompile(`^不支持的文本编码 (.+)$`), "error_encoding_unsupported"},
 	{regexp.MustCompile(`^内容含有 (.+) 无法表示的字符(?::.*)?$`), "error_unrepresentable"},
 	{regexp.MustCompile(`^存储空间不足：已用 (.+)，上限 (.+)，本次需要 (.+)。请先删除或缩减已有资源。$`), "error_quota_storage"},

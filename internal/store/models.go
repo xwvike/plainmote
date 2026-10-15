@@ -53,6 +53,8 @@ type Resource struct {
 	// type encrypted with the content key.
 	SealedKey  []byte
 	SealedMeta []byte
+	// Tags are its owner's labels, sorted.
+	Tags []string
 }
 
 // Sealed reports an end-to-end encrypted resource.

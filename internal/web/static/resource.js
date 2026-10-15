@@ -29,8 +29,23 @@ function saveShortcut(event) {
   if (!button.disabled) form.requestSubmit(button);
 }
 
+// A tag added with Enter leaves the box ready for the next one; a refused one
+// stays in it to be corrected.
+function keepTagging(event) {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || !form.matches("[data-tag-add]")) return;
+  const typed = form.querySelector("[data-tag-input]").value;
+  form.addEventListener("plainmote:submitted", ({ detail }) => {
+    const box = document.querySelector("[data-tag-input]");
+    if (!box) return;
+    if (!detail.saved) box.value = typed;
+    box.focus();
+  }, { once: true });
+}
+
 if (typeof document !== "undefined" && document.addEventListener) {
   document.addEventListener("change", followLifetime);
+  document.addEventListener("submit", keepTagging, true);
   document.addEventListener("keydown", saveShortcut);
   // The share dialog arrives after the page has loaded, through parts.js.
   document.addEventListener("plainmote:parts", (event) => syncWithin(event.detail.root));

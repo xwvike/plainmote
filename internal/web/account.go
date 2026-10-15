@@ -482,6 +482,9 @@ func (a *App) writeExport(r *http.Request, archive *zip.Writer, account store.Ac
 	if err := a.writeExportSealed(r, archive, account.User.ID, resources, versions, now); err != nil {
 		return err
 	}
+	if err := writeExportTags(archive, resources, now); err != nil {
+		return err
+	}
 
 	for _, resource := range resources {
 		if resource.ContentKey == "" {
@@ -550,6 +553,27 @@ func (a *App) writeExportBody(r *http.Request, archive *zip.Writer, resource Res
 	}
 	_, err = io.Copy(entry, body)
 	return err
+}
+
+// writeExportTags writes each tagged resource's tags, by its id - the
+// directory its files are under.
+func writeExportTags(archive *zip.Writer, resources []Resource, now time.Time) error {
+	tags := map[string][]string{}
+	for _, resource := range resources {
+		if len(resource.Tags) > 0 {
+			tags[resource.ID] = resource.Tags
+		}
+	}
+	if len(tags) == 0 {
+		return nil
+	}
+	entry, err := archive.CreateHeader(&zip.FileHeader{Name: "tags.json", Method: zip.Deflate, Modified: now})
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(entry)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(tags)
 }
 
 func writeExportAccount(archive *zip.Writer, account store.Account, now time.Time) error {

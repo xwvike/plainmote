@@ -470,6 +470,34 @@ a.pgn:hover { background: var(--zebra); color: var(--ink); text-decoration: none
 .ro { border-left: 2px solid var(--accent); border-radius: 0 var(--r) var(--r) 0; background: var(--accent-s); padding: 7px 10px; font-size: 12px; line-height: 1.55; color: var(--ink2); }
 .tag { display: inline-block; flex: none; padding: 0 6px; border-radius: 2px; background: var(--sunk); font: 400 10px/18px var(--mono); color: var(--ink2); }
 .tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+/* The owner's own tags: rounded and tinted, set apart from the square
+   badges the service puts on a row and from the outlined names of links. */
+.lbls { display: flex; min-width: 0; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lbl { display: inline-flex; flex: none; align-items: center; gap: 6px; max-width: 220px; height: 22px; padding: 0 9px; border-radius: 11px; background: color-mix(in oklab, var(--accent) 10%, var(--panel)); font: 500 12px/22px var(--sans); color: var(--accent-d); white-space: nowrap; }
+.lbl, .lbl a { overflow: hidden; text-overflow: ellipsis; }
+.lbl a { color: inherit; }
+a.lbl:hover, .lbl a:hover { color: var(--accent-d); text-decoration: none; }
+a.lbl:hover { background: color-mix(in oklab, var(--accent) 18%, var(--panel)); }
+.lbl b { min-width: 16px; height: 16px; padding: 0 4px; margin-right: -5px; border-radius: 8px; background: var(--panel); font: 400 10px/16px var(--mono); text-align: center; color: var(--ink3); }
+.lbl.on { background: var(--accent); color: var(--on-accent); }
+a.lbl.on:hover { background: var(--accent-d); color: var(--on-accent); }
+.lbl.on b { background: color-mix(in oklab, var(--on-accent) 22%, transparent); color: var(--on-accent); }
+.lbl.sm { height: 18px; gap: 4px; padding: 0 7px; border-radius: 9px; font-size: 11px; line-height: 18px; }
+.lbl button { all: unset; flex: none; margin-right: -3px; padding: 0 2px; font-size: 14px; line-height: 1; color: color-mix(in oklab, var(--accent-d) 55%, var(--panel)); cursor: pointer; }
+.lbl button:hover { color: var(--bad); }
+.lbl button:focus-visible { outline: 1px solid var(--accent); border-radius: 2px; }
+.lbl-edit { margin-top: -6px; }
+/* The box to add one reads as a tag not written yet: a dashed outline the
+   size of a tag. The suggestions open as the name is typed, so the arrow
+   the browser draws for them is left out. */
+.lbl-add input[type="text"] { width: 110px; height: 22px; padding: 0 9px; border: 1px dashed var(--line2); border-radius: 11px; background: transparent; box-shadow: none; font: 400 12px/20px var(--sans); }
+.lbl-add input[type="text"]:hover { border-color: var(--ink3); }
+.lbl-add input[type="text"]:focus { border-style: solid; border-color: var(--accent); box-shadow: none; background: var(--field); }
+.lbl-add input::-webkit-calendar-picker-indicator { display: none !important; }
+/* In a list row the filename comes first; the tags take what is left of
+   the cell and fade out where they no longer fit. */
+.fl > .trunc { flex: 0 1 auto; }
+.row-lbls { display: flex; flex: 1 1 0; min-width: 0; gap: 4px; overflow: hidden; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent); }
 .content-meta { font: 400 10.5px var(--mono); font-style: normal; color: var(--ink3); }
 /* The file input lives inside a key that says what choosing a file does; the
    input itself is kept for the keyboard and the form, out of sight. */
@@ -675,6 +703,8 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 
 .table-scroll { max-width: 100%; overflow-x: auto; }
 .table-scroll > table { min-width: 760px; }
+/* The filename cell also carries the tags: room for both before scrolling. */
+.table-scroll > table.res-list { min-width: 960px; }
 /* The record, kept but not given a panel of its own. */
 .meta { font: 400 10.5px var(--mono); color: var(--ink3); word-break: break-all; }
 

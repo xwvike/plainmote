@@ -31,6 +31,7 @@
         <a class="txt danger" href="/resources/{{.Resource.ID}}?delete=1" data-dialog>{{tr .Locale "delete"}}</a>
       </span>
     </div>
+    {{template "resource-tags" .}}
     {{end}}
     {{template "resource-notices" .}}
     {{if and .IsNew .HasKeyring}}
@@ -190,6 +191,20 @@
 
 {{define "resource-crumb"}}<div class="crumb" data-part="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{resourceLabel .Locale .Resource}}{{end}}</span></div>{{end}}
 
+{{/* Each tag takes itself off with its own form; Enter in the box adds one.
+     parts.js swaps only this row, so an edit in progress stays. */}}
+{{define "resource-tags"}}<div class="lbls lbl-edit" data-part="tags">
+  {{range .Resource.Tags}}<form class="lbl" method="post" action="/resources/{{$.Resource.ID}}/tags" data-parts>
+    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="remove" value="{{.}}">
+    <a href="/resources/?tag={{.}}">{{.}}</a><button type="submit" title="{{tr $.Locale "tag_remove"}}" aria-label="{{printf (tr $.Locale "tag_remove_named") .}}">×</button>
+  </form>{{end}}
+  <form class="lbl-add" method="post" action="/resources/{{.Resource.ID}}/tags" data-parts data-tag-add>
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="text" name="add" list="tag-choices" maxlength="{{tagMaxRunes}}" autocomplete="off" placeholder="{{tr .Locale "tag_add"}}" aria-label="{{tr .Locale "tag_add"}}" data-tag-input>
+    <datalist id="tag-choices">{{range .Tags}}<option value="{{.Name}}"></option>{{end}}</datalist>
+  </form>
+</div>{{end}}
+
 {{define "resource-hist"}}<a class="hist" href="/resources/{{.Resource.ID}}/versions" data-part="hist">{{tr .Locale "history"}}<b>{{.HistoryCount}}</b></a>{{end}}
 
 {{/* The version this edit starts from. A save over anything newer is
@@ -336,7 +351,8 @@
 {{/* What parts.js asks for: the pieces of this page an action can change. */}}
 {{define "resource.html#parts"}}{{template "resource-doc-title" .}}
 {{template "resource-crumb" .}}
-<h1 data-part="title">{{or .Resource.Name (tr .Locale "untitled_resource")}}</h1>
+<h1 data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{resourceLabel .Locale .Resource}}</h1>
+{{template "resource-tags" .}}
 {{template "resource-hist" .}}
 {{template "resource-notices" .}}
 {{template "resource-base" .}}

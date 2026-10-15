@@ -40,19 +40,35 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	if err != nil || page < 1 {
 		page = 1
 	}
-	kind := query.Get("kind")
-	if kind != store.KindResource && kind != store.KindQuickShare {
-		kind = ""
+	filter := store.ResourceFilter{Query: search, Kind: query.Get("kind"), Tag: strings.TrimSpace(query.Get("tag"))}
+	if filter.Kind != store.KindResource && filter.Kind != store.KindQuickShare {
+		filter.Kind = ""
 	}
+	filter.Tag = truncateBytes(filter.Tag, maxQueryLength)
 
-	resources, total, err := a.db.ListResourcesOfKind(r.Context(), user.ID, search, kind, size, (page-1)*size)
+	resources, total, err := a.db.ListResourcesBy(r.Context(), user.ID, filter, size, (page-1)*size)
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if last := lastPage(total, size); page > last {
-		http.Redirect(w, r, dashboardURL(search, kind, size, last), http.StatusSeeOther)
+		http.Redirect(w, r, dashboardURL(filter, size, last), http.StatusSeeOther)
 		return
+	}
+	tags, err := a.db.AccountTags(r.Context(), user.ID)
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	chips := make([]tagChip, 0, len(tags))
+	for _, tag := range tags {
+		on := strings.EqualFold(tag.Name, filter.Tag)
+		pick := filter
+		pick.Tag = tag.Name
+		if on {
+			pick.Tag = ""
+		}
+		chips = append(chips, tagChip{Name: tag.Name, Count: tag.Count, URL: dashboardURL(pick, size, 1), On: on})
 	}
 
 	// What is left is part of the list, not a surprise at save time: the
@@ -64,10 +80,11 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	}
 
 	pager := buildPager(page, size, total, pageSizes, func(number int) string {
-		return dashboardURL(search, kind, size, number)
+		return dashboardURL(filter, size, number)
 	})
 	pager.Query = search
-	pager.Kind = kind
+	pager.Kind = filter.Kind
+	pager.Tag = filter.Tag
 	a.renderTemplate(w, r, http.StatusOK, "dashboard.html", pageData{
 		User:      user,
 		CSRF:      csrfValue(r),
@@ -75,6 +92,7 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		BaseURL:   a.baseURL(r),
 		SignedIn:  true,
 		Resources: resources,
+		Tags:      chips,
 		Quota:     quota,
 		Pager:     pager,
 	})
@@ -113,13 +131,16 @@ func lastPage(total, size int) int {
 	return (total + size - 1) / size
 }
 
-func dashboardURL(search, kind string, size, page int) string {
+func dashboardURL(filter store.ResourceFilter, size, page int) string {
 	values := url.Values{}
-	if search != "" {
-		values.Set("q", search)
+	if filter.Query != "" {
+		values.Set("q", filter.Query)
 	}
-	if kind != "" {
-		values.Set("kind", kind)
+	if filter.Kind != "" {
+		values.Set("kind", filter.Kind)
+	}
+	if filter.Tag != "" {
+		values.Set("tag", filter.Tag)
 	}
 	if size != defaultPageSize {
 		values.Set("size", strconv.Itoa(size))

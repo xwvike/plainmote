@@ -134,6 +134,8 @@ func (a *App) templateSet() *template.Template {
 		"legalBytes":         legalBytes,
 		"storageMeter":       storageMeter,
 		"inc":                func(n int) int { return n + 1 },
+		"tagMaxRunes":        func() int { return store.TagMaxRunes },
+		"join":               strings.Join,
 		"add":                func(a, b int) int { return a + b },
 		"grantSource":        grantSource,
 	}).ParseFS(webAssets, "templates/*.html"))

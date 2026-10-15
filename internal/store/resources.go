@@ -163,7 +163,7 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
 const resourceColumns = `r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size, r.content_type,
        r.content_encoding, r.created_at, r.updated_at,
        r.version, COALESCE(r.version_at, r.updated_at), COALESCE(r.restored_from, 0), r.content_sha256,
-       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key, r.sealed_meta`
+       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key, r.sealed_meta, r.tags`
 
 // liveResource leaves out a quick share whose time is up but which the
 // sweep has not reached yet: it is gone as far as its owner is concerned.
@@ -177,7 +177,7 @@ func scanResource(row rowScanner, extra ...any) (Resource, error) {
 		&r.ID, &r.OwnerID, &r.Name, &r.Filename, &r.ContentKey, &r.ContentSize, &r.ContentType,
 		&r.ContentEncoding, &r.CreatedAt, &r.UpdatedAt,
 		&r.Version, &r.VersionAt, &r.RestoredFrom, &r.ContentSHA256,
-		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt, &r.SealedKey, &r.SealedMeta,
+		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt, &r.SealedKey, &r.SealedMeta, &r.Tags,
 	}, extra...)...)
 	return r, err
 }
@@ -209,24 +209,34 @@ const (
 )
 
 func (d *Store) ListResources(ctx context.Context, ownerID, query string, limit, offset int) ([]Resource, int, error) {
-	return d.ListResourcesOfKind(ctx, ownerID, query, "", limit, offset)
+	return d.ListResourcesBy(ctx, ownerID, ResourceFilter{Query: query}, limit, offset)
 }
 
-func (d *Store) ListResourcesOfKind(ctx context.Context, ownerID, query, kind string, limit, offset int) ([]Resource, int, error) {
-	query = strings.TrimSpace(query)
+// ResourceFilter narrows the resource list: Query by name or filename, Kind
+// to resources or quick shares, Tag to those carrying it, in any case.
+type ResourceFilter struct {
+	Query string
+	Kind  string
+	Tag   string
+}
+
+const resourceFilterSQL = `r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename ILIKE $3 ESCAPE '\')
+  AND ` + liveResource + ` AND ($4 = '' OR ($4 = 'quick') = (r.expires_at IS NOT NULL))
+  AND ($5 = '' OR EXISTS (SELECT 1 FROM unnest(r.tags) t WHERE lower(t) = lower($5)))`
+
+func (d *Store) ListResourcesBy(ctx context.Context, ownerID string, filter ResourceFilter, limit, offset int) ([]Resource, int, error) {
+	query := strings.TrimSpace(filter.Query)
 	pattern := "%" + escapeLikePattern(query) + "%"
+	kind := filter.Kind
 	switch kind {
 	case KindResource, KindQuickShare:
 	default:
 		kind = ""
 	}
+	tag := strings.TrimSpace(filter.Tag)
 	var total int
-	if err := d.db.QueryRow(ctx, `
-SELECT COUNT(*)
-FROM resources r
-WHERE r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename ILIKE $3 ESCAPE '\')
-  AND `+liveResource+` AND ($4 = '' OR ($4 = 'quick') = (r.expires_at IS NOT NULL))
-`, ownerID, query, pattern, kind).Scan(&total); err != nil {
+	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM resources r WHERE `+resourceFilterSQL,
+		ownerID, query, pattern, kind, tag).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count resources: %w: %w", ErrInternal, err)
 	}
 	if limit <= 0 {
@@ -238,14 +248,13 @@ WHERE r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename I
 	rows, err := d.db.Query(ctx, `
 SELECT `+resourceColumns+`,
        (SELECT COUNT(*) FROM links l WHERE l.resource_id = r.id AND l.revoked_at IS NULL
-          AND (l.expires_at IS NULL OR l.expires_at > $1)
+          AND (l.expires_at IS NULL OR l.expires_at > $6)
           AND (l.max_uses = 0 OR l.used_count < l.max_uses))
 FROM resources r
-WHERE r.owner_id = $2 AND ($3 = '' OR r.name ILIKE $4 ESCAPE '\' OR r.filename ILIKE $4 ESCAPE '\')
-  AND `+liveResource+` AND ($7 = '' OR ($7 = 'quick') = (r.expires_at IS NOT NULL))
+WHERE `+resourceFilterSQL+`
 ORDER BY r.updated_at DESC, r.id
-LIMIT $5 OFFSET $6
-`, time.Now().UTC(), ownerID, query, pattern, limit, offset, kind)
+LIMIT $7 OFFSET $8
+`, ownerID, query, pattern, kind, tag, time.Now().UTC(), limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

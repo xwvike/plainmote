@@ -31,9 +31,13 @@
         </select>
       </label>
       <input type="hidden" name="size" value="{{.Pager.Size}}">
+      {{if .Pager.Tag}}<input type="hidden" name="tag" value="{{.Pager.Tag}}">{{end}}
       <button type="submit">{{tr .Locale "search"}}</button>
-      {{if or .Pager.Query .Pager.Kind}}<a class="txt" href="/resources/">{{tr .Locale "clear"}}</a>{{end}}
+      {{if or .Pager.Query .Pager.Kind .Pager.Tag}}<a class="txt" href="/resources/">{{tr .Locale "clear"}}</a>{{end}}
     </form>
+    {{if .Tags}}<nav class="lbls" aria-label="{{tr .Locale "tags"}}">
+      {{range .Tags}}<a class="lbl{{if .On}} on{{end}}" href="{{.URL}}"{{if .On}} aria-current="true"{{end}}>{{.Name}}<b>{{.Count}}</b></a>{{end}}
+    </nav>{{end}}
     {{/* Encrypted names are not the service's to search: once unlocked,
          sealed-names.js matches them here, in a block of their own. */}}
     <div data-sealed-search data-query="{{.Pager.Query}}" hidden
@@ -54,14 +58,14 @@
     <div class="panel">
       {{if .Resources}}
       <div class="table-scroll">
-        <table class="fx">
+        <table class="fx res-list">
           <colgroup><col style="width:240px"><col><col style="width:210px"><col style="width:130px"><col style="width:150px"></colgroup>
           <thead><tr><th>{{tr .Locale "name"}}</th><th>{{tr .Locale "filename"}}</th><th>{{tr .Locale "type"}}</th><th>{{tr .Locale "status"}}</th><th class="r">{{tr .Locale "updated"}}</th></tr></thead>
           <tbody>
             {{range .Resources}}
             <tr>
               <td class="trunc"><a href="/resources/{{.ID}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</a></td>
-              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}</span></td>
+              <td><span class="fl"><span class="mono trunc" title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}{{with .Tags}}<span class="row-lbls" title="{{join . " · "}}">{{range .}}<a class="lbl sm" href="/resources/?tag={{.}}">{{.}}</a>{{end}}</span>{{end}}</span></td>
               <td>
                 {{if or .Encrypted .Sealed}}<span class="mut">—</span>
                 {{else}}<span class="mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
@@ -84,6 +88,7 @@
           <form class="psize" method="get" action="/resources/">
             <input type="hidden" name="q" value="{{.Pager.Query}}">
             <input type="hidden" name="kind" value="{{.Pager.Kind}}">
+            {{if .Pager.Tag}}<input type="hidden" name="tag" value="{{.Pager.Tag}}">{{end}}
             <label>{{tr .Locale "per_page"}} <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
             <button type="submit" class="sm">{{tr .Locale "apply"}}</button>
           </form>
@@ -95,7 +100,7 @@
         </div>
       </div>
       {{else}}
-      <p class="empty">{{if .Pager.Query}}{{tr .Locale "no_matching_resources"}}<span class="mono">{{.Pager.Query}}</span>{{else}}{{tr .Locale "no_resources"}}{{end}}</p>
+      <p class="empty">{{if .Pager.Query}}{{tr .Locale "no_matching_resources"}}<span class="mono">{{.Pager.Query}}</span>{{else if or .Pager.Tag .Pager.Kind}}{{tr .Locale "no_filtered_resources"}}{{else}}{{tr .Locale "no_resources"}}{{end}}</p>
       {{end}}
     </div>
   </main>

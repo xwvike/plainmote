@@ -127,6 +127,9 @@ CREATE INDEX IF NOT EXISTS resources_owner_usage_idx ON resources(owner_id) INCL
 -- empty and its content is ciphertext the service cannot read.
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_key BYTEA;
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_meta BYTEA;
+-- The labels its owner put on a resource, in plain text even on an encrypted
+-- one. One spelling per account: a tag differing only in case is the same tag.
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
 -- Objects whose delete failed once no row pointed at them any more. The
 -- prune deletes them again. Keys are made new for every write, so none of
 -- these can come back into use.
