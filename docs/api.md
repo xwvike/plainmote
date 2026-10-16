@@ -4,7 +4,7 @@ English | [简体中文](api.zh-CN.md)
 
 The endpoints under `/api/v1/` serve the `plainmote` command line and can also be called directly from scripts. Callers authenticate with a personal access token obtained through device authorization: the command line or script requests a code, and the account owner enters and approves it in a signed-in browser.
 
-The API can list, read, save and create resources, and make quick shares. It cannot delete resources, manage share links or change the account.
+The API can list, read, save and create resources, manage their tags, and make quick shares. It cannot delete resources, manage share links or change the account.
 
 ## Obtaining a token
 
@@ -294,6 +294,14 @@ The request body is `multipart/form-data`:
 Returns `201` with the resource object and `share_url`, the link.
 
 An encrypted quick share, as `plainmote share --encrypt` makes, is sent with the content encrypted on the client and these fields instead of `filename`, all Base64URL without padding except the IDs: `id` and `link_id`, UUIDs chosen by the client; `sealed_key`, the content key wrapped by the account key; `sealed_meta`, the encrypted metadata; `link_key`, the content key wrapped by the link's key; and `owner_key`, the link's key wrapped by the account key. `share_url` then lacks the key, which the client adds after `#`. The formats are described in [encryption.md](encryption.md). Text is delivered as plain text, images, audio and video as themselves, and anything else as a download, as for quick shares made on the home page. The quick share counts toward the account's storage. Its content is deleted when it expires; its access history is kept.
+
+## Fetching a share link
+
+A share link needs no token: the address is the credential. `GET` returns the raw bytes; `HEAD` returns the headers alone.
+
+- Responses carry an `ETag`, and stored content also `Last-Modified`. A request with `If-None-Match` or `If-Modified-Since` gets `304` with no body while the content is unchanged, which suits a machine polling for a config.
+- Every answered request, `304` and `HEAD` included, counts as one use of the link and is recorded in the access history. Repeated `304` and `HEAD` answers to the same caller within an hour are folded into one record with a count.
+- Updating the resource keeps the address; the next request gets the new content.
 
 ## Examples
 

@@ -4,7 +4,7 @@ English | [简体中文](encryption.zh-CN.md)
 
 PlainMote can encrypt content in the browser so that the service stores only ciphertext. Everything is encrypted under a **master password**: a password only the account owner knows. It protects an account key, which in turn protects the keys of encrypted resources and encrypted quick shares. This document describes it.
 
-Quick shares made before quick-share encryption moved under the master password used the `PMe1` format, with the key only in the link or derived from a code. Those still within their term are delivered until they expire; nothing makes them any more.
+Early encrypted quick shares used the `PMe1` format, with the key only in the link or derived from a code, independent of the master password. They are delivered until they expire; none are made any more.
 
 Encrypted resources can be viewed, edited, shared and exported in the browser. Quick shares made on the home page with its encryption switch on, or with `plainmote share --encrypt`, are encrypted resources too. The command line reads, edits, lists and creates them, asking for the master password each time or reading it from `PLAINMOTE_MASTER_PASSWORD`; it does not keep the account key.
 

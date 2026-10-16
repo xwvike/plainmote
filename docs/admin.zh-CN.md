@@ -20,7 +20,7 @@ PlainMote 不包含管理页面。运营者通过一组以 Ed25519 签名保护�
 管理接口有以下限制：
 
 - **不接触内容**：任何接口都不返回资源正文、历史版本正文、分享链接地址或访问记录中的访问者信息（IP 地址与客户端信息）。运营者只能看到元数据与汇总数字。
-- **变更必须说明原因并留痕**：每一项变更都须附带原因，并写入只追加的审计记录，记录时间、所用密钥、操作、对象、原因及来源 IP。审计记录不能修改或删除，也不随访问记录的保留期清理。
+- **变更必须说明原因并留痕**：每项变更都要填写原因，并写入只追加的审计记录，记录时间、所用密钥、操作、对象、原因及来源 IP。审计记录不能修改或删除，也不随访问记录的保留期清理。
 - **注册开关不在其中**：是否允许新账号注册由 `PLAINMOTE_REGISTRATION_MODE` 在启动时决定。
 
 ### 对用户的影响
@@ -34,7 +34,7 @@ PlainMote 不包含管理页面。运营者通过一组以 Ed25519 签名保护�
 | 删除资源 | 与所有者自行删除效果相同：正文、历史版本与分享链接一并删除，访问记录保留 |
 | 撤销链接 | 与所有者撤销效果相同 |
 
-对已停用账号或已下架资源的分享链接，公开访问一律返回 `401`，与链接失效时相同，不说明原因；所有者的访问记录中分别记为“账号已停用”与“已下架”。
+对已停用账号或已下架资源的分享链接，公开访问都返回 `401`，与链接失效时相同，不说明原因；所有者的访问记录中分别记为“账号已停用”与“已下架”。
 
 ## 启用
 
@@ -62,7 +62,7 @@ go run ./cmd/plainmote-admin keygen
 
 ### 管理页面
 
-[PlainMote Admin](https://github.com/xwvike/plainmote-admin)（MIT）是基于本接口的管理页面，完全在浏览器中运行，私钥以不可导出的形式保存，可同时管理多个部署。该页面可在本机运行、部署为静态站点，或使用已发布的地址 [xwvike.github.io/plainmote-admin](https://xwvike.github.io/plainmote-admin/)。页面所在的来源须列入 `PLAINMOTE_ADMIN_ORIGINS`。浏览器按来源保存私钥，同一来源下的任何脚本都可以使用它，因此该页面应部署在不承载其他内容的来源上。
+[PlainMote Admin](https://github.com/xwvike/plainmote-admin)（MIT）是基于本接口的管理页面，完全在浏览器中运行，私钥以不可导出的形式保存，可同时管理多个部署。该页面可在本机运行、部署为静态站点，或使用已发布的地址 [xwvike.github.io/plainmote-admin](https://xwvike.github.io/plainmote-admin/)。页面所在的来源要列入 `PLAINMOTE_ADMIN_ORIGINS`。浏览器按来源保存私钥，同一来源下的任何脚本都可以使用它，因此该页面应部署在不承载其他内容的来源上。
 
 ### 命令行调用
 
@@ -77,14 +77,14 @@ go run ./cmd/plainmote-admin call -key admin.jwk POST https://plainmote.link/_ad
 
 ### 通用约定
 
-- 路径前缀为 `/_admin/v1/`。请求体与响应体均为 JSON，请求体不超过 64 KiB。
+- 路径前缀为 `/_admin/v1/`。请求体与响应体都是 JSON，请求体不超过 64 KiB。
 - 时间为 RFC 3339 格式的 UTC 时间，大小以字节为单位，ID 为 UUID。
 - 列表接口接受查询参数 `page`（从 1 开始，默认 1）与 `size`（1–100，默认 20），返回 `{"items": [...], "total": <总数>}`。
 - 进行变更的接口要求请求体包含 `reason` 字段，长度为 1–500 个字符，写入审计记录；停用账号与下架资源的原因会显示给用户。
 
 ### 认证
 
-每个请求须携带以下请求头：
+每个请求都要带上以下请求头：
 
 | 请求头 | 内容 |
 | --- | --- |
@@ -184,7 +184,7 @@ PLAINMOTE-ADMIN-V1
 | `storage.limit_bytes` | integer | 容量上限 |
 | `plans` | array | 仅账号详情返回：生效中的套餐，见下表 |
 | `master_password` | boolean | 账号是否已设置用于端到端加密的主密码 |
-| `master_password_at` | time \| null | 主密码的设置时间；未设置时为 `null`。接口不返回任何密钥材料，运营者亦无法找回用户遗忘的主密码 |
+| `master_password_at` | time \| null | 主密码的设置时间；未设置时为 `null`。接口不返回任何密钥材料，运营者也无法找回用户遗忘的主密码 |
 
 `resources_limit` 与 `storage.limit_bytes` 为当前生效的全部套餐之和，已计入授予时间与到期时间。`plans` 的每一项：
 
@@ -338,7 +338,7 @@ PLAINMOTE-ADMIN-V1
 
 `DELETE /_admin/v1/plans/{id}`
 
-请求体：`{"reason": "…"}`。删除套餐，返回 `{"id": "…", "deleted": true}`。默认套餐不能删除（`plan_protected`）；仍有账号持有该套餐时不能删除（`plan_in_use`），包括已到期但尚未撤回的授予，须先逐个撤回。
+请求体：`{"reason": "…"}`。删除套餐，返回 `{"id": "…", "deleted": true}`。默认套餐不能删除（`plan_protected`）；仍有账号持有该套餐时不能删除（`plan_in_use`），包括已到期但尚未撤回的授予，要先逐个撤回。
 
 `POST /_admin/v1/users/{id}/plans`
 
@@ -356,7 +356,7 @@ PLAINMOTE-ADMIN-V1
 
 `GET /_admin/v1/resources?owner=&q=&status=&kind=&encrypted=&page=&size=`
 
-`owner` 为账号 ID；`q` 部分匹配名称或文件名（不区分大小写），加密资源没有名称与文件名，须按所有者或 ID 查找；`status` 为 `active` 或 `taken_down`；`kind` 为 `quick_share`（尚未转为资源的登录用户快速分享）或 `resource`（其余资源）；`encrypted=1` 时仅返回端到端加密的资源。按创建时间倒序返回资源对象的列表。
+`owner` 为账号 ID；`q` 部分匹配名称或文件名（不区分大小写），加密资源没有名称与文件名，只能按所有者或 ID 查找；`status` 为 `active` 或 `taken_down`；`kind` 为 `quick_share`（尚未转为资源的登录用户快速分享）或 `resource`（其余资源）；`encrypted=1` 时仅返回端到端加密的资源。按创建时间倒序返回资源对象的列表。
 
 `GET /_admin/v1/resources/{id}`
 
@@ -390,7 +390,7 @@ PLAINMOTE-ADMIN-V1
 { "link": "https://plainmote.link/d/…" }
 ```
 
-`link` 可以是完整的分享地址、地址中的路径或 token 本身。加密分享的地址在 `#` 之后带有密钥，发送前须去掉 `#` 及其后的内容：该密钥可解密内容，不应离开运营者的浏览器。服务端同样忽略 `#` 之后的部分。返回该链接所属的资源与链接自身的状态：
+`link` 可以是完整的分享地址、地址中的路径或 token 本身。加密分享的地址在 `#` 之后带有密钥，发送前要去掉 `#` 及其后的内容：该密钥可解密内容，不应离开运营者的浏览器。服务端同样忽略 `#` 之后的部分。返回该链接所属的资源与链接自身的状态：
 
 ```json
 { "resource": { "id": "…", "name": "checkout-api", "…": "…" }, "link": { "id": "…", "name": "web-01", "live": true, "…": "…" } }

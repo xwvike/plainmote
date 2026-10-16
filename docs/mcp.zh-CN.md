@@ -13,16 +13,16 @@
 | 应用 | 添加方法 |
 | --- | --- |
 | Claude Code | `claude mcp add --transport http --scope user plainmote <地址>`，然后在 Claude Code 中运行 `/mcp` 完成授权 |
-| Codex | `codex mcp add plainmote --url <地址>`，该命令会打开浏览器进行授权；如未打开，运行 `codex mcp login plainmote` |
+| Codex | `codex mcp add plainmote --url <地址>`，该命令会打开浏览器授权；如未打开，运行 `codex mcp login plainmote` |
 | Zed | 在 `settings.json` 中加入 `"context_servers": {"plainmote": {"url": "<地址>"}}` |
 | VS Code | `code --add-mcp '{"name":"plainmote","type":"http","url":"<地址>"}'`，或在 `mcp.json`（MCP: Open User Configuration）中加入 `"servers": {"plainmote": {"type": "http", "url": "<地址>"}}` |
 | opencode | 在 `opencode.json` 中加入 `"mcp": {"plainmote": {"type": "remote", "url": "<地址>"}}`，然后运行 `opencode mcp auth plainmote` |
 | Cursor | 在 `~/.cursor/mcp.json` 或项目中的 `.cursor/mcp.json` 加入 `"mcpServers": {"plainmote": {"url": "<地址>"}}`；开发者页面另提供一键安装链接 |
-| Antigravity | 在 `mcp_config.json`（… › Manage MCP Servers › View raw config）中加入 `"mcpServers": {"plainmote": {"serverUrl": "<地址>"}}`，键名须为 `serverUrl` |
+| Antigravity | 在 `mcp_config.json`（… › Manage MCP Servers › View raw config）中加入 `"mcpServers": {"plainmote": {"serverUrl": "<地址>"}}`，键名必须是 `serverUrl` |
 | Claude（桌面应用及 claude.ai） | 设置 › 连接器 › 添加自定义连接器 |
 | ChatGPT（桌面应用及网页） | 设置 › 应用 › 高级设置中开启开发者模式，然后在 设置 › 应用 中创建应用，认证方式选择 OAuth |
 
-Claude 和 ChatGPT 从其自身的服务器发起连接，因此部署须可从公网访问。其他支持远程 MCP 服务器和 OAuth 的应用，填写同一地址即可。应用首次连接时会打开本部署的授权页面，所有者在该页面登录（如尚未登录），核对应用名称和授权后的跳转地址，然后允许或拒绝。
+Claude 和 ChatGPT 从其自身的服务器发起连接，所以部署必须能从公网访问。其他支持远程 MCP 服务器和 OAuth 的应用，填写同一地址即可。应用首次连接时会打开本部署的授权页面，所有者在该页面登录（如尚未登录），核对应用名称和授权后的跳转地址，然后允许或拒绝。
 
 ## 授权
 
@@ -34,7 +34,7 @@ Claude 和 ChatGPT 从其自身的服务器发起连接，因此部署须可从�
    - **动态客户端注册**（RFC 7591），即 `POST /oauth/register`。应用自行提供的信息显示为未经验证。同一地址每小时最多注册 20 个客户端。
 
    跳转地址必须为 `https`、指向本机回环地址的 `http`（端口不限）或应用自有的协议，且不得包含片段。
-3. 应用将所有者引导至 `/oauth/authorize`，并将 `resource` 设为 `/mcp` 地址（RFC 8707）。令牌与该地址绑定，在其他地址均不被接受。
+3. 应用将所有者引导至 `/oauth/authorize`，并将 `resource` 设为 `/mcp` 地址（RFC 8707）。令牌与该地址绑定，在其他地址都不被接受。
 4. 应用在 `/oauth/token` 用授权码换取令牌，此后也在该处刷新令牌。
 
 ### 权限范围
@@ -45,12 +45,12 @@ Claude 和 ChatGPT 从其自身的服务器发起连接，因此部署须可从�
 | `write` | 新建资源、保存新版本 |
 | `share` | 创建和撤销分享链接 |
 
-每次授权始终包含全部三项权限，与应用请求的范围无关。授权页面列出这些权限，不提供选择：所有者只需允许或拒绝。所有工具均不能删除任何内容。创建分享链接是唯一使内容可在账号之外被访问的操作，因此 `share_resource` 带有 `destructiveHint` 和 `openWorldHint` 标注，供客户端在执行前向用户确认。
+每次授权始终包含全部三项权限，与应用请求的范围无关。授权页面列出这些权限，不提供选择：所有者只需允许或拒绝。所有工具都不能删除内容。创建分享链接是唯一使内容可在账号之外被访问的操作，因此 `share_resource` 带有 `destructiveHint` 和 `openWorldHint` 标注，供客户端在执行前向用户确认。
 
 ### 有效期与撤销
 
 - 访问令牌有效期为 1 小时。
-- 每次刷新都会签发新的刷新令牌，所用的刷新令牌随即作废。再次出示已作废的刷新令牌，整个授权即告失效。
+- 每次刷新都会签发新的刷新令牌，所用的刷新令牌随即作废。再次出示已作废的刷新令牌，整个授权随即失效。
 - 授权连续 30 天未刷新即失效。
 - 每次授权都会询问所有者，每次授权分别保存。
 - 应用可通过 `POST /oauth/revoke`（RFC 7009）撤销其令牌。所有者可在设置的“已授权应用”中撤销任一授权；该页面列出每个应用的权限、授权时间和最后使用时间。
@@ -59,9 +59,9 @@ Claude 和 ChatGPT 从其自身的服务器发起连接，因此部署须可从�
 
 ## 传输
 
-- 仅支持 `POST /mcp` 上的 Streamable HTTP。每个响应均为单个 JSON 对象。服务器不推送流、不保持会话、不发送通知。`GET` 和 `DELETE` 返回 `405`。
+- 仅支持 `POST /mcp` 上的 Streamable HTTP。每个响应都是单个 JSON 对象。服务器不推送流、不保持会话、不发送通知。`GET` 和 `DELETE` 返回 `405`。
 - 支持的协议版本：
-  - `2026-07-28`：每个请求在 `_meta` 中携带 `io.modelcontextprotocol/protocolVersion` 和 `clientCapabilities`。`MCP-Protocol-Version`、`Mcp-Method` 和 `Mcp-Name` 请求头须与请求体一致。`server/discover` 返回服务器说明。
+  - `2026-07-28`：每个请求在 `_meta` 中携带 `io.modelcontextprotocol/protocolVersion` 和 `clientCapabilities`。`MCP-Protocol-Version`、`Mcp-Method` 和 `Mcp-Name` 请求头必须与请求体一致。`server/discover` 返回服务器说明。
   - `2025-11-25`、`2025-06-18` 和 `2025-03-26`：以 `initialize` 开始。
 - 不接受 JSON-RPC 批量请求。
 - 来自其他网站页面的请求（依据 `Origin` 请求头判断）返回 `403`。
@@ -85,7 +85,7 @@ Claude 和 ChatGPT 从其自身的服务器发起连接，因此部署须可从�
 - `share_resource` 的 `expires_in` 为 `1h`、`24h`、`7d` 等时长（最长 `30d`，默认 `7d`）；`max_uses` 为 `0`（不限）至 1,000,000。应用不能创建永不过期的链接，所有者可在资源页面上创建。由应用创建的链接会在资源的分享列表中标注创建它的应用名称。
 - 标签是最长 24 个字符的自由文本；与账号已用标签仅大小写不同的标签视为同一个。加密资源和快速分享也可以打标签；标签不加密，因此会在列表中显示。
 - 二进制内容只返回说明，不返回内容。超过 256 KiB 的文本分段返回。快速分享可以列出和读取，但不能修改或再次分享。
-- 冲突、容量已满等拒绝情形以设置了 `isError` 的工具结果返回，并附带可供模型据以处理的说明。其他账号的资源与不存在的资源返回完全相同的结果。
+- 冲突、容量已满等拒绝情形以设置了 `isError` 的工具结果返回，并附带供模型据此处理的说明。其他账号的资源与不存在的资源返回完全相同的结果。
 
 ## 加密资源
 
