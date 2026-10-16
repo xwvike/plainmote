@@ -166,9 +166,16 @@ func TestPublicPagesAreIndexable(t *testing.T) {
 	if ld == nil {
 		t.Fatal("the home page has no structured data")
 	}
-	var site map[string]string
-	if err := json.Unmarshal([]byte(ld[1]), &site); err != nil || site["@type"] != "WebSite" || site["name"] != "PlainMote" || site["url"] != "https://plainmote.link/" {
-		t.Fatalf("structured data: %v %v", site, err)
+	var data struct {
+		Graph []map[string]any `json:"@graph"`
+	}
+	if err := json.Unmarshal([]byte(ld[1]), &data); err != nil || len(data.Graph) != 2 {
+		t.Fatalf("structured data: %s %v", ld[1], err)
+	}
+	for i, kind := range []string{"WebSite", "Organization"} {
+		if node := data.Graph[i]; node["@type"] != kind || node["name"] != "PlainMote" || node["url"] != "https://plainmote.link/" {
+			t.Fatalf("structured data %s: %v", kind, node)
+		}
 	}
 }
 

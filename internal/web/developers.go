@@ -58,13 +58,13 @@ func (a *App) handleDevelopers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := developersPath + "/" + page
-	data := pageData{Active: "developers", Section: "dev-" + page, SignInURL: "/login", BaseURL: a.baseURL(r), Canonical: prefix + path}
+	locale := requestLanguage(r).Locale
+	data := pageData{Active: "developers", Section: "dev-" + page, SignInURL: "/login", BaseURL: a.baseURL(r), Canonical: localePrefix(locale) + path}
 	data.Indexable = a.indexable(data.Canonical)
 	data.Alternates = localeAlternates(data.BaseURL, path)
 	if user, _, ok := a.currentUser(r); ok {
 		data.User, data.SignedIn, data.CSRF = user, true, csrfValue(r)
 	}
-	locale := requestLanguage(r).Locale
 	switch page {
 	case "cli":
 		w.Header().Add("Vary", "User-Agent")

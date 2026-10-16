@@ -34,6 +34,18 @@
      apart; each address shows its language to everyone. */}}
 {{define "alternates"}}{{range .Alternates}}<link rel="alternate" hreflang="{{.Hreflang}}" href="{{.URL}}">
   {{end}}{{end}}
+{{/* What a link preview shows, beside the page's own og:title and
+     og:description. X reads the og: tags where its own are missing. */}}
+{{define "social"}}<meta property="og:type" content="website">
+  <meta property="og:site_name" content="PlainMote">
+  <meta property="og:locale" content="{{openGraphLocale .Locale}}">
+  <meta property="og:url" content="{{.BaseURL}}{{.Canonical}}">
+  <meta property="og:image" content="{{.BaseURL}}/static/logo.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="256">
+  <meta property="og:image:height" content="256">
+  <meta property="og:image:alt" content="PlainMote">
+  <meta name="twitter:card" content="summary">{{end}}
 {{define "mark"}}<img class="mk" src="{{asset "logo.png"}}" alt="" width="18" height="18" decoding="async">{{end}}
 
 {{/* Sun and moon: the one shown is the way out of what is on screen. Links,

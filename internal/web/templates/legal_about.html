@@ -10,19 +10,19 @@
   <li><strong>历史版本：</strong>修改资源内容后，被替换的版本会保留一段时间，可查看、对比和恢复；访问记录注明每次获取的是哪个版本。</li>
   {{if .Legal.Anonymous}}<li><strong>临时分享：</strong>无需登录，在首页粘贴文本或上传文件即可生成有效期最长 {{legalDuration true .Legal.AnonymousTTL}}的链接。</li>{{end}}
   <li><strong>命令行工具：</strong>可在终端中查看、编辑和上传资源，编辑时使用本机的编辑器，关闭后保存为新版本。</li>
-  <li><strong>连接 AI 应用：</strong>经您授权，Claude、ChatGPT 等 AI 应用可以通过 MCP 读取和编辑您的资源；加密内容对应用不可读。</li>
+  <li><strong>连接 AI 应用：</strong>经你授权，Claude、ChatGPT 等 AI 应用可以通过 MCP 读取和编辑你的资源；加密内容对应用不可读。</li>
   <li><strong>端到端加密（可选）：</strong>登录用户设置主密码后，可为资源{{if .Legal.Anonymous}}和临时分享{{end}}开启端到端加密，内容在浏览器中加密，本服务仅保存密文，无法读取其内容；分享链接以 4 位口令代替密钥的，保护程度较低。</li>
 </ul>
 
 <h2>账号与登录</h2>
-<p>访问分享链接无需账号；保存资源、为同一资源创建多条分享链接及查看访问记录须登录。账号通过 {{.Legal.Providers}} 登录创建，本服务不另设登录密码。{{if .Legal.Google}}使用 Google 登录时，本服务仅获取您的 Google 账号 ID、名称和头像地址，用于识别您的账号，不获取您的邮箱地址或其他 Google 数据，详见<a href="/privacy">《隐私政策》</a>第九节“Google 用户数据”。{{end}}</p>
+<p>访问分享链接无需账号；保存资源、为同一资源创建多条分享链接及查看访问记录须登录。账号通过 {{.Legal.Providers}} 登录创建，本服务不另设登录密码。{{if .Legal.Google}}使用 Google 登录时，本服务仅获取你的 Google 账号 ID、名称和头像地址，用于识别你的账号，不获取你的邮箱地址或其他 Google 数据，详见<a href="{{.LegalPrefix}}/privacy">《隐私政策》</a>第九节“Google 用户数据”。{{end}}</p>
 
 <h2>隐私与安全</h2>
-<p>本服务不展示广告，不使用分析脚本或第三方跟踪工具。分享链接即为访问凭证，为防止链接经搜索引擎收录而泄露，分享链接及账号相关页面均禁止搜索引擎收录。本服务处理的信息详见<a href="/privacy">《隐私政策》</a>。</p>
+<p>本服务不展示广告，不使用分析脚本或第三方跟踪工具。分享链接即为访问凭证，为防止链接经搜索引擎收录而泄露，分享链接及账号相关页面均禁止搜索引擎收录。本服务处理的信息详见<a href="{{.LegalPrefix}}/privacy">《隐私政策》</a>。</p>
 {{if .Legal.SourceURL}}<p>本服务的源代码以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）公开，见 <a href="{{.Legal.SourceURL}}" rel="noopener">{{.Legal.SourceURL}}</a>。</p>{{end}}
 
 <h2>运营者</h2>
-<p>{{if .Legal.Operator}}PlainMote 由 {{.Legal.Operator}} 运营。{{end}}如有疑问、建议或需要举报，请通过<a href="/contact">联系我们</a>页面所列方式与我们联系。</p>
+<p>{{if .Legal.Operator}}PlainMote 由 {{.Legal.Operator}} 运营。{{end}}如有疑问、建议或需要举报，请通过<a href="{{.LegalPrefix}}/contact">联系我们</a>页面所列方式与我们联系。</p>
 {{end}}
 
 {{define "about-en"}}

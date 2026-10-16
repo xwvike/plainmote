@@ -70,9 +70,10 @@ func (a *App) serveLegal(w http.ResponseWriter, r *http.Request, page string) {
 	}
 	// These pages say what the service is, so unlike the rest of it they are
 	// meant to be found.
+	chinese := strings.HasPrefix(requestLanguage(r).Locale, "zh")
 	data := pageData{Active: page, SignInURL: "/login", Indexable: true, BaseURL: a.baseURL(r), Canonical: "/" + page}
-	if route, ok := routeLocale(r); ok {
-		data.Canonical = route.prefix + "/" + page
+	if chinese {
+		data.Canonical = legalChinesePrefix + "/" + page
 	}
 	data.Alternates = legalAlternates(data.BaseURL, page)
 	if user, _, ok := a.currentUser(r); ok {
@@ -84,7 +85,7 @@ func (a *App) serveLegal(w http.ResponseWriter, r *http.Request, page string) {
 	}
 	data.Legal = legalView{
 		Page:          page,
-		Chinese:       strings.HasPrefix(requestLanguage(r).Locale, "zh"),
+		Chinese:       chinese,
 		Site:          site,
 		Operator:      a.cfg.Operator,
 		Email:         a.cfg.ContactEmail,

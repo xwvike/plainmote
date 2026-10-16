@@ -51,6 +51,19 @@ func routeLocale(r *http.Request) (localeRoute, bool) {
 	return route, ok
 }
 
+// localePrefix is the address that shows locale to everyone, or "" for
+// English and a language without one. A page canonicalizes to the address of
+// the language it is shown in: Chinese followed from the browser at /about is
+// the page at /zh-cn/about, not the English one.
+func localePrefix(locale string) string {
+	for _, public := range publicLocales {
+		if public.locale == locale {
+			return public.prefix
+		}
+	}
+	return ""
+}
+
 // alternate is one rel=alternate hreflang link.
 type alternate struct {
 	Hreflang string

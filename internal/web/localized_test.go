@@ -26,12 +26,12 @@ func crawl(app *App, path string) *httptest.ResponseRecorder {
 func TestPublicPagesHaveAnAddressPerLanguage(t *testing.T) {
 	app := localizedApp()
 	for _, c := range []struct{ path, lang, title, canonical string }{
-		{"/", "en", "<title>Share configs or logs online with an expiring link · PlainMote</title>", "https://plainmote.link/"},
-		{"/zh-cn/", "zh-CN", "<title>在线分享配置或日志，生成限时链接 · PlainMote</title>", "https://plainmote.link/zh-cn/"},
-		{"/zh-tw/", "zh-TW", "<title>線上分享設定檔或日誌，產生限時連結 · PlainMote</title>", "https://plainmote.link/zh-tw/"},
-		{"/ja/", "ja", "<title>設定ファイルやログをオンラインで共有、期限付きリンクを作成 · PlainMote</title>", "https://plainmote.link/ja/"},
-		{"/fr/", "fr", "<title>Partager une configuration ou des logs en ligne par lien temporaire · PlainMote</title>", "https://plainmote.link/fr/"},
-		{"/de/", "de", "<title>Konfigurationen oder Logs online per ablaufendem Link teilen · PlainMote</title>", "https://plainmote.link/de/"},
+		{"/", "en", "<title>Pastebin for configs and logs, with expiring links · PlainMote</title>", "https://plainmote.link/"},
+		{"/zh-cn/", "zh-CN", "<title>在线剪贴板：分享配置、日志和文本，链接限时有效 · PlainMote</title>", "https://plainmote.link/zh-cn/"},
+		{"/zh-tw/", "zh-TW", "<title>線上剪貼簿：分享設定檔、日誌和文字，連結限時有效 · PlainMote</title>", "https://plainmote.link/zh-tw/"},
+		{"/ja/", "ja", "<title>テキスト共有：設定ファイルやログを期限付きリンクで共有 · PlainMote</title>", "https://plainmote.link/ja/"},
+		{"/fr/", "fr", "<title>Pastebin pour configurations et logs, avec liens temporaires · PlainMote</title>", "https://plainmote.link/fr/"},
+		{"/de/", "de", "<title>Pastebin für Konfigurationen und Logs, mit ablaufenden Links · PlainMote</title>", "https://plainmote.link/de/"},
 	} {
 		response := crawl(app, c.path)
 		body := response.Body.String()

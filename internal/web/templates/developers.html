@@ -2,10 +2,13 @@
 <html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
-  <title>{{template "dev-title" .}} · {{tr .Locale "dev_title"}} · PlainMote</title>
+  <title>{{template "dev-search-title" .}} · PlainMote</title>
   <meta name="description" content="{{template "dev-lede" .}}">
   {{if .Indexable}}<link rel="canonical" href="{{.BaseURL}}{{.Canonical}}">
-  {{template "alternates" .}}{{end}}
+  {{template "alternates" .}}
+  {{template "social" .}}
+  <meta property="og:title" content="{{template "dev-search-title" .}} · PlainMote">
+  <meta property="og:description" content="{{template "dev-lede" .}}">{{end}}
 </head>
 <body>
   {{template "topbar" .}}
@@ -220,4 +223,7 @@
 </html>{{end}}
 
 {{define "dev-title"}}{{if eq .Section "dev-api"}}{{tr .Locale "dev_api_title"}}{{else if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_title"}}{{else if eq .Section "dev-mcp"}}{{tr .Locale "dev_mcp_title"}}{{else}}{{tr .Locale "cli_title"}}{{end}}{{end}}
+{{/* The curl page is found by what people search for; its heading and the
+     navigation keep the short name. */}}
+{{define "dev-search-title"}}{{if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_search_title"}}{{else}}{{template "dev-title" .}} · {{tr .Locale "dev_title"}}{{end}}{{end}}
 {{define "dev-lede"}}{{if eq .Section "dev-api"}}{{tr .Locale "dev_api_lede"}}{{else if eq .Section "dev-curl"}}{{tr .Locale "dev_curl_lede"}}{{else if eq .Section "dev-mcp"}}{{tr .Locale "dev_mcp_lede"}}{{else}}{{tr .Locale "cli_lede"}}{{end}}{{end}}
