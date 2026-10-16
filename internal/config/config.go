@@ -54,6 +54,9 @@ type Config struct {
 	// CLIDir is where the image keeps the command line builds that /cli
 	// offers for download.
 	CLIDir string
+	// IndexNowKey, when set, is published at /<key>.txt and used to tell
+	// search engines about the public pages as the service starts.
+	IndexNowKey string
 }
 
 // LocationCloudflare reads the visitor location headers Cloudflare adds in
@@ -167,6 +170,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg.CLIDir = strings.TrimSpace(env("PLAINMOTE_CLI_DIR", DefaultCLIDir))
+	cfg.IndexNowKey, err = parseIndexNowKey(os.Getenv("PLAINMOTE_INDEXNOW_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
 	cfg.AdminKeys, err = parseAdminKeys(os.Getenv("PLAINMOTE_ADMIN_KEYS"))
 	if err != nil {
 		return Config{}, err
@@ -224,6 +231,25 @@ func parseSourceURL(value string) (string, error) {
 	parsed, err := url.Parse(value)
 	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
 		return "", fmt.Errorf("PLAINMOTE_SOURCE_URL must be an http(s) address such as %s", DefaultSourceURL)
+	}
+	return value, nil
+}
+
+// parseIndexNowKey takes what the IndexNow protocol allows: 8 to 128
+// letters, digits and dashes.
+func parseIndexNowKey(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	valid := len(value) >= 8 && len(value) <= 128
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
+			valid = false
+		}
+	}
+	if !valid {
+		return "", errors.New("PLAINMOTE_INDEXNOW_KEY must be 8 to 128 letters, digits or dashes, such as the output of openssl rand -hex 16")
 	}
 	return value, nil
 }

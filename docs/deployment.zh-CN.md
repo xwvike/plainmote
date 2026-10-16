@@ -169,6 +169,7 @@ Google 登录是可选的，可以和 GitHub 同时用，也可以单独用。�
 | `PLAINMOTE_SOURCE_URL` | 本仓库地址 | 每页底部“源代码”链接的地址；部署修改过的版本时，按 AGPL 要求指向修改后的源代码 |
 | `PLAINMOTE_ADMIN_KEYS` | 空 | 允许调用管理接口的 Ed25519 公钥，Base64，逗号分隔；不设置则没有管理接口 |
 | `PLAINMOTE_ADMIN_ORIGINS` | 空 | 允许在浏览器中跨站调用管理接口的管理页面来源，逗号分隔 |
+| `PLAINMOTE_INDEXNOW_KEY` | 空 | [IndexNow](https://www.indexnow.org) 密钥，8 至 128 位字母、数字或连字符（`openssl rand -hex 16`）；设置后在 `/<key>.txt` 提供密钥文件，服务每次启动时把公开页面提交给 Bing 等支持 IndexNow 的搜索引擎 |
 | `PLAINMOTE_CLI_DIR` | `/cli` | `/cli` 下提供的命令行文件所在目录；镜像已包含这些文件 |
 
 ### 密钥与页面

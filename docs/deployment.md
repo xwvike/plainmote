@@ -169,6 +169,7 @@ Optional:
 | `PLAINMOTE_SOURCE_URL` | this repository | Target of the "Source code" link on every page; a modified deployment must point it at its modified source, as the AGPL requires |
 | `PLAINMOTE_ADMIN_KEYS` | empty | Ed25519 public keys allowed to call the admin API, Base64, comma-separated; without them the API does not exist |
 | `PLAINMOTE_ADMIN_ORIGINS` | empty | Browser origins of admin pages allowed to call the admin API, comma-separated |
+| `PLAINMOTE_INDEXNOW_KEY` | empty | [IndexNow](https://www.indexnow.org) key, 8 to 128 letters, digits or dashes (`openssl rand -hex 16`); when set, the key is served at `/<key>.txt` and the public pages are submitted to Bing and other IndexNow search engines each time the service starts |
 | `PLAINMOTE_CLI_DIR` | `/cli` | Directory of the command line builds offered at `/cli`; the image includes them |
 
 ### Keys and pages

@@ -61,7 +61,7 @@ func Run() error {
 
 	go prune(ctx, db, cfg.LogRetention)
 
-	handler := web.New(web.Config{
+	site := web.New(web.Config{
 		PublicURL:          cfg.PublicURL,
 		SessionTTL:         cfg.SessionTTL,
 		MaxContent:         cfg.MaxContent,
@@ -76,16 +76,18 @@ func Run() error {
 		ContactEmail:       cfg.ContactEmail,
 		SourceURL:          cfg.SourceURL,
 		CLIDir:             cfg.CLIDir,
+		IndexNowKey:        cfg.IndexNowKey,
 		BlobEndpoint:       cfg.BlobEndpoint,
 		AdminKeys:          cfg.AdminKeys,
 		AdminOrigins:       cfg.AdminOrigins,
 		Version:            Version,
 		Revision:           Revision,
 		StartedAt:          time.Now().UTC(),
-	}, db, auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret)).Handler()
+	}, db, auth.NewGitHub(cfg.GitHubID, cfg.GitHubSecret))
+	go site.NotifyIndexNow(ctx)
 
 	fmt.Fprintf(os.Stderr, "listening on %s\n", cfg.Listen)
-	return serve(ctx, cfg.Listen, handler)
+	return serve(ctx, cfg.Listen, site.Handler())
 }
 
 const pruneInterval = time.Hour

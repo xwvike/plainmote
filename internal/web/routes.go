@@ -72,7 +72,8 @@ type Config struct {
 	StartedAt    time.Time
 	// CLIDir holds the command line builds the install page offers; empty,
 	// or without builds in it, the page says there are none.
-	CLIDir string
+	CLIDir      string
+	IndexNowKey string
 }
 
 func New(cfg Config, db *store.Store, github *auth.GitHub) *App {
@@ -370,6 +371,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/robots.txt", a.handleRobots)
 	mux.HandleFunc("/sitemap.xml", a.handleSitemap)
 	mux.HandleFunc("/llms.txt", a.handleLLMs)
+	if a.cfg.IndexNowKey != "" {
+		mux.HandleFunc(a.indexNowPath(), a.handleIndexNowKey)
+	}
 	// Registered only with a key to call it by: without one the path does not
 	// exist, the same as any other.
 	if a.admin != nil {
@@ -471,6 +475,9 @@ func (a *App) handleRobots(w http.ResponseWriter, r *http.Request) {
 		body.WriteString("Allow: /llms.txt$\n")
 		body.WriteString("Allow: " + staticPrefix + "\n")
 		body.WriteString("Allow: " + faviconPath + "$\n")
+		if a.cfg.IndexNowKey != "" {
+			body.WriteString("Allow: " + a.indexNowPath() + "$\n")
+		}
 	}
 	body.WriteString("Disallow: /\n")
 	if len(pages) > 0 {
