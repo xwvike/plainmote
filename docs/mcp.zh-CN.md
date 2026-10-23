@@ -72,7 +72,7 @@ Claude 和 ChatGPT 从其自身的服务器发起连接，所以部署必须能�
 | --- | --- | --- | --- |
 | `list_resources` | `read` | `query`、`kind`（`resource` 或 `quick_share`）、`tag`、`cursor` | 按更新时间从近到远列出资源及其标签，每页 50 个；`query` 匹配名称和文件名，`tag` 只保留带有该标签的资源 |
 | `list_tags` | `read` | 无 | 列出账号的所有标签及各自的资源数 |
-| `read_resource` | `read` | `resource`、`version`、`offset` | 返回当前版本或历史版本的文本，每次最多 256 KiB |
+| `read_resource` | `read` | `resource`、`version`、`offset`、`limit` | 返回当前版本或历史版本的文本，每段 32 KiB；也可用 `limit` 指定 4 KiB 至 256 KiB |
 | `list_versions` | `read` | `resource` | 列出资源的版本，含每个版本的大小、相对上一版本的大小变化，以及所存字节的 SHA-256 |
 | `diff_versions` | `read` | `resource`、`from`、`to` | 以带三行上下文的 unified diff 比较两个版本；默认比较当前版本与上一版本 |
 | `create_resource` | `write` | `content`、`filename`、`name`、`tags` | 以文本新建资源 |
@@ -87,7 +87,7 @@ Claude 和 ChatGPT 从其自身的服务器发起连接，所以部署必须能�
 - `edit_resource` 按顺序执行各项替换，每一项作用于前面各项替换后的文本。每个 `old_text` 必须恰好出现一次，或者设置 `replace_all`，否则不保存任何内容。无论文件使用 LF 还是 CRLF，换行都能匹配。
 - `share_resource` 的 `expires_in` 为 `1h`、`24h`、`7d` 等时长（最长 `30d`，默认 `7d`）；`max_uses` 为 `0`（不限）至 1,000,000。应用不能创建永不过期的链接，所有者可在资源页面上创建。由应用创建的链接会在资源的分享列表中标注创建它的应用名称。
 - 标签是最长 24 个字符的自由文本；与账号已用标签仅大小写不同的标签视为同一个。加密资源和快速分享也可以打标签；标签不加密，因此会在列表中显示。
-- 二进制内容只返回说明，不返回内容。超过 256 KiB 的文本分段返回。快速分享可以列出和读取，但不能修改或再次分享。
+- 二进制内容只返回说明，不返回内容。超过一段长度的文本分段返回；超过 32 KiB 的 unified diff 会被截断。快速分享可以列出和读取，但不能修改或再次分享。
 - 每个工具都通过 `outputSchema` 声明其结构化结果的格式。
 - 冲突、容量已满等拒绝情形以设置了 `isError` 的工具结果返回，并附带供模型据此处理的说明。其他账号的资源与不存在的资源返回完全相同的结果。
 

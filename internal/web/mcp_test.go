@@ -368,7 +368,7 @@ func TestMCPReadTools(t *testing.T) {
 	var joined strings.Builder
 	offset := 0.0
 	for parts := 0; ; parts++ {
-		if parts > 5 {
+		if parts > len(big)/mcpReadChunk+1 {
 			t.Fatal("reading never ends")
 		}
 		part := toolCall(t, app, token, "read_resource", map[string]any{"resource": long.ID, "offset": offset})

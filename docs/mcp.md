@@ -72,7 +72,7 @@ Tokens are stored only as digests. Suspending the account ends every authorizati
 | --- | --- | --- | --- |
 | `list_resources` | `read` | `query`, `kind` (`resource` or `quick_share`), `tag`, `cursor` | Lists resources with their tags, most recently updated first, 50 to a page; `query` matches names and filenames, `tag` keeps those carrying it |
 | `list_tags` | `read` | none | Lists the account's tags with how many resources carry each |
-| `read_resource` | `read` | `resource`, `version`, `offset` | Returns the text of the current version or an earlier one, in parts of up to 256 KiB |
+| `read_resource` | `read` | `resource`, `version`, `offset`, `limit` | Returns the text of the current version or an earlier one, in parts of 32 KiB, or of `limit` bytes from 4 KiB to 256 KiB |
 | `list_versions` | `read` | `resource` | Lists a resource's versions, each with its size, the change in size from the version before it and the SHA-256 of the stored bytes |
 | `diff_versions` | `read` | `resource`, `from`, `to` | Compares two versions as a unified diff with three lines of context; by default the current version and the one before it |
 | `create_resource` | `write` | `content`, `filename`, `name`, `tags` | Creates a resource from text |
@@ -87,7 +87,7 @@ Tokens are stored only as digests. Suspending the account ends every authorizati
 - `edit_resource` applies its edits in order, each to the text the ones before it left. Each `old_text` must appear exactly once, or `replace_all` must be set; otherwise nothing is saved. Line breaks match whether the file uses LF or CRLF.
 - `share_resource` takes `expires_in` as a duration such as `1h`, `24h` or `7d` (at most `30d`; default `7d`), and `max_uses` from `0` (no limit) to 1,000,000. An app cannot make a link that never expires; the owner can, on the resource's page. Links created by an app are marked in the resource's share list with the app's name.
 - A tag is free text of at most 24 characters; one differing only in case from a tag the account uses is that tag. Encrypted resources and quick shares can be tagged, and their tags are listed, as tags are not encrypted.
-- Binary content is described rather than returned. Text longer than 256 KiB is returned in parts. Quick shares can be listed and read, but not updated or shared again.
+- Binary content is described rather than returned. Text longer than a part is returned in parts; a unified diff longer than 32 KiB is cut short. Quick shares can be listed and read, but not updated or shared again.
 - Every tool declares an `outputSchema` for its structured result.
 - A refusal, such as a conflict or a full quota, is returned as a tool result with `isError` set and a message the model can act on. A resource of another account is reported exactly as one that does not exist.
 

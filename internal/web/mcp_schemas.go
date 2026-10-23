@@ -64,7 +64,7 @@ var mcpReadResourceOut = mcpObjectOut([]string{"id", "type", "version", "current
 	"version":         mcpDescribed(mcpIntegerOut, "The version read."),
 	"current_version": mcpDescribed(mcpIntegerOut, "The version that is current now: the base_version for update_resource or edit_resource."),
 	"offset":          mcpDescribed(mcpIntegerOut, "Where this part starts, in bytes of UTF-8 text."),
-	"length":          mcpDescribed(mcpIntegerOut, "The length of the whole text, in bytes of UTF-8 text."),
+	"length":          mcpDescribed(mcpIntegerOut, "The length of the whole text, in bytes of UTF-8 text: an offset near it reads the end, such as the last lines of a log."),
 	"text":            mcpStringOut,
 	"next_offset":     mcpDescribed(mcpIntegerOut, "Pass as offset to read the next part; absent once the text is all read."),
 	"binary":          mcpDescribed(mcpBooleanOut, "The content is not text and is not returned."),

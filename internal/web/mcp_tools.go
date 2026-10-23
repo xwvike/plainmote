@@ -26,8 +26,14 @@ import (
 // Encrypted resources are listed, as placeholders that say only that they
 // exist, and are never read: the service holds ciphertext and no key.
 const (
-	mcpListPage  = 50
-	mcpReadChunk = 256 << 10
+	mcpListPage = 50
+	// A part of a long text: the default keeps one answer within what
+	// clients put in a model's context unasked - Claude Code moves a text
+	// result past 50,000 characters to a file - and limit asks for less or
+	// more.
+	mcpReadChunk = 32 << 10
+	mcpReadMin   = 4 << 10
+	mcpReadMax   = 256 << 10
 	mcpRefMax    = 2048
 	// The name an encrypted resource is listed under: its own name is
 	// inside the ciphertext.
@@ -121,7 +127,7 @@ var mcpReadTools = []*mcpTool{
 	{
 		Name:  "read_resource",
 		Title: "Read a resource",
-		Description: "Read the text of a resource, now or at an earlier version. Text longer than 256 KiB comes in parts: pass next_offset back as offset for the next. " +
+		Description: "Read the text of a resource, now or at an earlier version. Text longer than 32 KiB, or than limit, comes in parts: pass next_offset back as offset for the next. " +
 			"Binary content is not returned, only its description. Encrypted resources cannot be read here.",
 		InputSchema: map[string]any{
 			"type": "object",
@@ -129,6 +135,8 @@ var mcpReadTools = []*mcpTool{
 				"resource": resourceRefSchema,
 				"version":  map[string]any{"type": "integer", "minimum": 1, "description": "An earlier version to read, from list_versions. Leave out for the current content."},
 				"offset":   map[string]any{"type": "integer", "minimum": 0, "description": "Where to continue: the next_offset of the previous part."},
+				"limit": map[string]any{"type": "integer", "minimum": mcpReadMin, "maximum": mcpReadMax,
+					"description": "The most bytes of text to return in one part, from 4096 to 262144. 32768 if left out."},
 			},
 			"required":             []string{"resource"},
 			"additionalProperties": false,
@@ -410,12 +418,20 @@ func (a *App) mcpReadResource(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 		Resource string `json:"resource"`
 		Version  int    `json:"version"`
 		Offset   int64  `json:"offset"`
+		Limit    int64  `json:"limit"`
 	}
 	if problem := mcpArguments(args, &in); problem != "" {
 		return mcpProblem("%s", problem)
 	}
 	if in.Version < 0 || in.Offset < 0 {
 		return mcpProblem("Invalid arguments: version and offset cannot be negative.")
+	}
+	chunk := int64(mcpReadChunk)
+	if in.Limit != 0 {
+		if in.Limit < mcpReadMin || in.Limit > mcpReadMax {
+			return mcpProblem("Invalid arguments: limit must be from %d to %d bytes.", mcpReadMin, mcpReadMax)
+		}
+		chunk = in.Limit
 	}
 	resource, problem, err := a.mcpResolve(x, in.Resource)
 	if err != nil || problem != "" {
@@ -451,7 +467,7 @@ func (a *App) mcpReadResource(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 	if !store.TextLike(contentType) {
 		return a.mcpBinary(resource, version, contentType, size, page), nil
 	}
-	part, ok, err := mcpUTF8Part(encoding, size, in.Offset, openRange)
+	part, ok, err := mcpUTF8Part(encoding, size, in.Offset, chunk, openRange)
 	if err != nil {
 		return mcpOutcome{}, err
 	}
@@ -465,7 +481,7 @@ func (a *App) mcpReadResource(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 			return a.mcpBinary(resource, version, contentType, size, page), nil
 		}
 		encoding = decodedAs
-		part = textPart(text, in.Offset)
+		part = textPart(text, in.Offset, chunk)
 	}
 	if part.past {
 		return mcpProblem("offset %d is past the end: the text of this version is %d bytes long.", in.Offset, part.length)
@@ -500,8 +516,9 @@ type mcpTextPart struct {
 	past               bool
 }
 
-// textPart cuts the part of text that begins at offset.
-func textPart(text string, offset int64) mcpTextPart {
+// textPart cuts the part of text that begins at offset, at most chunk bytes
+// long.
+func textPart(text string, offset, chunk int64) mcpTextPart {
 	length := int64(len(text))
 	if offset > length {
 		return mcpTextPart{length: length, past: true}
@@ -510,7 +527,7 @@ func textPart(text string, offset int64) mcpTextPart {
 	for start < length && !utf8.RuneStart(text[start]) {
 		start++
 	}
-	end := min(start+mcpReadChunk, length)
+	end := min(start+chunk, length)
 	for end < length && !utf8.RuneStart(text[end]) {
 		end--
 	}
@@ -527,8 +544,8 @@ const utf8BOM = "\xef\xbb\xbf"
 // find the character boundaries. ok is false when there is no such shortcut
 // - a short text, another encoding, bytes that turn out not to be UTF-8 -
 // and the whole is then read and decoded instead.
-func mcpUTF8Part(encoding string, size, offset int64, openRange func(start, end int64) (io.ReadCloser, int64, error)) (mcpTextPart, bool, error) {
-	if !strings.EqualFold(encoding, "utf-8") || size <= mcpReadChunk {
+func mcpUTF8Part(encoding string, size, offset, chunk int64, openRange func(start, end int64) (io.ReadCloser, int64, error)) (mcpTextPart, bool, error) {
+	if !strings.EqualFold(encoding, "utf-8") || size <= chunk {
 		return mcpTextPart{}, false, nil
 	}
 	read := func(start, end int64) ([]byte, error) {
@@ -556,7 +573,7 @@ func mcpUTF8Part(encoding string, size, offset int64, openRange func(start, end 
 	}
 	// A part may begin up to three continuation bytes late and end on the
 	// byte after it, so that much more is read than the part itself.
-	last := min(offset+mcpReadChunk+utf8.UTFMax, length) - 1
+	last := min(offset+chunk+utf8.UTFMax, length) - 1
 	window, err := read(skip+offset, skip+last)
 	if err != nil {
 		return mcpTextPart{}, false, err
@@ -572,7 +589,7 @@ func mcpUTF8Part(encoding string, size, offset int64, openRange func(start, end 
 	if start > last && start < length {
 		return mcpTextPart{}, false, nil
 	}
-	end := min(start+mcpReadChunk, length)
+	end := min(start+chunk, length)
 	for end < length && !utf8.RuneStart(at(end)) {
 		end--
 	}
