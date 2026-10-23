@@ -204,6 +204,9 @@ func (a *App) mcpTagResource(x mcpExchange, args json.RawMessage) (mcpOutcome, e
 	if err != nil {
 		return mcpStoreProblem(err)
 	}
+	if tags == nil {
+		tags = []string{}
+	}
 	text := fmt.Sprintf("%s now has no tags.", mcpLabel(resource))
 	if len(tags) > 0 {
 		text = fmt.Sprintf("%s is tagged %s.", mcpLabel(resource), strings.Join(tags, ", "))

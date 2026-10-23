@@ -40,9 +40,12 @@ type mcpTool struct {
 	Title       string         `json:"title"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
-	Annotations map[string]any `json:"annotations"`
-	scope       string
-	run         func(a *App, x mcpExchange, args json.RawMessage) (mcpOutcome, error)
+	// OutputSchema is the shape of the structured result, which every
+	// successful call returns.
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	Annotations  map[string]any `json:"annotations"`
+	scope        string
+	run          func(a *App, x mcpExchange, args json.RawMessage) (mcpOutcome, error)
 }
 
 // mcpOutcome is what a tool call produced: structured data with the text a
@@ -100,18 +103,20 @@ var mcpReadTools = []*mcpTool{
 			},
 			"additionalProperties": false,
 		},
-		Annotations: readOnlyTool,
-		scope:       store.OAuthScopeRead,
-		run:         (*App).mcpListResources,
+		OutputSchema: mcpListResourcesOut,
+		Annotations:  readOnlyTool,
+		scope:        store.OAuthScopeRead,
+		run:          (*App).mcpListResources,
 	},
 	{
-		Name:        "list_tags",
-		Title:       "List tags",
-		Description: "List the tags on this account's resources, by name, with how many resources carry each.",
-		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
-		Annotations: readOnlyTool,
-		scope:       store.OAuthScopeRead,
-		run:         (*App).mcpListTags,
+		Name:         "list_tags",
+		Title:        "List tags",
+		Description:  "List the tags on this account's resources, by name, with how many resources carry each.",
+		InputSchema:  map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+		OutputSchema: mcpListTagsOut,
+		Annotations:  readOnlyTool,
+		scope:        store.OAuthScopeRead,
+		run:          (*App).mcpListTags,
 	},
 	{
 		Name:  "read_resource",
@@ -128,23 +133,47 @@ var mcpReadTools = []*mcpTool{
 			"required":             []string{"resource"},
 			"additionalProperties": false,
 		},
-		Annotations: readOnlyTool,
-		scope:       store.OAuthScopeRead,
-		run:         (*App).mcpReadResource,
+		OutputSchema: mcpReadResourceOut,
+		Annotations:  readOnlyTool,
+		scope:        store.OAuthScopeRead,
+		run:          (*App).mcpReadResource,
 	},
 	{
-		Name:        "list_versions",
-		Title:       "List versions",
-		Description: "List a resource's versions, current first: version number, size and when it was saved. Read one with read_resource and its version.",
+		Name:  "list_versions",
+		Title: "List versions",
+		Description: "List a resource's versions, current first: version number, size, the change in size from the version kept before it, " +
+			"the SHA-256 of the stored bytes and when it was saved. Equal hashes are equal content. " +
+			"Read one with read_resource and its version; compare two with diff_versions.",
 		InputSchema: map[string]any{
 			"type":                 "object",
 			"properties":           map[string]any{"resource": resourceRefSchema},
 			"required":             []string{"resource"},
 			"additionalProperties": false,
 		},
-		Annotations: readOnlyTool,
-		scope:       store.OAuthScopeRead,
-		run:         (*App).mcpListVersions,
+		OutputSchema: mcpListVersionsOut,
+		Annotations:  readOnlyTool,
+		scope:        store.OAuthScopeRead,
+		run:          (*App).mcpListVersions,
+	},
+	{
+		Name:  "diff_versions",
+		Title: "Compare versions",
+		Description: "Compare two versions of a text resource line by line, as a unified diff with three lines of context, and count the lines added and removed. " +
+			"Without from and to, it compares the current version with the one kept before it.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"resource": resourceRefSchema,
+				"from":     map[string]any{"type": "integer", "minimum": 1, "description": "The older side, from list_versions. The version kept before to if left out."},
+				"to":       map[string]any{"type": "integer", "minimum": 1, "description": "The newer side. The current version if left out."},
+			},
+			"required":             []string{"resource"},
+			"additionalProperties": false,
+		},
+		OutputSchema: mcpDiffVersionsOut,
+		Annotations:  readOnlyTool,
+		scope:        store.OAuthScopeRead,
+		run:          (*App).mcpDiffVersions,
 	},
 }
 
@@ -584,18 +613,31 @@ func (a *App) mcpListVersions(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 	type versionItem struct {
 		Version      int       `json:"version"`
 		Size         int64     `json:"size"`
+		SizeDelta    *int64    `json:"size_delta,omitempty"`
+		SHA256       string    `json:"sha256,omitempty"`
 		SavedAt      time.Time `json:"saved_at"`
 		Current      bool      `json:"current,omitempty"`
 		RestoredFrom int       `json:"restored_from,omitempty"`
 	}
+	encrypted := mcpEncrypted(resource)
 	versions := make([]versionItem, 0, len(earlier)+1)
-	versions = append(versions, versionItem{Version: resource.Version, Size: resource.ContentSize, SavedAt: resource.VersionAt,
-		Current: true, RestoredFrom: resource.RestoredFrom})
+	versions = append(versions, versionItem{Version: resource.Version, Size: resource.ContentSize, SHA256: resource.ContentSHA256,
+		SavedAt: resource.VersionAt, Current: true, RestoredFrom: resource.RestoredFrom})
 	for _, v := range earlier {
-		versions = append(versions, versionItem{Version: v.Number, Size: v.ContentSize, SavedAt: v.SavedAt, RestoredFrom: v.RestoredFrom})
+		versions = append(versions, versionItem{Version: v.Number, Size: v.ContentSize, SHA256: v.ContentSHA256, SavedAt: v.SavedAt, RestoredFrom: v.RestoredFrom})
+	}
+	// Each against the version kept before it: the next one down the list.
+	for i := range versions {
+		if encrypted {
+			versions[i].SHA256 = ""
+		}
+		if i+1 < len(versions) {
+			delta := versions[i].Size - versions[i+1].Size
+			versions[i].SizeDelta = &delta
+		}
 	}
 	name := resource.Name
-	if mcpEncrypted(resource) {
+	if encrypted {
 		name = mcpEncryptedName
 	}
 	return mcpOutcome{structured: map[string]any{

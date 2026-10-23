@@ -110,7 +110,7 @@ irm %[1]s/cli.ps1 | iex         # Windows PowerShell
 ## MCP server
 
 - `+"`%[1]s%[2]s`"+` is a remote MCP server over Streamable HTTP, for AI apps such as Claude, ChatGPT and Cursor. An app connecting to it is sent through OAuth authorization: the account owner signs in on this site and allows or denies it. An authorization covers every tool; none deletes anything. Apps register dynamically or by a client ID metadata document.
-- Tools: `+"`list_resources`"+`, `+"`list_tags`"+`, `+"`read_resource`"+` and `+"`list_versions`"+` (read); `+"`create_resource`"+`, `+"`update_resource`"+` and `+"`tag_resource`"+` (write; an update names the version it was based on and is refused if the resource has moved on); `+"`share_resource`"+` and `+"`unshare_resource`"+` (share).
+- Tools: `+"`list_resources`"+`, `+"`list_tags`"+`, `+"`read_resource`"+`, `+"`list_versions`"+` and `+"`diff_versions`"+` (read); `+"`create_resource`"+`, `+"`edit_resource`"+`, `+"`update_resource`"+` and `+"`tag_resource`"+` (write; an edit replaces parts of the text, an update the whole of it, and both name the version they were based on and are refused if the resource has moved on); `+"`share_resource`"+` and `+"`unshare_resource`"+` (share).
 - Encrypted resources appear only as placeholders: no tool decrypts them or asks for the master password. Unencrypted content an app reads is sent to that app and its model provider.
 - An authorization lasts until it goes unused for 30 days, and the owner can revoke it at any time. `+"`%[1]s/developers/mcp`"+` explains how to add the server to each app.
 `, base, mcpPath)

@@ -54,14 +54,16 @@ var mcpWriteTools = []*mcpTool{
 			"required":             []string{"content"},
 			"additionalProperties": false,
 		},
-		Annotations: mcpWriteAnnotations,
-		scope:       store.OAuthScopeWrite,
-		run:         (*App).mcpCreateResource,
+		OutputSchema: mcpResourceOut,
+		Annotations:  mcpWriteAnnotations,
+		scope:        store.OAuthScopeWrite,
+		run:          (*App).mcpCreateResource,
 	},
 	{
 		Name:  "update_resource",
 		Title: "Save a new version",
-		Description: "Save new text for a resource as its next version; earlier versions stay in its history. " +
+		Description: "Save the whole new text of a resource as its next version; earlier versions stay in its history. " +
+			"For a change to part of it, edit_resource sends only that part. " +
 			"base_version must be the version the change was made from, as read_resource gave it: if the resource was saved since, " +
 			"nothing is saved and it has to be read again. Text identical to the current text is never a conflict: it changes nothing. " +
 			"The file keeps its encoding and line endings.",
@@ -77,9 +79,46 @@ var mcpWriteTools = []*mcpTool{
 			"required":             []string{"resource", "base_version", "content"},
 			"additionalProperties": false,
 		},
-		Annotations: mcpWriteAnnotations,
-		scope:       store.OAuthScopeWrite,
-		run:         (*App).mcpUpdateResource,
+		OutputSchema: mcpSaveOut,
+		Annotations:  mcpWriteAnnotations,
+		scope:        store.OAuthScopeWrite,
+		run:          (*App).mcpUpdateResource,
+	},
+	{
+		Name:  "edit_resource",
+		Title: "Edit a resource",
+		Description: "Change part of a text resource without sending all of it: each edit replaces old_text, which must appear exactly once, with new_text, " +
+			"and the result is saved as the next version. Edits apply in order, each to the text the ones before it left. " +
+			"base_version must be the version the edits were made against, as read_resource gave it: if the resource was saved since, nothing is saved. " +
+			"Nothing is saved either if an old_text is missing, or appears more than once without replace_all. " +
+			"Line breaks match whether the file uses LF or CRLF, and the file keeps its encoding and line endings.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"resource":     resourceRefSchema,
+				"base_version": map[string]any{"type": "integer", "minimum": 1, "description": "The version the edits were made against."},
+				"edits": map[string]any{
+					"type": "array", "minItems": 1, "maxItems": mcpEditMax,
+					"description": "The replacements, applied in order.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"old_text":    map[string]any{"type": "string", "description": "Text to replace, copied exactly, with enough around it to be unique."},
+							"new_text":    map[string]any{"type": "string", "description": "What replaces it; empty to delete it."},
+							"replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence rather than requiring exactly one."},
+						},
+						"required":             []string{"old_text", "new_text"},
+						"additionalProperties": false,
+					},
+				},
+			},
+			"required":             []string{"resource", "base_version", "edits"},
+			"additionalProperties": false,
+		},
+		OutputSchema: mcpSaveOut,
+		Annotations:  mcpWriteAnnotations,
+		scope:        store.OAuthScopeWrite,
+		run:          (*App).mcpEditResource,
 	},
 	{
 		Name:  "tag_resource",
@@ -97,9 +136,10 @@ var mcpWriteTools = []*mcpTool{
 			"required":             []string{"resource"},
 			"additionalProperties": false,
 		},
-		Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
-		scope:       store.OAuthScopeWrite,
-		run:         (*App).mcpTagResource,
+		OutputSchema: mcpTagResourceOut,
+		Annotations:  map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+		scope:        store.OAuthScopeWrite,
+		run:          (*App).mcpTagResource,
 	},
 }
 
@@ -126,9 +166,10 @@ var mcpShareTools = []*mcpTool{
 			"required":             []string{"resource"},
 			"additionalProperties": false,
 		},
-		Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
-		scope:       store.OAuthScopeShare,
-		run:         (*App).mcpShareResource,
+		OutputSchema: mcpShareResourceOut,
+		Annotations:  map[string]any{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
+		scope:        store.OAuthScopeShare,
+		run:          (*App).mcpShareResource,
 	},
 	{
 		Name:  "unshare_resource",
@@ -144,9 +185,10 @@ var mcpShareTools = []*mcpTool{
 			"required":             []string{"resource"},
 			"additionalProperties": false,
 		},
-		Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false},
-		scope:       store.OAuthScopeShare,
-		run:         (*App).mcpUnshareResource,
+		OutputSchema: mcpUnshareResourceOut,
+		Annotations:  map[string]any{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false},
+		scope:        store.OAuthScopeShare,
+		run:          (*App).mcpUnshareResource,
 	},
 }
 
@@ -232,37 +274,137 @@ func (a *App) mcpUpdateResource(x mcpExchange, args json.RawMessage) (mcpOutcome
 	if in.Filename != nil {
 		filename = *in.Filename
 	}
-	switch {
-	case mcpEncrypted(resource):
-		return mcpProblem("%s", mcpEncryptedText)
-	case resource.QuickShare():
-		return mcpProblem("%s is a quick share, which is read only until it is kept as a resource on its page.", mcpLabel(resource))
-	case !store.TextLike(resource.ContentType):
-		return mcpProblem("%s holds %s content, which cannot be replaced with text here.", mcpLabel(resource), resource.ContentType)
-	}
-	if problem := a.mcpTextProblem(*in.Content, name); problem != "" {
+	if problem := mcpUnwritable(resource); problem != "" {
 		return mcpProblem("%s", problem)
 	}
 	// The new text is written the way the file is: in its encoding, with its
 	// line endings, as the editor on the resource page does.
-	ctx := x.r.Context()
 	eol := store.EOLLF
-	if stored, err := a.db.ReadContent(ctx, resource); err == nil {
+	if stored, err := a.db.ReadContent(x.r.Context(), resource); err == nil {
 		if text, _, err := store.DecodeText(stored, resource.ContentEncoding); err == nil {
 			eol = store.DetectEOL(text)
 		}
 	}
-	encoded, encoding, err := store.EncodeText(store.ApplyEOL(*in.Content, eol), resource.ContentEncoding)
+	return a.mcpSaveText(x, resource, name, filename, *in.Content, eol, in.BaseVersion)
+}
+
+// mcpEditMax bounds the replacements one call makes.
+const mcpEditMax = 100
+
+func (a *App) mcpEditResource(x mcpExchange, args json.RawMessage) (mcpOutcome, error) {
+	var in struct {
+		Resource    string `json:"resource"`
+		BaseVersion int    `json:"base_version"`
+		Edits       []struct {
+			Old        *string `json:"old_text"`
+			New        *string `json:"new_text"`
+			ReplaceAll bool    `json:"replace_all"`
+		} `json:"edits"`
+	}
+	if problem := mcpArguments(args, &in); problem != "" {
+		return mcpProblem("%s", problem)
+	}
+	if in.BaseVersion < 1 {
+		return mcpProblem("Invalid arguments: base_version is required: the version the edits were made against, as read_resource gave it.")
+	}
+	if len(in.Edits) == 0 || len(in.Edits) > mcpEditMax {
+		return mcpProblem("Invalid arguments: edits must hold from 1 to %d replacements.", mcpEditMax)
+	}
+	resource, problem, err := a.mcpResolve(x, in.Resource)
+	if err != nil || problem != "" {
+		return mcpOutcome{problem: problem}, err
+	}
+	if problem := mcpUnwritable(resource); problem != "" {
+		return mcpProblem("%s", problem)
+	}
+	if resource.Version != in.BaseVersion {
+		return mcpConflict(resource, in.BaseVersion, resource.Version)
+	}
+	stored, err := a.db.ReadContent(x.r.Context(), resource)
+	if err != nil {
+		return mcpOutcome{}, err
+	}
+	text, _, err := store.DecodeText(stored, resource.ContentEncoding)
+	if err != nil {
+		return mcpProblem("%s is not readable as text, so it cannot be edited here.", mcpLabel(resource))
+	}
+	// Matching is on line breaks as LF, whatever the file uses, and the file
+	// gets its own back when it is written.
+	eol := store.DetectEOL(text)
+	text = store.ApplyEOL(text, store.EOLLF)
+	replaced := 0
+	for i, edit := range in.Edits {
+		if edit.Old == nil || edit.New == nil {
+			return mcpProblem("Invalid arguments: edit %d needs old_text and new_text.", i+1)
+		}
+		old, replacement := store.ApplyEOL(*edit.Old, store.EOLLF), store.ApplyEOL(*edit.New, store.EOLLF)
+		if old == "" {
+			return mcpProblem("Invalid arguments: edit %d has an empty old_text. To write the whole text, use update_resource.", i+1)
+		}
+		switch count := strings.Count(text, old); {
+		case count == 0:
+			return mcpProblem("Nothing was saved: the old_text of edit %d is not in version %d of %s%s. "+
+				"Copy it exactly as read_resource gave it, spaces and line breaks included.", i+1, resource.Version, mcpLabel(resource), mcpAfterEarlier(i))
+		case count > 1 && !edit.ReplaceAll:
+			return mcpProblem("Nothing was saved: the old_text of edit %d appears %d times in %s%s. "+
+				"Include more of the text around it to pick one, or set replace_all to change every one.", i+1, count, mcpLabel(resource), mcpAfterEarlier(i))
+		case edit.ReplaceAll:
+			text = strings.ReplaceAll(text, old, replacement)
+			replaced += count
+		default:
+			text = strings.Replace(text, old, replacement, 1)
+			replaced++
+		}
+	}
+	outcome, err := a.mcpSaveText(x, resource, resource.Name, resource.Filename, text, eol, in.BaseVersion)
+	if structured, ok := outcome.structured.(map[string]any); ok {
+		structured["replacements"] = replaced
+	}
+	return outcome, err
+}
+
+func mcpAfterEarlier(edit int) string {
+	if edit == 0 {
+		return ""
+	}
+	return " as the edits before it left it"
+}
+
+// mcpUnwritable says why a resource's text cannot be replaced here, if it
+// cannot.
+func mcpUnwritable(resource Resource) string {
+	switch {
+	case mcpEncrypted(resource):
+		return mcpEncryptedText
+	case resource.QuickShare():
+		return fmt.Sprintf("%s is a quick share, which is read only until it is kept as a resource on its page.", mcpLabel(resource))
+	case !store.TextLike(resource.ContentType):
+		return fmt.Sprintf("%s holds %s content, which cannot be replaced with text here.", mcpLabel(resource), resource.ContentType)
+	}
+	return ""
+}
+
+func mcpConflict(resource Resource, base, current int) (mcpOutcome, error) {
+	return mcpProblem("Nothing was saved: %s has been saved since version %d and is now at version %d. "+
+		"Read it again with read_resource, make the change to that text, and save with base_version %d.",
+		mcpLabel(resource), base, current, current)
+}
+
+// mcpSaveText saves text as a resource's next version, in its encoding and
+// with the line endings eol names, unless it was saved since base.
+func (a *App) mcpSaveText(x mcpExchange, resource Resource, name, filename, text, eol string, base int) (mcpOutcome, error) {
+	if problem := a.mcpTextProblem(text, name); problem != "" {
+		return mcpProblem("%s", problem)
+	}
+	encoded, encoding, err := store.EncodeText(store.ApplyEOL(text, eol), resource.ContentEncoding)
 	if err != nil {
 		return mcpStoreProblem(err)
 	}
-	result, err := a.db.SaveResource(ctx, x.user.ID, resource.ID, store.ResourceEdit{
-		Name: name, Filename: filename, Content: encoded, ContentEncoding: encoding, BaseVersion: in.BaseVersion,
+	result, err := a.db.SaveResource(x.r.Context(), x.user.ID, resource.ID, store.ResourceEdit{
+		Name: name, Filename: filename, Content: encoded, ContentEncoding: encoding, BaseVersion: base,
 	})
 	if conflict := (*store.VersionConflict)(nil); errors.As(err, &conflict) {
-		return mcpProblem("Nothing was saved: %s has been saved since version %d and is now at version %d. "+
-			"Read it again with read_resource, make the change to that text, and save with base_version %d.",
-			mcpLabel(resource), in.BaseVersion, conflict.Current, conflict.Current)
+		return mcpConflict(resource, base, conflict.Current)
 	}
 	if errors.Is(err, store.ErrNotFound) {
 		return mcpProblem("%s no longer exists.", mcpLabel(resource))
@@ -274,15 +416,15 @@ func (a *App) mcpUpdateResource(x mcpExchange, args json.RawMessage) (mcpOutcome
 		"id": resource.ID, "name": name, "filename": filename, "version": result.Version, "new_version": result.NewVersion,
 		"url": a.baseURL(x.r) + "/resources/" + resource.ID,
 	}
-	text := fmt.Sprintf("Saved %s as version %d.", mcpLabel(resource), result.Version)
+	message := fmt.Sprintf("Saved %s as version %d.", mcpLabel(resource), result.Version)
 	if !result.NewVersion {
-		text = fmt.Sprintf("The text is what %s already holds; it stays at version %d.", mcpLabel(resource), result.Version)
+		message = fmt.Sprintf("The text is what %s already holds; it stays at version %d.", mcpLabel(resource), result.Version)
 	}
 	if result.Trimmed > 0 {
 		structured["history_trimmed"] = result.Trimmed
-		text += fmt.Sprintf(" To make room, the %d oldest earlier versions were removed from the account's history.", result.Trimmed)
+		message += fmt.Sprintf(" To make room, the %d oldest earlier versions were removed from the account's history.", result.Trimmed)
 	}
-	return mcpOutcome{structured: structured, text: []string{text}}, nil
+	return mcpOutcome{structured: structured, text: []string{message}}, nil
 }
 
 func (a *App) mcpShareResource(x mcpExchange, args json.RawMessage) (mcpOutcome, error) {
