@@ -490,10 +490,32 @@ a.lbl.on:hover { background: var(--accent-d); color: var(--on-accent); }
 /* The box to add one reads as a tag not written yet: a dashed outline the
    size of a tag. The suggestions open as the name is typed, so the arrow
    the browser draws for them is left out. */
+.lbl-add { position: relative; display: inline-flex; align-items: center; }
 .lbl-add input[type="text"] { width: 110px; height: 22px; padding: 0 9px; border: 1px dashed var(--line2); border-radius: 11px; background: transparent; box-shadow: none; font: 400 12px/20px var(--sans); }
 .lbl-add input[type="text"]:hover { border-color: var(--ink3); }
 .lbl-add input[type="text"]:focus { border-style: solid; border-color: var(--accent); box-shadow: none; background: var(--field); }
 .lbl-add input::-webkit-calendar-picker-indicator { display: none !important; }
+/* Saving a tag draws a spinner in the box and holds the box until the answer
+   arrives. Taking a tag off turns its × into the same spinner. parts.js marks
+   the form busy for the length of the request. */
+@keyframes tag-spin { to { transform: rotate(360deg); } }
+.lbl-add[aria-busy="true"] input[type="text"] {
+  padding-right: 26px; border-style: solid; border-color: var(--accent); background: var(--field);
+  color: var(--ink2); -webkit-text-fill-color: var(--ink2); opacity: 1; cursor: progress;
+}
+.lbl-add[aria-busy="true"]::after,
+form.lbl[aria-busy="true"] button {
+  box-sizing: border-box; width: 12px; height: 12px;
+  border: 2px solid color-mix(in oklab, var(--accent) 35%, var(--line2));
+  border-top-color: var(--accent); border-right-color: var(--accent-d);
+  border-radius: 50%; animation: tag-spin .6s linear infinite;
+}
+.lbl-add[aria-busy="true"]::after { content: ""; position: absolute; z-index: 1; right: 7px; top: 50%; margin-top: -6px; }
+form.lbl[aria-busy="true"] button { flex: none; margin: 0; padding: 0; font-size: 0; color: transparent; background: transparent; opacity: 1; cursor: progress; }
+@media (prefers-reduced-motion: reduce) {
+  .lbl-add[aria-busy="true"]::after,
+  form.lbl[aria-busy="true"] button { animation: none; }
+}
 /* In a list row the filename comes first; the tags take what is left of
    the cell and fade out where they no longer fit. */
 .fl > .trunc { flex: 0 1 auto; }
