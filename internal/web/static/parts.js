@@ -179,6 +179,11 @@ async function submit(event) {
   const body = new FormData(form, event.submitter || undefined);
   const buttons = [...form.querySelectorAll("button[type='submit'], button:not([type])")];
   for (const button of buttons) button.disabled = true;
+  // The box that adds a tag has no button of its own. Disabling it, with the
+  // spinner the busy form draws, is what shows the name is being saved. The
+  // value is already in the body: a disabled field is left out of a submit.
+  const tagBox = form.matches("[data-tag-add]") ? form.querySelector("[data-tag-input]") : null;
+  if (tagBox) tagBox.disabled = true;
   form.setAttribute("aria-busy", "true");
   try {
     const answer = await fetchParts(target, { method: "POST", body });
@@ -200,6 +205,7 @@ async function submit(event) {
   } finally {
     busy = false;
     for (const button of buttons) button.disabled = false;
+    if (tagBox) tagBox.disabled = false;
     form.removeAttribute("aria-busy");
   }
 }
