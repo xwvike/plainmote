@@ -213,16 +213,19 @@ func (d *Store) ListResources(ctx context.Context, ownerID, query string, limit,
 }
 
 // ResourceFilter narrows the resource list: Query by name or filename, Kind
-// to resources or quick shares, Tag to those carrying it, in any case.
+// to resources or quick shares, Tags to those carrying every selected tag.
 type ResourceFilter struct {
 	Query string
 	Kind  string
-	Tag   string
+	Tags  []string
 }
 
 const resourceFilterSQL = `r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename ILIKE $3 ESCAPE '\')
   AND ` + liveResource + ` AND ($4 = '' OR ($4 = 'quick') = (r.expires_at IS NOT NULL))
-  AND ($5 = '' OR EXISTS (SELECT 1 FROM unnest(r.tags) t WHERE lower(t) = lower($5)))`
+  AND NOT EXISTS (
+    SELECT 1 FROM unnest($5::text[]) wanted
+    WHERE NOT EXISTS (SELECT 1 FROM unnest(r.tags) t WHERE lower(t) = lower(wanted))
+  )`
 
 func (d *Store) ListResourcesBy(ctx context.Context, ownerID string, filter ResourceFilter, limit, offset int) ([]Resource, int, error) {
 	query := strings.TrimSpace(filter.Query)
@@ -233,10 +236,9 @@ func (d *Store) ListResourcesBy(ctx context.Context, ownerID string, filter Reso
 	default:
 		kind = ""
 	}
-	tag := strings.TrimSpace(filter.Tag)
 	var total int
 	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM resources r WHERE `+resourceFilterSQL,
-		ownerID, query, pattern, kind, tag).Scan(&total); err != nil {
+		ownerID, query, pattern, kind, filter.Tags).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count resources: %w: %w", ErrInternal, err)
 	}
 	if limit <= 0 {
@@ -254,7 +256,7 @@ FROM resources r
 WHERE `+resourceFilterSQL+`
 ORDER BY r.updated_at DESC, r.id
 LIMIT $7 OFFSET $8
-`, ownerID, query, pattern, kind, tag, time.Now().UTC(), limit, offset)
+`, ownerID, query, pattern, kind, filter.Tags, time.Now().UTC(), limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

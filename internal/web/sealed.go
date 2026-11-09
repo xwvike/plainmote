@@ -128,7 +128,12 @@ func (a *App) handleSealedIndex(w http.ResponseWriter, r *http.Request, user Use
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	entries, err := a.db.SealedIndex(r.Context(), user.ID)
+	query := r.URL.Query()
+	kind := query.Get("kind")
+	if kind != store.KindResource && kind != store.KindQuickShare {
+		kind = ""
+	}
+	entries, err := a.db.SealedIndexBy(r.Context(), user.ID, kind, resourceTags(query["tag"]))
 	if err != nil {
 		a.serverError(w, "list sealed resources", err)
 		return

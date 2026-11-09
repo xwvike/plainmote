@@ -85,3 +85,36 @@ func TestEveryReaderSeesTheWholeResource(t *testing.T) {
 	}
 	check("ExportResources", exported[0])
 }
+
+func TestListResourcesMatchesAllSelectedTags(t *testing.T) {
+	db, user, both := testDatabase(t)
+	ctx := context.Background()
+	one, err := db.CreateResource(ctx, user.ID, "Another", "another.conf", []byte("answer=42"), "utf-8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SetResourceTags(ctx, user.ID, both.ID, []string{"Ops", "配置"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SetResourceTags(ctx, user.ID, one.ID, []string{"Ops"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		tags []string
+		want int
+	}{
+		{nil, 2},
+		{[]string{"OPS"}, 2},
+		{[]string{"OPS", "配置"}, 1},
+		{[]string{"OPS", "missing"}, 0},
+	} {
+		rows, total, err := db.ListResourcesBy(ctx, user.ID, ResourceFilter{Tags: tc.tags}, 10, 0)
+		if err != nil || total != tc.want || len(rows) != tc.want {
+			t.Fatalf("tags %q: got %d rows, total %d, err %v, want %d", tc.tags, len(rows), total, err, tc.want)
+		}
+		if tc.want == 1 && rows[0].ID != both.ID {
+			t.Fatalf("tags %q: matched %s, want %s", tc.tags, rows[0].ID, both.ID)
+		}
+	}
+}

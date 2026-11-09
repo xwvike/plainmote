@@ -477,14 +477,18 @@ type SealedEntry struct {
 // SealedIndex lists the account's encrypted resources, for its lists and
 // searches to name them in the browser.
 func (d *Store) SealedIndex(ctx context.Context, ownerID string) ([]SealedEntry, error) {
+	return d.SealedIndexBy(ctx, ownerID, "", nil)
+}
+
+func (d *Store) SealedIndexBy(ctx context.Context, ownerID, kind string, tags []string) ([]SealedEntry, error) {
 	if !validUUIDs(ownerID) {
 		return nil, ErrNotFound
 	}
 	rows, err := d.db.Query(ctx, `
 SELECT r.id::text, r.sealed_key, r.sealed_meta, r.expires_at IS NOT NULL FROM resources r
-WHERE r.owner_id = $1 AND r.sealed_key IS NOT NULL AND `+liveResource+`
+WHERE r.sealed_key IS NOT NULL AND `+resourceFilterSQL+`
 ORDER BY r.updated_at DESC
-`, ownerID)
+`, ownerID, "", "", kind, tags)
 	if err != nil {
 		return nil, fmt.Errorf("list sealed resources: %w: %w", ErrInternal, err)
 	}

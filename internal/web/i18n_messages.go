@@ -534,6 +534,8 @@ var messageTable = map[string][6]string{
 	"cli_cmd_config":              {"Show settings; change them with config language zh|en|auto or config editor <command>", "查看设置；用 config language zh|en|auto 或 config editor <命令> 修改", "檢視設定；用 config language zh|en|auto 或 config editor <命令> 修改", "設定を表示。config language zh|en|auto または config editor <コマンド> で変更", "Afficher les réglages ; les modifier avec config language zh|en|auto ou config editor <commande>", "Einstellungen anzeigen; ändern mit config language zh|en|auto oder config editor <Befehl>"},
 	"quick_share":                 {"Quick share", "快速分享", "快速分享", "クイック共有", "Partage rapide", "Schnellfreigabe"},
 	"tags":                        {"Tags", "标签", "標籤", "タグ", "Étiquettes", "Tags"},
+	"tag_search":                  {"Find tags", "搜索标签", "搜尋標籤", "タグを検索", "Filtrer les étiquettes", "Tags suchen"},
+	"tag_no_matches":              {"No matching tags", "没有匹配的标签", "沒有符合的標籤", "一致するタグはありません", "Aucune étiquette correspondante", "Keine passenden Tags"},
 	"tag_add":                     {"Add tag", "添加标签", "新增標籤", "タグを追加", "Ajouter une étiquette", "Tag hinzufügen"},
 	"tag_remove":                  {"Remove tag", "移除标签", "移除標籤", "タグを外す", "Retirer l’étiquette", "Tag entfernen"},
 	"tag_remove_named":            {"Remove tag %s", "移除标签 %s", "移除標籤 %s", "タグ %s を外す", "Retirer l’étiquette %s", "Tag %s entfernen"},

@@ -279,17 +279,19 @@ type pageData struct {
 // pager carries everything the dashboard footer needs; every link is a plain
 // href so the list stays usable without JavaScript.
 type pager struct {
-	Query   string
-	Kind    string
-	Tag     string
-	Size    int
-	Sizes   []int
-	Total   int
-	From    int
-	To      int
-	Links   []pageLink
-	PrevURL string
-	NextURL string
+	Query          string
+	Kind           string
+	Tags           []string
+	ClearTagsURL   string
+	SealedIndexURL string
+	Size           int
+	Sizes          []int
+	Total          int
+	From           int
+	To             int
+	Links          []pageLink
+	PrevURL        string
+	NextURL        string
 }
 
 type pageLink struct {

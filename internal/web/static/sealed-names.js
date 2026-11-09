@@ -12,7 +12,7 @@ const msg = (name) => search?.dataset[name] || "";
 const named = document.querySelectorAll("[data-sealed-name], [data-sealed-file]");
 
 async function readIndex() {
-  const response = await fetch("/resources/sealed", { headers: { Accept: "application/json" }, credentials: "same-origin" });
+  const response = await fetch(search?.dataset.sealedIndex || "/resources/sealed", { headers: { Accept: "application/json" }, credentials: "same-origin" });
   if (!response.ok) return [];
   return (await response.json()).resources || [];
 }

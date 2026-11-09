@@ -18,10 +18,14 @@ func (d *Store) APIResources(ctx context.Context, ownerID, query, tag string) ([
 	}
 	query = strings.TrimSpace(query)
 	pattern := "%" + escapeLikePattern(query) + "%"
+	var tags []string
+	if tag = strings.TrimSpace(tag); tag != "" {
+		tags = []string{tag}
+	}
 	return d.apiResources(ctx, `
 WHERE `+resourceFilterSQL+`
 ORDER BY r.updated_at DESC, r.id
-LIMIT $6`, ownerID, query, pattern, "", strings.TrimSpace(tag), APIListLimit)
+LIMIT $6`, ownerID, query, pattern, "", tags, APIListLimit)
 }
 
 // ResolveResources finds what a reference typed on the command line can mean:

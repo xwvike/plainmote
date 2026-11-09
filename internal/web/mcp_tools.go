@@ -325,7 +325,7 @@ func (a *App) mcpListResources(x mcpExchange, args json.RawMessage) (mcpOutcome,
 		}
 	}
 	query := clipText(strings.TrimSpace(in.Query), 200)
-	resources, total, err := a.db.ListResourcesBy(x.r.Context(), x.user.ID, store.ResourceFilter{Query: query, Kind: kind, Tag: clipText(in.Tag, 200)}, mcpListPage, offset)
+	resources, total, err := a.db.ListResourcesBy(x.r.Context(), x.user.ID, store.ResourceFilter{Query: query, Kind: kind, Tags: resourceTags([]string{clipText(in.Tag, 200)})}, mcpListPage, offset)
 	if err != nil {
 		return mcpOutcome{}, err
 	}

@@ -726,7 +726,26 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .table-scroll { max-width: 100%; overflow-x: auto; }
 .table-scroll > table { min-width: 760px; }
 /* The filename cell also carries the tags: room for both before scrolling. */
-.table-scroll > table.res-list { min-width: 960px; }
+.table-scroll > table.res-list { min-width: 740px; }
+.res-list .content-type { display: block; }
+.res-list .st { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.res-list .num { white-space: nowrap; }
+.resource-browser.with-tags { display: grid; grid-template-columns: 152px minmax(0, 1fr); gap: 12px; align-items: start; }
+.resource-results { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
+.tag-sidebar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.tag-sidebar input[type="search"] { width: 100%; min-width: 0; }
+.tag-options { max-height: min(50vh, 360px); overflow-y: auto; overscroll-behavior: contain; }
+.tag-option:not([hidden]) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 7px; padding: 5px 6px; border-radius: 4px; cursor: pointer; }
+.tag-option:hover, .tag-option:focus-within { background: var(--field); }
+.tag-option input { margin: 3px 0 0; accent-color: var(--accent); }
+.tag-option span { overflow-wrap: anywhere; }
+.tag-option small { color: var(--ink3); font-variant-numeric: tabular-nums; }
+.tag-clear { justify-self: start; }
+@media (max-width: 760px) {
+  .resource-browser.with-tags { grid-template-columns: minmax(0, 1fr); }
+  .tag-options { max-height: 160px; }
+}
+
 /* The record, kept but not given a panel of its own. */
 .meta { font: 400 10.5px var(--mono); color: var(--ink3); word-break: break-all; }
 

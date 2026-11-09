@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -40,11 +41,10 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	if err != nil || page < 1 {
 		page = 1
 	}
-	filter := store.ResourceFilter{Query: search, Kind: query.Get("kind"), Tag: strings.TrimSpace(query.Get("tag"))}
+	filter := store.ResourceFilter{Query: search, Kind: query.Get("kind"), Tags: resourceTags(query["tag"])}
 	if filter.Kind != store.KindResource && filter.Kind != store.KindQuickShare {
 		filter.Kind = ""
 	}
-	filter.Tag = truncateBytes(filter.Tag, maxQueryLength)
 
 	resources, total, err := a.db.ListResourcesBy(r.Context(), user.ID, filter, size, (page-1)*size)
 	if err != nil {
@@ -62,13 +62,14 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	}
 	chips := make([]tagChip, 0, len(tags))
 	for _, tag := range tags {
-		on := strings.EqualFold(tag.Name, filter.Tag)
-		pick := filter
-		pick.Tag = tag.Name
-		if on {
-			pick.Tag = ""
+		chips = append(chips, tagChip{Name: tag.Name, Count: tag.Count, On: containsFold(filter.Tags, tag.Name)})
+	}
+	// A tag may have been removed since this URL was saved. Keep it selectable
+	// so it can be cleared individually, even if it currently matches nothing.
+	for _, selected := range filter.Tags {
+		if !slices.ContainsFunc(tags, func(tag store.Tag) bool { return strings.EqualFold(tag.Name, selected) }) {
+			chips = append(chips, tagChip{Name: selected, On: true})
 		}
-		chips = append(chips, tagChip{Name: tag.Name, Count: tag.Count, URL: dashboardURL(pick, size, 1), On: on})
 	}
 
 	// What is left is part of the list, not a surprise at save time: the
@@ -84,7 +85,11 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	})
 	pager.Query = search
 	pager.Kind = filter.Kind
-	pager.Tag = filter.Tag
+	pager.Tags = filter.Tags
+	clear := filter
+	clear.Tags = nil
+	pager.ClearTagsURL = dashboardURL(clear, size, 1)
+	pager.SealedIndexURL = "/resources/sealed?" + url.Values{"kind": {filter.Kind}, "tag": filter.Tags}.Encode()
 	a.renderTemplate(w, r, http.StatusOK, "dashboard.html", pageData{
 		User:      user,
 		CSRF:      csrfValue(r),
@@ -96,6 +101,17 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		Quota:     quota,
 		Pager:     pager,
 	})
+}
+
+func resourceTags(values []string) []string {
+	var tags []string
+	for _, value := range values {
+		tag := truncateBytes(strings.TrimSpace(value), maxQueryLength)
+		if tag != "" && !containsFold(tags, tag) {
+			tags = append(tags, tag)
+		}
+	}
+	return tags
 }
 
 // truncateBytes cuts a string to a byte budget without splitting a character
@@ -139,8 +155,8 @@ func dashboardURL(filter store.ResourceFilter, size, page int) string {
 	if filter.Kind != "" {
 		values.Set("kind", filter.Kind)
 	}
-	if filter.Tag != "" {
-		values.Set("tag", filter.Tag)
+	for _, tag := range filter.Tags {
+		values.Add("tag", tag)
 	}
 	if size != defaultPageSize {
 		values.Set("size", strconv.Itoa(size))

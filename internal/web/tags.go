@@ -17,11 +17,10 @@ import (
 const tagFormMaxBytes = 16 << 10
 
 // tagChip is one of the account's tags as the pages show it: on the resource
-// list, a filter with its count; on a resource, a suggestion to add.
+// list, a checkbox with its count; on a resource, a suggestion to add.
 type tagChip struct {
 	Name  string
 	Count int
-	URL   string
 	On    bool
 }
 
