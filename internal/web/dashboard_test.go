@@ -82,7 +82,7 @@ func TestDashboardTagSidebarLocalization(t *testing.T) {
 				`class="tag-sidebar" aria-label="` + tc.tags + `"`,
 				`placeholder="` + tc.search + `" aria-label="` + tc.search + `"`,
 				`data-tag-empty hidden>` + tc.empty + `</p>`,
-				`class="txt tag-clear" href="/resources/">` + tc.clear + `</a>`,
+				`class="txt tag-clear" id="tag-clear" href="/resources/">` + tc.clear + `</a>`,
 				`name="tag" value="ops" checked`,
 			} {
 				if !strings.Contains(body, want) {
@@ -90,5 +90,28 @@ func TestDashboardTagSidebarLocalization(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDashboardFragmentKeepsPageShellOutOfResponse(t *testing.T) {
+	app := localizedApp()
+	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/?tag=ops", nil)
+	request.Header.Set(partsHeader, "1")
+	response := httptest.NewRecorder()
+	app.renderTemplate(response, request, http.StatusOK, "dashboard.html", pageData{
+		Tags:  []tagChip{{Name: "ops", On: true}},
+		Pager: pager{Tags: []string{"ops"}, ClearTagsURL: "/resources/"},
+	})
+	body := response.Body.String()
+	for _, want := range []string{
+		`id="resource-count"`, `id="resource-results"`, `id="resource-filters"`,
+		`id="tag-clear"`, `<template id="resource-selected-tags"><input type="checkbox" name="tag" value="ops" checked>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("fragment missing %q", want)
+		}
+	}
+	if strings.Contains(body, "<!doctype html>") || strings.Contains(body, "data-tag-sidebar") {
+		t.Error("fragment includes the page shell or tag sidebar")
 	}
 }

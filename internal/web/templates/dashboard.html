@@ -9,7 +9,7 @@
   <main class="page">
     <div class="ph">
       <h1>{{tr .Locale "resources"}}</h1>
-      <span class="cnt">{{countText .Locale .Pager.Total "items"}}</span>
+      {{template "dashboard-count" .}}
       <span class="sp">
         {{with storageMeter .Quota}}<a class="usage" href="/account" title="{{printf (tr $.Locale "meter_title") (bytesText .Current) (bytesText .History) (bytesText .Free)}}">
           <span class="meter-bar mini" style="{{.Style}}" aria-hidden="true"><span class="cur"></span><span class="his"></span></span>
@@ -21,19 +21,7 @@
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
     {{/* Filters sit above the list they narrow, on the page itself - the same
          place on every list page, and no box of their own. */}}
-    <form id="resource-filters" class="filters" method="get" action="/resources/">
-      <input type="search" name="q" value="{{.Pager.Query}}" placeholder="{{tr .Locale "search_name_filename"}}" aria-label="{{tr .Locale "search_name_filename"}}">
-      <label class="pick"><span>{{tr .Locale "type"}}</span>
-        <select name="kind">
-          <option value="">{{tr .Locale "kind_all"}}</option>
-          <option value="resource"{{if eq .Pager.Kind "resource"}} selected{{end}}>{{tr .Locale "kind_resource"}}</option>
-          <option value="quick"{{if eq .Pager.Kind "quick"}} selected{{end}}>{{tr .Locale "quick_share"}}</option>
-        </select>
-      </label>
-      <input type="hidden" name="size" value="{{.Pager.Size}}">
-      <button type="submit">{{tr .Locale "search"}}</button>
-      {{if or .Pager.Query .Pager.Kind .Pager.Tags}}<a class="txt" href="/resources/">{{tr .Locale "clear"}}</a>{{end}}
-    </form>
+    {{template "dashboard-filters" .}}
     <div class="resource-browser{{if .Tags}} with-tags{{end}}">
       {{if .Tags}}<aside class="tag-sidebar" aria-label="{{tr .Locale "tags"}}" data-tag-sidebar>
         <input type="search" data-tag-search hidden placeholder="{{tr .Locale "tag_search"}}" aria-label="{{tr .Locale "tag_search"}}">
@@ -44,74 +32,11 @@
           </label>{{end}}
           <p class="hint" data-tag-empty hidden>{{tr .Locale "tag_no_matches"}}</p>
         </div>
-        {{if .Pager.Tags}}<a class="txt tag-clear" href="{{.Pager.ClearTagsURL}}">{{tr .Locale "clear"}}</a>{{end}}
+        {{template "dashboard-tag-clear" .}}
       </aside>{{end}}
       <div class="resource-results">
-        {{/* Encrypted names are not the service's to search: once unlocked,
-             sealed-names.js matches them here, in a block of their own. */}}
-        <div data-sealed-search data-query="{{.Pager.Query}}" data-sealed-index="{{.Pager.SealedIndexURL}}" hidden
-             data-msg-locked="{{tr .Locale "sealed_search_locked"}}" data-msg-matches="{{tr .Locale "sealed_search_matches"}}" data-msg-tag="{{tr .Locale "encrypted"}}"
-             data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}">
-          <form class="unlock-bar" data-sealed-unlock hidden>
-            <span class="lock-ic" aria-hidden="true"></span>
-            <span class="msg" data-sealed-search-note></span>
-            <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
-            <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
-            <span class="err" data-sealed-error role="alert"></span>
-          </form>
-          <div class="panel" data-sealed-matches hidden>
-            <div class="pt"><span class="sec">{{tr .Locale "sealed_search_title"}}</span><span class="sp"><span class="hint" data-sealed-matches-count></span></span></div>
-            <div class="table-scroll"><table class="fx"><colgroup><col style="width:240px"><col></colgroup><tbody data-sealed-matches-body></tbody></table></div>
-          </div>
-        </div>
-        <div class="panel">
-          {{if .Resources}}
-          <div class="table-scroll">
-            <table class="fx res-list">
-              <colgroup><col style="width:21%"><col><col style="width:218px"><col style="width:116px"><col style="width:130px"></colgroup>
-              <thead><tr><th>{{tr .Locale "name"}}</th><th>{{tr .Locale "filename"}}</th><th>{{tr .Locale "type"}}</th><th>{{tr .Locale "status"}}</th><th class="r">{{tr .Locale "updated"}}</th></tr></thead>
-              <tbody>
-                {{range .Resources}}
-                <tr>
-                  <td class="trunc"><a href="/resources/{{.ID}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</a></td>
-                  <td><span class="fl"><span class="mono trunc" title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}{{with .Tags}}<span class="row-lbls" title="{{join . " · "}}">{{range .}}<a class="lbl sm" href="/resources/?tag={{.}}">{{.}}</a>{{end}}</span>{{end}}</span></td>
-                  <td>
-                    {{if or .Encrypted .Sealed}}<span class="mut">—</span>
-                    {{else}}<span class="content-type mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
-                  </td>
-                  <td>
-                    {{if .TakenDown}}<span class="st no"><i></i><span>{{tr $.Locale "taken_down"}}</span></span>
-                    {{else if .QuickShare}}<span class="st qs-left"><i></i><span>{{remainText $.Locale .ExpiresAt}}</span></span>
-                    {{else if .LiveShares}}<span class="st on"><i></i><span>{{countText $.Locale .LiveShares "shares"}}</span></span>
-                    {{else}}<span class="st off"><i></i><span>{{tr $.Locale "not_shared"}}</span></span>{{end}}
-                  </td>
-                  <td class="num">{{formatMinute .UpdatedAt}}</td>
-                </tr>
-                {{end}}
-              </tbody>
-            </table>
-          </div>
-          <div class="pf">
-            <div class="pg">
-              <span class="hint">{{pageSummary .Locale .Pager.From .Pager.To .Pager.Total "items"}}</span>
-              <form class="psize" method="get" action="/resources/">
-                <input type="hidden" name="q" value="{{.Pager.Query}}">
-                <input type="hidden" name="kind" value="{{.Pager.Kind}}">
-                {{range .Pager.Tags}}<input type="hidden" name="tag" value="{{.}}">{{end}}
-                <label>{{tr .Locale "per_page"}} <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
-                <button type="submit" class="sm">{{tr .Locale "apply"}}</button>
-              </form>
-              <span class="pages">
-                {{if .Pager.PrevURL}}<a class="pgn" href="{{.Pager.PrevURL}}">&lsaquo;</a>{{else}}<span class="pgn dis">&lsaquo;</span>{{end}}
-                {{range .Pager.Links}}{{if .Current}}<span class="pgn on">{{.Num}}</span>{{else}}<a class="pgn" href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
-                {{if .Pager.NextURL}}<a class="pgn" href="{{.Pager.NextURL}}">&rsaquo;</a>{{else}}<span class="pgn dis">&rsaquo;</span>{{end}}
-              </span>
-            </div>
-          </div>
-          {{else}}
-          <p class="empty">{{if .Pager.Query}}{{tr .Locale "no_matching_resources"}}<span class="mono">{{.Pager.Query}}</span>{{else if or .Pager.Tags .Pager.Kind}}{{tr .Locale "no_filtered_resources"}}{{else}}{{tr .Locale "no_resources"}}{{end}}</p>
-          {{end}}
-        </div>
+        <p class="err" id="tag-filter-error" role="alert" hidden>{{tr .Locale "request_unconfirmed"}}</p>
+        {{template "dashboard-results" .}}
       </div>
     </div>
   </main>
@@ -120,3 +45,102 @@
   {{if .Tags}}<script type="module" src="{{asset "tag-filter.js"}}"></script>{{end}}
 </body>
 </html>{{end}}
+
+
+{{define "dashboard.html#parts"}}
+  {{template "dashboard-count" .}}
+  {{template "dashboard-filters" .}}
+  {{template "dashboard-tag-clear" .}}
+  {{template "dashboard-results" .}}
+  <template id="resource-selected-tags">{{range .Tags}}{{if .On}}<input type="checkbox" name="tag" value="{{.Name}}" checked>{{end}}{{end}}</template>
+{{end}}
+
+{{define "dashboard-count"}}<span class="cnt" id="resource-count" aria-live="polite">{{countText .Locale .Pager.Total "items"}}</span>{{end}}
+
+{{define "dashboard-filters"}}
+<form id="resource-filters" class="filters" method="get" action="/resources/">
+  <input type="search" name="q" value="{{.Pager.Query}}" placeholder="{{tr .Locale "search_name_filename"}}" aria-label="{{tr .Locale "search_name_filename"}}">
+  <label class="pick"><span>{{tr .Locale "type"}}</span>
+    <select name="kind">
+      <option value="">{{tr .Locale "kind_all"}}</option>
+      <option value="resource"{{if eq .Pager.Kind "resource"}} selected{{end}}>{{tr .Locale "kind_resource"}}</option>
+      <option value="quick"{{if eq .Pager.Kind "quick"}} selected{{end}}>{{tr .Locale "quick_share"}}</option>
+    </select>
+  </label>
+  <input type="hidden" name="size" value="{{.Pager.Size}}">
+  <button type="submit">{{tr .Locale "search"}}</button>
+  <a class="txt" id="resource-clear" href="/resources/"{{if not (or .Pager.Query .Pager.Kind .Pager.Tags)}} hidden{{end}}>{{tr .Locale "clear"}}</a>
+</form>
+{{end}}
+
+{{define "dashboard-tag-clear"}}<a class="txt tag-clear" id="tag-clear" href="{{.Pager.ClearTagsURL}}"{{if not .Pager.Tags}} hidden{{end}}>{{tr .Locale "clear"}}</a>{{end}}
+
+{{define "dashboard-results"}}
+<div class="resource-results" id="resource-results">
+  {{/* Encrypted names are not the service's to search: once unlocked,
+       sealed-names.js matches them here, in a block of their own. */}}
+  <div data-sealed-search data-query="{{.Pager.Query}}" data-sealed-index="{{.Pager.SealedIndexURL}}" hidden
+       data-msg-locked="{{tr .Locale "sealed_search_locked"}}" data-msg-matches="{{tr .Locale "sealed_search_matches"}}" data-msg-tag="{{tr .Locale "encrypted"}}"
+       data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}">
+    <form class="unlock-bar" data-sealed-unlock hidden>
+      <span class="lock-ic" aria-hidden="true"></span>
+      <span class="msg" data-sealed-search-note></span>
+      <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+      <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+      <span class="err" data-sealed-error role="alert"></span>
+    </form>
+    <div class="panel" data-sealed-matches hidden>
+      <div class="pt"><span class="sec">{{tr .Locale "sealed_search_title"}}</span><span class="sp"><span class="hint" data-sealed-matches-count></span></span></div>
+      <div class="table-scroll"><table class="fx"><colgroup><col style="width:240px"><col></colgroup><tbody data-sealed-matches-body></tbody></table></div>
+    </div>
+  </div>
+  <div class="panel">
+    {{if .Resources}}
+    <div class="table-scroll">
+      <table class="fx res-list">
+        <colgroup><col style="width:21%"><col><col style="width:218px"><col style="width:116px"><col style="width:130px"></colgroup>
+        <thead><tr><th>{{tr .Locale "name"}}</th><th>{{tr .Locale "filename"}}</th><th>{{tr .Locale "type"}}</th><th>{{tr .Locale "status"}}</th><th class="r">{{tr .Locale "updated"}}</th></tr></thead>
+        <tbody>
+          {{range .Resources}}
+          <tr>
+            <td class="trunc"><a href="/resources/{{.ID}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</a></td>
+            <td><span class="fl"><span class="mono trunc" title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}{{with .Tags}}<span class="row-lbls" title="{{join . " · "}}">{{range .}}<a class="lbl sm" href="/resources/?tag={{.}}">{{.}}</a>{{end}}</span>{{end}}</span></td>
+            <td>
+              {{if or .Encrypted .Sealed}}<span class="mut">—</span>
+              {{else}}<span class="content-type mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
+            </td>
+            <td>
+              {{if .TakenDown}}<span class="st no"><i></i><span>{{tr $.Locale "taken_down"}}</span></span>
+              {{else if .QuickShare}}<span class="st qs-left"><i></i><span>{{remainText $.Locale .ExpiresAt}}</span></span>
+              {{else if .LiveShares}}<span class="st on"><i></i><span>{{countText $.Locale .LiveShares "shares"}}</span></span>
+              {{else}}<span class="st off"><i></i><span>{{tr $.Locale "not_shared"}}</span></span>{{end}}
+            </td>
+            <td class="num">{{formatMinute .UpdatedAt}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="pf">
+      <div class="pg">
+        <span class="hint">{{pageSummary .Locale .Pager.From .Pager.To .Pager.Total "items"}}</span>
+        <form class="psize" method="get" action="/resources/">
+          <input type="hidden" name="q" value="{{.Pager.Query}}">
+          <input type="hidden" name="kind" value="{{.Pager.Kind}}">
+          {{range .Pager.Tags}}<input type="hidden" name="tag" value="{{.}}">{{end}}
+          <label>{{tr .Locale "per_page"}} <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+          <button type="submit" class="sm">{{tr .Locale "apply"}}</button>
+        </form>
+        <span class="pages">
+          {{if .Pager.PrevURL}}<a class="pgn" href="{{.Pager.PrevURL}}">&lsaquo;</a>{{else}}<span class="pgn dis">&lsaquo;</span>{{end}}
+          {{range .Pager.Links}}{{if .Current}}<span class="pgn on">{{.Num}}</span>{{else}}<a class="pgn" href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
+          {{if .Pager.NextURL}}<a class="pgn" href="{{.Pager.NextURL}}">&rsaquo;</a>{{else}}<span class="pgn dis">&rsaquo;</span>{{end}}
+        </span>
+      </div>
+    </div>
+    {{else}}
+    <p class="empty">{{if .Pager.Query}}{{tr .Locale "no_matching_resources"}}<span class="mono">{{.Pager.Query}}</span>{{else if or .Pager.Tags .Pager.Kind}}{{tr .Locale "no_filtered_resources"}}{{else}}{{tr .Locale "no_resources"}}{{end}}</p>
+    {{end}}
+  </div>
+</div>
+{{end}}
