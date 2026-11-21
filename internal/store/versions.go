@@ -78,7 +78,7 @@ func lockContentTx(ctx context.Context, tx pgx.Tx, ownerID, id string) (currentC
 	err := tx.QueryRow(ctx, `
 SELECT content_key, content_size, content_type, content_encoding, content_sha256,
        version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), filename, sealed_meta
-FROM resources WHERE id = $1 AND owner_id = $2
+FROM resources WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
 FOR UPDATE
 `, id, ownerID).Scan(&current.Key, &current.Size, &current.Type, &current.Encoding, &current.SHA256,
 		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Filename, &current.SealedMeta)
@@ -136,15 +136,16 @@ RETURNING content_key
 		}
 	}
 	// Newest first, a running total: every version whose total no longer fits
-	// in the room goes. The order is total, so no two rows tie.
+	// in the room goes. Trashed resources' earlier versions give up room before
+	// live resources' history; current trashed content is never touched here.
 	if err := collect(tx.Query(ctx, `
 WITH room AS (
-  SELECT $2::bigint - COALESCE(SUM(content_size), 0) AS bytes FROM resources WHERE owner_id = $1
+  SELECT $2::bigint - COALESCE(SUM(content_size), 0) AS bytes FROM resources r WHERE r.owner_id = $1 AND `+unexpiredResource+`
 ), history AS (
   SELECT v.resource_id, v.version,
-         SUM(v.content_size) OVER (ORDER BY v.replaced_at DESC, v.resource_id, v.version DESC) AS kept
+         SUM(v.content_size) OVER (ORDER BY (r.deleted_at IS NULL) DESC, v.replaced_at DESC, v.resource_id, v.version DESC) AS kept
   FROM resource_versions v JOIN resources r ON r.id = v.resource_id
-  WHERE r.owner_id = $1
+  WHERE r.owner_id = $1 AND `+unexpiredResource+`
 )
 DELETE FROM resource_versions v
 USING history h, room
@@ -240,7 +241,7 @@ func (d *Store) ListVersions(ctx context.Context, ownerID, resourceID string) ([
 	rows, err := d.db.Query(ctx, `
 SELECT `+versionColumns+`
 FROM resource_versions v JOIN resources r ON r.id = v.resource_id
-WHERE v.resource_id = $1 AND r.owner_id = $2
+WHERE v.resource_id = $1 AND r.owner_id = $2 AND r.deleted_at IS NULL
 ORDER BY v.version DESC
 `, resourceID, ownerID)
 	if err != nil {
@@ -261,7 +262,7 @@ func (d *Store) HistoryCount(ctx context.Context, ownerID, resourceID string) (i
 	var count int
 	err := d.db.QueryRow(ctx, `
 SELECT COUNT(*) FROM resource_versions v JOIN resources r ON r.id = v.resource_id
-WHERE v.resource_id = $1 AND r.owner_id = $2
+WHERE v.resource_id = $1 AND r.owner_id = $2 AND r.deleted_at IS NULL
 `, resourceID, ownerID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count versions: %w: %w", ErrInternal, err)
@@ -277,7 +278,7 @@ func (d *Store) VersionForOwner(ctx context.Context, ownerID, resourceID string,
 	v, err := scanVersion(d.db.QueryRow(ctx, `
 SELECT `+versionColumns+`
 FROM resource_versions v JOIN resources r ON r.id = v.resource_id
-WHERE v.resource_id = $1 AND r.owner_id = $2 AND v.version = $3
+WHERE v.resource_id = $1 AND r.owner_id = $2 AND r.deleted_at IS NULL AND v.version = $3
 `, resourceID, ownerID, number))
 	if err != nil {
 		return Version{}, translateNotFound(err)
@@ -432,7 +433,7 @@ func (d *Store) DeleteVersion(ctx context.Context, ownerID, resourceID string, n
 	err := d.db.QueryRow(ctx, `
 DELETE FROM resource_versions v
 USING resources r
-WHERE v.resource_id = r.id AND v.resource_id = $1 AND r.owner_id = $2 AND v.version = $3
+WHERE v.resource_id = r.id AND v.resource_id = $1 AND r.owner_id = $2 AND r.deleted_at IS NULL AND v.version = $3
 RETURNING v.content_key
 `, resourceID, ownerID, number).Scan(&key)
 	if err != nil {
@@ -471,7 +472,7 @@ CROSS JOIN LATERAL (
   ORDER BY a.occurred_at DESC
   LIMIT 1
 ) last
-WHERE l.resource_id = $1 AND r.owner_id = $2
+WHERE l.resource_id = $1 AND r.owner_id = $2 AND r.deleted_at IS NULL
   AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at > $3)
   AND (l.max_uses = 0 OR l.used_count < l.max_uses)
 ORDER BY l.created_at, l.id

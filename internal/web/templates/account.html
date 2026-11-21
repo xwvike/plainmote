@@ -23,22 +23,24 @@
       {{else if eq .Section "security"}}{{template "account-security" .}}
       {{else if eq .Section "devices"}}{{template "account-devices" .}}
       {{else if eq .Section "data"}}{{template "account-data" .}}
+      {{else if eq .Section "trash"}}{{template "account-trash" .}}
       {{else}}{{template "account-overview" .}}{{end}}
     </div>
   </main>
 
-  {{if or .DeleteOpen .RevokeToken.ID .RevokeGrant.ID}}<div class="scrim"></div>{{end}}
+  {{if or .DeleteOpen .RevokeToken.ID .RevokeGrant.ID .PurgeTarget .EmptyOpen}}<div class="scrim"></div>{{end}}
   {{template "account-dialog" .}}
   {{template "footer" .}}
   <script type="module" src="{{asset "parts.js"}}"></script>
   {{if eq .Section "security"}}<script type="module" src="{{asset "keyring.js"}}"></script>{{end}}
   {{if eq .Section "devices"}}{{template "copy-status" .}}{{end}}
   {{if and (eq .Section "data") .SealedCount}}<script type="module" src="{{asset "export.js"}}"></script>{{end}}
+  {{if eq .Section "trash"}}<script type="module" src="{{asset "sealed-names.js"}}"></script>{{end}}
 </body>
 </html>{{end}}
 
-{{define "account-title"}}{{if eq .Section "sign-in"}}{{tr .Locale "signin_methods"}}{{else if eq .Section "security"}}{{tr .Locale "security_title"}}{{else if eq .Section "devices"}}{{tr .Locale "devices_title"}}{{else if eq .Section "data"}}{{tr .Locale "data_title"}}{{else}}{{tr .Locale "account"}}{{end}}{{end}}
-{{define "account-lede"}}{{if eq .Section "sign-in"}}{{tr .Locale "signin_lede"}}{{else if eq .Section "security"}}{{tr .Locale "security_lede"}}{{else if eq .Section "devices"}}{{tr .Locale "devices_lede"}}{{else if eq .Section "data"}}{{tr .Locale "data_lede"}}{{else}}{{tr .Locale "account_lede"}}{{end}}{{end}}
+{{define "account-title"}}{{if eq .Section "sign-in"}}{{tr .Locale "signin_methods"}}{{else if eq .Section "security"}}{{tr .Locale "security_title"}}{{else if eq .Section "devices"}}{{tr .Locale "devices_title"}}{{else if eq .Section "data"}}{{tr .Locale "data_title"}}{{else if eq .Section "trash"}}{{tr .Locale "trash"}}{{else}}{{tr .Locale "account"}}{{end}}{{end}}
+{{define "account-lede"}}{{if eq .Section "sign-in"}}{{tr .Locale "signin_lede"}}{{else if eq .Section "security"}}{{tr .Locale "security_lede"}}{{else if eq .Section "devices"}}{{tr .Locale "devices_lede"}}{{else if eq .Section "data"}}{{tr .Locale "data_lede"}}{{else if eq .Section "trash"}}{{printf (tr .Locale "trash_lede") .TrashDays}}{{else}}{{tr .Locale "account_lede"}}{{end}}{{end}}
 
 {{/* Who the account is, how much room it uses, and where each setting
      stands, every row leading to the page that changes it. */}}
@@ -88,6 +90,9 @@
             <div><span class="k">{{tr .Locale "export_title"}}</span>
               <span class="v">{{if .Export.Remaining}}{{printf (tr .Locale "overview_exports") .Export.Remaining}}{{else}}<span class="mut">{{tr .Locale "export_next"}}{{formatTime .Export.NextAt}}</span>{{end}}</span>
               <span class="a"><a class="txt" href="/account/data">{{tr .Locale "overview_manage"}}</a></span></div>
+            <div><span class="k">{{tr .Locale "trash"}}</span>
+              <span class="v">{{if .TrashCount}}{{countText .Locale .TrashCount "items"}}{{else}}<span class="mut">{{tr .Locale "trash_empty"}}</span>{{end}}</span>
+              <span class="a"><a class="txt" href="/account/trash">{{tr .Locale "overview_manage"}}</a></span></div>
           </div>
         </div>
       </section>
@@ -277,6 +282,75 @@
       </section>
 {{end}}
 
+{{define "account-trash"}}
+      {{if .RestoredResource}}
+      <div class="notice notice-row" role="status">
+        <span>{{printf (tr .Locale "notice_trash_restored") (resourceLabel .Locale .RestoredResource)}}</span>
+        <a class="txt" href="/resources/{{.RestoredResource.ID}}">{{tr .Locale "open_resource"}}</a>
+      </div>
+      {{else if .Purged}}
+      <p class="notice" role="status">{{tr .Locale "notice_trash_purged"}}</p>
+      {{else if .Emptied}}
+      <p class="notice" role="status">{{printf (tr .Locale "notice_trash_emptied") .Emptied}}</p>
+      {{end}}
+      {{if .TrashCount}}
+      <div class="trash-bar">
+        <span class="counts">{{countText .Locale .TrashCount "items"}}</span>
+        <a class="btn sm" href="/account/trash?empty=1" data-dialog>{{tr .Locale "empty_trash"}}</a>
+      </div>
+      {{end}}
+      <section class="panel" data-sealed-trash>
+        {{if .Resources}}
+        <div class="pb dev-sheet">
+          <div class="dev-list trash">
+            <div class="hd"><span>{{tr .Locale "name"}}</span><span>{{tr .Locale "size"}}</span><span>{{tr .Locale "trash_deleted_at"}}</span><span>{{tr .Locale "trash_purge_in"}}</span><span></span></div>
+            {{range .Resources}}
+            <div>
+              <span class="nm">
+                <b{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</b>
+                <span><span{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}—{{end}}</span>{{if .QuickShare}} · {{tr $.Locale "quick_share"}}{{end}}{{if or .Encrypted .Sealed}} · {{tr $.Locale "encrypted"}}{{end}}</span>
+              </span>
+              <span class="tm">{{bytesText .ContentSize}}</span>
+              <span class="tm">{{if .DeletedAt}}{{formatMinute .DeletedAt}}{{else}}—{{end}}</span>
+              <span class="tm">{{remainText $.Locale (trashPurgeAt .)}}</span>
+              <span class="act">
+                <span class="row-acts">
+                  <form method="post" action="/account/trash" class="inline">
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                    <input type="hidden" name="action" value="restore">
+                    <input type="hidden" name="id" value="{{.ID}}">
+                    <button type="submit" class="txt">{{tr $.Locale "restore"}}</button>
+                  </form>
+                  <a class="txt danger" href="/account/trash?purge={{.ID}}" data-dialog>{{tr $.Locale "delete_permanently"}}</a>
+                </span>
+              </span>
+            </div>
+            {{end}}
+          </div>
+          {{if gt .Pager.Total .Pager.Size}}
+          <div class="pf">
+            <div class="pg">
+              <span class="hint">{{pageSummary .Locale .Pager.From .Pager.To .Pager.Total "items"}}</span>
+              <form class="psize" method="get" action="/account/trash">
+                <label>{{tr .Locale "per_page"}} <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+                <button type="submit" class="sm">{{tr .Locale "apply"}}</button>
+              </form>
+              <span class="pages">
+                {{if .Pager.PrevURL}}<a class="pgn" href="{{.Pager.PrevURL}}">&lsaquo;</a>{{else}}<span class="pgn dis">&lsaquo;</span>{{end}}
+                {{range .Pager.Links}}{{if .Current}}<span class="pgn on">{{.Num}}</span>{{else}}<a class="pgn" href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
+                {{if .Pager.NextURL}}<a class="pgn" href="{{.Pager.NextURL}}">&rsaquo;</a>{{else}}<span class="pgn dis">&rsaquo;</span>{{end}}
+              </span>
+            </div>
+          </div>
+          {{end}}
+        </div>
+        {{else}}
+        <p class="empty">{{tr .Locale "trash_empty"}}</p>
+        {{end}}
+      </section>
+      <p class="hint">{{printf (tr .Locale "trash_rules") .TrashDays}}</p>
+{{end}}
+
 
 {{define "account-flash"}}<div data-part="flash">{{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}{{if .Error}}<p class="err">{{.Error}}</p>{{end}}</div>{{end}}
 
@@ -337,6 +411,47 @@
         <input type="hidden" name="action" value="revoke">
         <input type="hidden" name="token" value="{{.RevokeToken.ID}}">
         <button type="submit" class="bad">{{tr .Locale "revoke"}}</button>
+      </form>
+    </footer>
+  </dialog>
+  {{end}}
+  {{if .PurgeTarget}}
+  <dialog class="dlg" open data-part="dialog">
+    <header>
+      <b>{{tr .Locale "delete_permanently"}} <q>{{resourceLabel .Locale .PurgeTarget}}</q></b>
+      <a class="x" href="/account/trash" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+    </header>
+    <div class="body">
+      <p class="err">{{tr .Locale "purge_warning"}}</p>
+      <p class="hint">{{tr .Locale "logs_retained"}}</p>
+    </div>
+    <footer>
+      <a class="btn" href="/account/trash" data-close autofocus>{{tr .Locale "cancel"}}</a>
+      <form method="post" action="/account/trash" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="purge">
+        <input type="hidden" name="id" value="{{.PurgeTarget.ID}}">
+        <button type="submit" class="bad">{{tr .Locale "delete_permanently"}}</button>
+      </form>
+    </footer>
+  </dialog>
+  {{end}}
+  {{if .EmptyOpen}}
+  <dialog class="dlg" open data-part="dialog">
+    <header>
+      <b>{{tr .Locale "empty_trash"}}</b>
+      <a class="x" href="/account/trash" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+    </header>
+    <div class="body">
+      <p class="err">{{printf (tr .Locale "empty_trash_warning") .TrashCount}}</p>
+      <p class="hint">{{tr .Locale "logs_retained"}}</p>
+    </div>
+    <footer>
+      <a class="btn" href="/account/trash" data-close autofocus>{{tr .Locale "cancel"}}</a>
+      <form method="post" action="/account/trash" class="inline">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <input type="hidden" name="action" value="empty">
+        <button type="submit" class="bad">{{tr .Locale "empty_trash"}}</button>
       </form>
     </footer>
   </dialog>

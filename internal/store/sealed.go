@@ -474,7 +474,7 @@ type SealedEntry struct {
 	QuickShare bool
 }
 
-// SealedIndex lists the account's encrypted resources, for its lists and
+// SealedIndex lists the account's active encrypted resources, for its lists and
 // searches to name them in the browser.
 func (d *Store) SealedIndex(ctx context.Context, ownerID string) ([]SealedEntry, error) {
 	return d.SealedIndexBy(ctx, ownerID, "", nil)
@@ -489,6 +489,30 @@ SELECT r.id::text, r.sealed_key, r.sealed_meta, r.expires_at IS NOT NULL FROM re
 WHERE r.sealed_key IS NOT NULL AND `+resourceFilterSQL+`
 ORDER BY r.updated_at DESC
 `, ownerID, "", "", kind, tags)
+	if err != nil {
+		return nil, fmt.Errorf("list sealed resources: %w: %w", ErrInternal, err)
+	}
+	entries, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (SealedEntry, error) {
+		var e SealedEntry
+		return e, row.Scan(&e.ID, &e.SealedKey, &e.SealedMeta, &e.QuickShare)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list sealed resources: %w: %w", ErrInternal, err)
+	}
+	return entries, nil
+}
+
+// TrashedSealedIndex lists the account's trashed encrypted resources so the
+// trash section can decrypt their names in the browser.
+func (d *Store) TrashedSealedIndex(ctx context.Context, ownerID string) ([]SealedEntry, error) {
+	if !validUUIDs(ownerID) {
+		return nil, ErrNotFound
+	}
+	rows, err := d.db.Query(ctx, `
+SELECT r.id::text, r.sealed_key, r.sealed_meta, r.expires_at IS NOT NULL FROM resources r
+WHERE r.owner_id = $1 AND r.sealed_key IS NOT NULL AND `+trashedResource+`
+ORDER BY r.deleted_at DESC
+`, ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("list sealed resources: %w: %w", ErrInternal, err)
 	}

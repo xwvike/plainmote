@@ -163,11 +163,18 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
 const resourceColumns = `r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size, r.content_type,
        r.content_encoding, r.created_at, r.updated_at,
        r.version, COALESCE(r.version_at, r.updated_at), COALESCE(r.restored_from, 0), r.content_sha256,
-       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key, r.sealed_meta, r.tags`
+       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key, r.sealed_meta, r.tags, r.deleted_at`
 
-// liveResource leaves out a quick share whose time is up but which the
-// sweep has not reached yet: it is gone as far as its owner is concerned.
-const liveResource = `(r.expires_at IS NULL OR r.expires_at > now())`
+// unexpiredResource leaves out a quick share whose time is up but which the
+// sweep has not reached yet. Quota counts live and trashed resources alike.
+const unexpiredResource = `(r.expires_at IS NULL OR r.expires_at > now())`
+
+// liveResource leaves out trashed resources and quick shares whose time is up
+// but which the sweep has not reached yet: neither is active.
+const liveResource = `r.deleted_at IS NULL AND ` + unexpiredResource
+
+// trashedResource selects resources in the trash that have not expired.
+const trashedResource = `r.deleted_at IS NOT NULL AND ` + unexpiredResource
 
 // scanResource reads resourceColumns, then whatever the query selected after
 // them into extra.
@@ -177,7 +184,7 @@ func scanResource(row rowScanner, extra ...any) (Resource, error) {
 		&r.ID, &r.OwnerID, &r.Name, &r.Filename, &r.ContentKey, &r.ContentSize, &r.ContentType,
 		&r.ContentEncoding, &r.CreatedAt, &r.UpdatedAt,
 		&r.Version, &r.VersionAt, &r.RestoredFrom, &r.ContentSHA256,
-		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt, &r.SealedKey, &r.SealedMeta, &r.Tags,
+		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt, &r.SealedKey, &r.SealedMeta, &r.Tags, &r.DeletedAt,
 	}, extra...)...)
 	return r, err
 }

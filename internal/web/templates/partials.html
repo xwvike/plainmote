@@ -97,6 +97,7 @@
   <a href="/account/security"{{if eq .Section "security"}} class="on" aria-current="page"{{end}}>{{tr .Locale "security_title"}}</a>
   <a href="/account/devices"{{if eq .Section "devices"}} class="on" aria-current="page"{{end}}>{{tr .Locale "devices_title"}}</a>
   <a href="/account/data"{{if eq .Section "data"}} class="on" aria-current="page"{{end}}>{{tr .Locale "data_title"}}</a>
+  <a href="/account/trash"{{if eq .Section "trash"}} class="on" aria-current="page"{{end}}>{{tr .Locale "trash"}}</a>
   {{end}}
   <span class="side-h">{{tr .Locale "dev_title"}}</span>
   <a href="{{.LocalePrefix}}/developers/cli"{{if eq .Section "dev-cli"}} class="on" aria-current="page"{{end}}>{{tr .Locale "cli_title"}}</a>

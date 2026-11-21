@@ -177,7 +177,7 @@ func TestRemainingTimeUsesNaturalSingularForms(t *testing.T) {
 			t.Errorf("remainingText(%q, %s) = %q, want %q", test.locale, test.left, got, test.want)
 		}
 	}
-	if got := deleteWarning("fr", 1); got != "Cette ressource sera supprimée définitivement et 1 partage actif sera révoqué." {
+	if got := deleteWarning("fr", 1); got != "Cette ressource sera placée dans la corbeille pendant 30 jours et 1 partage actif sera révoqué." {
 		t.Fatalf("French singular delete warning = %q", got)
 	}
 }

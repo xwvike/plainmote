@@ -20,6 +20,7 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 - **Quick share**: no account needed. Paste text or drop a file on the home page and get a link that lasts from 10 minutes to 30 days; curl works too. A quick share made while signed in appears under My resources and can be kept as an ordinary resource before it expires.
 - **Share links**: one resource can have many links, each with its own expiry and use limit, each revocable on its own. Updating the content keeps every address. Links answer with `ETag` and `304`, which suits machines polling for a config; opened in a browser, images, audio and video are shown in place.
 - **Version history**: each change to the content keeps the version it replaced (up to 10 per resource, for 30 days), to compare, restore or save as a new resource. A save made against an outdated version is refused as a conflict instead of overwriting.
+- **Trash**: deleted resources move to the trash with their share links revoked immediately; they stay recoverable for 30 days under Trash in the settings, or can be permanently deleted to free storage.
 - **Access history**: every access through a link is recorded with its time, result, source IP and client, visible only to the owner and kept for 30 days by default.
 - **Tags**: label resources with text tags such as `tmp` or `surge`, and filter the list by them.
 - **Editor**: CodeMirror 6 with highlighting for common config formats and logs; it recognises UTF-8, GB18030, Shift_JIS and other encodings and saves in the file's own encoding and line endings.
@@ -78,7 +79,7 @@ curl https://plainmote.link/paste    # prints usage
 
 - **Links are credentials**: tokens are 256-bit random values; the database keeps only their digest and an encrypted copy. Share addresses are kept out of search engines and cannot be embedded by other sites.
 - **No web hosting**: types a browser may execute, such as HTML, scripts and SVG, are never delivered as themselves; pages run only the script files the site serves.
-- **Tokens and authorizations**: command line tokens and MCP authorizations are stored only as digests, cannot delete resources, and can be revoked at any time under Authorized apps in the settings.
+- **Tokens and authorizations**: command line tokens and MCP authorizations are stored only as digests, cannot permanently delete resources or access the trash, and can be revoked at any time under Authorized apps in the settings.
 - **End-to-end encryption**: WebCrypto in the browser (the Go standard library in the command line), AES-256-GCM; the master password never leaves the device. Decryption needs JavaScript; content is lost if both the master password and the recovery key are; size and access history are not encrypted. A four-character code only keeps out someone who merely sees the link: share sensitive content with the full link and its key. Design and threat model: [End-to-end encryption](docs/encryption.md).
 
 ## Self-hosting

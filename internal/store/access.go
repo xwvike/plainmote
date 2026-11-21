@@ -293,7 +293,7 @@ SELECT
     SELECT 1 FROM resource_versions v WHERE v.resource_id = a.resource_id AND v.version = a.resource_version
   ), FALSE)
 FROM access_logs a
-LEFT JOIN resources r ON r.id = a.resource_id
+LEFT JOIN resources r ON r.id = a.resource_id AND r.deleted_at IS NULL
 WHERE a.owner_id = $1
   AND ($2 = '' OR a.resource_id = NULLIF($2, '')::uuid)
   AND ($3 = '' OR a.outcome = $3)
@@ -336,6 +336,7 @@ type PruneResult struct {
 	Sessions   int64
 	Pastes     int64
 	Versions   int64
+	Trashed    int64
 }
 
 // Prune removes access logs older than retention, sessions that have expired,
@@ -391,6 +392,10 @@ WHERE id IN (SELECT id FROM sessions WHERE expires_at < $1 ORDER BY expires_at L
 	result.Versions, err = d.pruneHistory(ctx, conn, now)
 	if err != nil {
 		return result, fmt.Errorf("prune history: %w", err)
+	}
+	result.Trashed, err = d.pruneTrash(ctx, conn, now)
+	if err != nil {
+		return result, fmt.Errorf("prune trash: %w", err)
 	}
 	if _, err = d.retryGarbage(ctx, conn); err != nil {
 		return result, fmt.Errorf("retry undeleted objects: %w", err)

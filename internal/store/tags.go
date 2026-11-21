@@ -76,7 +76,7 @@ func (d *Store) SetResourceTags(ctx context.Context, ownerID, id string, tags []
 		rows, err := tx.Query(ctx, `
 SELECT DISTINCT ON (lower(t)) t
 FROM resources r, unnest(r.tags) t
-WHERE r.owner_id = $1 AND r.id <> $2 AND lower(t) = ANY($3)
+WHERE r.owner_id = $1 AND r.id <> $2 AND `+liveResource+` AND lower(t) = ANY($3)
 ORDER BY lower(t), t
 `, ownerID, id, keys)
 		if err != nil {

@@ -42,7 +42,7 @@ func (d *Store) ExportResources(ctx context.Context, ownerID string) ([]Resource
 	}
 	rows, err := d.db.Query(ctx, `
 SELECT `+resourceColumns+`
-FROM resources r WHERE r.owner_id = $1 ORDER BY r.created_at, r.id
+FROM resources r WHERE r.owner_id = $1 AND `+liveResource+` ORDER BY r.created_at, r.id
 	`, ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("export resources: %w: %w", ErrInternal, err)
@@ -65,7 +65,7 @@ func (d *Store) ExportVersions(ctx context.Context, ownerID string) ([]Version, 
 	rows, err := d.db.Query(ctx, `
 SELECT `+versionColumns+`
 FROM resource_versions v JOIN resources r ON r.id = v.resource_id
-WHERE r.owner_id = $1 ORDER BY v.resource_id, v.version
+WHERE r.owner_id = $1 AND `+liveResource+` ORDER BY v.resource_id, v.version
 `, ownerID)
 	if err != nil {
 		return nil, fmt.Errorf("export versions: %w: %w", ErrInternal, err)

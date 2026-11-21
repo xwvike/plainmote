@@ -43,11 +43,12 @@ type apiLimits struct {
 	// per address.
 	registrations   *windowLimiter
 	clientDocuments *windowLimiter
-	// MCP calls, per authorization and per address, and the share links
-	// an authorization makes.
+	// MCP calls, per authorization and per address, and the share links and
+	// trash moves an authorization makes.
 	mcpCalls     *windowLimiter
 	mcpAddresses *windowLimiter
 	mcpShares    *windowLimiter
+	mcpDeletes   *windowLimiter
 	// Quick shares made without an account, and the bytes they hold, per
 	// address. Every one of them comes out of a single pool the whole
 	// deployment shares, which one address must not be able to drain.
@@ -68,6 +69,7 @@ func newAPILimits() *apiLimits {
 		mcpCalls:        newWindowLimiter(300, time.Minute),
 		mcpAddresses:    newWindowLimiter(600, time.Minute),
 		mcpShares:       newWindowLimiter(30, time.Hour),
+		mcpDeletes:      newWindowLimiter(30, time.Hour),
 		pastes:          newWindowLimiter(120, time.Hour),
 		pasteBytes:      newWindowLimiter(256<<20, 24*time.Hour),
 	}

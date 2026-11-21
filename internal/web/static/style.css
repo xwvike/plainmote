@@ -745,7 +745,7 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
   .resource-browser.with-tags { grid-template-columns: minmax(0, 1fr); }
   .tag-options { max-height: 160px; }
 }
-
+.row-acts { display: inline-flex; align-items: center; justify-content: flex-end; gap: 12px; white-space: nowrap; }
 /* The record, kept but not given a panel of its own. */
 .meta { font: 400 10.5px var(--mono); color: var(--ink3); word-break: break-all; }
 
@@ -1087,6 +1087,8 @@ a.who:hover, a.who[aria-current] { border-color: var(--line-on); color: var(--in
 .snip > button { position: absolute; top: 6px; right: 6px; }
 .dev-list > div { display: grid; grid-template-columns: minmax(0, 1.4fr) 64px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, .9fr) 48px; gap: 12px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12.5px; }
 .dev-list.apps > div { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr) 48px; }
+.dev-list.trash > div { grid-template-columns: minmax(0, 1.6fr) 78px 128px 116px 124px; }
+.trash-bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: -6px; }
 .dev-list > div:first-child { border-top: 0; }
 .dev-list > .hd { font-size: 11.5px; color: var(--ink3); background: var(--head); border-radius: var(--r) var(--r) 0 0; }
 .dev-list .nm { display: grid; gap: 1px; min-width: 0; }
@@ -1181,7 +1183,7 @@ a.who:hover, a.who[aria-current] { border-color: var(--line-on); color: var(--in
 .cmds dd { color: var(--ink2); }
 @media (max-width: 760px) {
   .dev-list > .hd { display: none; }
-  .dev-list > div, .dev-list.apps > div { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
+  .dev-list > div, .dev-list.apps > div, .dev-list.trash > div { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; }
   .dev-list .tm { grid-column: 1; }
   .dev-list .act { grid-column: 2; grid-row: 1; }
   .cmds { grid-template-columns: minmax(0, 1fr); }

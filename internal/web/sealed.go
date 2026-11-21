@@ -129,11 +129,17 @@ func (a *App) handleSealedIndex(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	query := r.URL.Query()
-	kind := query.Get("kind")
-	if kind != store.KindResource && kind != store.KindQuickShare {
-		kind = ""
+	var entries []store.SealedEntry
+	var err error
+	if query.Get("trash") == "1" {
+		entries, err = a.db.TrashedSealedIndex(r.Context(), user.ID)
+	} else {
+		kind := query.Get("kind")
+		if kind != store.KindResource && kind != store.KindQuickShare {
+			kind = ""
+		}
+		entries, err = a.db.SealedIndexBy(r.Context(), user.ID, kind, resourceTags(query["tag"]))
 	}
-	entries, err := a.db.SealedIndexBy(r.Context(), user.ID, kind, resourceTags(query["tag"]))
 	if err != nil {
 		a.serverError(w, "list sealed resources", err)
 		return

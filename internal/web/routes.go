@@ -274,6 +274,15 @@ type pageData struct {
 	// Sealed and Unsealed confirm encryption just turned on or off.
 	Sealed   bool
 	Unsealed bool
+	// Trash view and confirmations.
+	TrashCount       int
+	TrashDays        int
+	Trashed          bool
+	PurgeTarget      *Resource
+	EmptyOpen        bool
+	RestoredResource *Resource
+	Purged           bool
+	Emptied          int
 }
 
 // pager carries everything the dashboard footer needs; every link is a plain

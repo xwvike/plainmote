@@ -130,6 +130,11 @@ ALTER TABLE resources ADD COLUMN IF NOT EXISTS sealed_meta BYTEA;
 -- The labels its owner put on a resource, in plain text even on an encrypted
 -- one. One spelling per account: a tag differing only in case is the same tag.
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+-- A resource moved to the trash: invisible to lists, links, CLI and MCP,
+-- kept for TrashRetention so its owner can restore it, and still counted
+-- toward the account's quota until it is permanently deleted or ages out.
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS resources_deleted_idx ON resources(owner_id, deleted_at DESC) WHERE deleted_at IS NOT NULL;
 -- Objects whose delete failed once no row pointed at them any more. The
 -- prune deletes them again. Keys are made new for every write, so none of
 -- these can come back into use.

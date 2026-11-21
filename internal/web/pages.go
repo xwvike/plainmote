@@ -138,6 +138,7 @@ func (a *App) templateSet() *template.Template {
 		"join":               strings.Join,
 		"add":                func(a, b int) int { return a + b },
 		"grantSource":        grantSource,
+		"trashPurgeAt":       trashPurgeAt,
 	}).ParseFS(webAssets, "templates/*.html"))
 }
 

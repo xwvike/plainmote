@@ -53,7 +53,7 @@ func TestDeleteFlowThroughRouter(t *testing.T) {
 
 	// The confirm step names what goes and says the log stays.
 	confirm := do(http.MethodGet, "/resources/"+resource.ID+"?delete=1", nil)
-	if confirm.Code != http.StatusOK || !strings.Contains(confirm.Body.String(), "Delete resource") {
+	if confirm.Code != http.StatusOK || !strings.Contains(confirm.Body.String(), "Move to trash") {
 		t.Fatalf("delete confirm: status %d body %q", confirm.Code, confirm.Body.String())
 	}
 
@@ -64,7 +64,7 @@ func TestDeleteFlowThroughRouter(t *testing.T) {
 	}
 
 	deleted := do(http.MethodPost, "/resources/"+resource.ID, url.Values{"action": {"delete"}, "csrf": {csrf}})
-	if deleted.Code != http.StatusSeeOther || deleted.Header().Get("Location") != "/resources/" {
+	if deleted.Code != http.StatusSeeOther || deleted.Header().Get("Location") != "/resources/?trashed=1" {
 		t.Fatalf("delete must land on the dashboard, got %d %q", deleted.Code, deleted.Header().Get("Location"))
 	}
 
@@ -74,7 +74,40 @@ func TestDeleteFlowThroughRouter(t *testing.T) {
 	after := httptest.NewRecorder()
 	app.handler.ServeHTTP(after, httptest.NewRequest(http.MethodGet, "https://cfg.test"+address, nil))
 	if after.Code == http.StatusOK {
-		t.Fatal("the address must stop resolving once the resource is deleted")
+		t.Fatal("the address must stop resolving once the resource is trashed")
+	}
+
+	// It is now in the trash and can be restored or permanently deleted.
+	trashPage := do(http.MethodGet, "/account/trash", nil)
+	if trashPage.Code != http.StatusOK || !strings.Contains(trashPage.Body.String(), resource.Name) {
+		t.Fatalf("trash page missing trashed resource: status %d", trashPage.Code)
+	}
+	restored := do(http.MethodPost, "/account/trash", url.Values{"action": {"restore"}, "id": {resource.ID}, "csrf": {csrf}})
+	if restored.Code != http.StatusSeeOther || restored.Header().Get("Location") != "/account/trash?restored="+resource.ID {
+		t.Fatalf("restore redirect = %d %q", restored.Code, restored.Header().Get("Location"))
+	}
+	if back := do(http.MethodGet, "/resources/"+resource.ID, nil); back.Code != http.StatusOK {
+		t.Fatalf("restored resource must open again, got %d", back.Code)
+	}
+	// Previously revoked share link stays revoked after restore.
+	afterRestore := httptest.NewRecorder()
+	app.handler.ServeHTTP(afterRestore, httptest.NewRequest(http.MethodGet, "https://cfg.test"+address, nil))
+	if afterRestore.Code == http.StatusOK {
+		t.Fatal("revoked share link must not revive after restore")
+	}
+
+	// Move to trash again and permanently delete from trash.
+	do(http.MethodPost, "/resources/"+resource.ID, url.Values{"action": {"delete"}, "csrf": {csrf}})
+	purgeConfirm := do(http.MethodGet, "/account/trash?purge="+resource.ID, nil)
+	if purgeConfirm.Code != http.StatusOK || !strings.Contains(purgeConfirm.Body.String(), "Delete permanently") {
+		t.Fatalf("purge confirm: status %d", purgeConfirm.Code)
+	}
+	purged := do(http.MethodPost, "/account/trash", url.Values{"action": {"purge"}, "id": {resource.ID}, "csrf": {csrf}})
+	if purged.Code != http.StatusSeeOther || purged.Header().Get("Location") != "/account/trash?purged=1" {
+		t.Fatalf("purge redirect = %d %q", purged.Code, purged.Header().Get("Location"))
+	}
+	if empty := do(http.MethodGet, "/account/trash", nil); empty.Code != http.StatusOK || !strings.Contains(empty.Body.String(), "Trash is empty") {
+		t.Fatalf("trash should be empty after purge: status %d", empty.Code)
 	}
 
 	logs, err := db.ListAccess(ctx, user.ID, "", store.OutcomeSuccess, 10)

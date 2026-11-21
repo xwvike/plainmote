@@ -141,6 +141,24 @@ var mcpWriteTools = []*mcpTool{
 		scope:        store.OAuthScopeWrite,
 		run:          (*App).mcpTagResource,
 	},
+	{
+		Name:  "delete_resource",
+		Title: "Move a resource to the trash",
+		Description: "Move a resource or quick share to the trash and revoke all of its share links. " +
+			"Trashed resources are kept for 30 days and can only be restored or permanently deleted by the owner in the web interface; " +
+			"MCP cannot view, restore or empty the trash. End-to-end encrypted resources cannot be deleted here. " +
+			"Only do this when the user asks to delete it.",
+		InputSchema: map[string]any{
+			"type":                 "object",
+			"properties":           map[string]any{"resource": resourceRefSchema},
+			"required":             []string{"resource"},
+			"additionalProperties": false,
+		},
+		OutputSchema: mcpDeleteResourceOut,
+		Annotations:  map[string]any{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": false},
+		scope:        store.OAuthScopeWrite,
+		run:          (*App).mcpDeleteResource,
+	},
 }
 
 func mcpTagsSchema(description string) map[string]any {
@@ -536,4 +554,54 @@ func (a *App) mcpUnshareResource(x mcpExchange, args json.RawMessage) (mcpOutcom
 	}
 	return mcpOutcome{structured: map[string]any{"resource_id": resource.ID, "link_id": linkID, "revoked": 1},
 		text: []string{fmt.Sprintf("Revoked the link %s of %s; its address no longer opens it.", linkID, mcpLabel(resource))}}, nil
+}
+
+func (a *App) mcpDeleteResource(x mcpExchange, args json.RawMessage) (mcpOutcome, error) {
+	var in struct {
+		Resource string `json:"resource"`
+	}
+	if problem := mcpArguments(args, &in); problem != "" {
+		return mcpProblem("%s", problem)
+	}
+	resource, problem, err := a.mcpResolve(x, in.Resource)
+	if err != nil || problem != "" {
+		return mcpOutcome{problem: problem}, err
+	}
+	if mcpEncrypted(resource) {
+		return mcpProblem("This resource is end-to-end encrypted. It can only be deleted by its owner in the browser, not through this server.")
+	}
+	now := time.Now().UTC()
+	if !a.limits.mcpDeletes.allow(x.access.GrantID, now) {
+		return mcpProblem("This app has moved too many resources to the trash in the last hour. Try again later, or delete resources on the web interface.")
+	}
+	revoked, err := a.db.TrashResource(x.r.Context(), x.user.ID, resource.ID, now)
+	if errors.Is(err, store.ErrNotFound) {
+		return mcpProblem("%s no longer exists.", mcpLabel(resource))
+	}
+	if err != nil {
+		return mcpStoreProblem(err)
+	}
+	purgeAfter := now.Add(store.TrashRetention)
+	if resource.ExpiresAt != nil && resource.ExpiresAt.Before(purgeAfter) {
+		purgeAfter = *resource.ExpiresAt
+	}
+	structured := map[string]any{
+		"id":            resource.ID,
+		"name":          mcpLabel(resource),
+		"trashed":       true,
+		"revoked_links": revoked,
+		"purge_after":   purgeAfter,
+	}
+	if resource.Filename != "" {
+		structured["filename"] = resource.Filename
+	}
+	message := fmt.Sprintf("Moved %s (id %s) to the trash", mcpLabel(resource), resource.ID)
+	if revoked == 1 {
+		message += " and revoked 1 active share link"
+	} else if revoked > 1 {
+		message += fmt.Sprintf(" and revoked %d active share links", revoked)
+	}
+	message += fmt.Sprintf(". The owner can restore or permanently delete it in the web trash (%s/account/trash) before %s; MCP cannot access the trash.",
+		a.baseURL(x.r), purgeAfter.UTC().Format(time.RFC3339))
+	return mcpOutcome{structured: structured, text: []string{message}}, nil
 }

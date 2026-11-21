@@ -27,6 +27,7 @@ func TestMCPToolsNeedTheirScope(t *testing.T) {
 	}{
 		{read, "create_resource", "read write", map[string]any{"content": "x"}},
 		{read, "update_resource", "read write", map[string]any{"resource": example.ID, "base_version": 1, "content": "x"}},
+		{read, "delete_resource", "read write", map[string]any{"resource": example.ID}},
 		{read, "share_resource", "read share", map[string]any{"resource": example.ID}},
 		{write, "share_resource", "read write share", map[string]any{"resource": example.ID}},
 		{write, "unshare_resource", "read write share", map[string]any{"resource": example.ID}},
@@ -249,6 +250,7 @@ func TestMCPWritesStayWithinTheAccount(t *testing.T) {
 		{"update_resource", func(ref string) map[string]any {
 			return map[string]any{"resource": ref, "base_version": 1, "content": "taken\n"}
 		}},
+		{"delete_resource", func(ref string) map[string]any { return map[string]any{"resource": ref} }},
 		{"share_resource", func(ref string) map[string]any { return map[string]any{"resource": ref} }},
 		{"unshare_resource", func(ref string) map[string]any { return map[string]any{"resource": ref} }},
 	} {
@@ -271,5 +273,90 @@ func TestMCPWritesStayWithinTheAccount(t *testing.T) {
 	links, err := db.ListShares(ctx, alice.ID, example.ID, time.Now().UTC())
 	if err != nil || len(links) != 1 || links[0].ID != alicesLink.ID || links[0].UsedCount != 0 {
 		t.Fatalf("alice's links changed: %+v %v", links, err)
+	}
+}
+
+func TestMCPDeleteTool(t *testing.T) {
+	db, alice, example := testDatabase(t)
+	app := newTestApp(db)
+	ctx := context.Background()
+	token := mcpToken(t, db, alice, "read write share", testMCPResource).AccessToken
+
+	share, err := db.CreateShare(ctx, alice.ID, example.ID, "live", time.Hour, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := shareAddress(share.Token, example.Filename)
+
+	// Deleting a regular resource moves it to the trash and revokes its share links.
+	deleted := toolCall(t, app, token, "delete_resource", map[string]any{"resource": example.ID})
+	if deleted.isError || deleted.structured["trashed"] != true || deleted.structured["revoked_links"].(float64) != 1 || deleted.structured["purge_after"] == nil {
+		t.Fatalf("delete_resource: %v %v", deleted.texts, deleted.structured)
+	}
+	if opened := call(app, http.MethodGet, address, "", ""); opened.Code == http.StatusOK {
+		t.Fatal("share link still works after MCP delete_resource")
+	}
+	// MCP cannot see, read or delete a trashed resource again.
+	if listed := toolCall(t, app, token, "list_resources", nil); listed.isError || listed.structured["total"].(float64) != 0 {
+		t.Fatalf("trashed resource listed in MCP: %v", listed.structured)
+	}
+	if read := toolCall(t, app, token, "read_resource", map[string]any{"resource": example.ID}); !read.isError {
+		t.Fatal("MCP read a trashed resource")
+	}
+	if again := toolCall(t, app, token, "delete_resource", map[string]any{"resource": example.ID}); !again.isError {
+		t.Fatal("MCP deleted a trashed resource again")
+	}
+
+	// Owner can restore it from the trash, while its previously revoked link stays revoked.
+	if _, err := db.RestoreResource(ctx, alice.ID, example.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("owner restore: %v", err)
+	}
+	if read := toolCall(t, app, token, "read_resource", map[string]any{"resource": example.ID}); read.isError || read.structured["text"] != "answer=42\n" {
+		t.Fatalf("restored resource unreadable via MCP: %v", read.structured)
+	}
+	if opened := call(app, http.MethodGet, address, "", ""); opened.Code == http.StatusOK {
+		t.Fatal("revoked link revived after restore")
+	}
+
+	// Quick shares can be moved to the trash via MCP.
+	quick, _, err := db.CreateQuickShare(ctx, alice.ID, "q.txt", []byte("quick\n"), time.Hour, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if qDel := toolCall(t, app, token, "delete_resource", map[string]any{"resource": quick.ID}); qDel.isError || qDel.structured["trashed"] != true {
+		t.Fatalf("delete quick share: %v %v", qDel.texts, qDel.structured)
+	}
+
+	// End-to-end encrypted resources are refused by MCP delete_resource.
+	sealedID := uuid.NewString()
+	if _, err := db.CreateSealedResource(ctx, alice.ID, sealedID, store.SealedPart{
+		Content: append([]byte("PMr1"), bytes.Repeat([]byte("S"), 48)...), Meta: append([]byte("PMm1"), bytes.Repeat([]byte("M"), 40)...),
+	}, bytes.Repeat([]byte{9}, 60)); err != nil {
+		t.Fatal(err)
+	}
+	if refused := toolCall(t, app, token, "delete_resource", map[string]any{"resource": sealedID}); !refused.isError {
+		t.Fatalf("encrypted resource was deleted via MCP: %v", refused)
+	}
+	if _, err := db.ResourceForOwner(ctx, alice.ID, sealedID); err != nil {
+		t.Fatalf("encrypted resource must stay active: %v", err)
+	}
+
+	// Per-authorization rate limit (30/hour).
+	busy := mcpToken(t, db, alice, "read write", testMCPResource).AccessToken
+	for i := 0; i < 30; i++ {
+		res, err := db.CreateResource(ctx, alice.ID, "", "item.txt", []byte("x\n"), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out := toolCall(t, app, busy, "delete_resource", map[string]any{"resource": res.ID}); out.isError {
+			t.Fatalf("delete %d: %v", i, out.texts)
+		}
+	}
+	extra, err := db.CreateResource(ctx, alice.ID, "", "extra.txt", []byte("x\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limited := toolCall(t, app, busy, "delete_resource", map[string]any{"resource": extra.ID}); !limited.isError {
+		t.Fatal("the 31st delete in an hour was allowed")
 	}
 }

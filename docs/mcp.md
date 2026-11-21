@@ -2,9 +2,9 @@
 
 English | [简体中文](mcp.zh-CN.md)
 
-`/mcp` is a remote [Model Context Protocol](https://modelcontextprotocol.io) server. AI apps such as Claude, ChatGPT, Cursor and Codex connect to it and, once the account owner has authorized them in a browser, can list, read, save and create resources, and create and revoke share links if the owner allows it.
+`/mcp` is a remote [Model Context Protocol](https://modelcontextprotocol.io) server. AI apps such as Claude, ChatGPT, Cursor and Codex connect to it and, once the account owner has authorized them in a browser, can list, read, save, create and move resources to the trash, and create and revoke share links if the owner allows it.
 
-An app cannot delete resources, read access history, change the account or read end-to-end encrypted content. Unencrypted content an app reads is sent to that app and to the model provider it uses.
+An app cannot permanently delete resources or view, restore or empty the trash; it also cannot read access history, change the account or read end-to-end encrypted content. Unencrypted content an app reads is sent to that app and to the model provider it uses.
 
 ## Connecting an app
 
@@ -42,10 +42,10 @@ Apps are authorized with OAuth 2.1: the authorization code flow with PKCE (`S256
 | Scope | Allows |
 | --- | --- |
 | `read` | Listing and reading resources and their versions |
-| `write` | Creating resources and saving new versions |
+| `write` | Creating resources, saving new versions, managing tags and moving unencrypted resources to the trash |
 | `share` | Creating and revoking share links |
 
-An authorization always carries all three, whatever the app asked for. The consent page lists them and offers no choice: the owner allows the app or denies it. No tool deletes anything. Creating a share link is the one step that reaches outside the account, so `share_resource` carries the `destructiveHint` and `openWorldHint` annotations, for the client to confirm with its user before running it.
+An authorization always carries all three, whatever the app asked for. The consent page lists them and offers no choice: the owner allows the app or denies it. No tool permanently deletes anything or accesses the trash: `delete_resource` only moves unencrypted resources to the trash for 30 days (revoking active links), where only the owner can restore or permanently delete them on the web. `delete_resource` carries `destructiveHint`, and `share_resource` carries `destructiveHint` and `openWorldHint`, for the client to confirm with its user before running them.
 
 ### Lifetimes and revocation
 
@@ -79,6 +79,7 @@ Tokens are stored only as digests. Suspending the account ends every authorizati
 | `edit_resource` | `write` | `resource`, `base_version`, `edits` | Replaces parts of the text, each `old_text` with its `new_text`, and saves the result as a new version |
 | `update_resource` | `write` | `resource`, `base_version`, `content`, `name`, `filename` | Saves the text as a new version, keeping the resource's encoding and line endings |
 | `tag_resource` | `write` | `resource`, `add`, `remove` | Adds and removes tags; the content and version stay as they are |
+| `delete_resource` | `write` | `resource` | Moves a resource or quick share to the trash and revokes all of its share links (kept 30 days on the web; encrypted resources are refused) |
 | `share_resource` | `share` | `resource`, `name`, `expires_in`, `max_uses` | Creates a share link and returns its address |
 | `unshare_resource` | `share` | `resource`, `link` | Revokes one link, or every link of the resource when `link` is omitted |
 
@@ -87,13 +88,13 @@ Tokens are stored only as digests. Suspending the account ends every authorizati
 - `edit_resource` applies its edits in order, each to the text the ones before it left. Each `old_text` must appear exactly once, or `replace_all` must be set; otherwise nothing is saved. Line breaks match whether the file uses LF or CRLF.
 - `share_resource` takes `expires_in` as a duration such as `1h`, `24h` or `7d` (at most `30d`; default `7d`), and `max_uses` from `0` (no limit) to 1,000,000. An app cannot make a link that never expires; the owner can, on the resource's page. Links created by an app are marked in the resource's share list with the app's name.
 - A tag is free text of at most 24 characters; one differing only in case from a tag the account uses is that tag. Encrypted resources and quick shares can be tagged, and their tags are listed, as tags are not encrypted.
-- Binary content is described rather than returned. Text longer than a part is returned in parts; a unified diff longer than 32 KiB is cut short. Quick shares can be listed and read, but not updated or shared again.
+- Binary content is described rather than returned. Text longer than a part is returned in parts; a unified diff longer than 32 KiB is cut short. Quick shares can be listed, read, tagged or moved to the trash, but not updated or shared again.
 - Every tool declares an `outputSchema` for its structured result.
 - A refusal, such as a conflict or a full quota, is returned as a tool result with `isError` set and a message the model can act on. A resource of another account is reported exactly as one that does not exist.
 
 ## Encrypted resources
 
-The server cannot decrypt end-to-end encrypted resources and does not ask for the master password. In lists they appear only as placeholders, with their ID, size, update time, address and tags; their names and filenames are not given. Reading one returns a notice instead of content, and they cannot be updated or shared through MCP.
+The server cannot decrypt end-to-end encrypted resources and does not ask for the master password. In lists they appear only as placeholders, with their ID, size, update time, address and tags; their names and filenames are not given. Reading one returns a notice instead of content, and they cannot be updated, deleted or shared through MCP.
 
 ## Limits
 
@@ -101,6 +102,7 @@ The server cannot decrypt end-to-end encrypted resources and does not ask for th
 | --- | --- |
 | Tool calls | 300 a minute per authorization, and 600 a minute per IP address |
 | Share links created | 30 an hour per authorization |
+| Resources moved to trash | 30 an hour per authorization |
 | Failed authentications | 30 a minute per IP address |
 | Content | The same size and storage limits as the account's other resources |
 

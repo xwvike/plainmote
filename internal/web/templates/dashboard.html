@@ -19,6 +19,12 @@
       </span>
     </div>
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
+    {{if .Trashed}}
+    <div class="notice notice-row" role="status">
+      <span>{{printf (tr .Locale "notice_trashed") .TrashDays}}</span>
+      <a class="txt" href="/account/trash">{{tr .Locale "open_trash"}}</a>
+    </div>
+    {{end}}
     {{/* Filters sit above the list they narrow, on the page itself - the same
          place on every list page, and no box of their own. */}}
     {{template "dashboard-filters" .}}

@@ -116,6 +116,15 @@ var mcpTagResourceOut = mcpObjectOut([]string{"id", "tags"}, map[string]any{
 	"tags": mcpDescribed(mcpStringsOut, "Every tag it carries now."),
 })
 
+var mcpDeleteResourceOut = mcpObjectOut([]string{"id", "name", "trashed", "revoked_links", "purge_after"}, map[string]any{
+	"id":            mcpStringOut,
+	"name":          mcpStringOut,
+	"filename":      mcpStringOut,
+	"trashed":       mcpDescribed(mcpBooleanOut, "Always true: moved to the trash, never permanently deleted here."),
+	"revoked_links": mcpDescribed(mcpIntegerOut, "Active share links revoked when moving the resource to the trash."),
+	"purge_after":   mcpDescribed(mcpTimeOut, "When the trash will permanently delete it unless restored by the owner on the web interface."),
+})
+
 var mcpShareResourceOut = mcpObjectOut([]string{"link_id", "url", "resource_id", "max_uses"}, map[string]any{
 	"link_id":     mcpStringOut,
 	"url":         mcpDescribed(mcpStringOut, "The share link's address."),

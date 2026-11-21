@@ -110,9 +110,9 @@ func usageForUser(ctx context.Context, q storeQuerier, userID, excludeID string)
 	err := q.QueryRow(ctx, `
 SELECT COUNT(*), COALESCE(SUM(content_size), 0),
        (SELECT COALESCE(SUM(v.content_size), 0) FROM resource_versions v
-        JOIN resources r ON r.id = v.resource_id WHERE r.owner_id = $1)
+        JOIN resources r ON r.id = v.resource_id WHERE r.owner_id = $1 AND `+unexpiredResource+`)
 FROM resources r
-WHERE r.owner_id = $1 AND ($2 = '' OR r.id <> NULLIF($2, '')::uuid) AND `+liveResource+`
+WHERE r.owner_id = $1 AND ($2 = '' OR r.id <> NULLIF($2, '')::uuid) AND `+unexpiredResource+`
 `, userID, excludeID).Scan(&usage.Resources, &usage.StorageBytes, &usage.HistoryBytes)
 	if err != nil {
 		return QuotaUsage{}, err

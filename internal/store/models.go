@@ -55,7 +55,12 @@ type Resource struct {
 	SealedMeta []byte
 	// Tags are its owner's labels, sorted.
 	Tags []string
+	// DeletedAt is set when the resource has been moved to the trash.
+	DeletedAt *time.Time
 }
+
+// Trashed reports whether the resource is in the trash.
+func (r Resource) Trashed() bool { return r.DeletedAt != nil }
 
 // Sealed reports an end-to-end encrypted resource.
 func (r Resource) Sealed() bool { return len(r.SealedKey) > 0 }

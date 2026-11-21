@@ -26,6 +26,7 @@ const (
 	accountSecurityPath = "/account/security"
 	accountDevicesPath  = "/account/devices"
 	accountDataPath     = "/account/data"
+	accountTrashPath    = "/account/trash"
 )
 
 // The forms those pages post to.
@@ -44,6 +45,7 @@ var accountSections = map[string]string{
 	accountSecurityPath: "security",
 	accountDevicesPath:  "devices",
 	accountDataPath:     "data",
+	accountTrashPath:    "trash",
 }
 
 // exportWriteTimeout replaces the server's 30-second write timeout for the one
@@ -52,16 +54,25 @@ var accountSections = map[string]string{
 const exportWriteTimeout = 15 * time.Minute
 
 func (a *App) handleAccount(w http.ResponseWriter, r *http.Request) {
-	user, _, ok := a.requireUser(w, r)
+	user, sessionID, ok := a.requireUser(w, r)
 	if !ok {
 		return
 	}
+	section := accountSections[r.URL.Path]
+	if section == "trash" && r.Method == http.MethodPost {
+		a.handleTrashPost(w, r, user, sessionID)
+		return
+	}
 	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", http.MethodGet)
+		if section == "trash" {
+			w.Header().Set("Allow", "GET, POST")
+		} else {
+			w.Header().Set("Allow", http.MethodGet)
+		}
 		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	a.renderAccount(w, r, user, accountSections[r.URL.Path], "", false, http.StatusOK)
+	a.renderAccount(w, r, user, section, "", false, http.StatusOK)
 }
 
 // renderAccount is one settings page, reading only what that page shows.
@@ -94,6 +105,10 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, s
 			return
 		}
 		if data.Export, err = a.db.ExportAllowance(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if data.TrashCount, err = a.db.TrashCount(ctx, user.ID); err != nil {
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -146,6 +161,10 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, s
 		data.ExportLimit = store.ExportLimit
 		data.ExportWindow = int(store.ExportWindow / time.Hour)
 		if !a.countSealed(w, r, user, &data) {
+			return
+		}
+	case "trash":
+		if !a.fillAccountTrash(w, r, user, &data) {
 			return
 		}
 	}

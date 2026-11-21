@@ -12,8 +12,11 @@ function showSealedNames(signal) {
   const msg = (name) => search?.dataset[name] || "";
   const named = document.querySelectorAll("[data-sealed-name], [data-sealed-file]");
 
+  const trashMode = document.querySelector("[data-sealed-trash]") !== null;
+
   async function readIndex() {
-    const response = await fetch(search?.dataset.sealedIndex || "/resources/sealed", { headers: { Accept: "application/json" }, credentials: "same-origin", signal });
+    const endpoint = trashMode ? "/resources/sealed?trash=1" : (search?.dataset.sealedIndex || "/resources/sealed");
+    const response = await fetch(endpoint, { headers: { Accept: "application/json" }, credentials: "same-origin", signal });
     if (!response.ok) return [];
     return (await response.json()).resources || [];
   }

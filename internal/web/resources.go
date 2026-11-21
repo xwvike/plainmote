@@ -41,6 +41,10 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 		a.handleSealedIndex(w, r, user, sessionID)
 		return
 	}
+	if path == trashPath || path == trashPath+"/" {
+		http.Redirect(w, r, accountTrashPath, http.StatusFound)
+		return
+	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
 		a.handleDashboard(w, r, user)
@@ -261,12 +265,12 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			return
 		}
 		if r.FormValue("action") == actionDelete {
-			if err := a.db.DeleteResource(r.Context(), user.ID, resourceID); err != nil {
+			if _, err := a.db.TrashResource(r.Context(), user.ID, resourceID, time.Now().UTC()); err != nil {
 				text, status := a.writeErrorText("delete resource", err)
 				a.renderResourcePage(w, r, user, resource, text, status, nil, nil)
 				return
 			}
-			http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
+			http.Redirect(w, r, dashboardPath+"?trashed=1", http.StatusSeeOther)
 			return
 		}
 		if r.FormValue("action") == actionKeep {

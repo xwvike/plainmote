@@ -96,7 +96,8 @@ func TestAllPagesRender(t *testing.T) {
 		{"logs page 2", "/logs?size=20&page=2", `class="pgn on">2<`},
 		{"new resource", "/resources/new", "Load from file"},
 		{"resource", "/resources/" + resource.ID, "New share"},
-		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "Delete resource"},
+		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "Move to trash"},
+		{"trash", "/account/trash", "Trash"},
 		// The save bar carries its unsaved marker, shown by the editor once
 		// something changes.
 		{"resource has an unsaved marker", "/resources/" + resource.ID, `<span class="unsaved" data-unsaved>Unsaved</span>`},

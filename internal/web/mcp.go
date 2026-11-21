@@ -428,6 +428,7 @@ const mcpInstructions = "PlainMote keeps this account's resources - configuratio
 	"Use list_resources to find a resource, read_resource to read its text (long text comes in parts: pass next_offset back as offset), " +
 	"list_versions for its history and diff_versions to see what changed between two versions. Resources carry the user's own tags, such as tmp or surge: list_tags shows them, list_resources " +
 	"filters by one, and tag_resource adds or removes them. To change part of a resource, read it, then replace that part with edit_resource and the " +
-	"version you read as base_version; update_resource saves a whole new text the same way, and create_resource makes a new one. share_resource makes a public link that anyone with the " +
-	"address can open: make one only when the user asks for it. End-to-end encrypted resources appear only as placeholders: they can be decrypted in the browser " +
-	"or in PlainMote CLI, never through this server. Never ask the user for their master password."
+	"version you read as base_version; update_resource saves a whole new text the same way, and create_resource makes a new one. " +
+	"delete_resource moves a non-encrypted resource or quick share to the trash and revokes its share links (kept 30 days for the owner to restore or permanently delete on the web; MCP cannot access the trash): call it only when the user asks to delete it. " +
+	"share_resource makes a public link that anyone with the address can open: make one only when the user asks for it. " +
+	"End-to-end encrypted resources appear only as placeholders: they can be decrypted in the browser or in PlainMote CLI, never through this server, and cannot be deleted through this server. Never ask the user for their master password."

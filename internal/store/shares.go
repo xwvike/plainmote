@@ -155,7 +155,7 @@ func (d *Store) assertOwnsResource(ctx context.Context, ownerID, resourceID stri
 		return ErrNotFound
 	}
 	var found string
-	err := d.db.QueryRow(ctx, `SELECT id FROM resources WHERE id = $1 AND owner_id = $2`, resourceID, ownerID).Scan(&found)
+	err := d.db.QueryRow(ctx, `SELECT r.id FROM resources r WHERE r.id = $1 AND r.owner_id = $2 AND `+liveResource, resourceID, ownerID).Scan(&found)
 	return translateNotFound(err)
 }
 
@@ -401,6 +401,7 @@ SET used_count = l.used_count + 1, last_used_at = $1
 FROM resources r JOIN users u ON u.id = r.owner_id
 WHERE l.token_hash = $2
   AND r.id = l.resource_id
+  AND r.deleted_at IS NULL
   AND r.taken_down_at IS NULL
   AND u.suspended_at IS NULL
   AND l.revoked_at IS NULL
@@ -469,7 +470,7 @@ SELECT l.id, l.resource_id, l.name, l.expires_at, l.revoked_at, l.max_uses, l.us
 FROM links l
 JOIN resources r ON r.id = l.resource_id
 JOIN users u ON u.id = r.owner_id
-WHERE l.token_hash = $1
+WHERE l.token_hash = $1 AND r.deleted_at IS NULL
 `, hash).Scan(&linkID, &resourceID, &name, &expires, &revoked, &maxUses, &usedCount,
 		&ownerID, &resourceName, &resourceFile, &takenDown, &suspended)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -523,7 +524,7 @@ SELECT CASE
   WHEN r.content_type LIKE 'audio/%' OR r.content_type LIKE 'video/%' THEN 'media'
   ELSE '' END
 FROM links l JOIN resources r ON r.id = l.resource_id JOIN users u ON u.id = r.owner_id
-WHERE l.token_hash = $1 AND r.taken_down_at IS NULL AND u.suspended_at IS NULL`, hashToken(token), EncryptedContentType).Scan(&shell)
+WHERE l.token_hash = $1 AND r.deleted_at IS NULL AND r.taken_down_at IS NULL AND u.suspended_at IS NULL`, hashToken(token), EncryptedContentType).Scan(&shell)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ShellNone, nil
 	}

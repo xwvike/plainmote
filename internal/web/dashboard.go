@@ -100,6 +100,8 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		Tags:      chips,
 		Quota:     quota,
 		Pager:     pager,
+		TrashDays: int(store.TrashRetention / (24 * time.Hour)),
+		Trashed:   query.Get("trashed") == "1",
 	})
 }
 
