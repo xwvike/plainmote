@@ -184,20 +184,11 @@
         <h2>{{tr .Locale "example_config_title"}}</h2>
         <p>{{tr .Locale "example_config_body"}}</p>
       </section>
-      {{if .Anonymous}}
-      {{/* The same box, from a shell: what llms.txt describes at length. */}}
       <section>
-        <h2>{{tr .Locale "example_cli_title"}}</h2>
-        <code class="cli"><b>$</b> tail -n 200 app.log | curl -F <span>'content=&lt;-'</span> <span>{{.BaseURL}}/paste</span></code>
-        <p class="hint"><a href="{{.LocalePrefix}}/developers/curl">{{tr .Locale "dev_curl_more"}} →</a></p>
+        <h2>{{tr .Locale "example_mcp_title"}}</h2>
+        <p>{{tr .Locale "example_mcp_body"}}</p>
+        <p class="hint"><a href="{{.LocalePrefix}}/developers/mcp">{{tr .Locale "example_mcp_more"}} →</a></p>
       </section>
-      {{else}}
-      <section>
-        <h2>{{tr .Locale "example_people_title"}}</h2>
-        <p>{{tr .Locale "example_people_body"}}</p>
-        <p class="hint">{{if .SignedIn}}<a href="/resources/">{{tr .Locale "go_to_resources"}} →</a>{{else}}<a href="{{.SignInURL}}">{{tr .Locale "login"}} →</a>{{end}}</p>
-      </section>
-      {{end}}
     </div>
 
   </main>
