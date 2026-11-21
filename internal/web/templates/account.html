@@ -224,7 +224,7 @@
       </section>
       {{end}}
       <section class="panel ruled">
-        <div class="pt"><span class="sec">{{tr .Locale "cli_title"}}</span>{{if .APITokens}}<span class="sp"><span class="counts"><b>{{len .APITokens}}</b> {{tr .Locale "cli_devices"}}</span></span>{{end}}</div>
+        <div class="pt"><span class="sec">{{tr .Locale "dev_api_title"}}</span>{{if .APITokens}}<span class="sp"><span class="counts"><b>{{len .APITokens}}</b> {{tr .Locale "cli_devices"}}</span></span>{{end}}</div>
         {{if .APITokens}}
         <div class="pb dev-sheet">
           <div class="dev-list">
@@ -238,8 +238,7 @@
         <div class="pb first-run">
           <b>{{tr .Locale "devices_empty_title"}}</b>
           <p class="hint">{{tr .Locale "devices_empty_body"}}</p>
-          <div class="cli-edit"><code><b>$</b> plainmote login</code><button type="button" class="sm" data-copy="plainmote login">{{template "copy-label" .}}</button></div>
-          <p class="hint">{{tr .Locale "devices_empty_install"}} <a href="/developers/cli">{{tr .Locale "devices_install"}} →</a></p>
+          <p class="hint"><a href="/developers/api">{{tr .Locale "dev_api_title"}} →</a></p>
         </div>
         {{end}}
       </section>

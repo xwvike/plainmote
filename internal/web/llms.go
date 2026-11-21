@@ -36,7 +36,7 @@ func (a *App) llmsText() string {
 	base := strings.TrimRight(a.cfg.PublicURL, "/")
 	var text strings.Builder
 	text.WriteString("# PlainMote\n\n")
-	text.WriteString("> PlainMote keeps and shares configs, logs, notes and other files, byte for byte as given. Every save keeps a version; each recipient or machine gets a link of its own, with its own expiry and use limit, revocable on its own, and every access through it is recorded. It works from a browser, a terminal, an HTTP API and an MCP server for AI apps.\n\n")
+	text.WriteString("> PlainMote keeps and shares configs, logs, notes and other files, byte for byte as given. Every save keeps a version; each recipient or machine gets a link of its own, with its own expiry and use limit, revocable on its own, and every access through it is recorded. It works from a browser, an HTTP API and an MCP server for AI apps.\n\n")
 	if a.cfg.SourceURL != "" {
 		fmt.Fprintf(&text, "Source code (AGPL-3.0): %s\n\n", a.cfg.SourceURL)
 	}
@@ -77,24 +77,6 @@ curl --data-binary @app.log '%[1]s/paste?ttl=1d&filename=app.log'
 - End-to-end encryption is optional, under a master password only the owner knows. Encrypted content, with its name and filename, is encrypted on the client; the server stores ciphertext and keys it cannot unwrap.
 `, legalBytes(a.cfg.MaxContent))
 
-	if len(a.cliBinaries()) > 0 {
-		fmt.Fprintf(&text, `
-## Command line
-
-`+"`plainmote`"+` lists, reads, edits and uploads an account's resources from a terminal or a script. The install script points it at this server.
-
-`+"```"+`
-curl -fsSL %[1]s/cli | sh       # macOS, Linux
-irm %[1]s/cli.ps1 | iex         # Windows PowerShell
-`+"```"+`
-
-- `+"`plainmote login`"+` signs the device in: it prints a code, which the account owner enters at `+"`%[1]s/cli/device`"+` in a signed-in browser. `+"`--read-only`"+` asks for a token that cannot write. `+"`PLAINMOTE_TOKEN`"+` takes the place of the saved sign-in.
-- `+"`plainmote ls [keyword] [--tag <tag>]`"+`, `+"`cat <resource>`"+`, `+"`edit <resource>`"+`, `+"`push <file|-> [--to <resource>] [--tag <tag>]`"+`, `+"`tag <resource> <tag>...`"+`, `+"`untag <resource> <tag>...`"+`, `+"`tags`"+`%[2]s. A `+"`<resource>`"+` is an ID, an ID prefix of at least six characters, or an exact name or filename.
-- %[3]s `+"`--encrypt`"+`. Encrypted resources are opened with the master password, asked for at the terminal or read from `+"`PLAINMOTE_MASTER_PASSWORD`"+`; the command line keeps no key.
-- `+"`plainmote help`"+` lists every command and option.
-`, base, a.llmsShareCommand(), a.llmsShareEncrypt())
-	}
-
 	fmt.Fprintf(&text, `
 ## HTTP API
 
@@ -103,7 +85,7 @@ irm %[1]s/cli.ps1 | iex         # Windows PowerShell
 - Reading: `+"`GET /me`"+`; `+"`GET /resources?q=&tag=`"+` lists, `+"`GET /resources/{id}`"+` describes, `+"`GET /resources/{id}/content`"+` returns the raw bytes; `+"`GET /tags`"+` lists the account's tags with their counts.
 - Writing, with a `+"`write`"+` token: `+"`PUT /resources/{id}/content`"+` with `+"`If-Match: \"v<version>\"`"+` saves a new version (`+"`412`"+` on a conflict); `+"`POST /resources`"+` creates one from a multipart `+"`content`"+` file, with `+"`tag`"+` fields to tag it; `+"`PATCH /resources/{id}/tags`"+` with `+"`{\"add\": [...], \"remove\": [...]}`"+` changes its tags%[2]s.
 - The API cannot delete resources, manage share links or read access records. Encrypted content is returned as ciphertext, for the client to decrypt.
-- `+"`%[1]s/developers/cli`"+` and `+"`%[1]s/developers/api`"+` present the command line and the API to people.
+- `+"`%[1]s/developers/api`"+` presents the HTTP API to people.
 `, base, a.llmsQuickShareAPI())
 
 	fmt.Fprintf(&text, `
@@ -135,20 +117,6 @@ func (a *App) providerLabels() string {
 		labels = append(labels, p.label)
 	}
 	return strings.Join(labels, " or ")
-}
-
-func (a *App) llmsShareCommand() string {
-	if !a.cfg.AnonymousEnabled {
-		return ""
-	}
-	return ", `share <file|-> [--ttl 10m|1h|1d|7d|30d]` (a quick share; prints its link)"
-}
-
-func (a *App) llmsShareEncrypt() string {
-	if !a.cfg.AnonymousEnabled {
-		return "`push` takes"
-	}
-	return "`push` and `share` take"
 }
 
 func (a *App) llmsQuickShareAPI() string {

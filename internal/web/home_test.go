@@ -512,7 +512,7 @@ func TestQuickSharesInTheResourceList(t *testing.T) {
 		t.Fatal("the list does not mark its quick shares")
 	}
 	quick := page("/resources/?kind=quick")
-	if !strings.Contains(quick, plain.ID) || !strings.Contains(quick, sealed.ID) || strings.Contains(quick, resource.ID) || !strings.Contains(quick, `value="quick" selected`) {
+	if !strings.Contains(quick, plain.ID) || !strings.Contains(quick, sealed.ID) || strings.Contains(quick, resource.ID) || !strings.Contains(quick, `value="quick" data-auto-submit checked`) {
 		t.Fatal("the quick share filter")
 	}
 	if kept := page("/resources/?kind=resource"); strings.Contains(kept, plain.ID) || !strings.Contains(kept, resource.ID) {

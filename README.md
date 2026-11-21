@@ -6,7 +6,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-PlainMote keeps and shares configuration files, logs, notes and other files. Every save keeps a version; every recipient or machine gets a share link of its own, with its own expiry and use limit, revocable on its own, and every access through it is recorded. Besides the web, it works from a terminal, an API or an AI app.
+PlainMote keeps and shares configuration files, logs, notes and other files. Every save keeps a version; every recipient or machine gets a share link of its own, with its own expiry and use limit, revocable on its own, and every access through it is recorded. Besides the web, it works through an HTTP API, curl, and an MCP server for AI apps.
 
 Reference deployment: [plainmote.link](https://plainmote.link)
 
@@ -25,7 +25,7 @@ Reference deployment: [plainmote.link](https://plainmote.link)
 - **Tags**: label resources with text tags such as `tmp` or `surge`, and filter the list by them.
 - **Editor**: CodeMirror 6 with highlighting for common config formats and logs; it recognises UTF-8, GB18030, Shift_JIS and other encodings and saves in the file's own encoding and line endings.
 - **End-to-end encryption (optional)**: with a master password, a resource or a quick share can be encrypted in the browser before upload; the service keeps only ciphertext.
-- **Command line and MCP**: the `plainmote` command line views, edits and uploads resources; AI apps such as Claude, ChatGPT and Cursor read and write them through `/mcp` once authorized.
+- **HTTP API and MCP**: scripts can read and update resources over `/api/v1/`; AI apps such as Claude, ChatGPT and Cursor read, edit, version, share and delete them through `/mcp` once authorized.
 - **Interface**: English, Simplified Chinese, Traditional Chinese, Japanese, French and German, in light and dark themes.
 
 <picture>
@@ -38,34 +38,7 @@ Reference deployment: [plainmote.link](https://plainmote.link)
   <img src="docs/screenshots/access-history-light.png" alt="Access history: the time, result, share link and source IP of every access, machines polling alongside people opening the link">
 </picture>
 
-## Command line
-
-```bash
-curl -fsSL https://plainmote.link/cli/en | sh        # macOS, Linux
-irm https://plainmote.link/cli/en.ps1 | iex          # Windows PowerShell
-```
-
-The install script verifies the build's SHA-256 and installs it for the current user, without administrator rights; after the service is upgraded, run it again to update. `/cli/en` installs a command line that speaks English, `/cli/zh` one that speaks Chinese.
-
-```bash
-plainmote login                               # confirm the sign-in in a browser
-plainmote ls nginx
-plainmote edit nginx.conf                     # opens your editor; closing it saves a new version
-plainmote cat nginx.conf | grep listen
-tail -n 200 app.log | plainmote push - --name app.log
-plainmote push ./nginx.conf --to nginx.conf
-plainmote push ./note.md --tag tmp            # create a resource with a tag
-plainmote ls --tag tmp
-plainmote share ./app.log --ttl 1d            # make a quick share; prints only its link
-plainmote push ./prod.env --encrypt           # create an end-to-end encrypted resource
-```
-
-- A resource is named by its ID, an ID prefix of at least six characters, its name or its filename; when several match, the candidates are listed.
-- If a resource is saved elsewhere while you edit it, the command line shows the difference and lets you save over it, edit again on the newer version or keep your file.
-- Encrypted resources ask for the master password, or read it from `PLAINMOTE_MASTER_PASSWORD`.
-- `plainmote help` lists every command and setting. The API it uses is described in [Command line API](docs/api.md).
-
-### Sharing with curl
+## Sharing with curl
 
 ```bash
 tail -n 200 app.log | curl -F 'content=<-' https://plainmote.link/paste
@@ -79,8 +52,8 @@ curl https://plainmote.link/paste    # prints usage
 
 - **Links are credentials**: tokens are 256-bit random values; the database keeps only their digest and an encrypted copy. Share addresses are kept out of search engines and cannot be embedded by other sites.
 - **No web hosting**: types a browser may execute, such as HTML, scripts and SVG, are never delivered as themselves; pages run only the script files the site serves.
-- **Tokens and authorizations**: command line tokens and MCP authorizations are stored only as digests, cannot permanently delete resources or access the trash, and can be revoked at any time under Authorized apps in the settings.
-- **End-to-end encryption**: WebCrypto in the browser (the Go standard library in the command line), AES-256-GCM; the master password never leaves the device. Decryption needs JavaScript; content is lost if both the master password and the recovery key are; size and access history are not encrypted. A four-character code only keeps out someone who merely sees the link: share sensitive content with the full link and its key. Design and threat model: [End-to-end encryption](docs/encryption.md).
+- **Tokens and authorizations**: HTTP API tokens and MCP authorizations are stored only as digests, cannot permanently delete resources or access the trash, and can be revoked at any time under Authorized apps in the settings.
+- **End-to-end encryption**: WebCrypto in the browser, AES-256-GCM; the master password never leaves the device. Decryption needs JavaScript; content is lost if both the master password and the recovery key are; size and access history are not encrypted. A four-character code only keeps out someone who merely sees the link: share sensitive content with the full link and its key. Design and threat model: [End-to-end encryption](docs/encryption.md).
 
 ## Self-hosting
 
@@ -100,7 +73,7 @@ Environment variables, external services, the public entry point, upgrades and b
 
 - [Deployment](docs/deployment.md): the image, external services, environment variables, the public entry point, upgrades and backups
 - [Administration](docs/admin.md): what administration covers, setup and the admin API
-- [Command line API](docs/api.md): device authorization, tokens, the `/api/v1/` reference and fetching share links
+- [HTTP API](docs/api.md): device authorization, tokens, the `/api/v1/` reference and fetching share links
 - [MCP server](docs/mcp.md): connecting AI apps, authorization, tools and limits
 - [End-to-end encryption](docs/encryption.md): keys, formats, flows and the threat model
 

@@ -75,7 +75,6 @@ func Run() error {
 		Operator:           cfg.Operator,
 		ContactEmail:       cfg.ContactEmail,
 		SourceURL:          cfg.SourceURL,
-		CLIDir:             cfg.CLIDir,
 		IndexNowKey:        cfg.IndexNowKey,
 		BlobEndpoint:       cfg.BlobEndpoint,
 		AdminKeys:          cfg.AdminKeys,

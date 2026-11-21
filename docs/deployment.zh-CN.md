@@ -38,8 +38,6 @@ gh attestation verify oci://ghcr.io/xwvike/plainmote@sha256:DIGEST --owner xwvik
 docker image inspect ghcr.io/xwvike/plainmote:v1.2.3 --format '{{json .Config.Labels}}'
 ```
 
-镜像的 `/cli` 目录里还有 macOS、Linux、Windows（amd64 与 arm64）的 `plainmote` 命令行，服务通过 `/cli` 和 `/developers/cli` 提供下载，约占 35 MiB。命令行与服务的版本号始终一致。
-
 ### 发布版本
 
 给 `main` 上已推送的提交打标签并推送：

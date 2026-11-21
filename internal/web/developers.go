@@ -14,16 +14,15 @@ import (
 
 const developersPath = "/developers"
 
-// developerPages are the pages for someone who would rather type, in the
-// order the side navigation lists them: the command line, the HTTP API,
-// quick shares with curl where the deployment takes them, and the MCP server
-// for AI apps, which every deployment has.
+// developerPages are the pages for someone connecting tools or AI apps, in the
+// order the side navigation lists them: the MCP server, the HTTP API, and
+// quick shares with curl where the deployment takes them.
 func (a *App) developerPages() []string {
-	pages := []string{"cli", "api"}
+	pages := []string{"mcp", "api"}
 	if a.cfg.AnonymousEnabled {
 		pages = append(pages, "curl")
 	}
-	return append(pages, "mcp")
+	return pages
 }
 
 // developersMovedPages are earlier addresses of a developer page: the page
@@ -45,7 +44,7 @@ func (a *App) handleDevelopers(w http.ResponseWriter, r *http.Request) {
 	}
 	page := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, prefix), developersPath)
 	if page == "" || page == "/" {
-		http.Redirect(w, r, prefix+developersPath+"/cli", http.StatusFound)
+		http.Redirect(w, r, prefix+developersPath+"/mcp", http.StatusFound)
 		return
 	}
 	page = strings.TrimPrefix(page, "/")
@@ -66,13 +65,6 @@ func (a *App) handleDevelopers(w http.ResponseWriter, r *http.Request) {
 		data.User, data.SignedIn, data.CSRF = user, true, csrfValue(r)
 	}
 	switch page {
-	case "cli":
-		w.Header().Add("Vary", "User-Agent")
-		w.Header().Add("Vary", "Sec-CH-UA-Platform")
-		data.CLIBinaries = a.cliBinaries()
-		data.CLIVersion = a.cfg.Version
-		data.CLIPlatform = clientPlatform(r)
-		data.CLILang = cliLanguage(locale)
 	case "api":
 		data.APIDocsURL = apiDocsURL(a.cfg.SourceURL, locale)
 	case "curl":

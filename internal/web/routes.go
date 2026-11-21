@@ -31,7 +31,6 @@ type App struct {
 	probes     probeLog
 	admin      *adminGate
 	limits     *apiLimits
-	cli        *cliIndex
 	// untrustedProxy says once that a peer not trusted as a proxy sent the
 	// headers one would.
 	untrustedProxy sync.Once
@@ -67,12 +66,9 @@ type Config struct {
 	// The admin interface exists only when there is a key to call it with.
 	AdminKeys    []ed25519.PublicKey
 	AdminOrigins []string
-	Version      string
-	Revision     string
-	StartedAt    time.Time
-	// CLIDir holds the command line builds the install page offers; empty,
-	// or without builds in it, the page says there are none.
-	CLIDir      string
+	Version     string
+	Revision    string
+	StartedAt   time.Time
 	IndexNowKey string
 }
 
@@ -109,25 +105,16 @@ type pageData struct {
 	Alternates   []alternate
 	LocalePrefix string
 	LegalPrefix  string
-	// The command line: the builds the install page lists, and the device
-	// page's step - "code", "confirm", "done" or "denied" - with the sign-in
-	// being decided and its code as shown.
-	CLIBinaries []cliBinary
-	CLIVersion  string
-	CLIPlatform string
-	CLILang     string
-	APIDocsURL  string
+	APIDocsURL string
 	// The MCP server page: how to add the server to each app.
 	MCPClients  []mcpClient
 	DeviceStep  string
 	DeviceGrant store.DeviceGrant
 	DeviceCode  string
-	// APITokens are the account page's signed-in command lines, and
-	// RevokeToken the one its revoke dialog is about. CLIDevices is whether
-	// there are any, which is when a resource page offers its edit command.
+	// APITokens are the account page's personal access tokens, and
+	// RevokeToken the one its revoke dialog is about.
 	APITokens   []store.APIToken
 	RevokeToken store.APIToken
-	CLIDevices  bool
 	// OAuthGrants are the MCP apps the account let in, and RevokeGrant the
 	// one its revoke dialog is about. OAuth is the consent page's request.
 	OAuthGrants []store.OAuthGrant
@@ -339,9 +326,6 @@ func (a *App) routes() http.Handler {
 	if a.limits == nil {
 		a.limits = newAPILimits()
 	}
-	if a.cli == nil {
-		a.cli = &cliIndex{}
-	}
 	if a.clientDocs == nil {
 		a.clientDocs = upstream.New(clientDocumentMaxBytes)
 	}
@@ -376,9 +360,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(oauthRevokePath, a.handleOAuthRevoke)
 	mux.HandleFunc(developersPath, a.handleDevelopers)
 	mux.HandleFunc(developersPath+"/", a.handleDevelopers)
-	mux.HandleFunc(cliPath, a.handleCLI)
-	mux.HandleFunc(cliPath+"/", a.handleCLIFiles)
-	mux.HandleFunc(cliPowerShell, a.handleCLIPowerShell)
+	mux.HandleFunc(deviceVerifyPath, a.handleDevicePage)
 	mux.HandleFunc("/robots.txt", a.handleRobots)
 	mux.HandleFunc("/sitemap.xml", a.handleSitemap)
 	mux.HandleFunc("/llms.txt", a.handleLLMs)

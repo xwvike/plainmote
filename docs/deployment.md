@@ -38,8 +38,6 @@ The image's OCI labels record the source repository, version and full commit has
 docker image inspect ghcr.io/xwvike/plainmote:v1.2.3 --format '{{json .Config.Labels}}'
 ```
 
-The image's `/cli` directory also holds the `plainmote` command line for macOS, Linux and Windows on amd64 and arm64, about 35 MiB, which the service offers at `/cli` and `/developers/cli`. The command line and the service always carry the same version.
-
 ### Publishing a release
 
 Tag a pushed commit on `main` and push the tag:

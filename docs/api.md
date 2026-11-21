@@ -1,8 +1,8 @@
-# Command line API
+# HTTP API
 
 English | [简体中文](api.zh-CN.md)
 
-The endpoints under `/api/v1/` serve the `plainmote` command line and can also be called directly from scripts. Callers authenticate with a personal access token obtained through device authorization: the command line or script requests a code, and the account owner enters and approves it in a signed-in browser.
+The endpoints under `/api/v1/` serve scripts and custom HTTP clients. Callers authenticate with a personal access token obtained through device authorization: the client requests a code, and the account owner enters and approves it in a signed-in browser.
 
 The API can list, read, save and create resources, manage their tags, and make quick shares. It cannot delete resources, manage share links or change the account.
 
@@ -72,7 +72,6 @@ Until then the response is `400` with `{"error": "<code>", "interval": <seconds>
 - A token is valid for 90 days from sign-in; using it does not extend that. After it expires, a new token must be obtained.
 - A read-only token can call the reading endpoints and receives `403` from the writing ones.
 - The service stores only a digest of each token. The account owner can see each token's device, access, sign-in time and last use in the settings under Authorized apps and revoke it at any time; a token can also revoke itself with `DELETE /api/v1/token`. When an account is suspended, all of its tokens are deleted.
-- The `plainmote` command line keeps its token in the `credentials` file of its configuration directory (mode 600) and also reads the `PLAINMOTE_TOKEN` environment variable.
 
 ## Conventions
 

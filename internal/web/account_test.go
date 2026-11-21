@@ -57,7 +57,7 @@ func TestAccountPageIsReachableFromTheTopBar(t *testing.T) {
 	}
 	page := client.do(http.MethodGet, "/account", nil)
 	body := page.Body.String()
-	for _, link := range []string{`href="/account/sign-in"`, `href="/account/security"`, `href="/account/devices"`, `href="/account/data"`, `href="/developers/cli"`} {
+	for _, link := range []string{`href="/account/sign-in"`, `href="/account/security"`, `href="/account/devices"`, `href="/account/data"`, `href="/developers/mcp"`, `href="/developers/api"`} {
 		if page.Code != http.StatusOK || !strings.Contains(body, link) {
 			t.Fatalf("account page: %d, the side navigation lacks %s", page.Code, link)
 		}

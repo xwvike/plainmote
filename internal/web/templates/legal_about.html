@@ -9,7 +9,7 @@
   <li><strong>访问记录：</strong>每次通过链接的访问均记录时间、来源 IP{{if .Legal.Location}}、大致地理位置{{end}}和客户端信息，仅资源所有者可见。</li>
   <li><strong>历史版本：</strong>修改资源内容后，被替换的版本会保留一段时间，可查看、对比和恢复；访问记录注明每次获取的是哪个版本。</li>
   {{if .Legal.Anonymous}}<li><strong>临时分享：</strong>无需登录，在首页粘贴文本或上传文件即可生成有效期最长 {{legalDuration true .Legal.AnonymousTTL}}的链接。</li>{{end}}
-  <li><strong>命令行工具：</strong>可在终端中查看、编辑和上传资源，编辑时使用本机的编辑器，关闭后保存为新版本。</li>
+  <li><strong>HTTP API：</strong>脚本和程序可通过个人访问令牌调用 <code>/api/v1/</code> 读取、创建和更新资源。</li>
   <li><strong>连接 AI 应用：</strong>经你授权，Claude、ChatGPT 等 AI 应用可以通过 MCP 读取和编辑你的资源；加密内容对应用不可读。</li>
   <li><strong>端到端加密（可选）：</strong>登录用户设置主密码后，可为资源{{if .Legal.Anonymous}}和临时分享{{end}}开启端到端加密，内容在浏览器中加密，本服务仅保存密文，无法读取其内容；分享链接以 4 位口令代替密钥的，保护程度较低。</li>
 </ul>
@@ -36,7 +36,7 @@
   <li><strong>Access records:</strong> each access through a link records the time, source IP address{{if .Legal.Location}}, approximate location{{end}} and client information, visible only to the resource owner.</li>
   <li><strong>Version history:</strong> when the content of a resource changes, the version it replaces is kept for a period and can be viewed, compared and restored; access records state which version each access received.</li>
   {{if .Legal.Anonymous}}<li><strong>Quick shares:</strong> paste text or upload a file on the home page, without signing in, to generate a link valid for up to {{legalDuration false .Legal.AnonymousTTL}}.</li>{{end}}
-  <li><strong>Command line tool:</strong> resources can be viewed, edited and uploaded from a terminal, editing in the machine’s own editor and saving a new version when it is closed.</li>
+  <li><strong>HTTP API:</strong> scripts and programs can read, create and update resources through <code>/api/v1/</code> using a personal access token.</li>
   <li><strong>AI apps:</strong> with your authorization, AI apps such as Claude and ChatGPT can read and edit your resources through MCP; encrypted content stays unreadable to them.</li>
   <li><strong>End-to-end encryption (optional):</strong> signed-in users who set a master password can turn it on for resources{{if .Legal.Anonymous}} and quick shares{{end}}; content is encrypted in the browser and the Service stores only the ciphertext and cannot read it; a share link opened with a four-character code in place of the key offers weaker protection.</li>
 </ul>
