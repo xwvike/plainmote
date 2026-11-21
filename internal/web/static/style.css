@@ -1205,11 +1205,12 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 }
 
 /* Settings cards. */
-.profile { display: flex; align-items: center; gap: 14px; padding: 16px; }
+.profile { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 14px; padding: 16px; }
 .av { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--accent-s); color: var(--accent); font: 600 16px var(--mono); }
-.profile-id { display: grid; gap: 2px; min-width: 0; }
+.profile-id { display: grid; gap: 2px; min-width: 0; flex: 1 1 200px; }
 .profile-id b { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-id span { font: 400 11.5px var(--mono); color: var(--ink3); }
+.profile-act { margin-left: auto; flex: none; }
 .idl { margin: 0; padding: 0; list-style: none; }
 .idl > li { display: grid; grid-template-columns: 22px 150px minmax(0, 1fr) auto; gap: 14px; align-items: center; min-height: 56px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .idl > li:first-child { border-top: 0; }

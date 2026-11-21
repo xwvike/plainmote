@@ -51,6 +51,7 @@
           <b>{{or .Account.User.Name .Account.User.Login}}</b>
           <span>{{with .Account.User.Name}}{{if ne . $.Account.User.Login}}{{$.Account.User.Login}} · {{end}}{{end}}{{tr .Locale "account_created"}} {{formatTime .Account.CreatedAt}}</span>
         </div>
+        <form method="post" action="/logout" class="profile-act"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit" class="sm">{{tr .Locale "logout"}}</button></form>
       </section>
 
       <section class="panel ruled">
