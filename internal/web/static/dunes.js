@@ -176,10 +176,25 @@ function createScene(seed) {
     });
   }
 
+  // Daytime sunlit quartz/mica sand glints scattered near dune crests.
+  const glints = [];
+  const glintCount = 26;
+  for (let i = 0; i < glintCount; i++) {
+    glints.push({
+      u: range(0.04, 0.96),
+      layer: i % 3, // 0: ridge2, 1: ridge3, 2: ridge4
+      depth: range(0.008, 0.14) * Math.pow(rng(), 0.7),
+      phase: range(0, tau),
+      speed: range(0.32, 0.78),
+      sparkle: i < 11, // crisp 4-point sunlit cross glint at peak
+      peak: range(0.65, 1.0),
+    });
+  }
+
   return {
     salt, sunDir, r1, r2, r3, r4, r5, evalRidge,
     cloudOffsetX, cloudOffsetY, rippleShift,
-    sparkleU, sparkleV, stars, motes,
+    sparkleU, sparkleV, stars, motes, glints,
   };
 }
 
@@ -418,7 +433,10 @@ if (canvas) {
 
     const t = now * 0.001;
 
-    // 1. Dark mode: twinkling pixel stars in the clear sky above the far ridge.
+    // 1. Sky & surface highlights:
+    //    - Dark mode: twinkling pixel stars in the clear night sky.
+    //    - Light mode: intermittent sunlit quartz sand glints catching the sun
+    //      along the dune crests and slopes.
     if (dark) {
       for (const s of scene.stars) {
         const sx = Math.round(s.u * width);
@@ -437,6 +455,41 @@ if (canvas) {
           ctx.fillRect(sx + 1, sy, 1, 1);
           ctx.fillRect(sx, sy - 1, 1, 1);
           ctx.fillRect(sx, sy + 1, 1, 1);
+        }
+      }
+    } else if (!staticOnly) {
+      for (const g of scene.glints) {
+        // Sharp brief crystalline flash separated by calm intervals so only a
+        // handful of quartz grains sparkle across the dunes at any instant.
+        const wave = Math.sin(t * g.speed + g.phase);
+        if (wave <= 0.25) continue;
+        const flash = Math.pow(wave, 12) * g.peak;
+        if (flash < 0.06) continue;
+
+        const gx = Math.round(g.u * width);
+        if (gx < 2 || gx >= width - 2) continue;
+        const ridgeArr = g.layer === 0 ? baked.y2 : g.layer === 1 ? baked.y3 : baked.y4;
+        const gv = ridgeArr[gx] + g.depth;
+        const gy = Math.round(gv * height);
+        if (gy < 2 || gy >= height - 2) continue;
+
+        const fadeY = 1 - smoothstep(0.62, 0.96, gv);
+        const intensity = clamp01(flash * fadeY);
+        if (intensity < 0.05) continue;
+
+        if (g.sparkle) {
+          // Warm sunlit amber-gold cross framing a crisp ivory highlight core.
+          const arm = (intensity * 0.58).toFixed(3);
+          ctx.fillStyle = `rgba(208, 138, 30, ${arm})`;
+          ctx.fillRect(gx - 1, gy, 1, 1);
+          ctx.fillRect(gx + 1, gy, 1, 1);
+          ctx.fillRect(gx, gy - 1, 1, 1);
+          ctx.fillRect(gx, gy + 1, 1, 1);
+          ctx.fillStyle = `rgba(255, 252, 242, ${(intensity * 0.95).toFixed(3)})`;
+          ctx.fillRect(gx, gy, 1, 1);
+        } else {
+          ctx.fillStyle = `rgba(208, 138, 30, ${(intensity * 0.68).toFixed(3)})`;
+          ctx.fillRect(gx, gy, 1, 1);
         }
       }
     }
