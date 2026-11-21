@@ -13,19 +13,19 @@
     </div>
     <form class="filters log-filter" method="get" action="/logs">
       <label class="pick log-filter-resource"><span>{{tr .Locale "resource"}}</span>
-        <select name="resource">
+        <select name="resource" data-auto-submit>
           <option value="">{{tr .Locale "all_resources"}}</option>
           {{range .Resources}}<option value="{{.ID}}"{{if eq .ID $.LogResource}} selected{{end}}>{{or .Name (tr $.Locale "untitled_resource")}}</option>{{end}}
         </select>
       </label>
       <label class="pick log-filter-outcome"><span>{{tr .Locale "result"}}</span>
-        <select name="outcome">
+        <select name="outcome" data-auto-submit>
           <option value="">{{tr .Locale "all_results"}}</option>
           {{range .Outcomes}}<option value="{{.}}"{{if eq . $.LogOutcome}} selected{{end}}>{{outcomeText $.Locale .}}</option>{{end}}
         </select>
       </label>
       <input type="hidden" name="size" value="{{.Pager.Size}}">
-      <button type="submit">{{tr .Locale "filter"}}</button>
+      <button type="submit" class="nojs-btn">{{tr .Locale "filter"}}</button>
       {{if or .LogResource .LogOutcome}}<a class="txt" href="/logs">{{tr .Locale "clear"}}</a>{{end}}
     </form>
     <div class="panel lg">
@@ -74,8 +74,8 @@
           <form class="psize" method="get" action="/logs">
             <input type="hidden" name="resource" value="{{.LogResource}}">
             <input type="hidden" name="outcome" value="{{.LogOutcome}}">
-            <label>{{tr .Locale "per_page"}} <select name="size">{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
-            <button type="submit" class="sm">{{tr .Locale "apply"}}</button>
+            <label>{{tr .Locale "per_page"}} <select name="size" data-auto-submit>{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+            <button type="submit" class="sm nojs-btn">{{tr .Locale "apply"}}</button>
           </form>
           <span class="pages">
             {{if .Pager.PrevURL}}<a class="pgn" href="{{.Pager.PrevURL}}">&lsaquo;</a>{{else}}<span class="pgn dis">&lsaquo;</span>{{end}}

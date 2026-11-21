@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@87.5,400..600&amp;family=Schibsted+Grotesk:wght@400..700&amp;display=swap">
   <link rel="stylesheet" href="{{asset "style.css"}}">
   <script defer src="{{asset "time.js"}}"></script>
+  <script type="module" src="{{asset "ui.js"}}"></script>
   {{if .SignedIn}}<meta name="plainmote-user" content="{{.User.ID}}">{{end}}
   <script type="module" src="{{asset "lock.js"}}"></script>
   <noscript><link rel="stylesheet" href="{{asset "noscript.css"}}"></noscript>
@@ -92,18 +93,18 @@
 {{define "side-nav"}}<nav class="side" aria-label="{{if .SignedIn}}{{tr .Locale "settings_title"}}{{else}}{{tr .Locale "dev_title"}}{{end}}">
   {{if .SignedIn}}
   <span class="side-h">{{tr .Locale "settings_title"}}</span>
-  <a href="/account"{{if eq .Section "account"}} class="on" aria-current="page"{{end}}>{{tr .Locale "account"}}</a>
-  <a href="/account/sign-in"{{if eq .Section "sign-in"}} class="on" aria-current="page"{{end}}>{{tr .Locale "signin_methods"}}</a>
-  <a href="/account/security"{{if eq .Section "security"}} class="on" aria-current="page"{{end}}>{{tr .Locale "security_title"}}</a>
-  <a href="/account/devices"{{if eq .Section "devices"}} class="on" aria-current="page"{{end}}>{{tr .Locale "devices_title"}}</a>
-  <a href="/account/data"{{if eq .Section "data"}} class="on" aria-current="page"{{end}}>{{tr .Locale "data_title"}}</a>
-  <a href="/account/trash"{{if eq .Section "trash"}} class="on" aria-current="page"{{end}}>{{tr .Locale "trash"}}</a>
+  <a href="/account"{{if eq .Section "account"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="5.3" r="2.7"></circle><path d="M3 13.2a5 5 0 0 1 10 0"></path></svg><span>{{tr .Locale "account"}}</span></a>
+  <a href="/account/sign-in"{{if eq .Section "sign-in"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="8" r="2.6"></circle><path d="M8.1 8h5.4M11.6 8v2"></path></svg><span>{{tr .Locale "signin_methods"}}</span></a>
+  <a href="/account/security"{{if eq .Section "security"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2 13 4.1v3.7c0 3.1-2.1 5.1-5 6-2.9-.9-5-2.9-5-6V4.1L8 2.2Z"></path></svg><span>{{tr .Locale "security_title"}}</span></a>
+  <a href="/account/devices"{{if eq .Section "devices"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.2" y="3" width="11.6" height="8" rx="1.4"></rect><path d="M5.5 13.5h5"></path></svg><span>{{tr .Locale "devices_title"}}</span></a>
+  <a href="/account/data"{{if eq .Section "data"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="8" cy="4.2" rx="5" ry="1.8"></ellipse><path d="M3 4.2v7.6c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V4.2M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"></path></svg><span>{{tr .Locale "data_title"}}</span></a>
+  <a href="/account/trash"{{if eq .Section "trash"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6 4.5V3.2c0-.5.4-.9.9-.9h2.2c.5 0 .9.4.9.9v1.3M4.2 4.5l.6 8.3c0 .6.5 1 1.1 1h4.2c.6 0 1-.4 1.1-1l.6-8.3"></path></svg><span>{{tr .Locale "trash"}}</span></a>
   {{end}}
   <span class="side-h">{{tr .Locale "dev_title"}}</span>
-  <a href="{{.LocalePrefix}}/developers/cli"{{if eq .Section "dev-cli"}} class="on" aria-current="page"{{end}}>{{tr .Locale "cli_title"}}</a>
-  <a href="{{.LocalePrefix}}/developers/api"{{if eq .Section "dev-api"}} class="on" aria-current="page"{{end}}>{{tr .Locale "dev_api_title"}}</a>
-  {{if .Anonymous}}<a href="{{.LocalePrefix}}/developers/curl"{{if eq .Section "dev-curl"}} class="on" aria-current="page"{{end}}>{{tr .Locale "dev_curl_title"}}</a>{{end}}
-  <a href="{{.LocalePrefix}}/developers/mcp"{{if eq .Section "dev-mcp"}} class="on" aria-current="page"{{end}}>{{tr .Locale "dev_mcp_title"}}</a>
+  <a href="{{.LocalePrefix}}/developers/cli"{{if eq .Section "dev-cli"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.8" width="12" height="10.4" rx="1.6"></rect><path d="M5 6.4 7 8 5 9.6M8.5 9.8H11"></path></svg><span>{{tr .Locale "cli_title"}}</span></a>
+  <a href="{{.LocalePrefix}}/developers/api"{{if eq .Section "dev-api"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 4.5 2.5 8l3 3.5M10.5 4.5l3 3.5-3 3.5M8.8 3.5l-1.6 9"></path></svg><span>{{tr .Locale "dev_api_title"}}</span></a>
+  {{if .Anonymous}}<a href="{{.LocalePrefix}}/developers/curl"{{if eq .Section "dev-curl"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.8 4.8 6 8l-3.2 3.2M7.6 11.2h5.6"></path></svg><span>{{tr .Locale "dev_curl_title"}}</span></a>{{end}}
+  <a href="{{.LocalePrefix}}/developers/mcp"{{if eq .Section "dev-mcp"}} class="on" aria-current="page"{{end}}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="4.2" cy="4.2" r="1.7"></circle><circle cx="11.8" cy="4.2" r="1.7"></circle><circle cx="8" cy="11.8" r="1.7"></circle><path d="M5.6 5.3 7.2 10.2M10.4 5.3 8.8 10.2M5.9 4.2h4.2"></path></svg><span>{{tr .Locale "dev_mcp_title"}}</span></a>
 </nav>{{end}}
 
 {{/* The master password's lock, on every page of an account that has one:

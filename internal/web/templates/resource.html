@@ -58,9 +58,14 @@
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       {{if not .IsNew}}{{template "resource-base" .}}{{end}}
 
+      <div class="editor-shell">
         <div class="panel ruled panel-ed">
           <div class="pt">
-            <span class="sec">{{tr .Locale "content"}}</span>
+            <div class="doc-fields">
+              <label class="doc-field"><span>{{tr .Locale "name"}}</span><input type="text" name="name" class="doc-name" value="{{.Resource.Name}}" placeholder="{{if .IsNew}}{{tr .Locale "optional"}}{{else}}{{tr .Locale "name_filename_fallback"}}{{end}}"></label>
+              <span class="doc-sep" aria-hidden="true"></span>
+              <label class="doc-field"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="doc-file mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}"></label>
+            </div>
             {{/* Said out loud only when something goes wrong with a chosen file. */}}
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             <span class="sp">
@@ -127,22 +132,19 @@
           </div>
         </div>
 
-
-      <div class="savebar">
-        {{template "resource-submit" .}}
-        {{if .IsNew}}
-        <a class="txt" href="/resources/">{{tr .Locale "cancel"}}</a>
-        <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "optional"}}" style="width:140px"></label>
-        <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
-        {{else}}
-        {{if .Conflict}}<a class="txt show" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_mine"}}</a>
-        {{else}}<a class="txt" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>{{end}}
-        <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" name="name" value="{{.Resource.Name}}" placeholder="{{tr .Locale "name_filename_fallback"}}" style="width:140px"></label>
-        <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
-        {{/* Appears with the first change and goes with the save: the page
-             after a save is the confirmation. */}}
-        <span class="unsaved{{if .Conflict}} show{{end}}" data-unsaved>{{tr .Locale "unsaved"}}</span>
-        {{end}}
+        <div class="savebar">
+          {{if .IsNew}}
+          <a class="txt" href="/resources/">{{tr .Locale "cancel"}}</a>
+          <span class="savebar-actions">{{template "resource-submit" .}}</span>
+          {{else}}
+          <span class="unsaved{{if .Conflict}} show{{end}}" data-unsaved>{{tr .Locale "unsaved"}}</span>
+          <span class="savebar-actions">
+            {{if .Conflict}}<a class="txt show" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_mine"}}</a>
+            {{else}}<a class="txt" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>{{end}}
+            {{template "resource-submit" .}}
+          </span>
+          {{end}}
+        </div>
       </div>
     </form>
 
@@ -477,9 +479,15 @@
         <div class="pb"><p class="ro" data-sealed-status>{{tr .Locale "sealed_needs_js"}}</p></div>
       </div>
       <form class="rform" data-sealed-form hidden>
+        <div class="editor-shell">
         <div class="panel ruled panel-ed">
           <div class="pt">
-            <span class="sec">{{tr .Locale "content"}}</span>
+            {{if .Resource.QuickShare}}<span class="sec">{{tr .Locale "content"}}</span>
+            {{else}}<div class="doc-fields">
+              <label class="doc-field"><span>{{tr .Locale "name"}}</span><input type="text" data-sealed-name class="doc-name" placeholder="{{tr .Locale "name_filename_fallback"}}"></label>
+              <span class="doc-sep" aria-hidden="true"></span>
+              <label class="doc-field"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" data-sealed-filename class="doc-file mpath" placeholder="{{tr .Locale "optional"}}"></label>
+            </div>{{end}}
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             <span class="sp">
               {{/* The editor's own controls, as on a plain resource: what a
@@ -510,14 +518,15 @@
         </div>
         {{if not .Resource.QuickShare}}
         <div class="savebar">
-          <button type="submit" class="pri">{{tr .Locale "save"}}</button>
-          <a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "discard_changes"}}</a>
-          <label class="pick"><span>{{tr .Locale "name"}}</span><input type="text" data-sealed-name placeholder="{{tr .Locale "name_filename_fallback"}}" style="width:140px"></label>
-          <label class="pick"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" data-sealed-filename class="mpath" placeholder="{{tr .Locale "optional"}}" style="width:150px"></label>
           <span class="hint">{{tr .Locale "sealed_saves_encrypted"}}</span>
           <span class="err" data-sealed-save-error role="alert"></span>
+          <span class="savebar-actions">
+            <a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "discard_changes"}}</a>
+            <button type="submit" class="pri">{{tr .Locale "save"}}</button>
+          </span>
         </div>
         {{end}}
+        </div>
       </form>
     </div>
 {{end}}

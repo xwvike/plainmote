@@ -100,9 +100,14 @@
            is no stored content and no encoding to keep - a quick share is
            sent as it is. Without the script the textarea is the whole
            interaction. */}}
+      <div class="editor-shell">
       <div class="panel ruled panel-ed paste-panel">
         <div class="pt">
-          <span class="sec">{{tr .Locale "content"}}</span>
+          <label class="quick-file">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.2 2.2h5.2l3.1 3.1v8.5a1 1 0 0 1-1 1H4.2a1 1 0 0 1-1-1V3.2a1 1 0 0 1 1-1Z"></path><path d="M9.4 2.2v3.1h3.1"></path></svg>
+            <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="{{tr .Locale "filename_optional"}} (notes.txt)"
+                   aria-label="{{tr .Locale "filename_optional"}}" class="mpath">
+          </label>
           <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
           <span class="sp"><span class="hint" data-content-meta>{{tr .Locale "limit"}} {{bytesText .MaxPaste}}</span>
             {{/* A file instead of the box, handled as on a resource: text is
@@ -129,10 +134,6 @@
             {{range .PasteChoices}}<label title="{{lifetimeText $.Locale .Value}}"><input type="radio" name="ttl" value="{{.Value}}" aria-label="{{lifetimeText $.Locale .Value}}"{{if eq .Value $.PasteTTL}} checked{{end}}><i></i><span>{{lifetimeShort $.Locale .Value}}</span></label>{{end}}
           </span>
         </span>
-        <label class="ttl-picker"><span>{{tr .Locale "filename_optional"}}</span>
-          <input type="text" name="filename" value="{{.PasteFilename}}" placeholder="notes.txt"
-                 aria-label="{{tr .Locale "filename_optional"}}" class="mpath" style="width:150px">
-        </label>
         {{if .HasKeyring}}
         {{/* Encrypted or not is chosen here, for each quick share; it starts
              as the last one was sent. */}}
@@ -145,17 +146,18 @@
              that cannot be mistaken for one another, and shown, to be told to
              the recipient. */}}
         <span class="ttl-picker" data-pin-pick{{if not .E2EE}} hidden{{end}}>
-          <button type="button" data-pin-add>{{tr .Locale "e2ee_pin_add"}}</button>
+          <button type="button" class="sm" data-pin-add>{{tr .Locale "e2ee_pin_add"}}</button>
           <span class="pin-on" data-pin-on hidden>
             <span>{{tr .Locale "e2ee_pin"}}</span>
             <code class="pin-code" data-pin-code></code>
             <button type="button" class="txt" data-pin-renew>{{tr .Locale "e2ee_pin_renew"}}</button>
-            <button type="button" data-pin-drop>{{tr .Locale "e2ee_pin_drop"}}</button>
+            <button type="button" class="sm" data-pin-drop>{{tr .Locale "e2ee_pin_drop"}}</button>
           </span>
         </span>
         {{end}}
         {{/* The action ends the row: choose the terms, then send. */}}
         <button type="submit" class="pri end">{{tr .Locale "create_share_link"}}</button>
+      </div>
       </div>
       {{if .HasKeyring}}
       {{/* Asked for only when this browser holds no unlocked key: the
