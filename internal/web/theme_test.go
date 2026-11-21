@@ -42,6 +42,16 @@ func TestThemeSwitchIsRememberedAndStamped(t *testing.T) {
 
 	if page := get("/", cookies[0]).Body.String(); !strings.Contains(page, `data-theme="dark"`) {
 		t.Fatal("the chosen theme is not stamped on the page")
+	} else if !strings.Contains(page, `class="theme-to-auto" href="/theme?next=%2F&amp;to=auto"`) {
+		t.Fatal("a chosen theme must offer returning to auto")
+	}
+	cleared := get("/theme?to=auto&next=%2F", cookies[0])
+	if cleared.Code != http.StatusSeeOther || cleared.Header().Get("Location") != "/" {
+		t.Fatalf("auto switch: %d to %q", cleared.Code, cleared.Header().Get("Location"))
+	}
+	clearedCookies := cleared.Result().Cookies()
+	if len(clearedCookies) != 1 || clearedCookies[0].Name != themeCookie || clearedCookies[0].MaxAge >= 0 {
+		t.Fatalf("auto switch should clear theme cookie: %+v", clearedCookies)
 	}
 	page := get("/").Body.String()
 	if strings.Contains(page, "data-theme=") {

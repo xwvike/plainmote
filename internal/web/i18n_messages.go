@@ -218,6 +218,7 @@ var messageTable = map[string][6]string{
 	"source_ip":                 {"Source IP", "来源 IP", "來源 IP", "送信元IP", "IP d’origine", "Quell-IP"},
 	"status":                    {"Status", "状态", "狀態", "状態", "État", "Status"},
 	"terms_restart_now":         {"Changes take effect now", "修改后的条件从现在重新计算", "修改後的條件從現在重新計算", "変更した条件は今から適用されます", "Les nouvelles conditions s’appliquent dès maintenant", "Änderungen gelten ab jetzt"},
+	"theme_to_auto":             {"Match system theme", "跟随系统主题", "跟隨系統主題", "システム設定に合わせる", "Suivre le thème du système", "Systemdesign verwenden"},
 	"theme_to_dark":             {"Switch to dark", "切换到深色", "切換到深色", "ダークに切り替え", "Passer au thème sombre", "Dunkles Design"},
 	"theme_to_light":            {"Switch to light", "切换到浅色", "切換到淺色", "ライトに切り替え", "Passer au thème clair", "Helles Design"},
 	"time":                      {"Time", "时间", "時間", "日時", "Date", "Zeit"},

@@ -50,11 +50,24 @@
   <meta name="twitter:card" content="summary">{{end}}
 {{define "mark"}}<img class="mk" src="{{asset "logo.png"}}" alt="" width="18" height="18" decoding="async">{{end}}
 
-{{/* Sun and moon: the one shown is the way out of what is on screen. Links,
-     so the switch works with scripts off; nofollow, as they only set a cookie. */}}
+{{/* Three-state single-icon theme cycle (auto -> opposite -> other -> auto).
+     The icon reflects the active mode (half-circle = auto, sun = light,
+     moon = dark), while CSS picks the target link so the first click from
+     auto always flips the current system appearance. */}}
+{{define "theme-icon-auto"}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 2.5a5.5 5.5 0 0 1 0 11Z" fill="currentColor" stroke="none"></path></svg>{{end}}
+{{define "theme-icon-light"}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"></path></svg>{{end}}
+{{define "theme-icon-dark"}}<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1Z"></path></svg>{{end}}
 {{define "theme-switch"}}<span class="theme-switch">
-  <a class="theme-to-dark" href="{{.Theme.DarkURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_dark"}}" title="{{tr .Locale "theme_to_dark"}}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1Z"></path></svg></a>
-  <a class="theme-to-light" href="{{.Theme.LightURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_light"}}" title="{{tr .Locale "theme_to_light"}}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"></path></svg></a>
+  {{if eq .Theme.Current "dark"}}
+  <a class="theme-to-light" href="{{.Theme.LightURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_light"}}" title="{{tr .Locale "theme_to_light"}}">{{template "theme-icon-dark"}}</a>
+  <a class="theme-to-auto" href="{{.Theme.AutoURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_auto"}}" title="{{tr .Locale "theme_to_auto"}}">{{template "theme-icon-dark"}}</a>
+  {{else if eq .Theme.Current "light"}}
+  <a class="theme-to-auto" href="{{.Theme.AutoURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_auto"}}" title="{{tr .Locale "theme_to_auto"}}">{{template "theme-icon-light"}}</a>
+  <a class="theme-to-dark" href="{{.Theme.DarkURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_dark"}}" title="{{tr .Locale "theme_to_dark"}}">{{template "theme-icon-light"}}</a>
+  {{else}}
+  <a class="theme-to-dark" href="{{.Theme.DarkURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_dark"}}" title="{{tr .Locale "theme_to_dark"}}">{{template "theme-icon-auto"}}</a>
+  <a class="theme-to-light" href="{{.Theme.LightURL}}" rel="nofollow" aria-label="{{tr .Locale "theme_to_light"}}" title="{{tr .Locale "theme_to_light"}}">{{template "theme-icon-auto"}}</a>
+  {{end}}
 </span>{{end}}
 {{define "language-switch"}}{{if .Language.ShowSwitch}}<nav class="lang-switch" aria-label="{{tr .Locale "language_switch"}}">
   <a class="lang-cell{{if ne .Locale "en"}} on{{end}}" href="{{.Language.NativeURL}}" lang="{{.Language.NativeLocale}}"{{if ne .Locale "en"}} aria-current="true"{{end}}>{{.Language.NativeLabel}}</a>

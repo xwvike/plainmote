@@ -219,9 +219,22 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 
 /* Theme & Master-key controls. */
 .theme-switch { display: inline-flex; }
-.theme-switch a { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--ink3); transition: background .14s, color .14s; }
+.theme-switch a { display: none; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--ink3); transition: background .14s, color .14s; }
 .theme-switch a:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
 .theme-switch svg { width: 15px; height: 15px; }
+/* Light OS cycle: auto -> dark -> light -> auto */
+:root:not([data-theme]) .theme-to-dark,
+:root[data-theme="dark"] .theme-to-light,
+:root[data-theme="light"] .theme-to-auto { display: grid; }
+/* Dark OS cycle: auto -> light -> dark -> auto */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .theme-to-dark,
+  :root[data-theme="dark"] .theme-to-light,
+  :root[data-theme="light"] .theme-to-auto { display: none; }
+  :root:not([data-theme]) .theme-to-light,
+  :root[data-theme="light"] .theme-to-dark,
+  :root[data-theme="dark"] .theme-to-auto { display: grid; }
+}
 .keylock { position: relative; }
 .keylock > summary { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--ink3); cursor: pointer; list-style: none; transition: background .14s, color .14s; }
 .keylock > summary::-webkit-details-marker { display: none; }
@@ -241,13 +254,6 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .keylock-pop .row { display: flex; align-items: center; gap: 8px; }
 .keylock-pop input { flex: 1 1 auto; min-width: 0; }
 .keylock-pop .err:empty { display: none; }
-.theme-to-light { display: none !important; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .theme-to-dark { display: none !important; }
-  :root:not([data-theme="light"]) .theme-to-light { display: grid !important; }
-}
-:root[data-theme="dark"] .theme-to-dark { display: none !important; }
-:root[data-theme="dark"] .theme-to-light { display: grid !important; }
 
 /* Page rhythm & typography. */
 .page { position: relative; z-index: 1; width: var(--col); margin: 0 auto; padding: 30px 0 60px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; }
