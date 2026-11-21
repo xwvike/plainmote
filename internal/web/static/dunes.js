@@ -53,6 +53,8 @@ function mulberry32(seed) {
   };
 }
 
+const SEED_KEY = "plainmote:dunes-seed";
+
 function freshSeed() {
   if (window.crypto && window.crypto.getRandomValues) {
     const buf = new Uint32Array(1);
@@ -60,6 +62,23 @@ function freshSeed() {
     return buf[0];
   }
   return Math.floor(Math.random() * 0xffffffff) >>> 0;
+}
+
+// Keep one unique landscape per browser tab session so navigating between
+// pages (or switching theme/language) never causes the dunes to jump.
+function sessionSeed() {
+  try {
+    const saved = window.sessionStorage.getItem(SEED_KEY);
+    if (saved !== null) {
+      const parsed = Number.parseInt(saved, 10);
+      if (Number.isFinite(parsed)) return parsed >>> 0;
+    }
+    const seed = freshSeed();
+    window.sessionStorage.setItem(SEED_KEY, String(seed));
+    return seed;
+  } catch (_) {
+    return freshSeed();
+  }
 }
 
 function hash2(ix, iy, salt) {
@@ -374,7 +393,7 @@ const canvas = document.querySelector("canvas[data-dunes]");
 if (canvas) {
   const root = document.documentElement;
   const ctx = canvas.getContext("2d", { alpha: true });
-  const scene = createScene(freshSeed());
+  const scene = createScene(sessionSeed());
 
   let width = 0;
   let height = 0;
@@ -431,7 +450,9 @@ if (canvas) {
     ctx.clearRect(0, 0, width, height);
     ctx.drawImage(baked.canvas, 0, 0);
 
-    const t = now * 0.001;
+    // Wall-clock seconds keep wind motes, star twinkle, and sand glints
+    // continuous across page navigations instead of resetting to frame 0.
+    const t = (Date.now() % 86400000) * 0.001;
 
     // 1. Sky & surface highlights:
     //    - Dark mode: twinkling pixel stars in the clear night sky.
