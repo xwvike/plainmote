@@ -150,7 +150,16 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html.js-ready .nojs-btn { display: none !important; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 400 14px/1.55 var(--sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body { position: relative; margin: 0; background: var(--bg); color: var(--ink); font: 400 14px/1.55 var(--sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+/* Ordered Bayer-dithered sand dunes anchored at the top and dissolving into
+   the mid-page canvas. Fades out smoothly via --dunes-fade as the page scrolls
+   upward so reading and editing stay completely calm. */
+.dunes-bg {
+  position: absolute; top: 0; left: 0; width: 100%; height: min(640px, 74vh);
+  z-index: 0; pointer-events: none; display: block;
+  opacity: calc(1 - var(--dunes-fade, 0));
+  image-rendering: pixelated; image-rendering: crisp-edges;
+}
 h1, h2, h3, p, dl, dd { margin: 0; }
 a { color: var(--accent); text-decoration: none; transition: color .14s; }
 a:hover { color: var(--accent-d); text-decoration: underline; text-underline-offset: 3px; }
@@ -161,11 +170,11 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
   .st.soon > i { animation: none; }
 }
 
-/* Quiet translucent topbar with pure typographic navigation. */
+/* Quiet frosted-glass topbar with pure typographic navigation. */
 .top {
   position: sticky; top: 0; z-index: 20; height: 50px;
-  background: color-mix(in oklab, var(--bg) 86%, transparent);
-  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  background: color-mix(in oklab, var(--bg) 78%, transparent);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line);
 }
 .topin { display: flex; align-items: center; gap: 22px; min-width: 0; height: 49px; width: var(--col); margin: 0 auto; }
@@ -206,7 +215,7 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 .lang-cell + .lang-cell { border-left: 0; }
 .lang-cell:hover { color: var(--ink); text-decoration: none; }
 .lang-cell.on { background: var(--panel); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-xs); }
-.signin-language { position: fixed; top: 18px; right: 20px; display: flex; align-items: center; gap: 10px; }
+.signin-language { position: fixed; top: 18px; right: 20px; z-index: 10; display: flex; align-items: center; gap: 10px; }
 
 /* Theme & Master-key controls. */
 .theme-switch { display: inline-flex; }
@@ -241,7 +250,7 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
 :root[data-theme="dark"] .theme-to-light { display: grid !important; }
 
 /* Page rhythm & typography. */
-.page { width: var(--col); margin: 0 auto; padding: 30px 0 60px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; }
+.page { position: relative; z-index: 1; width: var(--col); margin: 0 auto; padding: 30px 0 60px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; }
 .resource-detail { --edh: clamp(270px, calc(100vh - 430px), 620px); }
 .resource-detail:has([data-share-panel] .shl > li:only-child) { --edh: clamp(270px, calc(100vh - 436px), 620px); }
 .resource-detail:not(:has([data-share-panel] .shl > li)) { --edh: clamp(270px, calc(100vh - 446px), 620px); }
@@ -877,7 +886,7 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .lg .exp .kv { align-content: start; }
 
 /* Sign-in card. */
-.signin { display: grid; place-items: center; min-height: 100vh; padding: 24px; }
+.signin { position: relative; z-index: 1; display: grid; place-items: center; min-height: 100vh; padding: 24px; }
 .signin-card { width: 372px; max-width: 100%; padding: 32px 28px 26px; display: grid; justify-items: center; text-align: center; box-shadow: var(--shadow-sheet); }
 .signin-mark { width: 64px; height: 64px; }
 .signin-name { margin-top: 14px; font-size: 21px; font-weight: 700; letter-spacing: -0.025em; }
@@ -946,7 +955,7 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 .doc .doc-items { list-style: none; padding-left: 0; }
 .doc-meta { font: 400 11.5px var(--mono); color: var(--ink3); }
 .doc-lede { font-size: 15.5px; color: var(--ink2); }
-.foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; width: var(--col); margin: 0 auto; padding: 18px 0 36px; border-top: 1px solid var(--line); }
+.foot { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; width: var(--col); margin: 0 auto; padding: 18px 0 36px; border-top: 1px solid var(--line); }
 .foot nav { display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .foot a, .foot-name { font-size: 12.5px; color: var(--ink3); }
 .foot-name { margin-left: auto; }

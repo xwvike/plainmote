@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="{{asset "style.css"}}">
   <script defer src="{{asset "time.js"}}"></script>
   <script type="module" src="{{asset "ui.js"}}"></script>
+  <script type="module" src="{{asset "dunes.js"}}"></script>
   {{if .SignedIn}}<meta name="plainmote-user" content="{{.User.ID}}">{{end}}
   <script type="module" src="{{asset "lock.js"}}"></script>
   <noscript><link rel="stylesheet" href="{{asset "noscript.css"}}"></noscript>
@@ -60,7 +61,9 @@
   <a class="lang-cell{{if eq .Locale "en"}} on{{end}}" href="{{.Language.EnglishURL}}" lang="en"{{if eq .Locale "en"}} aria-current="true"{{end}}>EN</a>
 </nav>{{end}}{{end}}
 
-{{define "topbar"}}<div class="top"><div class="topin">
+{{define "dunes"}}<canvas class="dunes-bg" aria-hidden="true" data-dunes></canvas>{{end}}
+
+{{define "topbar"}}{{template "dunes"}}<div class="top"><div class="topin">
     <span class="brand"><a href="{{.LocalePrefix}}/">{{template "mark"}}<b>PlainMote</b></a></span>
     <nav class="nav">
       {{if .Anonymous}}<a href="{{.LocalePrefix}}/"{{if eq .Active "home"}} class="on" aria-current="page"{{end}}>{{tr .Locale "nav_quick_share"}}</a>{{end}}
