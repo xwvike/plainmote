@@ -38,7 +38,7 @@ const (
 	// The name an encrypted resource is listed under: its own name is
 	// inside the ciphertext.
 	mcpEncryptedName = "Encrypted resource"
-	mcpEncryptedText = "This resource is end-to-end encrypted. It can only be decrypted in the browser or in PlainMote CLI, not through this server."
+	mcpEncryptedText = "This resource is end-to-end encrypted. It can only be decrypted in the browser, not through this server."
 )
 
 type mcpTool struct {

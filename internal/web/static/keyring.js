@@ -7,7 +7,7 @@ import { put, get, lock, setLockMinutes } from "./vault.js";
 
 const section = document.querySelector("[data-keyring]");
 const body = document.body.dataset;
-const csrf = document.querySelector('input[name="csrf"]')?.value || "";
+const csrf = document.querySelector('meta[name="plainmote-csrf"]')?.content || document.querySelector('input[name="csrf"]')?.value || "";
 
 function message(name) {
   return body[`msgKeyring${name}`] || "";

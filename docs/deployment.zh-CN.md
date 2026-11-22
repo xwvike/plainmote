@@ -168,7 +168,6 @@ Google 登录是可选的，可以和 GitHub 同时用，也可以单独用。�
 | `PLAINMOTE_ADMIN_KEYS` | 空 | 允许调用管理接口的 Ed25519 公钥，Base64，逗号分隔；不设置则没有管理接口 |
 | `PLAINMOTE_ADMIN_ORIGINS` | 空 | 允许在浏览器中跨站调用管理接口的管理页面来源，逗号分隔 |
 | `PLAINMOTE_INDEXNOW_KEY` | 空 | [IndexNow](https://www.indexnow.org) 密钥，8 至 128 位字母、数字或连字符（`openssl rand -hex 16`）；设置后在 `/<key>.txt` 提供密钥文件，服务每次启动时把公开页面提交给 Bing 等支持 IndexNow 的搜索引擎 |
-| `PLAINMOTE_CLI_DIR` | `/cli` | `/cli` 下提供的命令行文件所在目录；镜像已包含这些文件 |
 
 ### 密钥与页面
 
@@ -230,7 +229,7 @@ PlainMote 只提供 HTTP，不处理 TLS。用 Cloudflare Tunnel 接入 Cloudfla
 在 Cloudflare 中还要：
 
 1. 对 `/paste` 开头的路径（包括 `/paste/encrypted`）设置写入限流。开放匿名分享时必须设置。
-2. 对 `/api/v1/device/`、`/oauth/register`、`/oauth/token` 和 `/mcp` 设置限流。服务自身已按 IP 限流（IPv6 按 /64 计），`/mcp` 还按授权限流；入口层限流可以在流量到达服务之前拦下。
+2. 对 `/api/v1/`、`/oauth/register`、`/oauth/token` 和 `/mcp` 设置限流。服务自身已按 IP（IPv6 按 /64 计）及令牌/授权限流；入口层限流可以在流量到达服务之前拦下。
 3. 按需对 `/d/*` 设置访问限流，但不要启用 `Cache Everything`。
 4. 保留服务发出的 `Cache-Control: no-store`，避免边缘缓存绕过撤销和次数限制。
 5. 不要再把容器端口直接暴露到公网，否则会出现一个绕过 Tunnel 和限流的入口。
@@ -247,8 +246,6 @@ curl --fail --silent --show-error http://127.0.0.1:8964/healthz
 ```
 
 查看启动日志，再实际登录、读取一份资源、打开一个分享链接。回滚时把 `PLAINMOTE_IMAGE` 改回之前的版本或摘要，执行同样的命令。
-
-新版本上线后，`/cli` 提供的就是新版本的命令行，用户重新执行安装命令即可升级，已有的登录不受影响。
 
 schema 目前不保证向后兼容。新版本写入了旧版本不认识的数据时，只换回旧镜像并不算完整回滚，所以每次发布前都要备份 PostgreSQL。存放在 S3/R2 的内容也应开启服务商的版本控制或备份。
 

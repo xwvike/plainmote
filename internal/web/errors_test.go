@@ -13,7 +13,7 @@ import (
 
 // TestOnlyRefusalsReachThePerson sends an error nobody marked - what a lost
 // database connection looks like - through each of the three ways a failure
-// is answered: a page, the command line's API and the admin interface. None
+// is answered: a page, the HTTP API and the admin interface. None
 // of them may repeat its text; each says the service failed. A refusal about
 // the request itself still comes through in full.
 func TestOnlyRefusalsReachThePerson(t *testing.T) {

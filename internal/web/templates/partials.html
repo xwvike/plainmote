@@ -11,7 +11,7 @@
   <script defer src="{{asset "time.js"}}"></script>
   <script type="module" src="{{asset "ui.js"}}"></script>
   <script type="module" src="{{asset "dunes.js"}}"></script>
-  {{if .SignedIn}}<meta name="plainmote-user" content="{{.User.ID}}">{{end}}
+  {{if .SignedIn}}<meta name="plainmote-user" content="{{.User.ID}}">{{if .CSRF}}<meta name="plainmote-csrf" content="{{.CSRF}}">{{end}}{{end}}
   <script type="module" src="{{asset "lock.js"}}"></script>
   <noscript><link rel="stylesheet" href="{{asset "noscript.css"}}"></noscript>
   {{/* Sizes in multiples of 48, which is what a search result will take as

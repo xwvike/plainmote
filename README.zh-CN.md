@@ -95,17 +95,16 @@ node tools/e2ee/e2ee_test.mjs
 npm --prefix tools/codemirror test
 ```
 
-装有 Node.js 时，`go test` 还会运行浏览器端的加密、对比与导出模块，并校验命令行与浏览器能互相解密；没有则跳过这些测试。编辑器的依赖以 bundle 形式随仓库提交，运行时不从 CDN 加载；重建执行 `tools/codemirror/build.sh`，常规构建不需要 Node.js。
+装有 Node.js 时，`go test` 还会运行浏览器端的加密、对比与导出模块测试；没有则跳过这些测试。编辑器的依赖以 bundle 形式随仓库提交，运行时不从 CDN 加载；重建执行 `tools/codemirror/build.sh`，常规构建不需要 Node.js。
 
 ```text
 cmd/plainmote/       服务入口
 cmd/plainmote-admin/ 管理密钥生成与请求签名工具
-cmd/plainmote-cli/   plainmote 命令行
 internal/app/        服务组装与 HTTP 生命周期
 internal/auth/       GitHub OAuth 与 Google OpenID Connect
 internal/blob/       S3 兼容对象存储
 internal/config/     环境变量解析与校验
-internal/linediff/   版本页面与命令行共用的行级差异比较
+internal/linediff/   版本页面与 MCP 共用的行级差异比较
 internal/store/      PostgreSQL schema 与业务约束
 internal/upstream/   从公网地址读取 MCP 客户端元数据文档
 internal/web/        路由、页面、静态资源与公开分发

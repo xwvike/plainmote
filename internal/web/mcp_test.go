@@ -148,7 +148,7 @@ func TestMCPAcceptsOnlyItsOwnAccessTokens(t *testing.T) {
 	tokens := mcpToken(t, db, alice, "read", testMCPResource)
 	elsewhere := mcpToken(t, db, alice, "read", "https://other.test/mcp")
 	for name, token := range map[string]string{
-		"a command-line token":           cli,
+		"an API token":                   cli,
 		"a refresh token":                tokens.RefreshToken,
 		"a token for another server":     elsewhere.AccessToken,
 		"an access token with a char on": tokens.AccessToken + "x",
@@ -164,7 +164,7 @@ func TestMCPAcceptsOnlyItsOwnAccessTokens(t *testing.T) {
 	if response, answer := list.send(app); response.Code != http.StatusOK || len(answer["result"].(map[string]any)["tools"].([]any)) != len(mcpTools) {
 		t.Fatalf("a good token: %d %s", response.Code, response.Body)
 	}
-	// The MCP token is no key to the command line's API either.
+	// The MCP token is no key to the HTTP API either.
 	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/api/v1/me", nil)
 	request.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
 	recorder := httptest.NewRecorder()

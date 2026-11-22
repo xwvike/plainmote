@@ -296,7 +296,7 @@ func (a *App) mcpChallenge(w http.ResponseWriter, r *http.Request, invalid bool,
 }
 
 // mcpUser authenticates a request by its access token, which must have been
-// issued for this endpoint. A command-line token is not one.
+// issued for this endpoint. An HTTP API token is not one.
 func (a *App) mcpUser(w http.ResponseWriter, r *http.Request) (User, store.OAuthAccess, bool) {
 	now := time.Now().UTC()
 	ip := a.clientIP(r)
@@ -431,4 +431,4 @@ const mcpInstructions = "PlainMote keeps this account's resources - configuratio
 	"version you read as base_version; update_resource saves a whole new text the same way, and create_resource makes a new one. " +
 	"delete_resource moves a non-encrypted resource or quick share to the trash and revokes its share links (kept 30 days for the owner to restore or permanently delete on the web; MCP cannot access the trash): call it only when the user asks to delete it. " +
 	"share_resource makes a public link that anyone with the address can open: make one only when the user asks for it. " +
-	"End-to-end encrypted resources appear only as placeholders: they can be decrypted in the browser or in PlainMote CLI, never through this server, and cannot be deleted through this server. Never ask the user for their master password."
+	"End-to-end encrypted resources appear only as placeholders: they can be decrypted in the browser, never through this server, and cannot be deleted through this server. Never ask the user for their master password."

@@ -168,7 +168,6 @@ Optional:
 | `PLAINMOTE_ADMIN_KEYS` | empty | Ed25519 public keys allowed to call the admin API, Base64, comma-separated; without them the API does not exist |
 | `PLAINMOTE_ADMIN_ORIGINS` | empty | Browser origins of admin pages allowed to call the admin API, comma-separated |
 | `PLAINMOTE_INDEXNOW_KEY` | empty | [IndexNow](https://www.indexnow.org) key, 8 to 128 letters, digits or dashes (`openssl rand -hex 16`); when set, the key is served at `/<key>.txt` and the public pages are submitted to Bing and other IndexNow search engines each time the service starts |
-| `PLAINMOTE_CLI_DIR` | `/cli` | Directory of the command line builds offered at `/cli`; the image includes them |
 
 ### Keys and pages
 
@@ -230,7 +229,7 @@ List in `PLAINMOTE_TRUSTED_PROXIES` only the proxies that connect to the service
 In Cloudflare, also:
 
 1. Rate-limit writes to paths beginning with `/paste` (including `/paste/encrypted`). This is required when anonymous sharing is on.
-2. Rate-limit `/api/v1/device/`, `/oauth/register`, `/oauth/token` and `/mcp`. The service already limits these per IP (an IPv6 client by its /64), and `/mcp` also per authorization; a limit at the entry point stops the traffic before it reaches the service.
+2. Rate-limit `/api/v1/`, `/oauth/register`, `/oauth/token` and `/mcp`. The service already limits these per IP (an IPv6 client by its /64) and per token/authorization; a limit at the entry point stops the traffic before it reaches the service.
 3. Rate-limit `/d/*` if needed, but never enable `Cache Everything`.
 4. Keep the `Cache-Control: no-store` the service sends, so that no edge cache can bypass revocations and use limits.
 5. Do not also publish the container port to the internet; that would be an entry point around the tunnel and the rate limits.
@@ -247,8 +246,6 @@ curl --fail --silent --show-error http://127.0.0.1:8964/healthz
 ```
 
 Check the startup log, then sign in, read a resource and open a share link. To roll back, set `PLAINMOTE_IMAGE` back to the previous release or digest and run the same commands.
-
-Once a new version is deployed, `/cli` serves the new command line; users upgrade by running the install command again, and existing sign-ins are kept.
 
 The schema carries no backward compatibility guarantee yet. Once the new version has written data the old one cannot read, switching back to the old image is not a complete rollback, so back up PostgreSQL before every release. Content in S3/R2 should be covered by the provider's versioning or backups.
 

@@ -114,7 +114,9 @@ func TestKeyringOnTheAccountPage(t *testing.T) {
 	client := newVersionClient(t, db, user)
 	page := client.do(http.MethodGet, accountSecurityPath, nil).Body.String()
 	if !strings.Contains(page, `data-keyring-open="setup" disabled`) || !strings.Contains(page, `data-keyring-dialog="setup"`) ||
-		!strings.Contains(page, `<meta name="plainmote-user" content="`+user.ID+`">`) || !strings.Contains(page, assetPath("keyring.js")) {
+		!strings.Contains(page, `<meta name="plainmote-user" content="`+user.ID+`">`) ||
+		!strings.Contains(page, `<meta name="plainmote-csrf" content="`+client.csrf+`">`) ||
+		!strings.Contains(page, assetPath("keyring.js")) {
 		t.Fatal("the account page without a master password")
 	}
 	if _, err := db.CreateKeyring(context.Background(), user.ID, store.Keyring{
@@ -130,8 +132,8 @@ func TestKeyringOnTheAccountPage(t *testing.T) {
 		}
 	}
 	signedOut := httptestRequest(client.app, http.MethodGet, "/", nil, nil).Body.String()
-	if strings.Contains(signedOut, "plainmote-user") || !strings.Contains(signedOut, assetPath("lock.js")) {
-		t.Fatal("a signed-out page must load lock.js and name no user")
+	if strings.Contains(signedOut, "plainmote-user") || strings.Contains(signedOut, "plainmote-csrf") || !strings.Contains(signedOut, assetPath("lock.js")) {
+		t.Fatal("a signed-out page must load lock.js and name no user or csrf")
 	}
 }
 

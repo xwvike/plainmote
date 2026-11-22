@@ -95,17 +95,16 @@ node tools/e2ee/e2ee_test.mjs
 npm --prefix tools/codemirror test
 ```
 
-With Node.js installed, `go test` also runs the browser's encryption, comparison and export modules and checks that the command line and the browser read each other's encrypted content; without it those tests are skipped. The editor's dependencies are committed as a bundle and never loaded from a CDN; rebuild it with `tools/codemirror/build.sh`. Regular builds do not need Node.js.
+With Node.js installed, `go test` also runs the browser's encryption, comparison and export modules; without it those tests are skipped. The editor's dependencies are committed as a bundle and never loaded from a CDN; rebuild it with `tools/codemirror/build.sh`. Regular builds do not need Node.js.
 
 ```text
 cmd/plainmote/       service entry point
 cmd/plainmote-admin/ admin key generation and request signing
-cmd/plainmote-cli/   the plainmote command line
 internal/app/        service assembly and HTTP lifecycle
 internal/auth/       GitHub OAuth and Google OpenID Connect
 internal/blob/       S3-compatible object storage
 internal/config/     environment parsing and validation
-internal/linediff/   line diff for version pages and the command line
+internal/linediff/   line diff for version pages and MCP
 internal/store/      PostgreSQL schema and business rules
 internal/upstream/   fetching MCP client metadata documents from public addresses
 internal/web/        routes, pages, static assets and public delivery

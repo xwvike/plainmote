@@ -31,8 +31,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # The version is stamped into the service and the command line, and the
-      # install scripts carry it, so it is held to what they accept.
+      # The version is stamped into the service and image tags.
       - id: version
         run: |
           commit="$(git rev-parse --short=12 HEAD)"

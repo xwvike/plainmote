@@ -1134,7 +1134,7 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
   .doc-field input.doc-name, .doc-field input.doc-file, .quick-file input[type="text"] { width: 140px; }
 }
 
-/* Device & OAuth pages. */
+/* OAuth consent page. */
 .device-page { justify-items: center; padding-top: 36px; }
 .device-card { width: 430px; max-width: 100%; padding: 28px 26px 24px; display: grid; justify-items: center; text-align: center; box-shadow: var(--shadow-sheet); }
 .device-card .rule { width: 100%; margin: 18px 0; background: var(--line); border-top: 0; }
@@ -1143,16 +1143,12 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 .device-card .scope { width: 100%; text-align: left; display: grid; gap: 5px; font-size: 12.5px; color: var(--ink2); }
 .device-card .scope b { color: var(--ink); font-weight: 600; }
 .device-card .scope ul { margin: 0 0 6px; padding-left: 18px; display: grid; gap: 3px; }
-.device-code { display: grid; gap: 12px; width: 100%; text-align: left; }
-.device-code input { height: 44px; text-align: center; font: 500 18px var(--mono); letter-spacing: .18em; text-transform: uppercase; }
-.device-code button { height: 34px; }
 .device-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-top: 16px; }
 .device-acts button { height: 34px; }
 .device-note { margin-top: 12px; }
 .oauth-form { display: grid; width: 100%; }
 .oauth-form .scope ul { margin-top: 2px; }
 .oauth-warn { width: 100%; margin-top: 12px; text-align: left; border-color: color-mix(in oklab, var(--warn) 30%, transparent); background: color-mix(in oklab, var(--warn) 9%, var(--panel)); color: var(--ink2); }
-.big-code { margin-top: 4px; font: 500 22px var(--mono); letter-spacing: .14em; color: var(--ink); }
 
 /* Devices, MCP Apps, Trash lists. */
 .dev-sheet { padding: 0; gap: 0; overflow: hidden; }
@@ -1236,8 +1232,6 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 .more-body .points { margin-top: 8px; }
 .first-run { justify-items: start; gap: 10px; padding: 24px 20px; }
 .first-run > b { font-size: 14px; font-weight: 600; }
-.first-run .cli-edit { padding: 2px 0; }
-.first-run .cli-edit .txt { margin-left: 0; }
 ol.steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin: 0; padding: 0; list-style: none; counter-reset: step; font-size: 13px; }
 ol.steps > li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; counter-increment: step; }
 ol.steps > li > p { color: var(--ink2); }
@@ -1253,24 +1247,13 @@ ol.steps > li > p::before { content: counter(step) "."; display: inline-block; m
   .idl-info { grid-row: 2; grid-column: 2 / -1; }
 }
 
-/* Install & CLI blocks. */
+/* Terminal & code snippet blocks. */
 .inst h3 { font-size: 12.5px; font-weight: 600; color: var(--ink2); }
 .term-block { display: block; padding: 11px 14px; overflow-x: auto; border: 1px solid var(--term-line); border-radius: var(--r); background: var(--term); color: var(--term-ink); font: 400 12px/1.75 var(--mono); white-space: pre; }
 .term-block b { font-weight: 400; color: var(--sand-l); }
-.inst-more { display: grid; gap: 10px; margin-top: 12px; }
-.inst-more h3:not(:first-child) { margin-top: 6px; }
-.dl { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); overflow: hidden; }
-.dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 13px; }
-.dl > div:first-child { border-top: 0; }
-.dl > div > span { font: 400 11.5px var(--mono); color: var(--ink3); }
-.cmds { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 18px; font-size: 13px; }
-.cmds dt { font: 500 12px var(--mono); color: var(--ink); }
-.cmds dd { color: var(--ink2); }
 @media (max-width: 760px) {
   .dev-list > .hd { display: none; }
   .dev-list > div, .dev-list.apps > div, .dev-list.trash > div { grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; }
   .dev-list .tm { grid-column: 1; }
   .dev-list .act { grid-column: 2; grid-row: 1; }
-  .cmds { grid-template-columns: minmax(0, 1fr); }
-  .cmds dd { margin-bottom: 6px; }
 }

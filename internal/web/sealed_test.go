@@ -224,7 +224,7 @@ func TestSealAndUnsealThroughThePage(t *testing.T) {
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
-// The command line's side of encryption: the keyring as it is kept, and
+// The API side of encryption: the keyring as it is kept, and
 // encrypted resources created, listed, read and saved as ciphertext - each
 // account's own, and only with a write token for what writes.
 func TestSealedResourcesThroughTheAPI(t *testing.T) {

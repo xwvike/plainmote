@@ -27,8 +27,8 @@ The interface has the following limits:
 
 | Operation | What users see |
 | --- | --- |
-| Suspend an account | All of the account's sign-in sessions and command line sign-ins end immediately, and the sign-in page shows the reason on the next attempt; all of its share links stop delivering. No data is deleted |
-| Unsuspend an account | The account can sign in again; share links resume with their original expiry and use limits; command lines must sign in again |
+| Suspend an account | All of the account's sign-in sessions, API tokens and MCP grants end immediately, and the sign-in page shows the reason on the next attempt; all of its share links stop delivering. No data is deleted |
+| Unsuspend an account | The account can sign in again; share links resume with their original expiry and use limits; API tokens and MCP apps must be created or authorized again |
 | Take down a resource | All of the resource's share links stop delivering; the owner sees the reason on the resource page, the resource list shows it as taken down, and the owner can no longer create share links for it or copy its earlier versions into new resources, but can still edit or delete it. A quick share made without signing in has no owner to notify and is deleted instead; a signed-in user's quick share is treated as a resource |
 | Restore a resource | Share links resume with their original expiry and use limits |
 | Delete a resource | The same as deletion by the owner: content, earlier versions and share links are deleted; access history is kept |

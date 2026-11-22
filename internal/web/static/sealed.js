@@ -11,7 +11,7 @@ import { toBase64URL, fromBase64URL } from "./e2ee.js";
 import { accountKey, unlock, WrongPassword, NoStorage } from "./unlock.js";
 import { textLike, textType, readsAsText, fileType } from "./upload.js";
 
-const csrf = document.querySelector('input[name="csrf"]')?.value || "";
+const csrf = document.querySelector('meta[name="plainmote-csrf"]')?.content || document.querySelector('input[name="csrf"]')?.value || "";
 const encoder = new TextEncoder();
 const sealedRoot = document.querySelector("[data-sealed]");
 const toggle = document.querySelector("[data-seal-switch]");

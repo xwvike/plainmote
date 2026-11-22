@@ -6,7 +6,7 @@ PlainMote can encrypt content in the browser so that the service stores only cip
 
 Early encrypted quick shares used the `PMe1` format, with the key only in the link or derived from a code, independent of the master password. They are delivered until they expire; none are made any more.
 
-Encrypted resources can be viewed, edited, shared and exported in the browser. Quick shares made on the home page with its encryption switch on, or with `plainmote share --encrypt`, are encrypted resources too. The command line reads, edits, lists and creates them, asking for the master password each time or reading it from `PLAINMOTE_MASTER_PASSWORD`; it does not keep the account key.
+Encrypted resources can be viewed, edited, shared and exported in the browser. Quick shares made on the home page with its encryption switch on are encrypted resources too.
 
 ## Goals
 
@@ -40,7 +40,7 @@ AK ─ wraps ─▶ LK (so the owner can show the full link again)
 
 ## Algorithms
 
-All cryptography is done by WebCrypto in the browser, with no third-party library. The command line implements the same formats with the Go standard library.
+All cryptography is done by WebCrypto in the browser, with no third-party library.
 
 - **Key derivation**: PBKDF2-HMAC-SHA-256, 600,000 iterations, 16-byte random salt. The algorithm name and the iteration count are stored with the keyring, so the count can be raised without breaking existing keyrings. The password is normalised to Unicode NFC before derivation.
 - **Encryption and wrapping**: AES-256-GCM with a fresh random 96-bit IV each time. A wrapped key is `IV (12) | ciphertext (32) | tag (16)`, 60 bytes.
@@ -83,7 +83,7 @@ All cryptography is done by WebCrypto in the browser, with no third-party librar
 - **Links opened by a code**: instead of a key in the address, a link can be opened by a four-character code from 31 letters and digits that cannot be mistaken for one another, read in either case. The browser derives the link's key from the code in upper case with PBKDF2-HMAC-SHA-256, 600,000 iterations and a 16-byte random salt; the link stores the salt followed by CK wrapped by that key - 76 bytes, where CK wrapped by a random LK is 60 - and the code itself wrapped by AK, so the owner can see it again. WebCrypto wraps only keys, so the code is wrapped as raw key material: `IV (12) | the code's bytes encrypted | tag (16)`, 32 bytes. A recipient's page tells the two kinds apart by that length and asks for the code; a wrong code fails as a wrong key does. The owner switches a link between a key and a code, or to a new code, on the link itself: the browser makes the link's keys again and the service replaces them, keeping the address. Whatever opened the link before - the full address or the old code - no longer does.
 - Revoking a link deletes it together with its wrapped CK. Anyone who already opened the link may have kept the content.
 - **What a link delivers**: `PMs1`, then the resource ID, CK wrapped by the link's LK and the encrypted metadata, each after a two-byte big-endian length, then the encrypted content. A browser opening the link first receives the decryption page, which costs no use; the page fetches this, which counts as one. Programs receive it as it is.
-- **Quick shares**: an encrypted quick share is an encrypted resource that ends with its one link. The browser - or the command line - generates the resource's ID, the link's ID, CK and the link's key (or a code), and sends the encrypted content and metadata with CK wrapped by AK and by the link's key, and the link's key or code wrapped by AK, in one request. The service stores them as a quick share: read only until kept, deleted with its link, counting toward the account's storage. Its owner, once unlocked, can open it, show its link or code again, and keep it as an encrypted resource whose link keeps its term. The home page offers the switch only with a master password, and starts it the way the last quick share from it was sent.
+- **Quick shares**: an encrypted quick share is an encrypted resource that ends with its one link. The browser generates the resource's ID, the link's ID, CK and the link's key (or a code), and sends the encrypted content and metadata with CK wrapped by AK and by the link's key, and the link's key or code wrapped by AK, in one request. The service stores them as a quick share: read only until kept, deleted with its link, counting toward the account's storage. Its owner, once unlocked, can open it, show its link or code again, and keep it as an encrypted resource whose link keeps its term. The home page offers the switch only with a master password, and starts it the way the last quick share from it was sent.
 - **Export**: the service's archive holds each encrypted content as `content.sealed`, with `sealed.json` listing every encrypted resource's wrapped CK and encrypted metadata and the account's keyring. On the settings' Data page, once unlocked, the browser decrypts that archive and saves it with the plaintext under the names it really has; locked, the archive is saved as it is.
 
 ## What the service stores
@@ -115,7 +115,7 @@ Not protected against:
 
 ## Limits
 
-- Encrypted resources can be decrypted only in a browser or the PlainMote command line; programs that read a share link directly receive ciphertext. Configuration meant to be read by programs should not be encrypted.
+- Encrypted resources can be decrypted only in a browser; programs that read a share link directly receive ciphertext. Configuration meant to be read by programs should not be encrypted.
 - Encrypted text is stored as UTF-8.
 - The operator cannot see encrypted content; abuse reports can be handled only from metadata or by taking content down.
 - Turning encryption on replaces a resource's plaintext, earlier versions included, but plaintext in database and storage backups remains until those backups expire.

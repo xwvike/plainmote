@@ -9,7 +9,7 @@ import { accountKey, unlock, WrongPassword, NoStorage } from "./unlock.js";
 
 const page = document.querySelector("[data-sealed-page]");
 const msg = (name) => page?.dataset[name] || "";
-const csrf = document.querySelector('input[name="csrf"]')?.value || "";
+const csrf = document.querySelector('meta[name="plainmote-csrf"]')?.content || document.querySelector('input[name="csrf"]')?.value || "";
 const id = page?.dataset.resource || "";
 
 function textLike(type) {

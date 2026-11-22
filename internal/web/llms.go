@@ -12,8 +12,7 @@ import (
 // handleLLMs serves /llms.txt: the service described for a language model, in
 // the llmstxt.org shape - a title, a one-line summary, then sections. It says
 // only what this deployment offers: no quick share section where the box is
-// off, no command line where the image carries no builds, no page links where
-// the pages do not exist, and nothing at all where neither does.
+// off, no page links where the pages do not exist, and nothing at all where neither does.
 func (a *App) handleLLMs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")

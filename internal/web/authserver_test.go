@@ -209,7 +209,7 @@ func TestMCPAuthorization(t *testing.T) {
 	if err != nil || user.ID != alice.ID || granted.Resource != testMCPResource || !granted.Has(store.OAuthScopeShare) {
 		t.Fatalf("the access token reads as %+v %+v %v", user, granted, err)
 	}
-	// Not a token for the command line's interface.
+	// Not a token for the HTTP API.
 	request := httptest.NewRequest(http.MethodGet, "https://cfg.test/api/v1/me", nil)
 	request.Header.Set("Authorization", "Bearer "+access)
 	apiResponse := httptest.NewRecorder()
