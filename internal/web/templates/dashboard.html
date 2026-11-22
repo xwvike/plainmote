@@ -110,11 +110,11 @@
         <tbody>
           {{range .Resources}}
           <tr>
-            <td class="trunc"><a href="/resources/{{.ID}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</a></td>
-            <td><span class="fl"><span class="mono trunc" title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}{{with .Tags}}<span class="row-lbls" title="{{join . " · "}}">{{range .}}<a class="lbl sm" href="/resources/?tag={{.}}">{{.}}</a>{{end}}</span>{{end}}</span></td>
+            <td class="trunc"><a href="/resources/{{.ID}}" data-marquee{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</a></td>
+            <td><span class="fl"><span class="mono trunc" data-marquee title="{{.Filename}}"{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}<span class="mut">—</span>{{end}}</span>{{if .QuickShare}}<span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}{{if .Encrypted}}<span class="tag">{{tr $.Locale "encrypted"}}</span>{{else if .Sealed}}<span class="tag enc">{{tr $.Locale "encrypted"}}</span>{{end}}{{with .Tags}}<span class="row-lbls" data-marquee title="{{join . " · "}}">{{range .}}<a class="lbl sm" href="/resources/?tag={{.}}">{{.}}</a>{{end}}</span>{{end}}</span></td>
             <td>
               {{if or .Encrypted .Sealed}}<span class="mut">—</span>
-              {{else}}<span class="content-type mono trunc mut" title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
+              {{else}}<span class="content-type mono trunc mut" data-marquee title="{{.ContentType}}">{{.ContentType}}</span>{{end}}
             </td>
             <td>
               {{if .TakenDown}}<span class="st no"><i></i><span>{{tr $.Locale "taken_down"}}</span></span>

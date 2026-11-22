@@ -35,12 +35,12 @@
         <summary>
           <span class="tm">{{formatTime .OccurredAt}}</span>
           <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{outcomeText $.Locale .Outcome}}</span></span>
-          <span class="trunc" title="{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}"{{if and .ResourceID (not (or .ResourceName .ResourceFile))}} data-sealed-name="{{.ResourceID}}"{{end}}>{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}{{if .QuickShare}} <span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}</span>
-          <span class="trunc" title="{{or .LinkName (tr $.Locale "untitled_share")}}">{{or .LinkName (tr $.Locale "untitled_share")}}</span>
+          <span class="trunc" data-marquee title="{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}"{{if and .ResourceID (not (or .ResourceName .ResourceFile))}} data-sealed-name="{{.ResourceID}}"{{end}}>{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}{{if .QuickShare}} <span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}</span>
+          <span class="trunc" data-marquee title="{{or .LinkName (tr $.Locale "untitled_share")}}">{{or .LinkName (tr $.Locale "untitled_share")}}</span>
           {{/* Sand when the content has moved on since: this caller is behind. */}}
           <span class="vc{{if and .Version (ne .Version .CurrentVersion)}} old{{end}}">{{if .Version}}v{{.Version}}{{else}}<span class="mut">—</span>{{end}}</span>
-          <span class="mono">{{.RemoteIP}}</span>
-          {{if .Location.Country}}<span title="{{locationText $.Locale .Location}}">{{locationShort $.Locale .Location}}</span>{{else}}<span class="mut">—</span>{{end}}
+          <span class="mono" data-marquee>{{.RemoteIP}}</span>
+          {{if .Location.Country}}<span data-marquee title="{{locationText $.Locale .Location}}">{{locationShort $.Locale .Location}}</span>{{else}}<span class="mut">—</span>{{end}}
           <span class="mono">{{.Hits}}</span>
           <svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>
         </summary>

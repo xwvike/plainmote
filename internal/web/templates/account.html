@@ -109,7 +109,7 @@
           <li>
             <span class="idl-mark">{{template "provider-icon" .Provider}}</span>
             <span class="idl-name"><b>{{.Label}}</b>{{with .Identity}}<span class="st on"><i></i><span>{{tr $.Locale "identity_on"}}</span></span>{{else}}<span class="st off"><i></i><span>{{tr $.Locale "identity_none"}}</span></span>{{end}}</span>
-            <span class="idl-info">{{with .Identity}}<span>{{.Login}}</span><span class="mut">{{tr $.Locale "identity_linked_on"}} {{formatMinute .CreatedAt}}{{with .LastUsedAt}} · {{tr $.Locale "signin_last_used"}} {{formatMinute .}}{{end}}</span>{{end}}</span>
+            <span class="idl-info">{{with .Identity}}<span data-marquee>{{.Login}}</span><span class="mut" data-marquee>{{tr $.Locale "identity_linked_on"}} {{formatMinute .CreatedAt}}{{with .LastUsedAt}} · {{tr $.Locale "signin_last_used"}} {{formatMinute .}}{{end}}</span>{{end}}</span>
             <span class="idl-act">{{if or .CanLink .CanUnlink}}<form method="post" action="/account/identities" class="inline">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="provider" value="{{.Provider}}">
@@ -213,7 +213,7 @@
           <div class="dev-list apps">
             <div class="hd"><span>{{tr .Locale "mcp_app"}}</span><span>{{tr .Locale "mcp_authorized"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
             {{range .OAuthGrants}}
-            <div><span class="nm"><b>{{or .ClientName (tr $.Locale "oauth_unnamed")}}</b><span>{{grantSource $.Locale .}}</span></span><span class="tm">{{formatMinute .CreatedAt}}</span><span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm">{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account/devices?revoke_app={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
+            <div><span class="nm"><b data-marquee>{{or .ClientName (tr $.Locale "oauth_unnamed")}}</b><span data-marquee>{{grantSource $.Locale .}}</span></span><span class="tm" data-marquee>{{formatMinute .CreatedAt}}</span><span class="tm" data-marquee>{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm" data-marquee>{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account/devices?revoke_app={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
             {{end}}
           </div>
         </div>
@@ -239,11 +239,11 @@
             <div class="hd"><span>{{tr .Locale "token_name"}}</span><span>{{tr .Locale "cli_scope"}}</span><span>{{tr .Locale "token_created"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
             {{range .APITokens}}
             <div>
-              <span class="nm"><b>{{or .DeviceName (tr $.Locale "token_unnamed")}}</b>{{if or .DeviceOS .ClientVersion}}<span>{{.DeviceOS}}{{if .ClientVersion}} · {{.ClientVersion}}{{end}}</span>{{end}}</span>
+              <span class="nm"><b data-marquee>{{or .DeviceName (tr $.Locale "token_unnamed")}}</b>{{if or .DeviceOS .ClientVersion}}<span data-marquee>{{.DeviceOS}}{{if .ClientVersion}} · {{.ClientVersion}}{{end}}</span>{{end}}</span>
               <span><span class="tag">{{if .CanWrite}}{{tr $.Locale "cli_scope_write"}}{{else}}{{tr $.Locale "cli_scope_read"}}{{end}}</span></span>
-              <span class="tm">{{formatMinute .CreatedAt}}</span>
-              <span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span>
-              <span class="tm">{{with .ExpiresAt}}{{formatMinute .}}{{else}}{{tr $.Locale "token_ttl_never"}}{{end}}</span>
+              <span class="tm" data-marquee>{{formatMinute .CreatedAt}}</span>
+              <span class="tm" data-marquee>{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span>
+              <span class="tm" data-marquee>{{with .ExpiresAt}}{{formatMinute .}}{{else}}{{tr $.Locale "token_ttl_never"}}{{end}}</span>
               <span class="act"><a class="txt danger" href="/account/devices?revoke={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span>
             </div>
             {{end}}
@@ -323,8 +323,8 @@
             {{range .Resources}}
             <div>
               <span class="nm">
-                <b{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</b>
-                <span><span{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}—{{end}}</span>{{if .QuickShare}} · {{tr $.Locale "quick_share"}}{{end}}{{if or .Encrypted .Sealed}} · {{tr $.Locale "encrypted"}}{{end}}</span>
+                <b data-marquee{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</b>
+                <span data-marquee><span{{if .Sealed}} data-sealed-file="{{.ID}}"{{end}}>{{if .Filename}}{{.Filename}}{{else}}—{{end}}</span>{{if .QuickShare}} · {{tr $.Locale "quick_share"}}{{end}}{{if or .Encrypted .Sealed}} · {{tr $.Locale "encrypted"}}{{end}}</span>
               </span>
               <span class="tm">{{bytesText .ContentSize}}</span>
               <span class="tm">{{if .DeletedAt}}{{formatMinute .DeletedAt}}{{else}}—{{end}}</span>

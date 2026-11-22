@@ -546,6 +546,23 @@ td a:hover { color: var(--accent); text-decoration: none; }
 .mono { font: 400 11.5px var(--mono); }
 .num { font: 400 11.5px var(--mono); color: var(--ink3); text-align: right; font-variant-numeric: tabular-nums; }
 .trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-marquee] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+a[data-marquee] { display: block; max-width: 100%; }
+[data-marquee].mq-active { text-overflow: clip; }
+[data-marquee].mq-fade-r {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+}
+[data-marquee].mq-fade-l {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 14px);
+  mask-image: linear-gradient(to right, transparent, #000 14px);
+}
+[data-marquee].mq-fade-l.mq-fade-r {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+[data-marquee] > .mq-track { display: inline-block; white-space: nowrap; will-change: transform; }
+[data-marquee] > .mq-track.mq-track-flex { display: inline-flex; align-items: center; gap: inherit; }
 .mut { color: var(--ink3); }
 .empty { padding: 40px 20px; text-align: center; font-size: 13.5px; color: var(--ink3); }
 

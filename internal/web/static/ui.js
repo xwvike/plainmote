@@ -1,5 +1,7 @@
 // Progressive enhancement for modern, zero-click-friction list controls.
 // Without this module every form keeps its submit button and works identically.
+import "./marquee.js";
+
 document.documentElement.classList.add("js-ready");
 
 document.addEventListener("change", (event) => {
