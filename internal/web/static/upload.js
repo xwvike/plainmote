@@ -2,6 +2,7 @@
 // enough to load on every local-resource page: it owns filename suggestion,
 // size feedback and previews that do not need to read the file into JavaScript.
 // The editor subscribes only when a selected file may contain text.
+import { presignAndUpload, xhrSend, createUploadProgress, readCSRF, UPLOAD_JSON_HEADER } from "./direct-upload.js";
 
 const MEDIA_EXTENSIONS = {
   png: "image", jpg: "image", jpeg: "image", gif: "image", webp: "image",
@@ -27,7 +28,15 @@ const TEXT_EXTENSIONS = new Set([
   "json", "yaml", "yml", "toml", "xml", "csv",
 ]);
 
-const FILE_EXTENSIONS = new Set(["pdf", "zip", "gz"]);
+const FILE_EXTENSIONS = new Set([
+  "pdf", "zip", "gz", "tgz", "tar", "bz2", "xz", "zst", "7z", "rar",
+  "dmg", "pkg", "iso", "img", "exe", "msi", "dll", "deb", "rpm", "apk", "ipa", "wasm", "bin",
+  "doc", "docx", "xls", "xlsx", "ppt", "pptx", "epub", "odt", "ods", "odp",
+  "psd", "ai", "sketch", "fig", "heic", "heif", "tif", "tiff",
+  "mkv", "avi", "wmv", "flv", "m4v", "wma", "aiff",
+  "sqlite", "db", "parquet", "p12", "pfx", "der",
+  "woff", "woff2", "ttf", "otf", "eot",
+]);
 const UNSAFE_EXTENSIONS = new Set(["html", "htm", "js", "mjs", "cjs", "svg", "xhtml"]);
 const TEXT_TYPES = new Set([
   "application/json", "application/yaml", "application/toml", "application/xml",
@@ -80,9 +89,28 @@ export function textType(filename) {
   return `${extensionTypes[extension] || "text/plain"}; charset=utf-8`;
 }
 
-function isUTF8(bytes) {
+const TEXT_SNIFF_BYTES = 64 * 1024;
+
+function trimIncompleteUTF8(bytes, truncated) {
+  if (!truncated || bytes.length === 0) return bytes;
+  for (let i = 1; i <= 3 && i <= bytes.length; i++) {
+    const b = bytes[bytes.length - i];
+    if ((b & 0xc0) !== 0x80) {
+      const needed = (b & 0x80) === 0 ? 1 : (b & 0xe0) === 0xc0 ? 2 : (b & 0xf0) === 0xe0 ? 3 : 4;
+      if (i < needed) return bytes.subarray(0, bytes.length - i);
+      break;
+    }
+  }
+  return bytes;
+}
+
+function isUTF8(bytes, truncated = false) {
+  const sample = trimIncompleteUTF8(bytes, truncated);
+  for (let i = 0; i < sample.length; i++) {
+    if (sample[i] === 0) return false;
+  }
   try {
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    new TextDecoder("utf-8", { fatal: true }).decode(sample);
     return true;
   } catch {
     return false;
@@ -90,11 +118,15 @@ function isUTF8(bytes) {
 }
 
 // What a chosen file is, by the same reading classifyUpload gives it: text by
-// its name or type, or - for a file of no telling type - by whether it reads
-// as UTF-8; media as the browser types it; anything else a download.
+// its name or type, or - for a file of no telling type - by whether a 64 KiB
+// prefix reads as UTF-8; media as the browser types it; anything else a download.
 export async function readsAsText(file) {
   const kind = classifyUpload(file);
-  return kind === "text" || (kind === "unknown" && isUTF8(new Uint8Array(await file.arrayBuffer())));
+  if (kind === "text") return true;
+  if (kind !== "unknown") return false;
+  const truncated = file.size > TEXT_SNIFF_BYTES;
+  const slice = truncated ? file.slice(0, TEXT_SNIFF_BYTES) : file;
+  return isUTF8(new Uint8Array(await slice.arrayBuffer()), truncated);
 }
 
 export async function fileType(file) {
@@ -356,6 +388,102 @@ function enhanceUpload(input) {
   };
   controllers.set(input, controller);
   input.addEventListener("change", select);
+
+  // Enhance plain file submissions (/paste, /resources/new, /resources/{id})
+  // with direct-to-R2 presigned PUT (for files >= 256 KiB) and live XHR progress.
+  // E2EE / sealed forms call event.preventDefault() first and own their submit.
+  if (form && !form.hasAttribute("data-sealed-form")) {
+    form.addEventListener("submit", async (event) => {
+      if (event.defaultPrevented) return;
+      // Never intercept encrypted submissions: e2ee-share.js and sealed.js own them.
+      if (form.querySelector("[data-e2ee-switch] input:checked")) return;
+      if (document.querySelector("[data-seal-switch] input:checked")) return;
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const maxBytes = Number(input.dataset.maxBytes || 0);
+      if (maxBytes > 0 && file.size > maxBytes) {
+        event.preventDefault();
+        setStatus(message("msgUploadOversize", { size: sizeText(file.size), limit: sizeText(maxBytes) }));
+        return;
+      }
+      const actionAttr = form.getAttribute("action") || "";
+      let purpose = "";
+      let resourceID = "";
+      if (actionAttr === "/paste") {
+        purpose = "paste";
+      } else if (actionAttr === "/resources/new") {
+        purpose = "resource_create";
+      } else {
+        const match = /^\/resources\/([0-9a-f-]{36})$/i.exec(actionAttr);
+        if (match) {
+          purpose = "resource_save";
+          resourceID = match[1];
+        }
+      }
+      if (!purpose) return;
+
+      // Capture FormData before disabling buttons so editor.js's formdata listener
+      // runs first: if the user edited the loaded text in the editor, editor.js
+      // drops the file field and we let the normal text save proceed untouched.
+      const formData = new FormData(form, event.submitter || undefined);
+      const chosen = input.name ? formData.get(input.name) : file;
+      if (!(chosen instanceof File) || chosen.size === 0) return;
+
+      event.preventDefault();
+      const submitBtn = event.submitter instanceof HTMLButtonElement
+        ? event.submitter
+        : form.querySelector("button[type='submit']");
+      const buttons = [...form.querySelectorAll("button[type='submit'], button:not([type])")];
+      const ui = createUploadProgress(form, submitBtn);
+      const csrf = readCSRF(form);
+      for (const b of buttons) b.disabled = true;
+      setStatus("");
+
+      try {
+        const direct = await presignAndUpload({
+          purpose,
+          blob: chosen,
+          resourceID,
+          csrf,
+          onProgress: (p) => ui.setProgress(p),
+        });
+
+        let result;
+        if (direct) {
+          ui.setSaving();
+          if (input.name) formData.delete(input.name);
+          formData.set("upload_token", direct.token);
+          formData.set("upload_filename", chosen.name);
+          if (direct.sha256) formData.set("upload_sha256", direct.sha256);
+          result = await xhrSend("POST", actionAttr, formData, {
+            withCredentials: true,
+            headers: { Accept: "application/json", [UPLOAD_JSON_HEADER]: "1" },
+          });
+        } else {
+          result = await xhrSend("POST", actionAttr, formData, {
+            withCredentials: true,
+            headers: { Accept: "application/json", [UPLOAD_JSON_HEADER]: "1" },
+            onProgress: (p) => ui.setProgress(p),
+          });
+        }
+
+        const data = JSON.parse(result.responseText || "{}");
+        if (!result.ok) {
+          throw new Error(data.message || document.body.dataset.msgRequestFailed || "Upload failed");
+        }
+        if (data.location) {
+          window.location.assign(data.location);
+          return;
+        }
+        window.location.reload();
+      } catch (err) {
+        ui.reset();
+        for (const b of buttons) b.disabled = false;
+        setStatus(err instanceof Error && err.message ? err.message : (document.body.dataset.msgRequestFailed || "Upload failed"));
+      }
+    });
+  }
+
   return controller;
 }
 

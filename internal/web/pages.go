@@ -465,6 +465,7 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	// names the home page after it, and getting that from only some of them
 	// would leave the navigation disagreeing with itself.
 	data.Anonymous = a.cfg.AnonymousEnabled
+	data.DirectUpload = a.directUploadEnabled()
 	// The top bar's lock is on every page of an account with a master
 	// password; a failure to tell only leaves it off.
 	if data.SignedIn && !data.HasKeyring && data.User.ID != "" {

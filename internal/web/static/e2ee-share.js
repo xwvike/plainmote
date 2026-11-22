@@ -10,6 +10,7 @@ import { newContentKey, wrapContentKey, encryptContent, encryptMeta, newLinkKeys
 import { toBase64URL } from "./e2ee.js";
 import { accountKey, unlock, WrongPassword, NoStorage } from "./unlock.js";
 import { sizeText, textType, fileType } from "./upload.js";
+import { presignAndUpload, xhrSend, createUploadProgress } from "./direct-upload.js";
 
 // Adding a code makes one; the code can be swapped for another or dropped.
 function setupPin(form) {
@@ -110,13 +111,14 @@ function setupForm(form) {
     const checked = form.querySelector("input[name='ttl']:checked");
 
     button.disabled = true;
+    const ui = createUploadProgress(form, button);
     try {
       const accountKey = await key();
       if (!accountKey) {
         button.disabled = false;
         return;
       }
-      button.textContent = form.dataset.msgEncrypting;
+      ui.setPhase(form.dataset.msgEncrypting);
       const name = (filename ? filename.value.trim() : "") || (file ? file.name : "");
       const type = file ? await fileType(file) : textType(name);
       const pin = currentPin();
@@ -124,6 +126,8 @@ function setupForm(form) {
       const linkID = crypto.randomUUID();
       const contentKey = await newContentKey();
       const link = pin ? await newCodeLinkKeys(contentKey, accountKey, linkID, pin) : await newLinkKeys(contentKey, accountKey, linkID);
+      const sealedBlob = new Blob([await encryptContent(contentKey, id, content)], { type: "application/octet-stream" });
+
       const body = new FormData();
       body.set("csrf", form.dataset.csrf);
       body.set("ttl", checked ? checked.value : "");
@@ -133,18 +137,41 @@ function setupForm(form) {
       body.set("link_key", toBase64URL(link.sealedKey));
       body.set("owner_key", toBase64URL(link.ownerKey));
       body.set("meta", toBase64URL(await encryptMeta(contentKey, id, { name: "", filename: name, type })));
-      body.set("content", new Blob([await encryptContent(contentKey, id, content)], { type: "application/octet-stream" }), "blob");
-      const response = await fetch(form.dataset.endpoint, {
-        method: "POST", body, credentials: "same-origin", headers: { Accept: "application/json" },
+
+      const direct = await presignAndUpload({
+        purpose: "sealed_paste",
+        blob: sealedBlob,
+        resourceID: id,
+        csrf: form.dataset.csrf,
+        onProgress: (p) => ui.setProgress(p),
       });
-      if (!response.ok) throw new Error((await response.text()).trim() || form.dataset.msgFailed);
-      const { result } = await response.json();
+
+      let response;
+      if (direct) {
+        ui.setSaving();
+        body.set("upload_token", direct.token);
+        if (direct.sha256) body.set("upload_sha256", direct.sha256);
+        response = await xhrSend("POST", form.dataset.endpoint, body, {
+          withCredentials: true,
+          headers: { Accept: "application/json" },
+        });
+      } else {
+        body.set("content", sealedBlob, "blob");
+        response = await xhrSend("POST", form.dataset.endpoint, body, {
+          withCredentials: true,
+          headers: { Accept: "application/json" },
+          onProgress: (p) => ui.setProgress(p),
+        });
+      }
+      if (!response.ok) throw new Error(response.responseText.trim() || form.dataset.msgFailed);
+      const { result } = JSON.parse(response.responseText);
       // #k= carries the key; #p= carries the code, for this page to show its
       // creator - it goes into no link. Either way the fragment stays in this
       // browser.
       window.location.assign(result + (pin ? `#p=${pin}` : `#k=${toBase64URL(link.bytes)}`));
     } catch (failure) {
       fail(failure instanceof Error && failure.message ? failure.message : form.dataset.msgFailed);
+      ui.reset();
       button.disabled = false;
       button.textContent = label;
     }

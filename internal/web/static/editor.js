@@ -289,11 +289,14 @@ function guessedEncoding(encoding) {
   return !["utf-8", "utf-8bom", "utf-16le-bom", "utf-16be-bom", "utf-32le-bom", "utf-32be-bom"].includes(normalizeEncoding(encoding));
 }
 
+const DETECT_SAMPLE_BYTES = 64 * 1024;
+
 function likelyText(content) {
   if (content.length === 0) return true;
+  const sample = content.length > DETECT_SAMPLE_BYTES ? content.slice(0, DETECT_SAMPLE_BYTES) : content;
   let controls = 0;
   let total = 0;
-  for (const character of content) {
+  for (const character of sample) {
     const value = character.codePointAt(0);
     total += 1;
     if (value === 0) return false;
@@ -307,15 +310,26 @@ function likelyText(content) {
 function detectFileEncoding(bytes) {
   const bom = bomEncoding(bytes);
   if (bom) return bom;
-  try {
-    const decoded = decodeBytes(bytes, "utf-8");
-    if (likelyText(decoded)) return "utf-8";
-  } catch (error) {
-    // Ranked legacy candidates below handle non-UTF-8 input.
+  const sample = bytes.length > DETECT_SAMPLE_BYTES ? bytes.subarray(0, DETECT_SAMPLE_BYTES) : bytes;
+  const hasNull = sample.includes(0);
+  if (!hasNull) {
+    try {
+      const decoded = decodeBytes(bytes, "utf-8");
+      if (likelyText(decoded)) return "utf-8";
+    } catch (error) {
+      // Ranked legacy candidates below handle non-UTF-8 input.
+    }
   }
-  const unicode = unicodeEncodingWithoutBOM(bytes);
-  if (unicode) return unicode;
-  for (const candidate of analyseEncoding(bytes)) {
+  const unicode = unicodeEncodingWithoutBOM(sample);
+  if (unicode) {
+    try {
+      if (likelyText(decodeBytes(bytes, unicode))) return unicode;
+    } catch (error) {
+      // Fall through if the full file is not valid UTF-16/UTF-32.
+    }
+  }
+  if (hasNull) return "";
+  for (const candidate of analyseEncoding(sample)) {
     if (candidate.confidence < 20) continue;
     const encoding = normalizeEncoding(candidate.name);
     if (!encoding) continue;

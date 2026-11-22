@@ -1,7 +1,6 @@
 package web
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -202,24 +201,55 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		if wantsHTML(r) {
 			a.rememberE2EE(r, user.ID, false)
 		}
-		resource, link, err = a.db.CreateQuickShare(r.Context(), user.ID, filename, []byte(content), ttl, time.Now().UTC())
+		if form.uploadToken != "" {
+			var ticket store.UploadTicket
+			ticket, err = a.verifyUploadToken(form.uploadToken, uploadPurposePaste, user.ID, "")
+			if err == nil {
+				resource, link, err = a.db.CreateQuickShareFromKey(r.Context(), user.ID, ticket.ResourceID, ticket.Key, filename, ticket.Size, form.uploadSHA256, ttl, time.Now().UTC())
+			}
+		} else {
+			resource, link, err = a.db.CreateQuickShare(r.Context(), user.ID, filename, []byte(content), ttl, time.Now().UTC())
+		}
 	} else {
 		now, key := time.Now().UTC(), addressKey(a.clientIP(r))
-		limited := a.limits.pastes
-		if limited.allow(key, now) {
-			if limited = a.limits.pasteBytes; limited.spend(key, len(content), now) {
-				limited = nil
+		if form.uploadToken != "" {
+			var ticket store.UploadTicket
+			ticket, err = a.verifyUploadToken(form.uploadToken, uploadPurposePaste, store.AnonymousUserID, "")
+			if err == nil {
+				limited := a.limits.pastes
+				if limited.allow(key, now) {
+					if limited = a.limits.pasteBytes; limited.spend(key, int(ticket.Size), now) {
+						limited = nil
+					}
+				}
+				if limited != nil {
+					a.db.DropBlob(r.Context(), ticket.Key)
+					wait := limited.retryIn(key, now)
+					w.Header().Set("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
+					locale := requestLanguage(r).Locale
+					a.refusePasteWith(w, r, boxContent, filename, ttlValue,
+						fmt.Sprintf(translate(locale, "paste_rate_limited"), waitText(locale, wait)), http.StatusTooManyRequests)
+					return
+				}
+				resource, link, err = a.db.CreateAnonymousPasteFromKey(r.Context(), ticket.ResourceID, ticket.Key, filename, ticket.Size, form.uploadSHA256, ttl, now)
 			}
+		} else {
+			limited := a.limits.pastes
+			if limited.allow(key, now) {
+				if limited = a.limits.pasteBytes; limited.spend(key, len(content), now) {
+					limited = nil
+				}
+			}
+			if limited != nil {
+				wait := limited.retryIn(key, now)
+				w.Header().Set("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
+				locale := requestLanguage(r).Locale
+				a.refusePasteWith(w, r, boxContent, filename, ttlValue,
+					fmt.Sprintf(translate(locale, "paste_rate_limited"), waitText(locale, wait)), http.StatusTooManyRequests)
+				return
+			}
+			resource, link, err = a.db.CreateAnonymousPaste(r.Context(), filename, []byte(content), ttl, now)
 		}
-		if limited != nil {
-			wait := limited.retryIn(key, now)
-			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
-			locale := requestLanguage(r).Locale
-			a.refusePasteWith(w, r, boxContent, filename, ttlValue,
-				fmt.Sprintf(translate(locale, "paste_rate_limited"), waitText(locale, wait)), http.StatusTooManyRequests)
-			return
-		}
-		resource, link, err = a.db.CreateAnonymousPaste(r.Context(), filename, []byte(content), ttl, now)
 	}
 	if err != nil {
 		if !store.IsRefusal(err) {
@@ -232,12 +262,20 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !wantsHTML(r) {
+		if wantsUploadJSON(r) {
+			a.writeAPI(w, http.StatusCreated, map[string]string{"location": pasteResultPrefix + resource.ID})
+			return
+		}
 		// A terminal gets the address and nothing else, so it can be piped on
 		// or captured with $(...). The result page is for a browser.
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, a.baseURL(r)+shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))+"\n")
+		return
+	}
+	if wantsUploadJSON(r) {
+		a.writeAPI(w, http.StatusCreated, map[string]string{"location": pasteResultPrefix + resource.ID})
 		return
 	}
 	http.Redirect(w, r, pasteResultPrefix+resource.ID, http.StatusSeeOther)
@@ -253,7 +291,9 @@ type pasteForm struct {
 	uploaded bool
 	// encrypt is the box's encryption switch, on: the page's script was to
 	// encrypt this and send it elsewhere, and did not.
-	encrypt bool
+	encrypt      bool
+	uploadToken  string
+	uploadSHA256 string
 }
 
 // readPasteForm reads the box's own form and what curl sends:
@@ -269,19 +309,27 @@ type pasteForm struct {
 //     no content field - and what a text/plain body is. Its lifetime and
 //     filename come from the query string, since the body has no room for them.
 func readPasteForm(r *http.Request) (pasteForm, error) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return pasteForm{}, err
-	}
 	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	switch mediaType {
-	case "multipart/form-data":
-		r.Body = io.NopCloser(bytes.NewReader(body))
+	if mediaType == "multipart/form-data" {
 		if err := r.ParseMultipartForm(pasteFormMaxBytes); err != nil {
 			return pasteForm{}, err
 		}
 		defer r.MultipartForm.RemoveAll()
-		form := pasteForm{content: []byte(r.FormValue("content")), filename: strings.TrimSpace(r.FormValue("filename")), ttl: r.FormValue("ttl"), encrypt: r.FormValue("encrypt") != ""}
+		form := pasteForm{
+			content:      []byte(r.FormValue("content")),
+			filename:     strings.TrimSpace(r.FormValue("filename")),
+			ttl:          r.FormValue("ttl"),
+			encrypt:      r.FormValue("encrypt") != "",
+			uploadToken:  strings.TrimSpace(r.FormValue("upload_token")),
+			uploadSHA256: strings.TrimSpace(r.FormValue("upload_sha256")),
+		}
+		if form.uploadToken != "" {
+			form.uploaded = true
+			if form.filename == "" {
+				form.filename = uploadName(r.FormValue("upload_filename"))
+			}
+			return form, nil
+		}
 		// A page with no file chosen still sends the field, empty.
 		for _, field := range []string{"file", "content"} {
 			files := r.MultipartForm.File[field]
@@ -304,9 +352,28 @@ func readPasteForm(r *http.Request) (pasteForm, error) {
 			break
 		}
 		return form, nil
-	case "application/x-www-form-urlencoded":
-		if form, err := url.ParseQuery(string(body)); err == nil && form.Has("content") {
-			return pasteForm{content: []byte(form.Get("content")), filename: strings.TrimSpace(form.Get("filename")), ttl: form.Get("ttl"), encrypt: form.Get("encrypt") != ""}, nil
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return pasteForm{}, err
+	}
+	if mediaType == "application/x-www-form-urlencoded" {
+		if form, err := url.ParseQuery(string(body)); err == nil && (form.Has("content") || form.Has("upload_token")) {
+			pf := pasteForm{
+				content:      []byte(form.Get("content")),
+				filename:     strings.TrimSpace(form.Get("filename")),
+				ttl:          form.Get("ttl"),
+				encrypt:      form.Get("encrypt") != "",
+				uploadToken:  strings.TrimSpace(form.Get("upload_token")),
+				uploadSHA256: strings.TrimSpace(form.Get("upload_sha256")),
+			}
+			if pf.uploadToken != "" {
+				pf.uploaded = true
+				if pf.filename == "" {
+					pf.filename = uploadName(form.Get("upload_filename"))
+				}
+			}
+			return pf, nil
 		}
 	}
 	query := r.URL.Query()
@@ -472,6 +539,11 @@ func (a *App) refusePaste(w http.ResponseWriter, r *http.Request, content, filen
 }
 
 func (a *App) refusePasteWith(w http.ResponseWriter, r *http.Request, content, filename, ttl, message string, status int) {
+	if wantsUploadJSON(r) {
+		w.Header().Add("Vary", "Accept-Language")
+		a.writeAPI(w, status, map[string]string{"message": localizePageError(requestLanguage(r).Locale, message)})
+		return
+	}
 	if !wantsHTML(r) {
 		w.Header().Add("Vary", "Accept-Language")
 		writePlainError(w, status, localizePageError(requestLanguage(r).Locale, message))

@@ -10,6 +10,7 @@ import {
 import { toBase64URL, fromBase64URL } from "./e2ee.js";
 import { accountKey, unlock, WrongPassword, NoStorage } from "./unlock.js";
 import { textLike, textType, readsAsText, fileType } from "./upload.js";
+import { presignAndUpload, xhrSend, createUploadProgress } from "./direct-upload.js";
 
 const csrf = document.querySelector('meta[name="plainmote-csrf"]')?.content || document.querySelector('input[name="csrf"]')?.value || "";
 const encoder = new TextEncoder();
@@ -37,13 +38,22 @@ function blobPart(form, name, bytes) {
   form.append(name, new Blob([bytes], { type: "application/octet-stream" }), "blob");
 }
 
-async function post(url, fields, files = {}) {
+async function post(url, fields, files = {}, { onProgress = null } = {}) {
   const form = new FormData();
   form.append("csrf", csrf);
   for (const [key, value] of Object.entries(fields)) form.append(key, value);
   for (const [key, value] of Object.entries(files)) blobPart(form, key, value);
-  const response = await fetch(url, { method: "POST", body: form, credentials: "same-origin", headers: { Accept: "application/json" } });
-  const answer = await response.json().catch(() => ({}));
+  const response = await xhrSend("POST", url, form, {
+    withCredentials: true,
+    headers: { Accept: "application/json" },
+    onProgress,
+  });
+  let answer = {};
+  try {
+    answer = JSON.parse(response.responseText || "{}");
+  } catch {
+    answer = {};
+  }
   return { status: response.status, ok: response.ok, answer };
 }
 
@@ -149,6 +159,8 @@ async function saveSealed(event) {
   const id = sealedRoot.dataset.resource;
   const problem = form.querySelector("[data-sealed-save-error]");
   say(problem, "");
+  const submitBtn = form.querySelector("button[type='submit']");
+  const ui = createUploadProgress(form, submitBtn);
   for (const button of form.querySelectorAll("button")) button.disabled = true;
   try {
     const filename = form.querySelector("[data-sealed-filename]").value.trim();
@@ -167,11 +179,32 @@ async function saveSealed(event) {
       if (filename !== opened.meta.filename || !textLike(meta.type)) meta.type = textType(filename);
     }
     const fields = { action: "save", base_version: sealedRoot.dataset.version, meta: toBase64URL(await encryptMeta(opened.contentKey, id, meta)) };
-    const files = content ? { content: await encryptContent(opened.contentKey, id, content) } : {};
-    const result = await post(`/resources/${id}/sealed`, fields, files);
+    let files = {};
+    if (content) {
+      const sealedBytes = await encryptContent(opened.contentKey, id, content);
+      const sealedBlob = new Blob([sealedBytes], { type: "application/octet-stream" });
+      const direct = await presignAndUpload({
+        purpose: "sealed_save",
+        blob: sealedBlob,
+        resourceID: id,
+        csrf,
+        onProgress: (p) => ui.setProgress(p),
+      });
+      if (direct) {
+        ui.setSaving();
+        fields.upload_token = direct.token;
+        if (direct.sha256) fields.upload_sha256 = direct.sha256;
+      } else {
+        files = { content: sealedBytes };
+      }
+    }
+    const result = await post(`/resources/${id}/sealed`, fields, files, {
+      onProgress: content && !fields.upload_token ? (p) => ui.setProgress(p) : null,
+    });
     if (!result.ok) throw new Error(result.answer.message || sealedRoot.dataset.msgFailed);
     location.assign(result.answer.location);
   } catch (error) {
+    ui.reset();
     say(problem, error.message || sealedRoot.dataset.msgFailed);
     for (const button of form.querySelectorAll("button")) button.disabled = false;
   }
@@ -459,6 +492,8 @@ function startNew(input) {
     await needKey();
     if (!key) return;
     const buttons = form.querySelectorAll("button");
+    const submitBtn = form.querySelector("button[type='submit']");
+    const ui = createUploadProgress(form, submitBtn);
     for (const button of buttons) button.disabled = true;
     try {
       const id = crypto.randomUUID();
@@ -467,14 +502,35 @@ function startNew(input) {
       const content = file ? new Uint8Array(await file.arrayBuffer()) : encoder.encode(form.elements.content.value);
       const type = file ? await fileType(file) : textType(filename);
       const contentKey = await newContentKey();
-      const result = await post("/resources/sealed", {
+      const sealedBytes = await encryptContent(contentKey, id, content);
+      const sealedBlob = new Blob([sealedBytes], { type: "application/octet-stream" });
+      const fields = {
         id,
         sealed_key: toBase64URL(await wrapContentKey(contentKey, key, id)),
         meta: toBase64URL(await encryptMeta(contentKey, id, { name: (form.elements.name?.value || "").trim(), filename, type })),
-      }, { content: await encryptContent(contentKey, id, content) });
+      };
+      const direct = await presignAndUpload({
+        purpose: "sealed_create",
+        blob: sealedBlob,
+        resourceID: id,
+        csrf,
+        onProgress: (p) => ui.setProgress(p),
+      });
+      let files = {};
+      if (direct) {
+        ui.setSaving();
+        fields.upload_token = direct.token;
+        if (direct.sha256) fields.upload_sha256 = direct.sha256;
+      } else {
+        files = { content: sealedBytes };
+      }
+      const result = await post("/resources/sealed", fields, files, {
+        onProgress: !fields.upload_token ? (p) => ui.setProgress(p) : null,
+      });
       if (!result.ok) throw new Error(result.answer.message || toggle.dataset.msgFailed);
       location.assign(result.answer.location);
     } catch (error) {
+      ui.reset();
       alertIn(form, error.message || toggle.dataset.msgFailed);
       for (const button of buttons) button.disabled = false;
     }

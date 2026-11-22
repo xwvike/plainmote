@@ -120,3 +120,13 @@ func (m *MemoryBlobs) Delete(_ context.Context, key string) error {
 	m.mu.Unlock()
 	return nil
 }
+
+func (m *MemoryBlobs) Head(_ context.Context, key string) (int64, error) {
+	m.mu.RLock()
+	data, ok := m.objects[key]
+	m.mu.RUnlock()
+	if !ok {
+		return 0, blob.ErrNotFound
+	}
+	return int64(len(data)), nil
+}

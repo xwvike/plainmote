@@ -20,11 +20,14 @@
        can show "PlainMote" and its icon rather than the bare domain. */}}
   <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "WebSite", "name": "PlainMote", "url": {{printf "%s/" .BaseURL}}}, {"@type": "Organization", "name": "PlainMote", "url": {{printf "%s/" .BaseURL}}, "logo": {{printf "%s/static/logo.png" .BaseURL}}{{if .SourceURL}}, "sameAs": [{{.SourceURL}}]{{end}}}]}</script>{{end}}
 </head>
-<body data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
+<body{{if .DirectUpload}} data-direct-upload="1"{{end}}
+      data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
       data-msg-editor-detect-failed="{{tr .Locale "editor_detect_failed"}}"
       data-msg-editor-file-reopen-failed="{{tr .Locale "editor_file_reopen_failed"}}"
       data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}"
-      data-msg-remove-file="{{tr .Locale "remove_file"}}">
+      data-msg-remove-file="{{tr .Locale "remove_file"}}"
+      data-msg-uploading="{{tr .Locale "uploading"}}"
+      data-msg-saving="{{tr .Locale "saving"}}">
   {{template "topbar" .}}
   <main class="page">
 

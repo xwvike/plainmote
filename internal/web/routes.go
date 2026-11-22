@@ -61,8 +61,11 @@ type Config struct {
 	LogRetention       time.Duration
 	Operator           string
 	ContactEmail       string
-	SourceURL          string
-	BlobEndpoint       string
+	SourceURL    string
+	BlobEndpoint string
+	// DirectUpload enables browser-to-S3 presigned PUT uploads even when
+	// BlobEndpoint is not https:// (for example in tests).
+	DirectUpload bool
 	// The admin interface exists only when there is a key to call it with.
 	AdminKeys    []ed25519.PublicKey
 	AdminOrigins []string
@@ -260,6 +263,8 @@ type pageData struct {
 	// versions for turning encryption on or off in the browser, which has to
 	// carry every one of them across.
 	HasKeyring bool
+	// DirectUpload tells the browser scripts that /uploads/presign is active.
+	DirectUpload bool
 	// SealedCompare is a comparison of encrypted versions, made in the browser.
 	SealedCompare bool
 	HistoryJSON   string
@@ -344,6 +349,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("/language", a.handleLanguage)
 	mux.HandleFunc("/theme", a.handleTheme)
 	mux.HandleFunc("/resources/", a.handleResources)
+	mux.HandleFunc(uploadPresignPath, a.handleUploadPresign)
 	mux.HandleFunc("/logs", a.handleLogs)
 	for path := range accountSections {
 		mux.HandleFunc(path, a.handleAccount)

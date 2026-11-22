@@ -4,14 +4,17 @@
   {{template "htmlhead" .}}
   {{template "resource-doc-title" .}}
 </head>
-<body data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
+<body{{if .DirectUpload}} data-direct-upload="1"{{end}}
+      data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
       data-msg-encoding-guess="{{tr .Locale "encoding_guess"}}"
       data-msg-encoding-choose="{{tr .Locale "encoding_choose"}}"
       data-msg-editor-detect-failed="{{tr .Locale "editor_detect_failed"}}"
       data-msg-editor-file-reopen-failed="{{tr .Locale "editor_file_reopen_failed"}}"
       data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}"
       data-msg-remove-file="{{tr .Locale "remove_file"}}"
-      data-msg-request-failed="{{tr .Locale "request_unconfirmed"}}">
+      data-msg-request-failed="{{tr .Locale "request_unconfirmed"}}"
+      data-msg-uploading="{{tr .Locale "uploading"}}"
+      data-msg-saving="{{tr .Locale "saving"}}">
   {{template "topbar" .}}
   <main class="page{{if not .IsNew}} resource-detail{{end}}">
     {{template "resource-crumb" .}}

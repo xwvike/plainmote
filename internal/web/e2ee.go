@@ -99,9 +99,23 @@ func (a *App) handleSealedPaste(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ttl, _ := parsePasteTTL(r.FormValue("ttl"))
-	resource, _, err := a.db.CreateSealedQuickShare(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"),
-		store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")},
-		base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"), ttl, time.Now().UTC())
+	var (
+		resource Resource
+		err      error
+	)
+	if uploadToken := r.FormValue("upload_token"); uploadToken != "" {
+		var ticket store.UploadTicket
+		ticket, err = a.verifyUploadToken(uploadToken, uploadPurposeSealedPaste, user.ID, r.FormValue("id"))
+		if err == nil {
+			resource, _, err = a.db.CreateSealedQuickShareFromKey(r.Context(), user.ID, ticket.ResourceID, r.FormValue("link_id"),
+				ticket.Key, base64Field(r, "meta"), base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"),
+				ticket.Size, r.FormValue("upload_sha256"), ttl, time.Now().UTC())
+		}
+	} else {
+		resource, _, err = a.db.CreateSealedQuickShare(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"),
+			store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")},
+			base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"), ttl, time.Now().UTC())
+	}
 	if err != nil {
 		if !store.IsRefusal(err) && !errors.Is(err, store.ErrNotFound) {
 			fmt.Fprintf(os.Stderr, "create sealed quick share: %v\n", err)

@@ -162,8 +162,21 @@ func (a *App) handleSealedCreate(w http.ResponseWriter, r *http.Request, user Us
 	if !a.readSealedForm(w, r, sessionID) {
 		return
 	}
-	resource, err := a.db.CreateSealedResource(r.Context(), user.ID, r.FormValue("id"),
-		store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")}, base64Field(r, "sealed_key"))
+	var (
+		resource Resource
+		err      error
+	)
+	if uploadToken := r.FormValue("upload_token"); uploadToken != "" {
+		var ticket store.UploadTicket
+		ticket, err = a.verifyUploadToken(uploadToken, uploadPurposeSealedCreate, user.ID, r.FormValue("id"))
+		if err == nil {
+			resource, err = a.db.CreateSealedResourceFromKey(r.Context(), user.ID, ticket.ResourceID, ticket.Key,
+				base64Field(r, "meta"), base64Field(r, "sealed_key"), ticket.Size, r.FormValue("upload_sha256"))
+		}
+	} else {
+		resource, err = a.db.CreateSealedResource(r.Context(), user.ID, r.FormValue("id"),
+			store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")}, base64Field(r, "sealed_key"))
+	}
 	if err != nil {
 		a.sealedFail(w, r, http.StatusBadRequest, "refused", err)
 		return
@@ -181,8 +194,17 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 	switch r.FormValue("action") {
 	case "save":
 		var result store.SaveResult
-		result, err = a.db.SaveSealedResource(r.Context(), user.ID, resourceID, base,
-			store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")})
+		if uploadToken := r.FormValue("upload_token"); uploadToken != "" {
+			var ticket store.UploadTicket
+			ticket, err = a.verifyUploadToken(uploadToken, uploadPurposeSealedSave, user.ID, resourceID)
+			if err == nil {
+				result, err = a.db.SaveSealedResourceFromKey(r.Context(), user.ID, resourceID, base, ticket.Key,
+					base64Field(r, "meta"), ticket.Size, r.FormValue("upload_sha256"))
+			}
+		} else {
+			result, err = a.db.SaveSealedResource(r.Context(), user.ID, resourceID, base,
+				store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")})
+		}
 		if err == nil {
 			saved := "0"
 			if result.NewVersion {

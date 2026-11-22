@@ -98,13 +98,30 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	form, err := readResourceForm(w, r, a.cfg.MaxContent)
 	if err == nil {
 		var resource Resource
-		resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.ContentEncoding)
+		if form.UploadToken != "" {
+			var ticket store.UploadTicket
+			ticket, err = a.verifyUploadToken(form.UploadToken, uploadPurposeResourceCreate, user.ID, "")
+			if err == nil {
+				resource, err = a.db.CreateResourceFromKey(r.Context(), user.ID, ticket.ResourceID, ticket.Key, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding, ticket.Size, form.UploadSHA256)
+			}
+		} else {
+			resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.ContentEncoding)
+		}
 		if err == nil {
-			http.Redirect(w, r, "/resources/"+resource.ID+"?created=1", http.StatusSeeOther)
+			location := "/resources/" + resource.ID + "?created=1"
+			if wantsUploadJSON(r) {
+				a.writeAPI(w, http.StatusCreated, map[string]string{"location": location})
+				return
+			}
+			http.Redirect(w, r, location, http.StatusSeeOther)
 			return
 		}
 	}
 	text, status := a.writeErrorText("create resource", err)
+	if wantsUploadJSON(r) {
+		a.writeAPI(w, status, map[string]string{"message": localizePageError(requestLanguage(r).Locale, text)})
+		return
+	}
 	body, recovered := editableText(form.Content, form.Filename, form.ContentEncoding)
 	if form.Uploaded && !recovered {
 		// The only body that cannot be handed back. Saying so beats a page
@@ -151,8 +168,11 @@ type resourceForm struct {
 	// ContentEOL is the line ending the body is written with. It is not stored:
 	// it is detected from the bytes whenever the page is rendered, so there is
 	// nothing to migrate and nothing that can go stale against the content.
-	ContentEOL string
-	Uploaded   bool
+	ContentEOL     string
+	Uploaded       bool
+	UploadToken    string
+	UploadFilename string
+	UploadSHA256   string
 
 	// ContentGiven separates "the editor sent an empty box" from "this form
 	// had no content field at all". A binary resource is edited through a
@@ -191,6 +211,15 @@ func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (r
 		ContentEncoding: strings.TrimSpace(r.FormValue("content_encoding")),
 		ContentEOL:      store.NormalizeEOLName(r.FormValue("content_eol")),
 		ContentGiven:    r.Form["content"] != nil,
+		UploadToken:     strings.TrimSpace(r.FormValue("upload_token")),
+		UploadFilename:  strings.TrimSpace(r.FormValue("upload_filename")),
+		UploadSHA256:    strings.TrimSpace(r.FormValue("upload_sha256")),
+	}
+	if form.UploadToken != "" {
+		form.Content = nil
+		form.ContentGiven = true
+		form.Uploaded = true
+		return form, nil
 	}
 	// Only a multipart submission can carry a file; anything else simply has
 	// none, which is not an error.
@@ -303,11 +332,24 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			content = nil
 		}
 		base := versionNumber(r.FormValue("base_version"))
-		result, err := a.db.SaveResource(r.Context(), user.ID, resourceID, store.ResourceEdit{
-			Name: form.Name, Filename: form.Filename, Content: content,
-			ContentEncoding: form.ContentEncoding, BaseVersion: base,
-		})
+		var result store.SaveResult
+		if form.UploadToken != "" {
+			var ticket store.UploadTicket
+			ticket, err = a.verifyUploadToken(form.UploadToken, uploadPurposeResourceSave, user.ID, resourceID)
+			if err == nil {
+				result, err = a.db.SaveResourceFromKey(r.Context(), user.ID, resourceID, ticket.Key, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding, base, ticket.Size, form.UploadSHA256)
+			}
+		} else {
+			result, err = a.db.SaveResource(r.Context(), user.ID, resourceID, store.ResourceEdit{
+				Name: form.Name, Filename: form.Filename, Content: content,
+				ContentEncoding: form.ContentEncoding, BaseVersion: base,
+			})
+		}
 		if conflict := (*store.VersionConflict)(nil); errors.As(err, &conflict) {
+			if wantsUploadJSON(r) {
+				a.writeAPI(w, http.StatusConflict, map[string]string{"message": localizePageError(requestLanguage(r).Locale, conflict.Error())})
+				return
+			}
 			// Nothing was written, and nothing is lost: the page comes back
 			// with the submission in the editor, says what happened, and the
 			// next save is made against the version that is current - which
@@ -322,6 +364,10 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		}
 		if err != nil {
 			text, status := a.writeErrorText("update resource", err)
+			if wantsUploadJSON(r) {
+				a.writeAPI(w, status, map[string]string{"message": localizePageError(requestLanguage(r).Locale, text)})
+				return
+			}
 			// The refused page comes back carrying the submission, not the
 			// stored row: the fields as they were typed, and the body as it
 			// was sent. Bytes that cannot go in a textarea are the one thing
@@ -349,7 +395,12 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		if result.Trimmed > 0 {
 			values.Set("trimmed", strconv.Itoa(result.Trimmed))
 		}
-		http.Redirect(w, r, "/resources/"+resourceID+"?"+values.Encode(), http.StatusSeeOther)
+		location := "/resources/" + resourceID + "?" + values.Encode()
+		if wantsUploadJSON(r) {
+			a.writeAPI(w, http.StatusOK, map[string]string{"location": location})
+			return
+		}
+		http.Redirect(w, r, location, http.StatusSeeOther)
 		return
 	}
 	if r.Method != http.MethodGet {

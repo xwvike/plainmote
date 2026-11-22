@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 )
 
 // ErrNotFound is returned when a key has no object behind it.
@@ -25,4 +26,12 @@ type Store interface {
 	// Delete removes an object. Removing something absent is not an error,
 	// so cleaning up twice is safe.
 	Delete(ctx context.Context, key string) error
+}
+
+// DirectStore is optionally implemented by object stores that can issue
+// short-lived presigned PUT URLs for direct browser uploads and verify
+// uploaded objects via HEAD without reading the body back through the server.
+type DirectStore interface {
+	PresignPut(ctx context.Context, key string, size int64, ttl time.Duration) (string, error)
+	Head(ctx context.Context, key string) (int64, error)
 }

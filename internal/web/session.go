@@ -53,10 +53,14 @@ func (a *App) requireUser(w http.ResponseWriter, r *http.Request) (User, string,
 }
 
 func (a *App) checkCSRF(r *http.Request, sessionID string) bool {
+	return a.checkCSRFValue(r, sessionID, r.FormValue("csrf"))
+}
+
+func (a *App) checkCSRFValue(r *http.Request, sessionID, value string) bool {
 	if sessionID == "" {
 		return false
 	}
-	value := strings.TrimSpace(r.FormValue("csrf"))
+	value = strings.TrimSpace(value)
 	cookie, err := r.Cookie(csrfCookie)
 	if err != nil || value == "" || cookie.Value == "" || subtle.ConstantTimeCompare([]byte(value), []byte(cookie.Value)) != 1 {
 		return false

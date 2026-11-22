@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -38,8 +41,9 @@ func (c S3Config) validate() error {
 
 // S3 stores objects in an S3-compatible bucket.
 type S3 struct {
-	client *s3.Client
-	bucket string
+	client  *s3.Client
+	presign *s3.PresignClient
+	bucket  string
 }
 
 func NewS3(cfg S3Config) (*S3, error) {
@@ -50,14 +54,74 @@ func NewS3(cfg S3Config) (*S3, error) {
 	if region == "" {
 		region = "auto"
 	}
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          64,
+		MaxIdleConnsPerHost:   32,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 0,
+		WriteBufferSize:       128 << 10,
+		ReadBufferSize:        128 << 10,
+	}
 	client := s3.New(s3.Options{
 		Region:       region,
 		BaseEndpoint: aws.String(strings.TrimRight(cfg.Endpoint, "/")),
 		Credentials:  credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, ""),
+		HTTPClient:   &http.Client{Transport: transport},
 		// R2 buckets are addressed by path, not by a host prefix.
 		UsePathStyle: true,
 	})
-	return &S3{client: client, bucket: cfg.Bucket}, nil
+	return &S3{client: client, presign: s3.NewPresignClient(client), bucket: cfg.Bucket}, nil
+}
+
+// PresignPut issues a short-lived presigned PUT URL that binds the exact object
+// key and Content-Length so browsers can upload directly to object storage.
+func (s *S3) PresignPut(ctx context.Context, key string, size int64, ttl time.Duration) (string, error) {
+	if strings.TrimSpace(key) == "" {
+		return "", errors.New("blob key must not be empty")
+	}
+	if size <= 0 {
+		return "", errors.New("blob size must be positive")
+	}
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	req, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(key),
+		ContentLength: aws.Int64(size),
+	}, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", fmt.Errorf("presign put: %w", err)
+	}
+	return req.URL, nil
+}
+
+// Head checks that key exists and returns its stored byte length.
+func (s *S3) Head(ctx context.Context, key string) (int64, error) {
+	if strings.TrimSpace(key) == "" {
+		return 0, errors.New("blob key must not be empty")
+	}
+	out, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		if isNotFound(err) {
+			return 0, ErrNotFound
+		}
+		return 0, fmt.Errorf("head blob: %w", err)
+	}
+	if out.ContentLength == nil {
+		return 0, nil
+	}
+	return *out.ContentLength, nil
 }
 
 func (s *S3) Put(ctx context.Context, key string, r io.Reader, size int64) error {
