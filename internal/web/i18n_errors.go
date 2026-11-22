@@ -46,12 +46,15 @@ var localizedErrorCodes = map[string]string{
 	"临时分享已失效":                            "error_paste_expired",
 	"临时分享已失效，无法保存":                       "error_paste_expired_save",
 	"临时分享已失效，无法保存。":                      "error_paste_expired_save",
+	"请输入令牌名称":                            "error_token_name_required",
+	"令牌有效期无效":                            "error_token_ttl",
 }
 
 var localizedErrorPatterns = []struct {
 	pattern *regexp.Regexp
 	key     string
 }{
+	{regexp.MustCompile(`^每个账号最多同时持有 ([0-9]+) 个有效令牌$`), "error_token_limit"},
 	{regexp.MustCompile(`^内容最大 (.+)$`), "error_content_max"},
 	{regexp.MustCompile(`^文件名最长 ([0-9]+) 个字符$`), "error_filename_length"},
 	{regexp.MustCompile(`^标签最长 ([0-9]+) 个字符$`), "error_tag_length"},

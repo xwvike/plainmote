@@ -12,33 +12,32 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"plainmote/internal/store"
 )
 
-// The command line's interface. Everything under apiPrefix except the two
-// device endpoints needs a personal access token in the Authorization header
-// - never a cookie, never a query parameter - and nothing here answers a
-// browser on another site: no CORS headers are ever sent, so a page cannot
-// read an answer, and a request carrying a token is never a "simple" one a
-// page could send blind.
+// The HTTP API. Everything under apiPrefix needs a personal access token in
+// the Authorization header - never a cookie, never a query parameter - and
+// nothing here answers a browser on another site: no CORS headers are ever
+// sent, so a page cannot read an answer, and a request carrying a token is
+// never a "simple" one a page could send blind.
 const (
-	apiPrefix        = "/api/v1/"
-	apiDeviceCode    = apiPrefix + "device/code"
-	apiDeviceToken   = apiPrefix + "device/token"
-	deviceVerifyPath = "/cli/device"
-	apiMaxJSON       = 4 << 10
+	apiPrefix       = "/api/v1/"
+	apiMaxJSON      = 4 << 10
+	apiNameMaxRunes = 200
+	apiShareMaxUses = 1_000_000
+	apiShareNameMax = 100
+	apiShareMaxTTL  = 365 * 24 * time.Hour
 )
 
 // apiLimits brakes guessing and floods. Counts are per address, and per token
 // for an authenticated caller.
 type apiLimits struct {
-	deviceCodes  *windowLimiter // codes asked for, per address
-	devicePolls  *windowLimiter // polls, per address
-	codeFailures *windowLimiter // wrong codes typed in the browser, per account
-	codeAddress  *windowLimiter // and per address
 	authFailures *windowLimiter // bad tokens, per address
 	requests     *windowLimiter // calls, per token
+	apiShares    *windowLimiter // share links made via HTTP API, per token
+	apiDeletes   *windowLimiter // trash moves via HTTP API, per token
 	// MCP clients registering themselves, and metadata documents fetched,
 	// per address.
 	registrations   *windowLimiter
@@ -58,12 +57,10 @@ type apiLimits struct {
 
 func newAPILimits() *apiLimits {
 	return &apiLimits{
-		deviceCodes:     newWindowLimiter(10, 10*time.Minute),
-		devicePolls:     newWindowLimiter(120, time.Minute),
-		codeFailures:    newWindowLimiter(5, 15*time.Minute),
-		codeAddress:     newWindowLimiter(20, 15*time.Minute),
 		authFailures:    newWindowLimiter(30, time.Minute),
 		requests:        newWindowLimiter(300, time.Minute),
+		apiShares:       newWindowLimiter(60, time.Hour),
+		apiDeletes:      newWindowLimiter(60, time.Hour),
 		registrations:   newWindowLimiter(20, time.Hour),
 		clientDocuments: newWindowLimiter(30, 10*time.Minute),
 		mcpCalls:        newWindowLimiter(300, time.Minute),
@@ -80,8 +77,6 @@ type apiError struct {
 	Message string `json:"message,omitempty"`
 	// Set on a conflict: the version the save would have replaced.
 	CurrentVersion int `json:"current_version,omitempty"`
-	// Set on a device poll: how long to wait before the next one.
-	Interval int `json:"interval,omitempty"`
 }
 
 func (a *App) writeAPI(w http.ResponseWriter, status int, value any) {
@@ -115,14 +110,6 @@ func (a *App) apiRefused(w http.ResponseWriter, what string, err error) {
 
 func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-PlainMote-Version", a.cfg.Version)
-	switch r.URL.Path {
-	case apiDeviceCode:
-		a.handleDeviceCode(w, r)
-		return
-	case apiDeviceToken:
-		a.handleDeviceToken(w, r)
-		return
-	}
 	user, token, ok := a.apiUser(w, r)
 	if !ok {
 		return
@@ -130,10 +117,14 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, apiPrefix)
 	switch {
 	case path == "me" && r.Method == http.MethodGet:
-		a.writeAPI(w, http.StatusOK, map[string]any{
-			"login": user.Login, "user_id": user.ID, "scope": token.Scope, "expires_at": token.ExpiresAt,
-			"device": token.DeviceName, "server_version": a.cfg.Version,
-		})
+		me := map[string]any{
+			"login": user.Login, "user_id": user.ID, "scope": token.Scope,
+			"name": token.DeviceName, "server_version": a.cfg.Version,
+		}
+		if token.ExpiresAt != nil {
+			me["expires_at"] = token.ExpiresAt
+		}
+		a.writeAPI(w, http.StatusOK, me)
 	case path == "keyring" && r.Method == http.MethodGet:
 		a.apiKeyring(w, r, user)
 	case path == "token" && r.Method == http.MethodDelete:
@@ -159,11 +150,31 @@ func (a *App) handleAPI(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case len(rest) == 1 && r.Method == http.MethodGet:
 			a.apiGetResource(w, r, user, rest[0])
+		case len(rest) == 1 && r.Method == http.MethodPatch:
+			if a.apiWritable(w, token) {
+				a.apiUpdateResourceMeta(w, r, user, rest[0])
+			}
+		case len(rest) == 1 && r.Method == http.MethodDelete:
+			if a.apiWritable(w, token) {
+				a.apiDeleteResource(w, r, user, token, rest[0])
+			}
 		case len(rest) == 2 && rest[1] == "content" && r.Method == http.MethodGet:
 			a.apiReadContent(w, r, user, rest[0])
 		case len(rest) == 2 && rest[1] == "content" && r.Method == http.MethodPut:
 			if a.apiWritable(w, token) {
 				a.apiWriteContent(w, r, user, rest[0])
+			}
+		case len(rest) == 2 && rest[1] == "versions" && r.Method == http.MethodGet:
+			a.apiListVersions(w, r, user, rest[0])
+		case len(rest) == 2 && rest[1] == "links" && r.Method == http.MethodGet:
+			a.apiListLinks(w, r, user, rest[0])
+		case len(rest) == 2 && rest[1] == "links" && r.Method == http.MethodPost:
+			if a.apiWritable(w, token) {
+				a.apiCreateLink(w, r, user, token, rest[0])
+			}
+		case len(rest) == 3 && rest[1] == "links" && r.Method == http.MethodDelete:
+			if a.apiWritable(w, token) {
+				a.apiRevokeLink(w, r, user, rest[0], rest[2])
 			}
 		case len(rest) == 2 && rest[1] == "tags" && r.Method == http.MethodPatch:
 			if a.apiWritable(w, token) {
@@ -189,14 +200,14 @@ func (a *App) apiUser(w http.ResponseWriter, r *http.Request) (User, store.APITo
 	value = strings.TrimSpace(value)
 	if !found || value == "" {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="plainmote"`)
-		a.apiFail(w, http.StatusUnauthorized, "unauthorized", "sign in with `plainmote login`")
+		a.apiFail(w, http.StatusUnauthorized, "unauthorized", "missing bearer token; create an API token under Settings > Authorized apps")
 		return User{}, store.APIToken{}, false
 	}
 	user, token, err := a.db.TokenUser(r.Context(), value, ip, now)
 	if errors.Is(err, store.ErrNotFound) {
 		a.limits.authFailures.allow(addressKey(ip), now)
 		w.Header().Set("WWW-Authenticate", `Bearer realm="plainmote", error="invalid_token"`)
-		a.apiFail(w, http.StatusUnauthorized, "unauthorized", "this sign-in has expired or was revoked; run `plainmote login`")
+		a.apiFail(w, http.StatusUnauthorized, "unauthorized", "this API token is invalid, expired, or revoked")
 		return User{}, store.APIToken{}, false
 	}
 	if err != nil {
@@ -214,22 +225,23 @@ func (a *App) apiWritable(w http.ResponseWriter, token store.APIToken) bool {
 	if token.CanWrite() {
 		return true
 	}
-	a.apiFail(w, http.StatusForbidden, "read_only", "this sign-in is read-only; run `plainmote login` to sign in with write access")
+	a.apiFail(w, http.StatusForbidden, "read_only", "this token is read-only; create a write token to modify resources")
 	return false
 }
 
 type apiResource struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Filename  string    `json:"filename"`
-	Size      int64     `json:"size"`
-	Type      string    `json:"type"`
-	Encoding  string    `json:"encoding,omitempty"`
-	Version   int       `json:"version"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Editable  bool      `json:"editable"`
-	Encrypted bool      `json:"encrypted,omitempty"`
-	TakenDown bool      `json:"taken_down,omitempty"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Filename   string    `json:"filename"`
+	Size       int64     `json:"size"`
+	Type       string    `json:"type"`
+	Encoding   string    `json:"encoding,omitempty"`
+	Version    int       `json:"version"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	Editable   bool      `json:"editable"`
+	Encrypted  bool      `json:"encrypted,omitempty"`
+	TakenDown  bool      `json:"taken_down,omitempty"`
+	ShareLinks int       `json:"share_links,omitempty"`
 	// ExpiresAt is set on a quick share not yet kept: read only, and
 	// deleted at that time.
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
@@ -248,22 +260,39 @@ func (a *App) apiResourceView(r *http.Request, resource Resource) apiResource {
 		ID: resource.ID, Name: resource.Name, Filename: resource.Filename, Size: resource.ContentSize,
 		Type: resource.ContentType, Encoding: resource.ContentEncoding, Version: resource.Version,
 		UpdatedAt: resource.UpdatedAt, Encrypted: encrypted,
-		Editable:  resource.Editable() && !encrypted && !resource.QuickShare(),
-		TakenDown: resource.TakenDown, ExpiresAt: resource.ExpiresAt, URL: a.baseURL(r) + "/resources/" + resource.ID,
-		SealedKey: b64url(resource.SealedKey), SealedMeta: b64url(resource.SealedMeta),
+		Editable:   resource.Editable() && !encrypted && !resource.QuickShare(),
+		TakenDown:  resource.TakenDown,
+		ShareLinks: resource.LiveShares,
+		ExpiresAt:  resource.ExpiresAt,
+		URL:        a.baseURL(r) + "/resources/" + resource.ID,
+		SealedKey:  b64url(resource.SealedKey), SealedMeta: b64url(resource.SealedMeta),
 		Tags: append([]string{}, resource.Tags...),
 	}
 }
 
-// apiListResources lists, or with ref resolves a reference typed on the
-// command line to every resource it can mean.
+// apiListResources lists resources filtered by q, tag and kind, or with ref
+// resolves an ID, prefix, exact name or filename.
 func (a *App) apiListResources(w http.ResponseWriter, r *http.Request, user User) {
 	var resources []Resource
 	var err error
 	if ref := r.URL.Query().Get("ref"); ref != "" {
 		resources, err = a.db.ResolveResources(r.Context(), user.ID, ref)
 	} else {
-		resources, err = a.db.APIResources(r.Context(), user.ID, r.URL.Query().Get("q"), r.URL.Query().Get("tag"))
+		filter := store.ResourceFilter{Query: r.URL.Query().Get("q")}
+		switch kind := strings.TrimSpace(r.URL.Query().Get("kind")); kind {
+		case "":
+		case "resource":
+			filter.Kind = store.KindResource
+		case "quick", "quick_share":
+			filter.Kind = store.KindQuickShare
+		default:
+			a.apiFail(w, http.StatusBadRequest, "bad_request", "kind must be resource or quick_share")
+			return
+		}
+		if tag := strings.TrimSpace(r.URL.Query().Get("tag")); tag != "" {
+			filter.Tags = []string{tag}
+		}
+		resources, _, err = a.db.ListResourcesBy(r.Context(), user.ID, filter, store.APIListLimit, 0)
 	}
 	if err != nil {
 		a.apiRefused(w, "list resources", err)
@@ -282,44 +311,169 @@ func (a *App) apiGetResource(w http.ResponseWriter, r *http.Request, user User, 
 		a.apiRefused(w, "read resource", err)
 		return
 	}
+	if live, err := a.db.ListShares(r.Context(), user.ID, resource.ID, time.Now().UTC()); err == nil {
+		resource.LiveShares = len(live)
+	}
 	a.writeAPI(w, http.StatusOK, a.apiResourceView(r, resource))
+}
+
+// apiUpdateResourceMeta updates a resource's name, filename, and/or tags.
+func (a *App) apiUpdateResourceMeta(w http.ResponseWriter, r *http.Request, user User, id string) {
+	var in struct {
+		Name     *string   `json:"name"`
+		Filename *string   `json:"filename"`
+		Tags     *[]string `json:"tags"`
+	}
+	if !a.readAPIJSON(w, r, &in) {
+		return
+	}
+	if in.Name == nil && in.Filename == nil && in.Tags == nil {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", "provide at least one of name, filename, or tags")
+		return
+	}
+	if in.Name != nil && utf8.RuneCountInString(*in.Name) > apiNameMaxRunes {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", fmt.Sprintf("name can be at most %d characters", apiNameMaxRunes))
+		return
+	}
+	if in.Tags != nil {
+		if err := checkTags(*in.Tags); err != nil {
+			a.apiRefused(w, "update resource", err)
+			return
+		}
+	}
+	ctx := r.Context()
+	resource, err := a.db.ResourceForOwner(ctx, user.ID, id)
+	if err != nil {
+		a.apiRefused(w, "update resource", err)
+		return
+	}
+	if in.Name != nil || in.Filename != nil {
+		name, filename := resource.Name, resource.Filename
+		if in.Name != nil {
+			name = *in.Name
+		}
+		if in.Filename != nil {
+			filename = strings.TrimSpace(*in.Filename)
+		}
+		if _, err := a.db.SaveResource(ctx, user.ID, resource.ID, store.ResourceEdit{Name: name, Filename: filename}); err != nil {
+			a.apiRefused(w, "update resource", err)
+			return
+		}
+	}
+	if in.Tags != nil {
+		if _, err := a.db.SetResourceTags(ctx, user.ID, resource.ID, *in.Tags); err != nil {
+			a.apiRefused(w, "tag resource", err)
+			return
+		}
+	}
+	updated, err := a.db.ResourceForOwner(ctx, user.ID, resource.ID)
+	if err != nil {
+		a.apiRefused(w, "read resource", err)
+		return
+	}
+	if live, err := a.db.ListShares(ctx, user.ID, updated.ID, time.Now().UTC()); err == nil {
+		updated.LiveShares = len(live)
+	}
+	a.writeAPI(w, http.StatusOK, a.apiResourceView(r, updated))
+}
+
+// apiDeleteResource moves a resource to the trash and revokes its share links.
+func (a *App) apiDeleteResource(w http.ResponseWriter, r *http.Request, user User, token store.APIToken, id string) {
+	ctx := r.Context()
+	resource, err := a.db.ResourceForOwner(ctx, user.ID, id)
+	if err != nil {
+		a.apiRefused(w, "delete resource", err)
+		return
+	}
+	if resource.Sealed() || resource.Encrypted() {
+		a.apiFail(w, http.StatusBadRequest, "refused", "end-to-end encrypted resources can only be deleted in the browser")
+		return
+	}
+	now := time.Now().UTC()
+	if !a.limits.apiDeletes.allow(token.ID, now) {
+		a.apiFail(w, http.StatusTooManyRequests, "rate_limited", "too many deletions; try again later")
+		return
+	}
+	revoked, err := a.db.TrashResource(ctx, user.ID, resource.ID, now)
+	if err != nil {
+		a.apiRefused(w, "delete resource", err)
+		return
+	}
+	purgeAfter := now.Add(store.TrashRetention)
+	if resource.ExpiresAt != nil && resource.ExpiresAt.Before(purgeAfter) {
+		purgeAfter = *resource.ExpiresAt
+	}
+	a.writeAPI(w, http.StatusOK, map[string]any{
+		"id":            resource.ID,
+		"trashed":       true,
+		"revoked_links": revoked,
+		"purge_after":   purgeAfter,
+	})
 }
 
 // apiVersionTag is the ETag of a resource's content: its version number.
 func apiVersionTag(version int) string { return `"v` + strconv.Itoa(version) + `"` }
 
 // apiReadContent sends the stored bytes as they are, in the encoding they
-// were saved in, which the headers name.
+// were saved in, which the headers name. An optional ?version=N query reads
+// an earlier version from history.
 func (a *App) apiReadContent(w http.ResponseWriter, r *http.Request, user User, id string) {
-	resource, err := a.db.ResourceForOwner(r.Context(), user.ID, id)
+	ctx := r.Context()
+	resource, err := a.db.ResourceForOwner(ctx, user.ID, id)
 	if err != nil {
 		a.apiRefused(w, "read content", err)
 		return
 	}
-	body, size, err := a.db.OpenContent(r.Context(), resource)
-	if err != nil {
-		a.apiRefused(w, "read content", fmt.Errorf("%w: %w", store.ErrInternal, err))
-		return
+	version := resource.Version
+	contentType, encoding := resource.ContentType, resource.ContentEncoding
+	var body io.ReadCloser
+	var size int64
+	if raw := strings.TrimSpace(r.URL.Query().Get("version")); raw != "" {
+		num, err := strconv.Atoi(raw)
+		if err != nil || num < 1 {
+			a.apiFail(w, http.StatusBadRequest, "bad_request", "version must be a positive integer")
+			return
+		}
+		if num != resource.Version {
+			v, err := a.db.VersionForOwner(ctx, user.ID, resource.ID, num)
+			if err != nil {
+				a.apiRefused(w, "read version", err)
+				return
+			}
+			version, contentType, encoding = v.Number, v.ContentType, v.ContentEncoding
+			body, size, err = a.db.OpenVersion(ctx, v)
+			if err != nil {
+				a.apiRefused(w, "read version", fmt.Errorf("%w: %w", store.ErrInternal, err))
+				return
+			}
+		}
+	}
+	if body == nil {
+		body, size, err = a.db.OpenContent(ctx, resource)
+		if err != nil {
+			a.apiRefused(w, "read content", fmt.Errorf("%w: %w", store.ErrInternal, err))
+			return
+		}
 	}
 	defer body.Close()
-	w.Header().Set("Content-Type", store.ContentTypeWithEncoding(store.SafeContentType(resource.ContentType), resource.ContentEncoding))
+	w.Header().Set("Content-Type", store.ContentTypeWithEncoding(store.SafeContentType(contentType), encoding))
 	w.Header().Set("Content-Disposition", "attachment")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("ETag", apiVersionTag(resource.Version))
-	w.Header().Set("X-PlainMote-Resource-Version", strconv.Itoa(resource.Version))
-	if resource.ContentEncoding != "" {
-		w.Header().Set("X-PlainMote-Encoding", resource.ContentEncoding)
+	w.Header().Set("ETag", apiVersionTag(version))
+	w.Header().Set("X-PlainMote-Resource-Version", strconv.Itoa(version))
+	if encoding != "" {
+		w.Header().Set("X-PlainMote-Encoding", encoding)
 	}
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, body)
 }
 
-// apiWriteContent saves new content as the resource's next version. The
-// version it was edited from must come in If-Match, as the resource page's
-// hidden field does; "*" saves over whatever is current, on purpose.
+// apiWriteContent saves new content as the resource's next version. If-Match
+// is optional: omit it (or send "*") to save over the current version, or send
+// a version tag such as "v5" to guard against concurrent edits (412 conflict).
 func (a *App) apiWriteContent(w http.ResponseWriter, r *http.Request, user User, id string) {
 	resource, err := a.db.ResourceForOwner(r.Context(), user.ID, id)
 	if err != nil {
@@ -328,15 +482,15 @@ func (a *App) apiWriteContent(w http.ResponseWriter, r *http.Request, user User,
 	}
 	base := 0
 	switch match := strings.TrimSpace(r.Header.Get("If-Match")); {
-	case match == "*":
+	case match == "", match == "*":
 	case strings.HasPrefix(match, `"v`) && strings.HasSuffix(match, `"`):
 		base, err = strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(match, `"v`), `"`))
 		if err != nil || base < 1 {
-			a.apiFail(w, http.StatusBadRequest, "bad_request", "If-Match must be a version tag such as \"v5\", or *")
+			a.apiFail(w, http.StatusBadRequest, "bad_request", `If-Match must be a version tag such as "v5", or *`)
 			return
 		}
 	default:
-		a.apiFail(w, http.StatusPreconditionRequired, "precondition_required", "send the version the edit started from in If-Match, or * to save over the current one")
+		a.apiFail(w, http.StatusBadRequest, "bad_request", `If-Match must be a version tag such as "v5", or *`)
 		return
 	}
 	if resource.Sealed() {
@@ -364,6 +518,155 @@ func (a *App) apiWriteContent(w http.ResponseWriter, r *http.Request, user User,
 	a.writeAPI(w, http.StatusOK, map[string]any{"version": result.Version, "new_version": result.NewVersion, "trimmed": result.Trimmed})
 }
 
+// apiListVersions lists the current version and every retained earlier version.
+func (a *App) apiListVersions(w http.ResponseWriter, r *http.Request, user User, id string) {
+	ctx := r.Context()
+	resource, err := a.db.ResourceForOwner(ctx, user.ID, id)
+	if err != nil {
+		a.apiRefused(w, "list versions", err)
+		return
+	}
+	earlier, err := a.db.ListVersions(ctx, user.ID, resource.ID)
+	if err != nil {
+		a.apiRefused(w, "list versions", err)
+		return
+	}
+	type apiVersion struct {
+		Version      int       `json:"version"`
+		Size         int64     `json:"size"`
+		SizeDelta    *int64    `json:"size_delta,omitempty"`
+		SHA256       string    `json:"sha256,omitempty"`
+		SavedAt      time.Time `json:"saved_at"`
+		Current      bool      `json:"current,omitempty"`
+		RestoredFrom int       `json:"restored_from,omitempty"`
+	}
+	encrypted := resource.Sealed() || resource.Encrypted()
+	versions := make([]apiVersion, 0, len(earlier)+1)
+	versions = append(versions, apiVersion{
+		Version: resource.Version, Size: resource.ContentSize, SHA256: resource.ContentSHA256,
+		SavedAt: resource.VersionAt, Current: true, RestoredFrom: resource.RestoredFrom,
+	})
+	for _, v := range earlier {
+		versions = append(versions, apiVersion{
+			Version: v.Number, Size: v.ContentSize, SHA256: v.ContentSHA256,
+			SavedAt: v.SavedAt, RestoredFrom: v.RestoredFrom,
+		})
+	}
+	for i := range versions {
+		if encrypted {
+			versions[i].SHA256 = ""
+		}
+		if i+1 < len(versions) {
+			delta := versions[i].Size - versions[i+1].Size
+			versions[i].SizeDelta = &delta
+		}
+	}
+	a.writeAPI(w, http.StatusOK, map[string]any{
+		"id": resource.ID, "current_version": resource.Version, "versions": versions,
+	})
+}
+
+type apiLink struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	URL        string     `json:"url,omitempty"`
+	MaxUses    int        `json:"max_uses"`
+	UsedCount  int        `json:"used_count"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+}
+
+func (a *App) apiLinkView(r *http.Request, resource Resource, link Link) apiLink {
+	view := apiLink{
+		ID: link.ID, Name: link.Name, MaxUses: link.MaxUses, UsedCount: link.UsedCount,
+		CreatedAt: link.CreatedAt, ExpiresAt: link.ExpiresAt, LastUsedAt: link.LastUsedAt,
+	}
+	if !link.Unreadable && link.Token != "" {
+		view.URL = a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))
+	}
+	return view
+}
+
+// apiListLinks lists a resource's active share links.
+func (a *App) apiListLinks(w http.ResponseWriter, r *http.Request, user User, id string) {
+	ctx := r.Context()
+	resource, err := a.db.ResourceForOwner(ctx, user.ID, id)
+	if err != nil {
+		a.apiRefused(w, "list links", err)
+		return
+	}
+	live, err := a.db.ListShares(ctx, user.ID, resource.ID, time.Now().UTC())
+	if err != nil {
+		a.apiRefused(w, "list links", err)
+		return
+	}
+	views := make([]apiLink, 0, len(live))
+	for _, link := range live {
+		views = append(views, a.apiLinkView(r, resource, link))
+	}
+	a.writeAPI(w, http.StatusOK, map[string]any{"links": views})
+}
+
+// apiCreateLink creates a share link for a resource. Body is optional JSON:
+// {"name": "...", "expires_in": "7d"|"never", "max_uses": 0}.
+func (a *App) apiCreateLink(w http.ResponseWriter, r *http.Request, user User, token store.APIToken, id string) {
+	var in struct {
+		Name      string `json:"name"`
+		ExpiresIn string `json:"expires_in"`
+		MaxUses   int    `json:"max_uses"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if !a.readAPIJSON(w, r, &in) {
+			return
+		}
+	}
+	var ttl time.Duration
+	switch value := strings.ToLower(strings.TrimSpace(in.ExpiresIn)); value {
+	case "", "never":
+	default:
+		parsed, err := parseShareDuration(value)
+		if err != nil || parsed <= 0 || parsed > apiShareMaxTTL {
+			a.apiFail(w, http.StatusBadRequest, "bad_request", "expires_in must be a duration such as 1h, 7d or 30d (up to 365d), or never")
+			return
+		}
+		ttl = parsed
+	}
+	if in.MaxUses < 0 || in.MaxUses > apiShareMaxUses {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", fmt.Sprintf("max_uses must be between 0 and %d", apiShareMaxUses))
+		return
+	}
+	if utf8.RuneCountInString(in.Name) > apiShareNameMax {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", fmt.Sprintf("name can be at most %d characters", apiShareNameMax))
+		return
+	}
+	ctx := r.Context()
+	resource, err := a.db.ResourceForOwner(ctx, user.ID, id)
+	if err != nil {
+		a.apiRefused(w, "create link", err)
+		return
+	}
+	if !a.limits.apiShares.allow(token.ID, time.Now().UTC()) {
+		a.apiFail(w, http.StatusTooManyRequests, "rate_limited", "too many share links created; try again later")
+		return
+	}
+	link, err := a.db.CreateShare(ctx, user.ID, resource.ID, strings.TrimSpace(in.Name), ttl, in.MaxUses)
+	if err != nil {
+		a.apiRefused(w, "create link", err)
+		return
+	}
+	a.writeAPI(w, http.StatusCreated, a.apiLinkView(r, resource, link))
+}
+
+// apiRevokeLink revokes a single share link of a resource.
+func (a *App) apiRevokeLink(w http.ResponseWriter, r *http.Request, user User, resourceID, linkID string) {
+	if err := a.db.RevokeLink(r.Context(), user.ID, resourceID, linkID); err != nil {
+		a.apiRefused(w, "revoke link", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // apiBody reads a request body no larger than a resource may be.
 func (a *App) apiBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, bool) {
 	if r.ContentLength > limit {
@@ -384,11 +687,22 @@ func (a *App) apiBody(w http.ResponseWriter, r *http.Request, limit int64) ([]by
 	return body, true
 }
 
-// apiCreateResource makes a new resource from a multipart form: name,
-// filename and encoding fields beside a content file.
+// apiCreateResource creates a new resource from either application/json
+// ({"content": "...", "filename": "...", "name": "...", "tags": [...]}) or
+// multipart/form-data (for binary files or encrypted payloads).
 func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user User) {
-	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "multipart/form-data" {
-		a.apiFail(w, http.StatusUnsupportedMediaType, "bad_request", "send a multipart form with a content file")
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		a.apiFail(w, http.StatusUnsupportedMediaType, "bad_request", "send application/json or multipart/form-data")
+		return
+	}
+	switch mediaType {
+	case "application/json":
+		a.apiCreateResourceJSON(w, r, user)
+		return
+	case "multipart/form-data":
+	default:
+		a.apiFail(w, http.StatusUnsupportedMediaType, "bad_request", "send application/json or multipart/form-data")
 		return
 	}
 	limit := a.cfg.MaxContent + 64<<10
@@ -403,20 +717,13 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	defer func() { _ = r.MultipartForm.RemoveAll() }()
-	file, _, err := r.FormFile("content")
-	if err != nil {
-		a.apiFail(w, http.StatusBadRequest, "bad_request", "the form has no content file")
+	content, ok := a.readMultipartContent(w, r, a.cfg.MaxContent+sealedOverhead)
+	if !ok {
 		return
 	}
-	defer file.Close()
 	tags := r.MultipartForm.Value["tag"]
 	if err := checkTags(tags); err != nil {
 		a.apiRefused(w, "create resource", err)
-		return
-	}
-	content, err := io.ReadAll(io.LimitReader(file, a.cfg.MaxContent+sealedOverhead+1))
-	if err != nil || int64(len(content)) > a.cfg.MaxContent+sealedOverhead {
-		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
 		return
 	}
 	// Encrypted on the client: stored under the id its encryption is bound
@@ -444,6 +751,67 @@ func (a *App) apiCreateResource(w http.ResponseWriter, r *http.Request, user Use
 	a.apiCreated(w, r, user, resource, tags)
 }
 
+func (a *App) apiCreateResourceJSON(w http.ResponseWriter, r *http.Request, user User) {
+	var in struct {
+		Content  *string  `json:"content"`
+		Name     string   `json:"name"`
+		Filename string   `json:"filename"`
+		Encoding string   `json:"encoding"`
+		Tags     []string `json:"tags"`
+	}
+	if !a.readAPIJSONLimit(w, r, &in, a.cfg.MaxContent+64<<10) {
+		return
+	}
+	if in.Content == nil {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", "content is required")
+		return
+	}
+	if int64(len(*in.Content)) > a.cfg.MaxContent {
+		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+		return
+	}
+	if utf8.RuneCountInString(in.Name) > apiNameMaxRunes {
+		a.apiFail(w, http.StatusBadRequest, "bad_request", fmt.Sprintf("name can be at most %d characters", apiNameMaxRunes))
+		return
+	}
+	if err := checkTags(in.Tags); err != nil {
+		a.apiRefused(w, "create resource", err)
+		return
+	}
+	resource, err := a.db.CreateResource(r.Context(), user.ID, in.Name, strings.TrimSpace(in.Filename),
+		[]byte(*in.Content), strings.TrimSpace(in.Encoding))
+	if err != nil {
+		a.apiRefused(w, "create resource", err)
+		return
+	}
+	a.apiCreated(w, r, user, resource, in.Tags)
+}
+
+// readMultipartContent reads the "content" field whether it was uploaded as a
+// file (-F content=@file) or sent as a plain form field (-F content=text).
+func (a *App) readMultipartContent(w http.ResponseWriter, r *http.Request, maxBytes int64) ([]byte, bool) {
+	file, _, err := r.FormFile("content")
+	if err == nil {
+		defer file.Close()
+		content, readErr := io.ReadAll(io.LimitReader(file, maxBytes+1))
+		if readErr != nil || int64(len(content)) > maxBytes {
+			a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+			return nil, false
+		}
+		return content, true
+	}
+	if values := r.MultipartForm.Value["content"]; len(values) > 0 {
+		content := []byte(values[0])
+		if int64(len(content)) > maxBytes {
+			a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+			return nil, false
+		}
+		return content, true
+	}
+	a.apiFail(w, http.StatusBadRequest, "bad_request", "the form has no content field")
+	return nil, false
+}
+
 // apiCreated tags a resource just made, and answers with it.
 func (a *App) apiCreated(w http.ResponseWriter, r *http.Request, user User, resource Resource, tags []string) {
 	if len(tags) > 0 {
@@ -458,14 +826,56 @@ func (a *App) apiCreated(w http.ResponseWriter, r *http.Request, user User, reso
 
 // apiCreateQuickShare is the home page's box for a signed-in account: the
 // content and one link that ends with it, kept in the account's resources.
-// It exists where quick sharing does.
+// Accepts application/json or multipart/form-data.
 func (a *App) apiCreateQuickShare(w http.ResponseWriter, r *http.Request, user User) {
 	if !a.cfg.AnonymousEnabled {
 		a.apiFail(w, http.StatusNotFound, "not_found", "this server does not offer quick shares")
 		return
 	}
-	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "multipart/form-data" {
-		a.apiFail(w, http.StatusUnsupportedMediaType, "bad_request", "send a multipart form with a content file")
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		a.apiFail(w, http.StatusUnsupportedMediaType, "bad_request", "send application/json or multipart/form-data")
+		return
+	}
+	if mediaType == "application/json" {
+		var in struct {
+			Content  *string `json:"content"`
+			Filename string  `json:"filename"`
+			TTL      string  `json:"ttl"`
+		}
+		if !a.readAPIJSONLimit(w, r, &in, int64(store.AnonymousMaxBytes)+64<<10) {
+			return
+		}
+		if in.Content == nil {
+			a.apiFail(w, http.StatusBadRequest, "bad_request", "content is required")
+			return
+		}
+		if len(*in.Content) > store.AnonymousMaxBytes {
+			a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+			return
+		}
+		ttl := store.AnonymousDefaultTTL
+		if value := strings.TrimSpace(in.TTL); value != "" {
+			choice, ok := lifetimeChoice(value)
+			if !ok {
+				a.apiFail(w, http.StatusBadRequest, "invalid_ttl", "ttl must be one of 10m, 1h, 1d, 7d or 30d")
+				return
+			}
+			ttl = choice.Duration
+		}
+		resource, link, err := a.db.CreateQuickShare(r.Context(), user.ID, strings.TrimSpace(in.Filename), []byte(*in.Content), ttl, time.Now().UTC())
+		if err != nil {
+			a.apiRefused(w, "create quick share", err)
+			return
+		}
+		a.writeAPI(w, http.StatusCreated, struct {
+			apiResource
+			ShareURL string `json:"share_url"`
+		}{a.apiResourceView(r, resource), a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))})
+		return
+	}
+	if mediaType != "multipart/form-data" {
+		a.apiFail(w, http.StatusUnsupportedMediaType, "bad_request", "send application/json or multipart/form-data")
 		return
 	}
 	limit := int64(store.AnonymousMaxBytes) + 64<<10
@@ -489,22 +899,13 @@ func (a *App) apiCreateQuickShare(w http.ResponseWriter, r *http.Request, user U
 		}
 		ttl = choice.Duration
 	}
-	file, _, err := r.FormFile("content")
-	if err != nil {
-		a.apiFail(w, http.StatusBadRequest, "bad_request", "the form has no content file")
-		return
-	}
-	defer file.Close()
-	content, err := io.ReadAll(io.LimitReader(file, store.AnonymousMaxBytes+sealedOverhead+1))
-	if err != nil || len(content) > store.AnonymousMaxBytes+sealedOverhead {
-		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+	content, ok := a.readMultipartContent(w, r, int64(store.AnonymousMaxBytes)+sealedOverhead)
+	if !ok {
 		return
 	}
 	var resource Resource
 	var link Link
 	if r.FormValue("sealed_key") != "" {
-		// Encrypted on the client under the master password, as the home
-		// page's box does: an encrypted resource with its one link.
 		resource, link, err = a.db.CreateSealedQuickShare(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"),
 			store.SealedPart{Content: content, Meta: base64Field(r, "sealed_meta")},
 			base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"), ttl, time.Now().UTC())
@@ -524,96 +925,31 @@ func (a *App) apiCreateQuickShare(w http.ResponseWriter, r *http.Request, user U
 	}{a.apiResourceView(r, resource), a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))})
 }
 
-// handleDeviceCode starts a command line's sign-in. It needs no account - it
-// is how a command line gets one - so it is limited per address, and asks for
-// JSON so a page on another site cannot send it as a simple request.
-func (a *App) handleDeviceCode(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		a.apiFail(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
-		return
-	}
-	var request struct {
-		Scope   string `json:"scope"`
-		Device  string `json:"device"`
-		OS      string `json:"os"`
-		Version string `json:"version"`
-	}
-	if !a.readAPIJSON(w, r, &request) {
-		return
-	}
-	now := time.Now().UTC()
-	ip := a.clientIP(r)
-	if !a.limits.deviceCodes.allow(addressKey(ip), now) {
-		a.apiFail(w, http.StatusTooManyRequests, "rate_limited", "too many sign-ins started from this address; try again later")
-		return
-	}
-	deviceCode, userCode, grant, err := a.db.CreateDeviceGrant(r.Context(), store.DeviceRequest{
-		Scope: request.Scope, DeviceName: request.Device, DeviceOS: request.OS,
-		ClientVersion: request.Version, RequestIP: ip,
-	}, now)
-	if errors.Is(err, store.ErrBadScope) {
-		a.apiFail(w, http.StatusBadRequest, "invalid_scope", "scope must be read or write")
-		return
-	}
-	if err != nil {
-		a.apiRefused(w, "start sign-in", err)
-		return
-	}
-	a.writeAPI(w, http.StatusOK, map[string]any{
-		"device_code":      deviceCode,
-		"user_code":        store.FormatUserCode(userCode),
-		"verification_uri": a.baseURL(r) + deviceVerifyPath,
-		"expires_in":       int(grant.ExpiresAt.Sub(now).Seconds()),
-		"interval":         store.DevicePollInterval,
-	})
-}
-
-// handleDeviceToken answers a command line polling with its device code, in
-// the shape RFC 8628 gives: a token once approved, otherwise an error naming
-// why not yet, or not at all.
-func (a *App) handleDeviceToken(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		a.apiFail(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
-		return
-	}
-	var request struct {
-		DeviceCode string `json:"device_code"`
-	}
-	if !a.readAPIJSON(w, r, &request) {
-		return
-	}
-	now := time.Now().UTC()
-	if !a.limits.devicePolls.allow(addressKey(a.clientIP(r)), now) {
-		a.writeAPI(w, http.StatusTooManyRequests, apiError{Error: store.DeviceSlowDown, Interval: store.DevicePollInterval * 2})
-		return
-	}
-	exchange, err := a.db.ExchangeDeviceCode(r.Context(), request.DeviceCode, now)
-	if err != nil {
-		a.apiRefused(w, "finish sign-in", err)
-		return
-	}
-	if exchange.State != store.DeviceApproved {
-		a.writeAPI(w, http.StatusBadRequest, apiError{Error: exchange.State, Interval: exchange.Interval})
-		return
-	}
-	a.writeAPI(w, http.StatusOK, map[string]any{
-		"access_token": exchange.Token,
-		"token_type":   "bearer",
-		"scope":        exchange.APIToken.Scope,
-		"expires_at":   exchange.APIToken.ExpiresAt,
-		"login":        exchange.User.Login,
-	})
-}
-
 func (a *App) readAPIJSON(w http.ResponseWriter, r *http.Request, into any) bool {
+	return a.readAPIJSONLimit(w, r, into, apiMaxJSON)
+}
+
+func (a *App) readAPIJSONLimit(w http.ResponseWriter, r *http.Request, into any, limit int64) bool {
 	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
 		a.apiFail(w, http.StatusUnsupportedMediaType, "bad_request", "send JSON")
 		return false
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, apiMaxJSON))
+	if r.ContentLength > limit {
+		a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+		return false
+	}
+	if limit > apiMaxJSON {
+		allowUpload(w, limit)
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(into); err != nil {
-		a.apiFail(w, http.StatusBadRequest, "bad_request", "could not read the request")
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			a.apiFail(w, http.StatusRequestEntityTooLarge, "too_large", "content is too large")
+		} else {
+			a.apiFail(w, http.StatusBadRequest, "bad_request", "could not read the request")
+		}
 		return false
 	}
 	return true
@@ -630,9 +966,8 @@ func b64url(value []byte) string {
 	return base64.RawURLEncoding.EncodeToString(value)
 }
 
-// apiKeyring hands the command line the account's keyring, wrapped as it is
-// kept: what it needs to unlock with the master password, and nothing that
-// opens without it.
+// apiKeyring returns the account's wrapped keyring for end-to-end encrypted
+// resources.
 func (a *App) apiKeyring(w http.ResponseWriter, r *http.Request, user User) {
 	keyring, err := a.db.Keyring(r.Context(), user.ID)
 	if errors.Is(err, store.ErrNotFound) {
@@ -649,9 +984,8 @@ func (a *App) apiKeyring(w http.ResponseWriter, r *http.Request, user User) {
 	}{keyringJSON(keyring), user.ID})
 }
 
-// apiWriteSealed saves content the command line encrypted: the body is the
-// ciphertext, and X-PlainMote-Sealed-Meta the encrypted metadata to go with
-// it.
+// apiWriteSealed saves client-encrypted content: the body is the ciphertext,
+// and X-PlainMote-Sealed-Meta the encrypted metadata to go with it.
 func (a *App) apiWriteSealed(w http.ResponseWriter, r *http.Request, user User, resource Resource, base int) {
 	meta, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(r.Header.Get("X-PlainMote-Sealed-Meta")))
 	if err != nil || len(meta) == 0 {

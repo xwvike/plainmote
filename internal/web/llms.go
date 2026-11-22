@@ -80,12 +80,12 @@ curl --data-binary @app.log '%[1]s/paste?ttl=1d&filename=app.log'
 	fmt.Fprintf(&text, `
 ## HTTP API
 
-- Base `+"`%[1]s/api/v1/`"+`. JSON, except resource content, which is raw bytes. Errors are `+"`{\"error\": \"<code>\", \"message\": \"...\"}`"+`.
-- Authentication is a personal access token (`+"`pmt_...`"+`) in `+"`Authorization: Bearer`"+`, obtained by device authorization (RFC 8628): `+"`POST /api/v1/device/code`"+` with `+"`{\"scope\": \"read\"|\"write\", \"device\": \"...\"}`"+`, the owner approves the user code at `+"`%[1]s/cli/device`"+`, then poll `+"`POST /api/v1/device/token`"+` with `+"`{\"device_code\": \"...\"}`"+`. A token lasts 90 days; the owner can revoke it under Settings › Authorized apps.
-- Reading: `+"`GET /me`"+`; `+"`GET /resources?q=&tag=`"+` lists, `+"`GET /resources/{id}`"+` describes, `+"`GET /resources/{id}/content`"+` returns the raw bytes; `+"`GET /tags`"+` lists the account's tags with their counts.
-- Writing, with a `+"`write`"+` token: `+"`PUT /resources/{id}/content`"+` with `+"`If-Match: \"v<version>\"`"+` saves a new version (`+"`412`"+` on a conflict); `+"`POST /resources`"+` creates one from a multipart `+"`content`"+` file, with `+"`tag`"+` fields to tag it; `+"`PATCH /resources/{id}/tags`"+` with `+"`{\"add\": [...], \"remove\": [...]}`"+` changes its tags%[2]s.
-- The API cannot delete resources, manage share links or read access records. Encrypted content is returned as ciphertext, for the client to decrypt.
-- `+"`%[1]s/developers/api`"+` presents the HTTP API to people.
+- Base `+"`%[1]s/api/v1/`"+`. JSON, except resource content (`+"`GET/PUT /resources/{id}/content`"+`), which is raw bytes. Errors are `+"`{\"error\": \"<code>\", \"message\": \"...\"}`"+`.
+- Authentication is a personal access token (`+"`pmt_...`"+`) in `+"`Authorization: Bearer`"+`, created directly under Settings › Authorized apps (`+"`%[1]s/account/devices`"+`) with read or write scope and a chosen expiry (30 days, 90 days, 1 year, or never). Revocable at any time.
+- Reading: `+"`GET /me`"+`; `+"`GET /resources?q=&tag=&kind=`"+` lists, `+"`GET /resources/{id}`"+` describes, `+"`GET /resources/{id}/content`"+` returns raw bytes (optional `+"`?version=N`"+`), `+"`GET /resources/{id}/versions`"+` lists version history, `+"`GET /resources/{id}/links`"+` lists active share links, `+"`GET /tags`"+` lists tags with counts.
+- Writing, with a `+"`write`"+` token: `+"`POST /resources`"+` creates a resource from JSON (`+"`{\"filename\", \"name\", \"content\", \"tags\"}`"+`) or multipart form; `+"`PATCH /resources/{id}`"+` updates name, filename or tags; `+"`PUT /resources/{id}/content`"+` saves a new version (optional `+"`If-Match: \"v<version>\"`"+` for conflict detection); `+"`DELETE /resources/{id}`"+` moves an unencrypted resource to the trash and revokes its links; `+"`POST /resources/{id}/links`"+` creates a share link and `+"`DELETE /resources/{id}/links/{link_id}`"+` revokes it%[2]s.
+- Encrypted resources cannot be shared or deleted via API; their content is returned as ciphertext. Access logs and trash management remain web-only.
+- `+"`%[1]s/developers/api`"+` presents the HTTP API with copyable examples.
 `, base, a.llmsQuickShareAPI())
 
 	fmt.Fprintf(&text, `

@@ -695,7 +695,7 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .dlg > header b, .dlg > form > header b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
 .dlg > header .x, .dlg > form > header .x { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: var(--r-sm); color: var(--ink3); font: 400 18px var(--sans); text-decoration: none; transition: background .14s, color .14s; }
 .dlg > header .x:hover, .dlg > form > header .x:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
-.dlg > .body, .dlg > form > .body { padding: 18px 20px; display: grid; gap: 14px; }
+.dlg > .body, .dlg > form > .body { padding: 18px 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .dlg > footer, .dlg > form > footer { display: flex; justify-content: flex-end; gap: 10px; align-items: center; padding: 13px 20px; border-top: 1px solid var(--line); background: var(--head); }
 .rr { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .rr label { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; white-space: nowrap; }
@@ -799,9 +799,17 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .kv-rows .mut { font-size: 12.5px; }
 .dlg header .steps { margin-left: auto; font: 400 11.5px var(--mono); color: var(--ink3); }
 .dlg .field { display: grid; gap: 5px; font-size: 12.5px; color: var(--ink2); }
-.dlg .field input { width: 100%; box-sizing: border-box; }
+.dlg .field input:not([type="radio"]):not([type="checkbox"]), .dlg .field select { width: 100%; box-sizing: border-box; }
 .dlg .err:empty, .dlg .hint:empty { display: none; }
 .dlg .check { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.token-scopes { display: grid; gap: 8px; }
+.token-scope { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--field); cursor: pointer; transition: border-color .14s, background .14s; }
+.token-scope:has(input:checked) { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 6%, var(--panel)); }
+.token-scope input[type="radio"] { width: 14px; height: 14px; margin: 3px 0 0; flex: none; accent-color: var(--accent); }
+.token-scope > span { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.token-scope b { font-size: 13px; font-weight: 600; color: var(--ink); }
+.token-scope small { font-size: 12px; color: var(--ink3); line-height: 1.45; }
+.first-run-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 2px; }
 .rk { display: block; padding: 12px 14px; border: 1px solid var(--term-line); border-radius: var(--r); background: var(--term); color: var(--term-ink); font: 500 13.5px/1.8 var(--mono); letter-spacing: .04em; overflow-wrap: anywhere; user-select: all; }
 .rk-acts { display: flex; gap: 8px; margin: 0; }
 
@@ -1156,9 +1164,9 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 .clients details[open] summary::before { transform: rotate(45deg); }
 .clients summary:hover { background: var(--zebra); }
 .clients .inst { display: grid; gap: 10px; padding: 4px 16px 16px 30px; }
-.snip { position: relative; }
-.snip .term-block { padding-right: 78px; }
-.snip > button { position: absolute; top: 8px; right: 8px; }
+.snip { position: relative; min-width: 0; max-width: 100%; }
+.snip .term-block { padding-right: 78px; max-width: 100%; }
+.snip > button { position: absolute; top: 9px; right: 9px; }
 .dev-list > div { display: grid; grid-template-columns: minmax(0, 1.4fr) 64px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, .9fr) 56px; gap: 12px; align-items: center; padding: 11px 16px; border-top: 1px solid var(--line); font-size: 13px; transition: background .12s; }
 .dev-list > div:not(.hd):hover { background: var(--zebra); }
 .dev-list.apps > div { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr) 56px; }
@@ -1174,10 +1182,6 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 .tag.qs { background: color-mix(in oklab, var(--sand) 15%, var(--panel)); color: var(--sand-ink); }
 .st.qs-left { color: var(--sand); }
 .st.qs-left > span { color: var(--sand-ink); }
-.cli-edit { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 2px 2px; }
-.cli-edit code { min-width: 0; box-sizing: border-box; height: 26px; padding: 0 10px; overflow-x: auto; border: 1px solid var(--term-line); border-radius: var(--r-sm); background: var(--term); color: var(--term-ink); font: 400 11.5px/24px var(--mono); white-space: nowrap; }
-.cli-edit code b { font-weight: 400; color: var(--sand-l); }
-.cli-edit .txt { margin-left: auto; }
 
 /* Settings & Developers frosted-glass side rail (keeps nav crisp over dithered backdrop). */
 .page.settings { grid-template-columns: 204px minmax(0, 1fr); gap: 20px 26px; align-items: start; }
@@ -1234,14 +1238,14 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 .first-run > b { font-size: 14px; font-weight: 600; }
 .first-run .cli-edit { padding: 2px 0; }
 .first-run .cli-edit .txt { margin-left: 0; }
-.steps { display: grid; gap: 16px; margin: 0; padding-left: 1.4em; font-size: 13px; }
-.steps > li { display: grid; gap: 7px; padding-left: 2px; }
-.steps > li::marker { font: 600 12px var(--mono); color: var(--ink3); }
-.steps p { color: var(--ink2); }
+ol.steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin: 0; padding: 0; list-style: none; counter-reset: step; font-size: 13px; }
+ol.steps > li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; counter-increment: step; }
+ol.steps > li > p { color: var(--ink2); }
+ol.steps > li > p::before { content: counter(step) "."; display: inline-block; min-width: 18px; font: 600 12px var(--mono); color: var(--accent); }
 .api-table th { background: var(--panel); font-weight: 500; color: var(--ink3); }
 .api-table td.mono { font: 400 12px var(--mono); white-space: nowrap; }
 .api-table td:last-child { color: var(--ink2); }
-.ex { display: grid; gap: 7px; }
+.ex { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; }
 .ex > p { font-size: 13px; color: var(--ink2); }
 @media (max-width: 760px) {
   .idl > li { grid-template-columns: 22px minmax(0, 1fr) auto; }

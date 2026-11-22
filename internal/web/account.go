@@ -137,6 +137,11 @@ func (a *App) renderAccount(w http.ResponseWriter, r *http.Request, user User, s
 			a.renderError(w, http.StatusInternalServerError, err)
 			return
 		}
+		if r.URL.Query().Get("new_token") == "1" {
+			data.NewTokenOpen = true
+			data.TokenScope = store.TokenScopeRead
+			data.TokenTTL = "90d"
+		}
 		// The revoke dialog opens over the list, for a token or an app that
 		// is still on it.
 		if id := r.URL.Query().Get("revoke"); id != "" {
@@ -283,8 +288,17 @@ func (a *App) handleAccountIdentities(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleAccountTokens revokes one signed-in command line. Its next request is
-// refused, and the page comes back without it.
+// tokenTTLChoices maps the form values on the create-token dialog to lifetimes.
+// Zero means the token does not expire.
+var tokenTTLChoices = map[string]time.Duration{
+	"30d":   30 * 24 * time.Hour,
+	"90d":   90 * 24 * time.Hour,
+	"365d":  365 * 24 * time.Hour,
+	"never": 0,
+}
+
+// handleAccountTokens creates or revokes a personal access token, or revokes
+// an authorized MCP app.
 func (a *App) handleAccountTokens(w http.ResponseWriter, r *http.Request) {
 	user, sessionID, ok := a.requireUser(w, r)
 	if !ok {
@@ -301,6 +315,9 @@ func (a *App) handleAccountTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	// Already gone is what was asked for: another tab may have revoked it.
 	switch r.FormValue("action") {
+	case "create":
+		a.handleCreateAPIToken(w, r, user)
+		return
 	case "revoke":
 		if err := a.db.RevokeAPIToken(r.Context(), user.ID, r.FormValue("token")); err != nil && !errors.Is(err, store.ErrNotFound) {
 			a.serverError(w, "revoke token", err)
@@ -316,6 +333,66 @@ func (a *App) handleAccountTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, accountDevicesPath, http.StatusSeeOther)
+}
+
+func (a *App) handleCreateAPIToken(w http.ResponseWriter, r *http.Request, user User) {
+	ctx := r.Context()
+	now := time.Now().UTC()
+	locale := requestLanguage(r).Locale
+	name := strings.TrimSpace(r.FormValue("name"))
+	scope := r.FormValue("scope")
+	if scope != store.TokenScopeRead && scope != store.TokenScopeWrite {
+		scope = store.TokenScopeRead
+	}
+	ttlValue := r.FormValue("ttl")
+	ttl, ttlOK := tokenTTLChoices[ttlValue]
+
+	render := func(status int, tokenErr, secret string, created store.APIToken) {
+		account, err := a.db.Account(ctx, user.ID)
+		if err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		data := a.basePage(r, user)
+		data.Active = "account"
+		data.Section = "devices"
+		data.Account = account
+		if data.APITokens, err = a.db.ListAPITokens(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if data.OAuthGrants, err = a.db.ListOAuthGrants(ctx, user.ID, now); err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if tokenErr != "" {
+			data.NewTokenOpen = true
+			data.TokenName = name
+			data.TokenScope = scope
+			data.TokenTTL = ttlValue
+			data.TokenError = tokenErr
+		} else {
+			data.CreatedToken = secret
+			data.CreatedTokenInfo = created
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		a.renderTemplate(w, r, status, "account.html", data)
+	}
+
+	if !ttlOK {
+		render(http.StatusBadRequest, localizePageError(locale, store.ErrBadTokenTTL.Error()), "", store.APIToken{})
+		return
+	}
+	secret, token, err := a.db.CreateAPIToken(ctx, user.ID, name, scope, ttl, now)
+	if store.IsRefusal(err) {
+		render(http.StatusBadRequest, localizePageError(locale, err.Error()), "", store.APIToken{})
+		return
+	}
+	if err != nil {
+		a.serverError(w, "create token", err)
+		return
+	}
+	render(http.StatusOK, "", secret, token)
 }
 
 // handleAccountDelete takes two steps: the username typed out, then a dialog

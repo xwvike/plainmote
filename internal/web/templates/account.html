@@ -28,7 +28,7 @@
     </div>
   </main>
 
-  {{if or .DeleteOpen .RevokeToken.ID .RevokeGrant.ID .PurgeTarget .EmptyOpen}}<div class="scrim"></div>{{end}}
+  {{if or .DeleteOpen .NewTokenOpen .CreatedToken .RevokeToken.ID .RevokeGrant.ID .PurgeTarget .EmptyOpen}}<div class="scrim"></div>{{end}}
   {{template "account-dialog" .}}
   {{template "footer" .}}
   <script type="module" src="{{asset "parts.js"}}"></script>
@@ -203,13 +203,9 @@
       {{if .Keyring}}{{template "keyring-dialogs-set" .}}{{else}}{{template "keyring-dialogs-new" .}}{{end}}
 {{end}}
 
-{{/* One row per command line signed in to this account. The token itself
-     is not shown, and not kept: only what the command line said about
-     itself, when it signed in and when it was last used. With none, the page
-     says how to sign one in. */}}
+{{/* Authorized MCP apps and personal access tokens for the HTTP API.
+     Tokens are shown once on creation; only their metadata is kept here. */}}
 {{define "account-devices"}}
-      {{/* MCP apps appear once one has been authorized: until then the
-           command line is what this page is about. */}}
       {{if .OAuthGrants}}
       <section class="panel ruled">
         <div class="pt"><span class="sec">{{tr .Locale "mcp_apps_title"}}</span><span class="sp"><span class="counts"><b>{{len .OAuthGrants}}</b> {{tr .Locale "mcp_apps_count"}}</span></span></div>
@@ -223,14 +219,33 @@
         </div>
       </section>
       {{end}}
-      <section class="panel ruled">
-        <div class="pt"><span class="sec">{{tr .Locale "dev_api_title"}}</span>{{if .APITokens}}<span class="sp"><span class="counts"><b>{{len .APITokens}}</b> {{tr .Locale "cli_devices"}}</span></span>{{end}}</div>
+      {{template "account-api-tokens" .}}
+      <p class="hint">{{tr .Locale "devices_note"}}</p>
+      {{if not .OAuthGrants}}<p class="hint">{{tr .Locale "devices_mcp_hint"}} <a href="/developers/mcp">{{tr .Locale "dev_mcp_title"}} →</a></p>{{end}}
+{{end}}
+
+{{define "account-api-tokens"}}
+      <section class="panel ruled" data-part="tokens">
+        <div class="pt">
+          <span class="sec">{{tr .Locale "api_tokens_title"}}</span>
+          <span class="sp">
+            {{if .APITokens}}<span class="counts"><b>{{len .APITokens}}</b> {{tr .Locale "api_tokens_count"}}</span>{{end}}
+            <a class="btn pri sm" href="/account/devices?new_token=1" data-dialog>{{tr .Locale "token_new"}}</a>
+          </span>
+        </div>
         {{if .APITokens}}
         <div class="pb dev-sheet">
           <div class="dev-list">
-            <div class="hd"><span>{{tr .Locale "cli_device"}}</span><span>{{tr .Locale "cli_scope"}}</span><span>{{tr .Locale "cli_signed_in"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
+            <div class="hd"><span>{{tr .Locale "token_name"}}</span><span>{{tr .Locale "cli_scope"}}</span><span>{{tr .Locale "token_created"}}</span><span>{{tr .Locale "cli_last_used"}}</span><span>{{tr .Locale "cli_expires"}}</span><span></span></div>
             {{range .APITokens}}
-            <div><span class="nm"><b>{{or .DeviceName (tr $.Locale "cli_unnamed_device")}}</b><span>{{.DeviceOS}}{{if .ClientVersion}} · {{.ClientVersion}}{{end}}</span></span><span><span class="tag">{{if .CanWrite}}{{tr $.Locale "cli_scope_write"}}{{else}}{{tr $.Locale "cli_scope_read"}}{{end}}</span></span><span class="tm">{{formatMinute .CreatedAt}}</span><span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span><span class="tm">{{formatMinute .ExpiresAt}}</span><span class="act"><a class="txt danger" href="/account/devices?revoke={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span></div>
+            <div>
+              <span class="nm"><b>{{or .DeviceName (tr $.Locale "token_unnamed")}}</b>{{if or .DeviceOS .ClientVersion}}<span>{{.DeviceOS}}{{if .ClientVersion}} · {{.ClientVersion}}{{end}}</span>{{end}}</span>
+              <span><span class="tag">{{if .CanWrite}}{{tr $.Locale "cli_scope_write"}}{{else}}{{tr $.Locale "cli_scope_read"}}{{end}}</span></span>
+              <span class="tm">{{formatMinute .CreatedAt}}</span>
+              <span class="tm">{{with .LastUsedAt}}{{formatMinute .}}{{else}}—{{end}}{{if .LastUsedIP}} · {{.LastUsedIP}}{{end}}</span>
+              <span class="tm">{{with .ExpiresAt}}{{formatMinute .}}{{else}}{{tr $.Locale "token_ttl_never"}}{{end}}</span>
+              <span class="act"><a class="txt danger" href="/account/devices?revoke={{.ID}}" data-dialog>{{tr $.Locale "revoke"}}</a></span>
+            </div>
             {{end}}
           </div>
         </div>
@@ -238,12 +253,13 @@
         <div class="pb first-run">
           <b>{{tr .Locale "devices_empty_title"}}</b>
           <p class="hint">{{tr .Locale "devices_empty_body"}}</p>
-          <p class="hint"><a href="/developers/api">{{tr .Locale "dev_api_title"}} →</a></p>
+          <div class="first-run-acts">
+            <a class="btn pri sm" href="/account/devices?new_token=1" data-dialog>{{tr .Locale "token_new"}}</a>
+            <a class="txt" href="/developers/api">{{tr .Locale "dev_api_title"}} →</a>
+          </div>
         </div>
         {{end}}
       </section>
-      <p class="hint">{{tr .Locale "devices_note"}}</p>
-      {{if not .OAuthGrants}}<p class="hint">{{tr .Locale "devices_mcp_hint"}} <a href="/developers/mcp">{{tr .Locale "dev_mcp_title"}} →</a></p>{{end}}
 {{end}}
 
 {{/* What leaves with an export and what goes with a deletion, one above the
@@ -395,10 +411,78 @@
     </footer>
   </dialog>
   {{end}}
+  {{if .NewTokenOpen}}
+  <dialog class="dlg" open data-part="dialog">
+    <form method="post" action="/account/tokens" data-parts>
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="action" value="create">
+      <header>
+        <b>{{tr .Locale "token_new_title"}}</b>
+        <a class="x" href="/account/devices" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+      </header>
+      <div class="body">
+        <label class="field">
+          <span>{{tr .Locale "token_name"}}</span>
+          <input type="text" name="name" value="{{.TokenName}}" maxlength="64" placeholder="{{tr .Locale "token_name_placeholder"}}" autocomplete="off" required autofocus>
+        </label>
+        <div class="field">
+          <span>{{tr .Locale "cli_scope"}}</span>
+          <div class="token-scopes" role="radiogroup" aria-label="{{tr .Locale "cli_scope"}}">
+            <label class="token-scope">
+              <input type="radio" name="scope" value="read"{{if ne .TokenScope "write"}} checked{{end}}>
+              <span><b>{{tr .Locale "cli_scope_read"}}</b><small>{{tr .Locale "token_scope_read_hint"}}</small></span>
+            </label>
+            <label class="token-scope">
+              <input type="radio" name="scope" value="write"{{if eq .TokenScope "write"}} checked{{end}}>
+              <span><b>{{tr .Locale "cli_scope_write"}}</b><small>{{tr .Locale "token_scope_write_hint"}}</small></span>
+            </label>
+          </div>
+        </div>
+        <label class="field">
+          <span>{{tr .Locale "cli_expires"}}</span>
+          <select name="ttl">
+            <option value="30d"{{if eq .TokenTTL "30d"}} selected{{end}}>{{tr .Locale "token_ttl_30d"}}</option>
+            <option value="90d"{{if or (eq .TokenTTL "90d") (eq .TokenTTL "")}} selected{{end}}>{{tr .Locale "token_ttl_90d"}}</option>
+            <option value="365d"{{if eq .TokenTTL "365d"}} selected{{end}}>{{tr .Locale "token_ttl_365d"}}</option>
+            <option value="never"{{if eq .TokenTTL "never"}} selected{{end}}>{{tr .Locale "token_ttl_never"}}</option>
+          </select>
+        </label>
+        {{if .TokenError}}<p class="err" role="alert">{{.TokenError}}</p>{{end}}
+      </div>
+      <footer>
+        <a class="btn" href="/account/devices" data-close>{{tr .Locale "cancel"}}</a>
+        <button type="submit" class="pri">{{tr .Locale "token_create_submit"}}</button>
+      </footer>
+    </form>
+  </dialog>
+  {{end}}
+  {{if .CreatedToken}}
+  <dialog class="dlg" open data-part="dialog">
+    <header>
+      <b>{{tr .Locale "token_created_title"}}</b>
+      <a class="x" href="/account/devices" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+    </header>
+    <div class="body">
+      <p class="notice">{{tr .Locale "token_created_warn"}}</p>
+      <div class="snip">
+        <code class="term-block">{{.CreatedToken}}</code>
+        <button type="button" class="sm" data-copy="{{.CreatedToken}}">{{template "copy-label" .}}</button>
+      </div>
+      <p class="hint">{{tr .Locale "token_created_try"}}</p>
+      <div class="snip">
+        <code class="term-block"><b>$</b> curl -H "Authorization: Bearer {{.CreatedToken}}" {{.BaseURL}}/api/v1/resources</code>
+        <button type="button" class="sm" data-copy="curl -H &quot;Authorization: Bearer {{.CreatedToken}}&quot; {{.BaseURL}}/api/v1/resources">{{template "copy-label" .}}</button>
+      </div>
+    </div>
+    <footer>
+      <a class="btn pri" href="/account/devices" data-close autofocus>{{tr .Locale "token_done"}}</a>
+    </footer>
+  </dialog>
+  {{end}}
   {{if .RevokeToken.ID}}
   <dialog class="dlg" open data-part="dialog">
     <header>
-      <b>{{tr .Locale "revoke"}} <q>{{or .RevokeToken.DeviceName (tr .Locale "cli_unnamed_device")}}</q></b>
+      <b>{{tr .Locale "revoke"}} <q>{{or .RevokeToken.DeviceName (tr .Locale "token_unnamed")}}</q></b>
       <a class="x" href="/account/devices" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
@@ -458,7 +542,7 @@
   {{end}}
 {{end}}
 
-{{define "account.html#parts"}}{{template "account-flash" .}}{{template "account-dialog" .}}{{end}}
+{{define "account.html#parts"}}{{template "account-flash" .}}{{if eq .Section "devices"}}{{template "account-api-tokens" .}}{{end}}{{template "account-dialog" .}}{{end}}
 
 {{/* The master password's dialogs. Each form is handled by keyring.js and
      never submitted: what is typed into them stays in the browser. */}}

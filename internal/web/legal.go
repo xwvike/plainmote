@@ -49,10 +49,8 @@ type legalView struct {
 	// each was replaced.
 	HistoryKeep      int
 	HistoryRetention time.Duration
-	// How long a command line's sign-in lasts, and how long a sign-in
-	// request waits to be confirmed.
+	// Default lifetime of a personal access token when an expiry is chosen.
 	TokenLifetime time.Duration
-	DeviceWindow  time.Duration
 	// How long an authorized app may go unused before it lapses.
 	AppIdle time.Duration
 }
@@ -107,7 +105,6 @@ func (a *App) serveLegal(w http.ResponseWriter, r *http.Request, page string) {
 		HistoryKeep:      store.HistoryKeep,
 		HistoryRetention: store.HistoryRetention,
 		TokenLifetime:    store.TokenLifetime,
-		DeviceWindow:     store.DeviceGrantLifetime,
 		AppIdle:          store.OAuthRefreshLifetime,
 	}
 	a.renderTemplate(w, r, http.StatusOK, "legal.html", data)

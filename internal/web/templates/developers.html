@@ -21,16 +21,62 @@
         <div class="pt"><span class="sec">{{tr .Locale "dev_api_auth_title"}}</span></div>
         <div class="pb">
           <ol class="steps">
-            <li><p>{{tr .Locale "dev_api_step_code"}}</p>
-              <code class="term-block"><b>$</b> curl -X POST -H 'Content-Type: application/json' \
-    -d '{"scope": "read", "device": "my-script"}' {{.BaseURL}}/api/v1/device/code</code></li>
-            <li><p>{{printf (tr .Locale "dev_api_step_approve") (print .BaseURL "/cli/device")}}</p></li>
-            <li><p>{{tr .Locale "dev_api_step_token"}}</p>
-              <code class="term-block"><b>$</b> curl -X POST -H 'Content-Type: application/json' \
-    -d '{"device_code": "…"}' {{.BaseURL}}/api/v1/device/token</code></li>
+            <li><p>{{tr .Locale "dev_api_step_create"}} <a href="/account/devices">{{tr .Locale "devices_title"}} →</a></p></li>
             <li><p>{{tr .Locale "dev_api_step_call"}}</p>
-              <code class="term-block"><b>$</b> curl -H "Authorization: Bearer $PLAINMOTE_TOKEN" {{.BaseURL}}/api/v1/resources</code></li>
+              <div class="snip">
+                <code class="term-block"><b>$</b> curl -H "Authorization: Bearer $PLAINMOTE_TOKEN" {{.BaseURL}}/api/v1/me</code>
+                <button type="button" class="sm" data-copy="curl -H &quot;Authorization: Bearer $PLAINMOTE_TOKEN&quot; {{.BaseURL}}/api/v1/me">{{template "copy-label" .}}</button>
+              </div></li>
           </ol>
+        </div>
+      </section>
+
+      <section class="panel ruled">
+        <div class="pt"><span class="sec">{{tr .Locale "dev_curl_examples"}}</span></div>
+        <div class="pb">
+          <div class="ex">
+            <p>{{tr .Locale "dev_api_ex_list"}}</p>
+            <div class="snip">
+              <code class="term-block"><b>$</b> curl -H "Authorization: Bearer $PLAINMOTE_TOKEN" {{.BaseURL}}/api/v1/resources</code>
+              <button type="button" class="sm" data-copy="curl -H &quot;Authorization: Bearer $PLAINMOTE_TOKEN&quot; {{.BaseURL}}/api/v1/resources">{{template "copy-label" .}}</button>
+            </div>
+          </div>
+          <div class="ex">
+            <p>{{tr .Locale "dev_api_ex_create"}}</p>
+            <div class="snip">
+              <code class="term-block"><b>$</b> curl -X POST {{.BaseURL}}/api/v1/resources \
+    -H "Authorization: Bearer $PLAINMOTE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"filename":"nginx.conf","content":"listen 80;\n","tags":["prod"]}'</code>
+              <button type="button" class="sm" data-copy="curl -X POST {{.BaseURL}}/api/v1/resources -H &quot;Authorization: Bearer $PLAINMOTE_TOKEN&quot; -H &quot;Content-Type: application/json&quot; -d '{&quot;filename&quot;:&quot;nginx.conf&quot;,&quot;content&quot;:&quot;listen 80;\n&quot;,&quot;tags&quot;:[&quot;prod&quot;]}'">{{template "copy-label" .}}</button>
+            </div>
+          </div>
+          <div class="ex">
+            <p>{{tr .Locale "dev_api_ex_read"}}</p>
+            <div class="snip">
+              <code class="term-block"><b>$</b> curl -H "Authorization: Bearer $PLAINMOTE_TOKEN" {{.BaseURL}}/api/v1/resources/{id}/content</code>
+              <button type="button" class="sm" data-copy="curl -H &quot;Authorization: Bearer $PLAINMOTE_TOKEN&quot; {{.BaseURL}}/api/v1/resources/{id}/content">{{template "copy-label" .}}</button>
+            </div>
+          </div>
+          <div class="ex">
+            <p>{{tr .Locale "dev_api_ex_update"}}</p>
+            <div class="snip">
+              <code class="term-block"><b>$</b> curl -X PUT {{.BaseURL}}/api/v1/resources/{id}/content \
+    -H "Authorization: Bearer $PLAINMOTE_TOKEN" \
+    --data-binary @nginx.conf</code>
+              <button type="button" class="sm" data-copy="curl -X PUT {{.BaseURL}}/api/v1/resources/{id}/content -H &quot;Authorization: Bearer $PLAINMOTE_TOKEN&quot; --data-binary @nginx.conf">{{template "copy-label" .}}</button>
+            </div>
+          </div>
+          <div class="ex">
+            <p>{{tr .Locale "dev_api_ex_share"}}</p>
+            <div class="snip">
+              <code class="term-block"><b>$</b> curl -X POST {{.BaseURL}}/api/v1/resources/{id}/links \
+    -H "Authorization: Bearer $PLAINMOTE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"prod-server","expires_in":"30d"}'</code>
+              <button type="button" class="sm" data-copy="curl -X POST {{.BaseURL}}/api/v1/resources/{id}/links -H &quot;Authorization: Bearer $PLAINMOTE_TOKEN&quot; -H &quot;Content-Type: application/json&quot; -d '{&quot;name&quot;:&quot;prod-server&quot;,&quot;expires_in&quot;:&quot;30d&quot;}'">{{template "copy-label" .}}</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -40,18 +86,20 @@
           <div class="table-scroll"><table class="api-table">
             <thead><tr><th>{{tr .Locale "dev_api_request"}}</th><th>{{tr .Locale "cli_scope"}}</th><th>{{tr .Locale "dev_api_purpose"}}</th></tr></thead>
             <tbody>
-              <tr><td class="mono">POST /api/v1/device/code</td><td><span class="mut">{{tr .Locale "dev_api_no_token"}}</span></td><td>{{tr .Locale "dev_api_code"}}</td></tr>
-              <tr><td class="mono">POST /api/v1/device/token</td><td><span class="mut">{{tr .Locale "dev_api_no_token"}}</span></td><td>{{tr .Locale "dev_api_token"}}</td></tr>
-              <tr><td class="mono">GET /api/v1/me</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_me"}}</td></tr>
-              <tr><td class="mono">GET /api/v1/keyring</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_keyring"}}</td></tr>
               <tr><td class="mono">GET /api/v1/resources</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_list"}}</td></tr>
+              <tr><td class="mono">POST /api/v1/resources</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_create"}}</td></tr>
               <tr><td class="mono">GET /api/v1/resources/{id}</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_get"}}</td></tr>
+              <tr><td class="mono">PATCH /api/v1/resources/{id}</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_patch"}}</td></tr>
+              <tr><td class="mono">DELETE /api/v1/resources/{id}</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_delete"}}</td></tr>
               <tr><td class="mono">GET /api/v1/resources/{id}/content</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_read"}}</td></tr>
               <tr><td class="mono">PUT /api/v1/resources/{id}/content</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_save"}}</td></tr>
-              <tr><td class="mono">POST /api/v1/resources</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_create"}}</td></tr>
-              <tr><td class="mono">PATCH /api/v1/resources/{id}/tags</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_retag"}}</td></tr>
+              <tr><td class="mono">GET /api/v1/resources/{id}/versions</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_versions"}}</td></tr>
+              <tr><td class="mono">GET /api/v1/resources/{id}/links</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_links_list"}}</td></tr>
+              <tr><td class="mono">POST /api/v1/resources/{id}/links</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_links_create"}}</td></tr>
+              <tr><td class="mono">DELETE /api/v1/resources/{id}/links/{link_id}</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_links_revoke"}}</td></tr>
               <tr><td class="mono">GET /api/v1/tags</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_tags"}}</td></tr>
               {{if .Anonymous}}<tr><td class="mono">POST /api/v1/quick-shares</td><td><span class="tag">write</span></td><td>{{tr .Locale "dev_api_quick"}}</td></tr>{{end}}
+              <tr><td class="mono">GET /api/v1/me</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_me"}}</td></tr>
               <tr><td class="mono">DELETE /api/v1/token</td><td><span class="tag">read</span></td><td>{{tr .Locale "dev_api_revoke"}}</td></tr>
             </tbody>
           </table></div>
@@ -72,13 +120,15 @@
           {{if .APIDocsURL}}<p class="hint">{{tr .Locale "dev_api_docs"}} <a href="{{.APIDocsURL}}" rel="noopener">docs/api.md</a></p>{{end}}
         </div>
       </section>
+
+      {{template "copy-status" .}}
     {{else if eq .Section "dev-curl"}}
       <section class="panel ruled">
         <div class="pt"><span class="sec">{{tr .Locale "dev_curl_examples"}}</span></div>
         <div class="pb">
-          <div class="ex"><p>{{tr .Locale "dev_curl_ex_pipe"}}</p><code class="term-block"><b>$</b> tail -n 200 app.log | curl -F 'content=&lt;-' {{.BaseURL}}/paste</code></div>
-          <div class="ex"><p>{{tr .Locale "dev_curl_ex_file"}}</p><code class="term-block"><b>$</b> curl -F content=@app.log {{.BaseURL}}/paste</code></div>
-          <div class="ex"><p>{{tr .Locale "dev_curl_ex_raw"}}</p><code class="term-block"><b>$</b> curl --data-binary @app.log '{{.BaseURL}}/paste?ttl=1d&amp;filename=app.log'</code></div>
+          <div class="ex"><p>{{tr .Locale "dev_curl_ex_pipe"}}</p><div class="snip"><code class="term-block"><b>$</b> tail -n 200 app.log | curl -F 'content=&lt;-' {{.BaseURL}}/paste</code><button type="button" class="sm" data-copy="tail -n 200 app.log | curl -F 'content=<-' {{.BaseURL}}/paste">{{template "copy-label" .}}</button></div></div>
+          <div class="ex"><p>{{tr .Locale "dev_curl_ex_file"}}</p><div class="snip"><code class="term-block"><b>$</b> curl -F content=@app.log {{.BaseURL}}/paste</code><button type="button" class="sm" data-copy="curl -F content=@app.log {{.BaseURL}}/paste">{{template "copy-label" .}}</button></div></div>
+          <div class="ex"><p>{{tr .Locale "dev_curl_ex_raw"}}</p><div class="snip"><code class="term-block"><b>$</b> curl --data-binary @app.log '{{.BaseURL}}/paste?ttl=1d&amp;filename=app.log'</code><button type="button" class="sm" data-copy="curl --data-binary @app.log '{{.BaseURL}}/paste?ttl=1d&filename=app.log'">{{template "copy-label" .}}</button></div></div>
         </div>
       </section>
 
@@ -104,6 +154,8 @@
           <p class="hint">{{tr .Locale "dev_curl_hint"}}</p>
         </div>
       </section>
+
+      {{template "copy-status" .}}
     {{else}}
       {{/* One app at a time, folded: each takes the address its own way, and
            every one of them then opens this site to be authorized. */}}

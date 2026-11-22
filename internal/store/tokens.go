@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,88 +10,34 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // What a personal access token may do. A read token lists and reads; a
-// write token also saves new content and creates resources. Neither deletes
-// anything, touches share links or changes the account.
+// write token also creates, edits, tags, trashes and shares resources.
 const (
 	TokenScopeRead  = "read"
 	TokenScopeWrite = "write"
 )
 
 const (
-	// TokenLifetime is fixed from sign-in: using a token does not extend it.
+	// TokenLifetime is the default token lifetime when one is chosen.
 	TokenLifetime = 90 * 24 * time.Hour
-	// DeviceGrantLifetime is how long a code shown by the command line can be
-	// entered in the browser.
-	DeviceGrantLifetime = 10 * time.Minute
-	// DevicePollInterval is the slowest a command line may ask whether it has
-	// been approved; asking faster adds DevicePollBackoff to its interval.
-	DevicePollInterval = 5
-	DevicePollBackoff  = 5
-	devicePollCeiling  = 60
+	// MaxTokenTTL is the longest finite lifetime for a personal access token;
+	// zero means no expiry.
+	MaxTokenTTL = 365 * 24 * time.Hour
+	// MaxAPITokens bounds how many live API tokens one account may hold.
+	MaxAPITokens = 50
 
 	// TokenPrefix marks a PlainMote token wherever it ends up, so a leak can
 	// be recognised by secret scanners and by eye.
 	TokenPrefix = "pmt_"
 
-	// The user code is eight characters from an alphabet without the ones a
-	// person mixes up - 0 and O, 1 and I - so it can be read off one screen
-	// and typed into another. 32 symbols: one byte masked to five bits picks
-	// one without bias.
-	userCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-	userCodeLength   = 8
-
 	deviceTextMaxRunes = 64
 	// tokenTouchEvery spaces out the writes that record a token's last use:
-	// a command line can make several requests a second.
+	// a script can make several requests a second.
 	tokenTouchEvery = time.Minute
 )
-
-// Outcomes of exchanging a device code, as RFC 8628 names them.
-const (
-	DevicePending  = "authorization_pending"
-	DeviceSlowDown = "slow_down"
-	DeviceDenied   = "access_denied"
-	DeviceExpired  = "expired_token"
-	DeviceApproved = "approved"
-)
-
-// DeviceRequest is what a command line says about itself when it asks to be
-// signed in. Everything here comes from the command line and is shown to the
-// person approving it as a claim, not as fact - except RequestIP, which the
-// server saw.
-type DeviceRequest struct {
-	Scope         string
-	DeviceName    string
-	DeviceOS      string
-	ClientVersion string
-	RequestIP     string
-}
-
-type DeviceGrant struct {
-	ID            string
-	Scope         string
-	DeviceName    string
-	DeviceOS      string
-	ClientVersion string
-	RequestIP     string
-	CreatedAt     time.Time
-	ExpiresAt     time.Time
-}
-
-// DeviceExchange is the answer to a command line polling with its device
-// code. Token is set only when State is DeviceApproved.
-type DeviceExchange struct {
-	State    string
-	Interval int
-	Token    string
-	User     User
-	APIToken APIToken
-}
 
 type APIToken struct {
 	ID            string
@@ -102,7 +47,7 @@ type APIToken struct {
 	DeviceOS      string
 	ClientVersion string
 	CreatedAt     time.Time
-	ExpiresAt     time.Time
+	ExpiresAt     *time.Time
 	LastUsedAt    *time.Time
 	LastUsedIP    string
 }
@@ -113,92 +58,17 @@ func (t APIToken) CanWrite() bool { return t.Scope == TokenScopeWrite }
 // ErrBadScope is a request for a scope that does not exist.
 var ErrBadScope = refusal("unknown token scope")
 
-// CreateDeviceGrant starts a sign-in. It returns the device code, which only
-// the command line ever holds, and the user code, which its owner types into
-// the browser.
-func (d *Store) CreateDeviceGrant(ctx context.Context, request DeviceRequest, now time.Time) (deviceCode, userCode string, grant DeviceGrant, err error) {
-	if request.Scope != TokenScopeRead && request.Scope != TokenScopeWrite {
-		return "", "", DeviceGrant{}, ErrBadScope
-	}
-	grant = DeviceGrant{
-		ID: uuid.NewString(), Scope: request.Scope,
-		DeviceName:    deviceText(request.DeviceName),
-		DeviceOS:      deviceText(request.DeviceOS),
-		ClientVersion: deviceText(request.ClientVersion),
-		RequestIP:     limitAccessText(request.RequestIP, accessIPMaxBytes),
-		CreatedAt:     now, ExpiresAt: now.Add(DeviceGrantLifetime),
-	}
-	deviceCode, err = randomSecret(32)
-	if err != nil {
-		return "", "", DeviceGrant{}, fmt.Errorf("create device code: %w", err)
-	}
-	// A clash on the user code is astronomically unlikely among the few
-	// grants alive at once, but it is a unique column: draw again.
-	for attempt := 0; attempt < 3; attempt++ {
-		userCode, err = newUserCode()
-		if err != nil {
-			return "", "", DeviceGrant{}, err
-		}
-		_, err = d.db.Exec(ctx, `
-INSERT INTO device_grants(id, device_code_hash, user_code_hash, scope, device_name, device_os, client_version, request_ip, created_at, expires_at, poll_interval)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-`, grant.ID, hashToken(deviceCode), hashToken(userCode), grant.Scope, grant.DeviceName, grant.DeviceOS,
-			grant.ClientVersion, grant.RequestIP, now, grant.ExpiresAt, DevicePollInterval)
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			continue
-		}
-		break
-	}
-	if err != nil {
-		return "", "", DeviceGrant{}, fmt.Errorf("save device grant: %w: %w", ErrInternal, err)
-	}
-	return deviceCode, userCode, grant, nil
-}
+// ErrTokenNameRequired refuses a token without a name to identify it in the list.
+var ErrTokenNameRequired = refusal("请输入令牌名称")
 
-func newUserCode() (string, error) {
-	raw := make([]byte, userCodeLength)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("create user code: %w", err)
-	}
-	code := make([]byte, userCodeLength)
-	for i, b := range raw {
-		code[i] = userCodeAlphabet[b&31]
-	}
-	return string(code), nil
-}
+// ErrTokenLimitReached refuses creating another token once an account is at MaxAPITokens.
+var ErrTokenLimitReached = refusalf("每个账号最多同时持有 %d 个有效令牌", MaxAPITokens)
 
-// FormatUserCode writes a user code the way it is shown: two groups of four.
-func FormatUserCode(code string) string {
-	if len(code) != userCodeLength {
-		return code
-	}
-	return code[:4] + "-" + code[4:]
-}
+// ErrBadTokenTTL refuses a negative or overlong token lifetime.
+var ErrBadTokenTTL = refusal("令牌有效期无效")
 
-// NormalizeUserCode reads a code as a person typed it: any case, with or
-// without the dash or spaces. Anything outside the alphabet makes it no code
-// at all, rather than a near miss to be corrected.
-func NormalizeUserCode(input string) (string, bool) {
-	var code strings.Builder
-	for _, r := range strings.ToUpper(input) {
-		switch {
-		case r == '-' || unicode.IsSpace(r):
-			continue
-		case r < unicode.MaxASCII && strings.ContainsRune(userCodeAlphabet, r):
-			code.WriteRune(r)
-		default:
-			return "", false
-		}
-	}
-	if code.Len() != userCodeLength {
-		return "", false
-	}
-	return code.String(), true
-}
-
-// deviceText keeps what a command line says about itself short and printable:
-// it is shown on the approval page and the account page.
+// deviceText keeps a token's label short and printable: it is shown on the
+// account page.
 func deviceText(value string) string {
 	var out strings.Builder
 	count := 0
@@ -215,141 +85,64 @@ func deviceText(value string) string {
 	return out.String()
 }
 
-// PendingDeviceGrant finds the sign-in a user code belongs to, while it can
-// still be approved. Every other state reads as not found: the page says the
-// same thing for a mistyped code and a used one.
-func (d *Store) PendingDeviceGrant(ctx context.Context, userCode string, now time.Time) (DeviceGrant, error) {
-	var grant DeviceGrant
-	err := d.db.QueryRow(ctx, `
-SELECT id, scope, device_name, device_os, client_version, request_ip, created_at, expires_at
-FROM device_grants
-WHERE user_code_hash = $1 AND state = 'pending' AND expires_at > $2
-`, hashToken(userCode), now).Scan(&grant.ID, &grant.Scope, &grant.DeviceName, &grant.DeviceOS,
-		&grant.ClientVersion, &grant.RequestIP, &grant.CreatedAt, &grant.ExpiresAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return DeviceGrant{}, ErrNotFound
+// CreateAPIToken issues a personal access token for an account directly from
+// its settings page. ttl == 0 means the token never expires. Only the hash is
+// stored; the plaintext secret is returned once to show to the owner.
+func (d *Store) CreateAPIToken(ctx context.Context, userID, name, scope string, ttl time.Duration, now time.Time) (string, APIToken, error) {
+	if !validUUIDs(userID) {
+		return "", APIToken{}, ErrNotFound
 	}
+	if scope != TokenScopeRead && scope != TokenScopeWrite {
+		return "", APIToken{}, ErrBadScope
+	}
+	cleanName := deviceText(name)
+	if cleanName == "" {
+		return "", APIToken{}, ErrTokenNameRequired
+	}
+	if ttl < 0 || ttl > MaxTokenTTL {
+		return "", APIToken{}, ErrBadTokenTTL
+	}
+	secret, err := randomSecret(32)
 	if err != nil {
-		return DeviceGrant{}, fmt.Errorf("read device grant: %w: %w", ErrInternal, err)
+		return "", APIToken{}, fmt.Errorf("create api token: %w", err)
 	}
-	return grant, nil
-}
-
-// DecideDeviceGrant records the browser's answer. The user code is checked
-// again with the id, so a form cannot approve a grant its sender never saw
-// the code of, and only a pending, live grant can be decided - once.
-func (d *Store) DecideDeviceGrant(ctx context.Context, userID, grantID, userCode string, approve bool, now time.Time) error {
-	if !validUUIDs(userID, grantID) {
-		return ErrNotFound
+	full := TokenPrefix + secret
+	var expires *time.Time
+	if ttl > 0 {
+		at := now.Add(ttl)
+		expires = &at
 	}
-	state := "denied"
-	if approve {
-		state = "approved"
+	token := APIToken{
+		ID: uuid.NewString(), UserID: userID, Scope: scope, DeviceName: cleanName,
+		CreatedAt: now, ExpiresAt: expires,
 	}
-	tag, err := d.db.Exec(ctx, `
-UPDATE device_grants g
-SET state = $1, user_id = $2
-FROM users u
-WHERE g.id = $3 AND g.user_code_hash = $4 AND g.state = 'pending' AND g.expires_at > $5
-  AND u.id = $2 AND u.suspended_at IS NULL
-`, state, userID, grantID, hashToken(userCode), now)
-	if err != nil {
-		return fmt.Errorf("decide device grant: %w: %w", ErrInternal, err)
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// ExchangeDeviceCode answers a command line polling to learn whether it has
-// been approved. An approval is turned into a token here, once: the grant is
-// deleted in the same transaction, so a device code yields one token at most.
-func (d *Store) ExchangeDeviceCode(ctx context.Context, deviceCode string, now time.Time) (DeviceExchange, error) {
-	var result DeviceExchange
-	err := d.withTx(ctx, func(tx pgx.Tx) error {
-		var grantID, state, scope, deviceName, deviceOS, clientVersion string
-		var userID pgtype.UUID
-		var expires time.Time
-		var polled pgtype.Timestamptz
-		var interval int
-		err := tx.QueryRow(ctx, `
-SELECT id, state, scope, device_name, device_os, client_version, user_id, expires_at, polled_at, poll_interval
-FROM device_grants WHERE device_code_hash = $1 FOR UPDATE
-`, hashToken(deviceCode)).Scan(&grantID, &state, &scope, &deviceName, &deviceOS, &clientVersion,
-			&userID, &expires, &polled, &interval)
-		if errors.Is(err, pgx.ErrNoRows) {
-			result.State = DeviceExpired
-			return nil
+	err = d.withTx(ctx, func(tx pgx.Tx) error {
+		var suspended bool
+		if err := tx.QueryRow(ctx, `SELECT suspended_at IS NOT NULL FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&suspended); err != nil {
+			return translateNotFound(err)
 		}
-		if err != nil {
-			return err
+		if suspended {
+			return ErrNotFound
 		}
-		drop := func() error {
-			_, err := tx.Exec(ctx, `DELETE FROM device_grants WHERE id = $1`, grantID)
-			return err
+		var count int
+		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM api_tokens WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > $2)`, userID, now).Scan(&count); err != nil {
+			return fmt.Errorf("count tokens: %w: %w", ErrInternal, err)
 		}
-		if !now.Before(expires) {
-			result.State = DeviceExpired
-			return drop()
-		}
-		// Asked again before its interval was up: wait longer from now on.
-		if polled.Valid && now.Sub(polled.Time) < time.Duration(interval)*time.Second && state == "pending" {
-			interval = min(interval+DevicePollBackoff, devicePollCeiling)
-			result.State, result.Interval = DeviceSlowDown, interval
-			_, err := tx.Exec(ctx, `UPDATE device_grants SET polled_at = $2, poll_interval = $3 WHERE id = $1`, grantID, now, interval)
-			return err
-		}
-		result.Interval = interval
-		switch state {
-		case "pending":
-			result.State = DevicePending
-			_, err := tx.Exec(ctx, `UPDATE device_grants SET polled_at = $2 WHERE id = $1`, grantID, now)
-			return err
-		case "denied":
-			result.State = DeviceDenied
-			return drop()
-		case "approved":
-		default:
-			result.State = DeviceExpired
-			return drop()
-		}
-		// Approved. The account is read again: one suspended between the
-		// approval and this poll gets nothing.
-		var user User
-		err = tx.QueryRow(ctx, `
-SELECT id, COALESCE(github_id, ''), login, name, avatar_url FROM users WHERE id = $1 AND suspended_at IS NULL
-`, userID).Scan(&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL)
-		if errors.Is(err, pgx.ErrNoRows) {
-			result.State = DeviceDenied
-			return drop()
-		}
-		if err != nil {
-			return err
-		}
-		secret, err := randomSecret(32)
-		if err != nil {
-			return err
-		}
-		token := APIToken{
-			ID: uuid.NewString(), UserID: user.ID, Scope: scope,
-			DeviceName: deviceName, DeviceOS: deviceOS, ClientVersion: clientVersion,
-			CreatedAt: now, ExpiresAt: now.Add(TokenLifetime),
+		if count >= MaxAPITokens {
+			return ErrTokenLimitReached
 		}
 		if _, err := tx.Exec(ctx, `
 INSERT INTO api_tokens(id, user_id, token_hash, scope, device_name, device_os, client_version, created_at, expires_at)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
-`, token.ID, token.UserID, hashToken(TokenPrefix+secret), token.Scope, token.DeviceName, token.DeviceOS,
-			token.ClientVersion, token.CreatedAt, token.ExpiresAt); err != nil {
-			return err
+VALUES($1, $2, $3, $4, $5, '', '', $6, $7)
+`, token.ID, token.UserID, hashToken(full), token.Scope, token.DeviceName, token.CreatedAt, token.ExpiresAt); err != nil {
+			return fmt.Errorf("save token: %w: %w", ErrInternal, err)
 		}
-		result = DeviceExchange{State: DeviceApproved, Interval: interval, Token: TokenPrefix + secret, User: user, APIToken: token}
-		return drop()
+		return nil
 	})
 	if err != nil {
-		return DeviceExchange{}, fmt.Errorf("exchange device code: %w: %w", ErrInternal, err)
+		return "", APIToken{}, err
 	}
-	return result, nil
+	return full, token, nil
 }
 
 // TokenUser resolves a presented token to its account. An expired token, a
@@ -361,15 +154,15 @@ func (d *Store) TokenUser(ctx context.Context, token, ip string, now time.Time) 
 	}
 	var user User
 	var apiToken APIToken
-	var lastUsed pgtype.Timestamptz
+	var expires, lastUsed pgtype.Timestamptz
 	err := d.db.QueryRow(ctx, `
 SELECT t.id, t.scope, t.device_name, t.device_os, t.client_version, t.created_at, t.expires_at, t.last_used_at, t.last_used_ip,
        u.id, COALESCE(u.github_id, ''), u.login, u.name, u.avatar_url
 FROM api_tokens t
 JOIN users u ON u.id = t.user_id
-WHERE t.token_hash = $1 AND t.expires_at > $2 AND u.suspended_at IS NULL
+WHERE t.token_hash = $1 AND (t.expires_at IS NULL OR t.expires_at > $2) AND u.suspended_at IS NULL
 `, hashToken(token), now).Scan(&apiToken.ID, &apiToken.Scope, &apiToken.DeviceName, &apiToken.DeviceOS,
-		&apiToken.ClientVersion, &apiToken.CreatedAt, &apiToken.ExpiresAt, &lastUsed, &apiToken.LastUsedIP,
+		&apiToken.ClientVersion, &apiToken.CreatedAt, &expires, &lastUsed, &apiToken.LastUsedIP,
 		&user.ID, &user.GitHubID, &user.Login, &user.Name, &user.AvatarURL)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, APIToken{}, ErrNotFound
@@ -378,6 +171,7 @@ WHERE t.token_hash = $1 AND t.expires_at > $2 AND u.suspended_at IS NULL
 		return User{}, APIToken{}, fmt.Errorf("read token: %w: %w", ErrInternal, err)
 	}
 	apiToken.UserID = user.ID
+	apiToken.ExpiresAt = timePointer(expires)
 	ip = limitAccessText(ip, accessIPMaxBytes)
 	if !lastUsed.Valid || now.Sub(lastUsed.Time) >= tokenTouchEvery || apiToken.LastUsedIP != ip {
 		if _, err := d.db.Exec(ctx, `UPDATE api_tokens SET last_used_at = $2, last_used_ip = $3 WHERE id = $1`, apiToken.ID, now, ip); err != nil {
@@ -398,7 +192,7 @@ func (d *Store) ListAPITokens(ctx context.Context, userID string, now time.Time)
 	}
 	rows, err := d.db.Query(ctx, `
 SELECT id, scope, device_name, device_os, client_version, created_at, expires_at, last_used_at, last_used_ip
-FROM api_tokens WHERE user_id = $1 AND expires_at > $2
+FROM api_tokens WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > $2)
 ORDER BY created_at DESC
 `, userID, now)
 	if err != nil {
@@ -408,15 +202,13 @@ ORDER BY created_at DESC
 	var tokens []APIToken
 	for rows.Next() {
 		token := APIToken{UserID: userID}
-		var lastUsed pgtype.Timestamptz
+		var expires, lastUsed pgtype.Timestamptz
 		if err := rows.Scan(&token.ID, &token.Scope, &token.DeviceName, &token.DeviceOS, &token.ClientVersion,
-			&token.CreatedAt, &token.ExpiresAt, &lastUsed, &token.LastUsedIP); err != nil {
+			&token.CreatedAt, &expires, &lastUsed, &token.LastUsedIP); err != nil {
 			return nil, fmt.Errorf("list tokens: %w: %w", ErrInternal, err)
 		}
-		if lastUsed.Valid {
-			at := lastUsed.Time
-			token.LastUsedAt = &at
-		}
+		token.ExpiresAt = timePointer(expires)
+		token.LastUsedAt = timePointer(lastUsed)
 		tokens = append(tokens, token)
 	}
 	if err := rows.Err(); err != nil {
@@ -425,13 +217,13 @@ ORDER BY created_at DESC
 	return tokens, nil
 }
 
-// HasAPITokens is whether any command line is signed in to the account.
+// HasAPITokens is whether any live API token exists for the account.
 func (d *Store) HasAPITokens(ctx context.Context, userID string, now time.Time) (bool, error) {
 	if !validUUIDs(userID) {
 		return false, ErrNotFound
 	}
 	var has bool
-	err := d.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM api_tokens WHERE user_id = $1 AND expires_at > $2)`, userID, now).Scan(&has)
+	err := d.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM api_tokens WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > $2))`, userID, now).Scan(&has)
 	if err != nil {
 		return false, fmt.Errorf("check tokens: %w: %w", ErrInternal, err)
 	}
@@ -468,8 +260,7 @@ func (d *Store) RevokeAPIToken(ctx context.Context, userID, tokenID string) erro
 	return nil
 }
 
-// RevokeAPITokenByID deletes the token a request was made with: what
-// `plainmote logout` asks for.
+// RevokeAPITokenByID deletes the token a request was made with.
 func (d *Store) RevokeAPITokenByID(ctx context.Context, tokenID string) error {
 	if !validUUIDs(tokenID) {
 		return ErrNotFound

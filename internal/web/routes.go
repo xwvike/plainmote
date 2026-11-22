@@ -107,14 +107,19 @@ type pageData struct {
 	LegalPrefix  string
 	APIDocsURL string
 	// The MCP server page: how to add the server to each app.
-	MCPClients  []mcpClient
-	DeviceStep  string
-	DeviceGrant store.DeviceGrant
-	DeviceCode  string
-	// APITokens are the account page's personal access tokens, and
-	// RevokeToken the one its revoke dialog is about.
-	APITokens   []store.APIToken
-	RevokeToken store.APIToken
+	MCPClients []mcpClient
+	// APITokens are the account page's personal access tokens, RevokeToken
+	// the one its revoke dialog is about, and NewTokenOpen / CreatedToken
+	// drive the create-token dialog.
+	APITokens        []store.APIToken
+	RevokeToken      store.APIToken
+	NewTokenOpen     bool
+	TokenName        string
+	TokenScope       string
+	TokenTTL         string
+	TokenError       string
+	CreatedToken     string
+	CreatedTokenInfo store.APIToken
 	// OAuthGrants are the MCP apps the account let in, and RevokeGrant the
 	// one its revoke dialog is about. OAuth is the consent page's request.
 	OAuthGrants []store.OAuthGrant
@@ -360,7 +365,6 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc(oauthRevokePath, a.handleOAuthRevoke)
 	mux.HandleFunc(developersPath, a.handleDevelopers)
 	mux.HandleFunc(developersPath+"/", a.handleDevelopers)
-	mux.HandleFunc(deviceVerifyPath, a.handleDevicePage)
 	mux.HandleFunc("/robots.txt", a.handleRobots)
 	mux.HandleFunc("/sitemap.xml", a.handleSitemap)
 	mux.HandleFunc("/llms.txt", a.handleLLMs)
