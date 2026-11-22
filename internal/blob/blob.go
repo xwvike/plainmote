@@ -28,10 +28,24 @@ type Store interface {
 	Delete(ctx context.Context, key string) error
 }
 
+// ObjectInfo describes an object already present in storage.
+type ObjectInfo struct {
+	Size int64
+	ETag string
+}
+
+// PresignedPut is a short-lived direct upload URL together with any extra
+// signed headers (such as X-Amz-Checksum-Sha256) the client must send.
+type PresignedPut struct {
+	URL     string
+	Headers map[string]string
+}
+
 // DirectStore is optionally implemented by object stores that can issue
-// short-lived presigned PUT URLs for direct browser uploads and verify
-// uploaded objects via HEAD without reading the body back through the server.
+// short-lived presigned PUT URLs for direct browser uploads, verify objects via
+// HEAD, and server-side copy staged objects into immutable published keys.
 type DirectStore interface {
-	PresignPut(ctx context.Context, key string, size int64, ttl time.Duration) (string, error)
-	Head(ctx context.Context, key string) (int64, error)
+	PresignPut(ctx context.Context, key string, size int64, sha256B64 string, ttl time.Duration) (PresignedPut, error)
+	Head(ctx context.Context, key string) (ObjectInfo, error)
+	Copy(ctx context.Context, srcKey, dstKey, expectedETag string) error
 }

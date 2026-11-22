@@ -6,6 +6,8 @@ package testsupport
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -121,12 +123,28 @@ func (m *MemoryBlobs) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (m *MemoryBlobs) Head(_ context.Context, key string) (int64, error) {
+func (m *MemoryBlobs) Head(_ context.Context, key string) (blob.ObjectInfo, error) {
 	m.mu.RLock()
 	data, ok := m.objects[key]
 	m.mu.RUnlock()
 	if !ok {
-		return 0, blob.ErrNotFound
+		return blob.ObjectInfo{}, blob.ErrNotFound
 	}
-	return int64(len(data)), nil
+	return blob.ObjectInfo{Size: int64(len(data)), ETag: fmt.Sprintf(`"%x"`, sha256Sum(data))}, nil
 }
+
+func (m *MemoryBlobs) Copy(_ context.Context, srcKey, dstKey, expectedETag string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	data, ok := m.objects[srcKey]
+	if !ok {
+		return blob.ErrNotFound
+	}
+	if expectedETag != "" && fmt.Sprintf(`"%x"`, sha256Sum(data)) != expectedETag {
+		return errors.New("etag mismatch")
+	}
+	m.objects[dstKey] = bytes.Clone(data)
+	return nil
+}
+
+func sha256Sum(data []byte) [32]byte { return sha256.Sum256(data) }

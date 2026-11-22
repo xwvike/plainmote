@@ -360,3 +360,46 @@ func TestMCPDeleteTool(t *testing.T) {
 		t.Fatal("the 31st delete in an hour was allowed")
 	}
 }
+
+func TestMCPEditResourceSizeGuards(t *testing.T) {
+	db, alice, _ := testDatabase(t)
+	app := newTestApp(db)
+	app.cfg.MaxContent = 512
+	ctx := context.Background()
+	token := mcpToken(t, db, alice, "read write", testMCPResource).AccessToken
+
+	// 1. ReplaceAll expansion exceeding MaxContent is rejected before allocating.
+	res, err := db.CreateResource(ctx, alice.ID, "bomb", "bomb.txt", bytes.Repeat([]byte("a"), 200), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	boom := toolCall(t, app, token, "edit_resource", map[string]any{
+		"resource":     res.ID,
+		"base_version": 1,
+		"edits": []map[string]any{
+			{"old_text": "a", "new_text": strings.Repeat("b", 10), "replace_all": true},
+		},
+	})
+	if !boom.isError || !strings.Contains(strings.Join(boom.texts, " "), "512-byte limit") {
+		t.Fatalf("expected expansion refusal, got isError=%v texts=%v", boom.isError, boom.texts)
+	}
+
+	// 2. UTF-16 resource whose UTF-8 text fits under MaxContent (300 B <= 512 B)
+	//    but whose UTF-16 encoded bytes exceed MaxContent (600+ B > 512 B) is refused.
+	encoded, encName, err := store.EncodeText("hello\n", "utf-16le-bom")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u16, err := db.CreateResource(ctx, alice.ID, "u16", "u16.txt", encoded, encName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tooBigEncoded := toolCall(t, app, token, "update_resource", map[string]any{
+		"resource":     u16.ID,
+		"base_version": 1,
+		"content":      strings.Repeat("x", 300),
+	})
+	if !tooBigEncoded.isError || !strings.Contains(strings.Join(tooBigEncoded.texts, " "), "encoded content") {
+		t.Fatalf("expected encoded-size refusal, got isError=%v texts=%v", tooBigEncoded.isError, tooBigEncoded.texts)
+	}
+}

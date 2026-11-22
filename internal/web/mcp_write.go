@@ -366,12 +366,24 @@ func (a *App) mcpEditResource(x mcpExchange, args json.RawMessage) (mcpOutcome, 
 		case count > 1 && !edit.ReplaceAll:
 			return mcpProblem("Nothing was saved: the old_text of edit %d appears %d times in %s%s. "+
 				"Include more of the text around it to pick one, or set replace_all to change every one.", i+1, count, mcpLabel(resource), mcpAfterEarlier(i))
-		case edit.ReplaceAll:
-			text = strings.ReplaceAll(text, old, replacement)
-			replaced += count
 		default:
-			text = strings.Replace(text, old, replacement, 1)
-			replaced++
+			replacements := int64(1)
+			if edit.ReplaceAll {
+				replacements = int64(count)
+			}
+			if delta := int64(len(replacement)) - int64(len(old)); delta > 0 {
+				room := a.cfg.MaxContent - int64(len(text))
+				if room < 0 || replacements > room/delta {
+					return mcpProblem("Nothing was saved: edit %d would make %s larger than the %d-byte limit.", i+1, mcpLabel(resource), a.cfg.MaxContent)
+				}
+			}
+			if edit.ReplaceAll {
+				text = strings.ReplaceAll(text, old, replacement)
+				replaced += count
+			} else {
+				text = strings.Replace(text, old, replacement, 1)
+				replaced++
+			}
 		}
 	}
 	outcome, err := a.mcpSaveText(x, resource, resource.Name, resource.Filename, text, eol, in.BaseVersion)
@@ -417,6 +429,9 @@ func (a *App) mcpSaveText(x mcpExchange, resource Resource, name, filename, text
 	encoded, encoding, err := store.EncodeText(store.ApplyEOL(text, eol), resource.ContentEncoding)
 	if err != nil {
 		return mcpStoreProblem(err)
+	}
+	if int64(len(encoded)) > a.cfg.MaxContent {
+		return mcpProblem("The encoded content is %d bytes; a resource can hold at most %d.", len(encoded), a.cfg.MaxContent)
 	}
 	result, err := a.db.SaveResource(x.r.Context(), x.user.ID, resource.ID, store.ResourceEdit{
 		Name: name, Filename: filename, Content: encoded, ContentEncoding: encoding, BaseVersion: base,

@@ -370,15 +370,15 @@ FOR UPDATE OF g
 		if err != nil {
 			return err
 		}
-		if used.Valid {
-			refused = true
-			_, err := tx.Exec(ctx, `DELETE FROM oauth_grants WHERE id = $1`, grantID)
-			return err
-		}
 		if !now.Before(codeExpires) || !active || clientID != ex.ClientID || redirectURI != ex.RedirectURI ||
 			(ex.Resource != "" && ex.Resource != resource) || !verifierMatches(ex.Verifier, challenge) {
 			refused = true
 			return nil
+		}
+		if used.Valid {
+			refused = true
+			_, err := tx.Exec(ctx, `DELETE FROM oauth_grants WHERE id = $1`, grantID)
+			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE oauth_grants SET code_used_at = $2 WHERE id = $1`, grantID, now); err != nil {
 			return err

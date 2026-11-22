@@ -91,21 +91,48 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		a.renderTemplate(w, r, http.StatusOK, "resource.html", data)
 		return
 	}
-	if r.Method != http.MethodPost || !a.checkCSRF(r, sessionID) {
+	if r.Method != http.MethodPost {
 		writePlainError(w, http.StatusForbidden, "invalid request")
 		return
 	}
-	form, err := readResourceForm(w, r, a.cfg.MaxContent)
+	cleanup, parseErr := prepareResourcePost(w, r, a.cfg.MaxContent)
+	defer cleanup()
+	if parseErr != nil {
+		text, status := a.writeErrorText("create resource", parseErr)
+		if isOversizeError(parseErr) {
+			status = http.StatusRequestEntityTooLarge
+			text = "content is too large"
+		}
+		if wantsUploadJSON(r) {
+			a.writeAPI(w, status, map[string]string{"message": localizePageError(requestLanguage(r).Locale, text)})
+			return
+		}
+		data := a.basePageWithError(r, user, text)
+		data.IsNew = true
+		a.renderTemplate(w, r, status, "resource.html", data)
+		return
+	}
+	if !a.checkCSRF(r, sessionID) {
+		writePlainError(w, http.StatusForbidden, "invalid request")
+		return
+	}
+	form, err := readResourceForm(r, a.cfg.MaxContent)
 	if err == nil {
 		var resource Resource
 		if form.UploadToken != "" {
 			var ticket store.UploadTicket
 			ticket, err = a.verifyUploadToken(form.UploadToken, uploadPurposeResourceCreate, user.ID, "")
 			if err == nil {
-				resource, err = a.db.CreateResourceFromKey(r.Context(), user.ID, ticket.ResourceID, ticket.Key, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding, ticket.Size, form.UploadSHA256)
+				resource, err = a.db.CreateResourceFromUpload(r.Context(), user.ID, ticket, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding)
 			}
 		} else {
-			resource, err = a.db.CreateResource(r.Context(), user.ID, form.Name, form.Filename, form.Content, form.ContentEncoding)
+			fallbackUploadID := ""
+			if form.FallbackUploadToken != "" {
+				if ticket, verifyErr := a.verifyUploadToken(form.FallbackUploadToken, uploadPurposeResourceCreate, user.ID, ""); verifyErr == nil {
+					fallbackUploadID = ticket.UploadID
+				}
+			}
+			resource, err = a.db.CreateResourceWithFallbackUpload(r.Context(), user.ID, fallbackUploadID, form.Name, form.Filename, form.Content, form.ContentEncoding)
 		}
 		if err == nil {
 			location := "/resources/" + resource.ID + "?created=1"
@@ -168,11 +195,12 @@ type resourceForm struct {
 	// ContentEOL is the line ending the body is written with. It is not stored:
 	// it is detected from the bytes whenever the page is rendered, so there is
 	// nothing to migrate and nothing that can go stale against the content.
-	ContentEOL     string
-	Uploaded       bool
-	UploadToken    string
-	UploadFilename string
-	UploadSHA256   string
+	ContentEOL          string
+	Uploaded            bool
+	UploadToken         string
+	FallbackUploadToken string
+	UploadFilename      string
+	UploadSHA256        string
 
 	// ContentGiven separates "the editor sent an empty box" from "this form
 	// had no content field at all". A binary resource is edited through a
@@ -181,11 +209,21 @@ type resourceForm struct {
 	ContentGiven bool
 }
 
-func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (resourceForm, error) {
-	var form resourceForm
+func isOversizeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var maxErr *http.MaxBytesError
+	return errors.As(err, &maxErr) || strings.Contains(err.Error(), "too large")
+}
+
+// prepareResourcePost applies the upload size limit and write deadline and
+// parses the request body once, before any form field (including CSRF) is read.
+func prepareResourcePost(w http.ResponseWriter, r *http.Request, maxBytes int64) (func(), error) {
+	noop := func() {}
 	limit := maxBytes + 64*1024
 	if r.ContentLength > limit {
-		return form, errors.New("content is too large")
+		return noop, errors.New("content is too large")
 	}
 	// The length check above only sees a declared length. A chunked request
 	// declares none, and ParseMultipartForm spills whatever does not fit in
@@ -193,27 +231,36 @@ func readResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (r
 	// is tmpfs in the production container. Bounding the reader bounds both.
 	allowUpload(w, limit)
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
-	multipartForm := strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data")
-	if multipartForm {
-		if err := r.ParseMultipartForm(maxBytes + 1); err != nil {
-			return form, fmt.Errorf("read upload: %w", err)
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := r.ParseMultipartForm(min(maxBytes+1, 32<<20)); err != nil {
+			return noop, fmt.Errorf("read upload: %w", err)
 		}
-		defer func() {
+		return func() {
 			if r.MultipartForm != nil {
 				_ = r.MultipartForm.RemoveAll()
 			}
-		}()
+		}, nil
 	}
+	if err := r.ParseForm(); err != nil {
+		return noop, fmt.Errorf("read form: %w", err)
+	}
+	return noop, nil
+}
+
+func readResourceForm(r *http.Request, maxBytes int64) (resourceForm, error) {
+	var form resourceForm
+	multipartForm := strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data")
 	form = resourceForm{
 		Name:            r.FormValue("name"),
 		Filename:        strings.TrimSpace(r.FormValue("filename")),
 		Content:         []byte(r.FormValue("content")),
 		ContentEncoding: strings.TrimSpace(r.FormValue("content_encoding")),
 		ContentEOL:      store.NormalizeEOLName(r.FormValue("content_eol")),
-		ContentGiven:    r.Form["content"] != nil,
-		UploadToken:     strings.TrimSpace(r.FormValue("upload_token")),
-		UploadFilename:  strings.TrimSpace(r.FormValue("upload_filename")),
-		UploadSHA256:    strings.TrimSpace(r.FormValue("upload_sha256")),
+		ContentGiven:        r.Form["content"] != nil,
+		UploadToken:         strings.TrimSpace(r.FormValue("upload_token")),
+		FallbackUploadToken: strings.TrimSpace(r.FormValue("fallback_upload_token")),
+		UploadFilename:      strings.TrimSpace(r.FormValue("upload_filename")),
+		UploadSHA256:        strings.TrimSpace(r.FormValue("upload_sha256")),
 	}
 	if form.UploadToken != "" {
 		form.Content = nil
@@ -289,6 +336,21 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		return
 	}
 	if r.Method == http.MethodPost {
+		cleanup, parseErr := prepareResourcePost(w, r, a.cfg.MaxContent)
+		defer cleanup()
+		if parseErr != nil {
+			text, status := a.writeErrorText("save resource", parseErr)
+			if isOversizeError(parseErr) {
+				status = http.StatusRequestEntityTooLarge
+				text = "content is too large"
+			}
+			if wantsUploadJSON(r) {
+				a.writeAPI(w, status, map[string]string{"message": localizePageError(requestLanguage(r).Locale, text)})
+				return
+			}
+			a.renderResourcePage(w, r, user, resource, text, status, nil, nil)
+			return
+		}
 		if !a.checkCSRF(r, sessionID) {
 			writePlainError(w, http.StatusForbidden, "invalid csrf token")
 			return
@@ -321,7 +383,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			a.renderResourcePage(w, r, user, resource, translate(requestLanguage(r).Locale, "quick_share_read_only"), http.StatusBadRequest, nil, nil)
 			return
 		}
-		form, err := readResourceForm(w, r, a.cfg.MaxContent)
+		form, err := readResourceForm(r, a.cfg.MaxContent)
 		if err != nil {
 			a.renderResourcePage(w, r, user, resource, err.Error(), http.StatusBadRequest, nil, nil)
 			return
@@ -337,12 +399,19 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 			var ticket store.UploadTicket
 			ticket, err = a.verifyUploadToken(form.UploadToken, uploadPurposeResourceSave, user.ID, resourceID)
 			if err == nil {
-				result, err = a.db.SaveResourceFromKey(r.Context(), user.ID, resourceID, ticket.Key, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding, base, ticket.Size, form.UploadSHA256)
+				result, err = a.db.SaveResourceFromUpload(r.Context(), user.ID, resourceID, ticket, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding, base)
 			}
 		} else {
+			fallbackUploadID := ""
+			if form.FallbackUploadToken != "" {
+				if ticket, verifyErr := a.verifyUploadToken(form.FallbackUploadToken, uploadPurposeResourceSave, user.ID, resourceID); verifyErr == nil {
+					fallbackUploadID = ticket.UploadID
+				}
+			}
 			result, err = a.db.SaveResource(r.Context(), user.ID, resourceID, store.ResourceEdit{
 				Name: form.Name, Filename: form.Filename, Content: content,
 				ContentEncoding: form.ContentEncoding, BaseVersion: base,
+				FallbackUploadID: fallbackUploadID,
 			})
 		}
 		if conflict := (*store.VersionConflict)(nil); errors.As(err, &conflict) {

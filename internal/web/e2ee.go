@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"plainmote/internal/store"
@@ -107,13 +108,29 @@ func (a *App) handleSealedPaste(w http.ResponseWriter, r *http.Request) {
 		var ticket store.UploadTicket
 		ticket, err = a.verifyUploadToken(uploadToken, uploadPurposeSealedPaste, user.ID, r.FormValue("id"))
 		if err == nil {
-			resource, _, err = a.db.CreateSealedQuickShareFromKey(r.Context(), user.ID, ticket.ResourceID, r.FormValue("link_id"),
-				ticket.Key, base64Field(r, "meta"), base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"),
-				ticket.Size, r.FormValue("upload_sha256"), ttl, time.Now().UTC())
+			resource, _, err = a.db.CreateSealedQuickShareFromUpload(r.Context(), user.ID, ticket, r.FormValue("link_id"),
+				base64Field(r, "meta"), base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"),
+				ttl, time.Now().UTC())
 		}
 	} else {
-		resource, _, err = a.db.CreateSealedQuickShare(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"),
-			store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")},
+		var content []byte
+		content, err = a.part(r, "content")
+		if err != nil {
+			if errors.Is(err, errPartTooLarge) {
+				writePlainError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf(translate(locale, "e2ee_too_large"), store.BytesText(store.AnonymousMaxBytes)))
+				return
+			}
+			writePlainError(w, http.StatusBadRequest, translate(locale, "e2ee_failed"))
+			return
+		}
+		fallbackUploadID := ""
+		if fallbackToken := strings.TrimSpace(r.FormValue("fallback_upload_token")); fallbackToken != "" {
+			if ticket, verifyErr := a.verifyUploadToken(fallbackToken, uploadPurposeSealedPaste, user.ID, r.FormValue("id")); verifyErr == nil {
+				fallbackUploadID = ticket.UploadID
+			}
+		}
+		resource, _, err = a.db.CreateSealedQuickShareWithFallbackUpload(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"), fallbackUploadID,
+			store.SealedPart{Content: content, Meta: base64Field(r, "meta")},
 			base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"), ttl, time.Now().UTC())
 	}
 	if err != nil {

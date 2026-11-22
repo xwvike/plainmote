@@ -121,10 +121,14 @@ WHERE r.owner_id = $1 AND ($2 = '' OR r.id <> NULLIF($2, '')::uuid) AND `+unexpi
 }
 
 // quotaGate locks the account for the length of the transaction and reports the
-// ceiling and the usage the caller has to fit under. The lock is what makes the
-// check binding: without it two uploads can both read a usage that leaves room
-// and both commit.
+// ceiling and the usage the caller has to fit under. Active uncommitted direct
+// uploads are counted as reserved usage so concurrent presigned uploads cannot
+// exceed the account's quota.
 func quotaGate(ctx context.Context, tx pgx.Tx, ownerID, excludeID string, at time.Time) (QuotaLimit, QuotaUsage, error) {
+	return quotaGateForUpload(ctx, tx, ownerID, excludeID, "", at)
+}
+
+func quotaGateForUpload(ctx context.Context, tx pgx.Tx, ownerID, excludeID, excludeUploadID string, at time.Time) (QuotaLimit, QuotaUsage, error) {
 	var locked string
 	if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&locked); err != nil {
 		return QuotaLimit{}, QuotaUsage{}, translateNotFound(err)
@@ -137,6 +141,21 @@ func quotaGate(ctx context.Context, tx pgx.Tx, ownerID, excludeID string, at tim
 	if err != nil {
 		return QuotaLimit{}, QuotaUsage{}, err
 	}
+	if excludeUploadID != "" && !validUUIDs(excludeUploadID) {
+		excludeUploadID = ""
+	}
+	var reservedRes, reservedBytes int64
+	if err := tx.QueryRow(ctx, `
+SELECT COALESCE(SUM(CASE WHEN purpose IN ('paste', 'sealed_paste', 'resource_create', 'sealed_create') THEN 1 ELSE 0 END), 0),
+       COALESCE(SUM(size), 0)
+FROM staged_uploads
+WHERE owner_id = $1 AND committed_at IS NULL AND expires_at > $2
+  AND ($3 = '' OR id <> NULLIF($3, '')::uuid)
+`, ownerID, at, excludeUploadID).Scan(&reservedRes, &reservedBytes); err != nil {
+		return QuotaLimit{}, QuotaUsage{}, err
+	}
+	usage.Resources += reservedRes
+	usage.StorageBytes += reservedBytes
 	return limit, usage, nil
 }
 

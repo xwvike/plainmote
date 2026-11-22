@@ -241,6 +241,17 @@ func TestE2EEAccountRefusesPlaintextFromTheBox(t *testing.T) {
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "Enable JavaScript") {
 		t.Fatalf("plain form: %d", response.Code)
 	}
+	// Even if the session expired before submit, encrypt=on must never fall
+	// back into the anonymous plaintext branch.
+	anonReq := httptest.NewRequest(http.MethodPost, "https://cfg.test/paste", strings.NewReader(url.Values{"content": {"secret"}, "encrypt": {"on"}}.Encode()))
+	anonReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	anonReq.Header.Set("Accept", "text/html")
+	anonReq.Header.Set("Accept-Language", "en")
+	anonResp := httptest.NewRecorder()
+	client.app.handler.ServeHTTP(anonResp, anonReq)
+	if anonResp.Code != http.StatusBadRequest || !strings.Contains(anonResp.Body.String(), "Enable JavaScript") {
+		t.Fatalf("expired-session plain form with encrypt=on: %d", anonResp.Code)
+	}
 	quota, err := db.QuotaForUser(context.Background(), store.AnonymousUserID, time.Now().UTC())
 	if err != nil || quota.Usage.Resources != 0 {
 		t.Fatalf("nothing may have been stored: %d %v", quota.Usage.Resources, err)

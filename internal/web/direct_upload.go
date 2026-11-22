@@ -54,6 +54,7 @@ func (a *App) handleUploadPresign(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Purpose    string `json:"purpose"`
 		Size       int64  `json:"size"`
+		SHA256     string `json:"sha256"`
 		ResourceID string `json:"resource_id"`
 		CSRF       string `json:"csrf"`
 	}
@@ -69,7 +70,8 @@ func (a *App) handleUploadPresign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, sessionID, signedIn := a.currentUser(r)
-	var ownerID, resourceID string
+	var ownerID, resourceID, excludeResourceID string
+	addResources := 1
 
 	switch req.Purpose {
 	case uploadPurposePaste:
@@ -87,16 +89,19 @@ func (a *App) handleUploadPresign(w http.ResponseWriter, r *http.Request) {
 				a.writeAPI(w, http.StatusForbidden, map[string]string{"error": "csrf", "message": translate(locale, "e2ee_page_stale")})
 				return
 			}
-			if err := a.db.CheckQuotaForUpload(r.Context(), user.ID, "", req.Size, 1, now); err != nil {
-				text, status := a.writeErrorText("presign paste quota", err)
-				a.writeAPI(w, status, map[string]string{"error": "quota", "message": localizePageError(locale, text)})
-				return
-			}
 			ownerID = user.ID
 		} else {
+			// Spend the anonymous rate limit atomically at presign time so
+			// uncommitted uploads cannot bypass IP rate limits and fill the bucket.
 			key := addressKey(a.clientIP(r))
-			if a.limits.pastes.blocked(key, now) || a.limits.pasteBytes.blocked(key, now) {
-				wait := max(a.limits.pastes.retryIn(key, now), a.limits.pasteBytes.retryIn(key, now))
+			limited := a.limits.pastes
+			if limited.allow(key, now) {
+				if limited = a.limits.pasteBytes; limited.spend(key, int(req.Size), now) {
+					limited = nil
+				}
+			}
+			if limited != nil {
+				wait := limited.retryIn(key, now)
 				w.Header().Set("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
 				a.writeAPI(w, http.StatusTooManyRequests, map[string]string{
 					"error":   "rate_limited",
@@ -136,11 +141,6 @@ func (a *App) handleUploadPresign(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		if err := a.db.CheckQuotaForUpload(r.Context(), user.ID, "", req.Size, 1, now); err != nil {
-			text, status := a.writeErrorText("presign sealed paste quota", err)
-			a.writeAPI(w, status, map[string]string{"error": "quota", "message": localizePageError(locale, text)})
-			return
-		}
 		ownerID, resourceID = user.ID, req.ResourceID
 
 	case uploadPurposeResourceCreate:
@@ -150,11 +150,6 @@ func (a *App) handleUploadPresign(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Size > a.cfg.MaxContent {
 			a.writeAPI(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "too_large", "message": localizePageError(locale, "uploaded file is too large")})
-			return
-		}
-		if err := a.db.CheckQuotaForUpload(r.Context(), user.ID, "", req.Size, 1, now); err != nil {
-			text, status := a.writeErrorText("presign create quota", err)
-			a.writeAPI(w, status, map[string]string{"error": "quota", "message": localizePageError(locale, text)})
 			return
 		}
 		ownerID, resourceID = user.ID, uuid.NewString()
@@ -181,12 +176,7 @@ func (a *App) handleUploadPresign(w http.ResponseWriter, r *http.Request) {
 			a.writeAPI(w, http.StatusBadRequest, map[string]string{"error": "refused"})
 			return
 		}
-		if err := a.db.CheckQuotaForUpload(r.Context(), user.ID, res.ID, req.Size, 0, now); err != nil {
-			text, status := a.writeErrorText("presign save quota", err)
-			a.writeAPI(w, status, map[string]string{"error": "quota", "message": localizePageError(locale, text)})
-			return
-		}
-		ownerID, resourceID = user.ID, res.ID
+		ownerID, resourceID, excludeResourceID, addResources = user.ID, res.ID, res.ID, 0
 
 	case uploadPurposeSealedCreate:
 		if !signedIn || !a.checkCSRFValue(r, sessionID, req.CSRF) {
@@ -203,11 +193,6 @@ func (a *App) handleUploadPresign(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Size <= store.SealedHeaderBytes || req.Size > a.cfg.MaxContent+store.SealedHeaderBytes {
 			a.writeAPI(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "too_large", "message": localizePageError(locale, "uploaded file is too large")})
-			return
-		}
-		if err := a.db.CheckQuotaForUpload(r.Context(), user.ID, "", req.Size, 1, now); err != nil {
-			text, status := a.writeErrorText("presign sealed create quota", err)
-			a.writeAPI(w, status, map[string]string{"error": "quota", "message": localizePageError(locale, text)})
 			return
 		}
 		ownerID, resourceID = user.ID, req.ResourceID
@@ -234,34 +219,26 @@ func (a *App) handleUploadPresign(w http.ResponseWriter, r *http.Request) {
 			a.writeAPI(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "too_large", "message": localizePageError(locale, "uploaded file is too large")})
 			return
 		}
-		if err := a.db.CheckQuotaForUpload(r.Context(), user.ID, res.ID, req.Size, 0, now); err != nil {
-			text, status := a.writeErrorText("presign sealed save quota", err)
-			a.writeAPI(w, status, map[string]string{"error": "quota", "message": localizePageError(locale, text)})
-			return
-		}
-		ownerID, resourceID = user.ID, res.ID
+		ownerID, resourceID, excludeResourceID, addResources = user.ID, res.ID, res.ID, 0
 
 	default:
 		a.writeAPI(w, http.StatusBadRequest, map[string]string{"error": "invalid_purpose"})
 		return
 	}
 
-	ticket := store.UploadTicket{
-		Purpose:    req.Purpose,
-		OwnerID:    ownerID,
-		ResourceID: resourceID,
-		Key:        a.db.NewUploadKey(resourceID),
-		Size:       req.Size,
-		ExpiresAt:  now.Add(presignTicketTTL).Unix(),
-	}
-	putURL, token, err := a.db.PresignUpload(r.Context(), ticket, presignURLTTL)
+	presigned, token, _, err := a.db.BeginStagedUpload(
+		r.Context(), ownerID, req.Purpose, resourceID, excludeResourceID,
+		req.Size, addResources, req.SHA256, presignURLTTL, presignTicketTTL, now,
+	)
 	if err != nil {
-		a.serverError(w, "presign upload", err)
+		text, status := a.writeErrorText("begin staged upload", err)
+		a.writeAPI(w, status, map[string]string{"error": "refused", "message": localizePageError(locale, text)})
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	a.writeAPI(w, http.StatusOK, map[string]string{
-		"url":         putURL,
+	a.writeAPI(w, http.StatusOK, map[string]any{
+		"url":         presigned.URL,
+		"headers":     presigned.Headers,
 		"token":       token,
 		"resource_id": resourceID,
 	})

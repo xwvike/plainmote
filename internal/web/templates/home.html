@@ -141,7 +141,7 @@
         {{/* Encrypted or not is chosen here, for each quick share; it starts
              as the last one was sent. */}}
         <label class="sw" data-e2ee-switch>
-          <input type="checkbox" role="switch" name="encrypt" value="on"{{if .E2EE}} checked{{end}}>
+          <input type="checkbox" role="switch"{{if not .E2EE}} disabled{{end}} name="encrypt" value="on"{{if .E2EE}} checked{{end}}>
           <span class="sw-track" aria-hidden="true"><span class="sw-knob"></span></span><span>{{tr .Locale "e2ee_title"}}</span>
         </label>
         {{/* A four-character code, made here and never a form field, so no
@@ -159,7 +159,7 @@
         </span>
         {{end}}
         {{/* The action ends the row: choose the terms, then send. */}}
-        <button type="submit" class="pri end">{{tr .Locale "create_share_link"}}</button>
+        <button type="submit" class="pri end"{{if and .HasKeyring .E2EE}} disabled{{end}}>{{tr .Locale "create_share_link"}}</button>
       </div>
       </div>
       {{if .HasKeyring}}

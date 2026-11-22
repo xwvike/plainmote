@@ -85,6 +85,10 @@ func (p SealedPart) valid() bool { return validSealedContent(p.Content) && valid
 // CreateSealedResource stores a resource encrypted in the browser under the
 // id its encryption is bound to.
 func (d *Store) CreateSealedResource(ctx context.Context, ownerID, id string, part SealedPart, sealedKey []byte) (Resource, error) {
+	return d.CreateSealedResourceWithFallbackUpload(ctx, ownerID, id, "", part, sealedKey)
+}
+
+func (d *Store) CreateSealedResourceWithFallbackUpload(ctx context.Context, ownerID, id, fallbackUploadID string, part SealedPart, sealedKey []byte) (Resource, error) {
 	if !validUUIDs(ownerID, id) || ownerID == AnonymousUserID {
 		return Resource{}, ErrNotFound
 	}
@@ -101,8 +105,9 @@ func (d *Store) CreateSealedResource(ctx context.Context, ownerID, id string, pa
 		return Resource{}, fmt.Errorf("store sealed body: %w: %w", ErrInternal, err)
 	}
 	var dropped []string
-	err := d.withTx(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGate(ctx, tx, ownerID, "", now)
+	var fallbackStagingKey string
+	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
+		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, "", fallbackUploadID, now)
 		if err != nil {
 			return err
 		}
@@ -125,12 +130,17 @@ ON CONFLICT (id) DO NOTHING
 			return errSealedShape
 		}
 		dropped, err = trimHistoryTx(ctx, tx, ownerID, "", limit.StorageBytes)
+		if err != nil {
+			return err
+		}
+		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, ownerID, "sealed_create", resource.ID, 1, true, len(dropped), now)
 		return err
 	})
 	if err != nil {
-		d.dropObjects(ctx, []string{resource.ContentKey})
+		d.dropPublishedOnError(ctx, resource.ContentKey, rolledBack)
 		return Resource{}, err
 	}
+	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return resource, nil
 }
@@ -139,12 +149,19 @@ ON CONFLICT (id) DO NOTHING
 // content as a new version, or with Content nil, only new metadata - a
 // rename. The version check is the one every save has.
 func (d *Store) SaveSealedResource(ctx context.Context, ownerID, id string, baseVersion int, part SealedPart) (SaveResult, error) {
+	return d.SaveSealedResourceWithFallbackUpload(ctx, ownerID, id, "", baseVersion, part)
+}
+
+func (d *Store) SaveSealedResourceWithFallbackUpload(ctx context.Context, ownerID, id, fallbackUploadID string, baseVersion int, part SealedPart) (SaveResult, error) {
 	current, err := d.ResourceForOwner(ctx, ownerID, id)
 	if err != nil {
 		return SaveResult{}, err
 	}
 	if !current.Sealed() {
 		return SaveResult{}, errSealedShape
+	}
+	if err := refuseQuickShare(current); err != nil {
+		return SaveResult{}, err
 	}
 	if !validSealedMeta(part.Meta) || (part.Content != nil && !validSealedContent(part.Content)) {
 		return SaveResult{}, errSealedShape
@@ -160,14 +177,21 @@ func (d *Store) SaveSealedResource(ctx context.Context, ownerID, id string, base
 	now := time.Now().UTC()
 	var result SaveResult
 	var dropped []string
-	err = d.withTx(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
+	var fallbackStagingKey string
+	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
+		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, id, fallbackUploadID, now)
 		if err != nil {
 			return err
 		}
 		locked, err := lockContentTx(ctx, tx, ownerID, id)
 		if err != nil {
 			return err
+		}
+		if !locked.Sealed {
+			return errSealedShape
+		}
+		if locked.QuickShare {
+			return errQuickShareReadOnly
 		}
 		// Encrypting the same text twice never gives the same bytes, so
 		// unlike a plain save there is no telling an unchanged resubmission
@@ -197,14 +221,21 @@ WHERE id = $9 AND owner_id = $10
 		}
 		result.Version = next.Version
 		trimmed, err := trimHistoryTx(ctx, tx, ownerID, id, limit.StorageBytes)
+		if err != nil {
+			return err
+		}
 		result.Trimmed = len(trimmed)
 		dropped = trimmed
+		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, ownerID, "sealed_save", id, result.Version, result.NewVersion, result.Trimmed, now)
 		return err
 	})
 	if err != nil {
-		d.dropObjects(ctx, []string{nextKey})
+		if replace {
+			d.dropPublishedOnError(ctx, nextKey, rolledBack)
+		}
 		return SaveResult{}, err
 	}
+	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return result, nil
 }
@@ -299,9 +330,19 @@ func (d *Store) SealResource(ctx context.Context, ownerID, id string, baseVersio
 	now := time.Now().UTC()
 	var dropped []string
 	err = d.withTx(ctx, func(tx pgx.Tx) error {
+		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
+		if err != nil {
+			return err
+		}
 		locked, err := lockContentTx(ctx, tx, ownerID, id)
 		if err != nil {
 			return err
+		}
+		if locked.Sealed {
+			return errSealedShape
+		}
+		if locked.QuickShare {
+			return errQuickShareReadOnly
 		}
 		if locked.Version != baseVersion {
 			return &VersionConflict{Current: locked.Version, At: locked.VersionAt}
@@ -312,6 +353,9 @@ func (d *Store) SealResource(ctx context.Context, ownerID, id string, baseVersio
 		}
 		if !sameNumbers(numbers, versions) {
 			return errSealedVersions
+		}
+		if usage.StorageBytes+int64(len(current.Content)) > limit.StorageBytes {
+			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, int64(len(current.Content)))
 		}
 		for _, number := range numbers {
 			part := versions[number]
@@ -336,7 +380,11 @@ WHERE id = $1 AND owner_id = $2
 			return fmt.Errorf("revoke links: %w: %w", ErrInternal, err)
 		}
 		revoked = int(tag.RowsAffected())
-		dropped = append(oldKeys, locked.Key)
+		trimmed, err := trimHistoryTx(ctx, tx, ownerID, id, limit.StorageBytes)
+		if err != nil {
+			return err
+		}
+		dropped = append(append(oldKeys, locked.Key), trimmed...)
 		return nil
 	})
 	if err != nil {
@@ -362,6 +410,9 @@ func (d *Store) UnsealResource(ctx context.Context, ownerID, id string, baseVers
 	if resource.TakenDown {
 		return ErrTakenDown
 	}
+	if err := refuseQuickShare(resource); err != nil {
+		return err
+	}
 	head, err := normalizeResourceInput(current.Name, current.Filename, current.Content, "")
 	if err != nil {
 		return err
@@ -386,9 +437,19 @@ func (d *Store) UnsealResource(ctx context.Context, ownerID, id string, baseVers
 	now := time.Now().UTC()
 	var dropped []string
 	err = d.withTx(ctx, func(tx pgx.Tx) error {
+		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
+		if err != nil {
+			return err
+		}
 		locked, err := lockContentTx(ctx, tx, ownerID, id)
 		if err != nil {
 			return err
+		}
+		if !locked.Sealed {
+			return errSealedShape
+		}
+		if locked.QuickShare {
+			return errQuickShareReadOnly
 		}
 		if locked.Version != baseVersion {
 			return &VersionConflict{Current: locked.Version, At: locked.VersionAt}
@@ -399,6 +460,9 @@ func (d *Store) UnsealResource(ctx context.Context, ownerID, id string, baseVers
 		}
 		if !sameNumbers(numbers, versions) {
 			return errSealedVersions
+		}
+		if usage.StorageBytes+int64(len(head.Content)) > limit.StorageBytes {
+			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, int64(len(head.Content)))
 		}
 		for _, number := range numbers {
 			input := typed[number]
@@ -421,7 +485,11 @@ WHERE id = $1 AND owner_id = $2
 		if _, err := tx.Exec(ctx, `UPDATE links SET sealed_key = NULL, owner_key = NULL WHERE resource_id = $1`, id); err != nil {
 			return fmt.Errorf("unseal links: %w: %w", ErrInternal, err)
 		}
-		dropped = append(oldKeys, locked.Key)
+		trimmed, err := trimHistoryTx(ctx, tx, ownerID, id, limit.StorageBytes)
+		if err != nil {
+			return err
+		}
+		dropped = append(append(oldKeys, locked.Key), trimmed...)
 		return nil
 	})
 	if err != nil {
@@ -436,31 +504,47 @@ WHERE id = $1 AND owner_id = $2
 // keys are bound to, carrying the content key wrapped by the link key and the
 // link key wrapped by the account key.
 func (d *Store) CreateSealedShare(ctx context.Context, ownerID, resourceID, linkID, name string, ttl time.Duration, maxUses int, sealedKey, ownerKey []byte) (Link, error) {
-	if !validUUIDs(linkID) {
+	if !validUUIDs(ownerID, resourceID) {
+		return Link{}, ErrNotFound
+	}
+	if !validUUIDs(linkID) || !validLinkKeys(sealedKey, ownerKey) {
 		return Link{}, errSealedShape
-	}
-	resource, err := d.ResourceForOwner(ctx, ownerID, resourceID)
-	if err != nil {
-		return Link{}, err
-	}
-	if !resource.Sealed() || !validLinkKeys(sealedKey, ownerKey) {
-		return Link{}, errSealedShape
-	}
-	if resource.TakenDown {
-		return Link{}, ErrTakenDown
 	}
 	if err := validateShareTerms(ttl, maxUses); err != nil {
 		return Link{}, err
 	}
 	now := time.Now().UTC()
 	link := Link{ID: linkID, ResourceID: resourceID, Name: name, MaxUses: maxUses, ExpiresAt: shareExpiry(now, ttl), SealedKey: sealedKey, OwnerKey: ownerKey}
-	if err := d.insertLink(ctx, d.db, &link, now); err != nil {
-		if isUniqueViolation(err) {
-			return Link{}, errSealedShape
+	err := d.withTx(ctx, func(tx pgx.Tx) error {
+		var takenDown, quick, sealed bool
+		if err := tx.QueryRow(ctx, `
+SELECT taken_down_at IS NOT NULL, expires_at IS NOT NULL, sealed_key IS NOT NULL
+FROM resources
+WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > $3)
+FOR UPDATE
+`, resourceID, ownerID, now).Scan(&takenDown, &quick, &sealed); err != nil {
+			return translateNotFound(err)
 		}
-		return Link{}, err
-	}
-	return link, nil
+		if !sealed {
+			return errSealedShape
+		}
+		if takenDown {
+			return ErrTakenDown
+		}
+		// A quick share has the one link it was made with; another would outlive
+		// what it points at.
+		if quick {
+			return errQuickShareReadOnly
+		}
+		if err := d.insertLink(ctx, tx, &link, now); err != nil {
+			if isUniqueViolation(err) {
+				return errSealedShape
+			}
+			return err
+		}
+		return nil
+	})
+	return link, err
 }
 
 // SealedEntry is what the browser needs to show an encrypted resource's
@@ -549,34 +633,53 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
-// RekeySealedShare gives a live link to an encrypted resource new keys: a
-// code in place of the key in its address, a new code, or a key again. Its
-// address stays; whatever opened it before - the full address, the old code
-// - no longer does.
+// RekeySealedShare gives a live link to an encrypted resource new keys and a
+// new delivery token: a code in place of the key in its address, a new code,
+// or a key again. Rotating the token invalidates the old address so a prior
+// recipient who cached the content key cannot fetch later versions.
 func (d *Store) RekeySealedShare(ctx context.Context, ownerID, resourceID, linkID string, sealedKey, ownerKey []byte) error {
-	if !validUUIDs(linkID) {
+	if !validUUIDs(ownerID, resourceID, linkID) {
 		return ErrNotFound
 	}
-	resource, err := d.ResourceForOwner(ctx, ownerID, resourceID)
+	if !validLinkKeys(sealedKey, ownerKey) {
+		return errSealedShape
+	}
+	token, err := generateToken()
 	if err != nil {
 		return err
 	}
-	if !resource.Sealed() || !validLinkKeys(sealedKey, ownerKey) {
-		return errSealedShape
-	}
-	if resource.TakenDown {
-		return ErrTakenDown
-	}
-	tag, err := d.db.Exec(ctx, `
-UPDATE links SET sealed_key = $3, owner_key = $4
-WHERE id = $1 AND resource_id = $2 AND sealed_key IS NOT NULL AND revoked_at IS NULL
-  AND (expires_at IS NULL OR expires_at > now()) AND (max_uses = 0 OR used_count < max_uses)
-`, linkID, resourceID, sealedKey, ownerKey)
+	ciphertext, err := d.cipher.seal(token)
 	if err != nil {
-		return fmt.Errorf("rekey link: %w: %w", ErrInternal, err)
+		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return nil
+	now := time.Now().UTC()
+	return d.withTx(ctx, func(tx pgx.Tx) error {
+		var takenDown, sealed bool
+		if err := tx.QueryRow(ctx, `
+SELECT taken_down_at IS NOT NULL, sealed_key IS NOT NULL
+FROM resources
+WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > $3)
+FOR UPDATE
+`, resourceID, ownerID, now).Scan(&takenDown, &sealed); err != nil {
+			return translateNotFound(err)
+		}
+		if !sealed {
+			return errSealedShape
+		}
+		if takenDown {
+			return ErrTakenDown
+		}
+		tag, err := tx.Exec(ctx, `
+UPDATE links SET sealed_key = $3, owner_key = $4, token_hash = $5, token_ciphertext = $6
+WHERE id = $1 AND resource_id = $2 AND sealed_key IS NOT NULL AND revoked_at IS NULL
+  AND (expires_at IS NULL OR expires_at > $7) AND (max_uses = 0 OR used_count < max_uses)
+`, linkID, resourceID, sealedKey, ownerKey, hashToken(token), ciphertext, now)
+		if err != nil {
+			return fmt.Errorf("rekey link: %w: %w", ErrInternal, err)
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }

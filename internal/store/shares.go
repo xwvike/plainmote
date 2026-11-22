@@ -190,31 +190,38 @@ func (d *Store) CreateShare(ctx context.Context, ownerID, resourceID, name strin
 // CreateAppShare makes a link as CreateShare does, recording the MCP app
 // that asked for it so its owner can tell it apart.
 func (d *Store) CreateAppShare(ctx context.Context, ownerID, resourceID, name string, ttl time.Duration, maxUses int, app string) (Link, error) {
-	if err := d.assertOwnsResource(ctx, ownerID, resourceID); err != nil {
-		return Link{}, err
-	}
-	var takenDown, quick, sealed bool
-	if err := d.db.QueryRow(ctx, `SELECT taken_down_at IS NOT NULL, expires_at IS NOT NULL, sealed_key IS NOT NULL FROM resources WHERE id = $1`, resourceID).Scan(&takenDown, &quick, &sealed); err != nil {
-		return Link{}, translateNotFound(err)
-	}
-	// Its link needs a key only the browser can make.
-	if sealed {
-		return Link{}, errSealedNeedsKey
-	}
-	if takenDown {
-		return Link{}, ErrTakenDown
-	}
-	// A quick share has the one link it was made with; another would outlive
-	// what it points at.
-	if quick {
-		return Link{}, errQuickShareReadOnly
+	if !validUUIDs(ownerID, resourceID) {
+		return Link{}, ErrNotFound
 	}
 	if err := validateShareTerms(ttl, maxUses); err != nil {
 		return Link{}, err
 	}
 	now := time.Now().UTC()
 	link := Link{ResourceID: resourceID, Name: name, MaxUses: maxUses, ExpiresAt: shareExpiry(now, ttl), CreatedByApp: oauthText(app)}
-	err := d.insertLink(ctx, d.db, &link, now)
+	err := d.withTx(ctx, func(tx pgx.Tx) error {
+		var takenDown, quick, sealed bool
+		if err := tx.QueryRow(ctx, `
+SELECT taken_down_at IS NOT NULL, expires_at IS NOT NULL, sealed_key IS NOT NULL
+FROM resources
+WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > $3)
+FOR UPDATE
+`, resourceID, ownerID, now).Scan(&takenDown, &quick, &sealed); err != nil {
+			return translateNotFound(err)
+		}
+		// Its link needs a key only the browser can make.
+		if sealed {
+			return errSealedNeedsKey
+		}
+		if takenDown {
+			return ErrTakenDown
+		}
+		// A quick share has the one link it was made with; another would outlive
+		// what it points at.
+		if quick {
+			return errQuickShareReadOnly
+		}
+		return d.insertLink(ctx, tx, &link, now)
+	})
 	return link, err
 }
 
@@ -403,6 +410,7 @@ WHERE l.token_hash = $2
   AND r.id = l.resource_id
   AND r.deleted_at IS NULL
   AND r.taken_down_at IS NULL
+  AND (r.expires_at IS NULL OR r.expires_at > $1)
   AND u.suspended_at IS NULL
   AND l.revoked_at IS NULL
   AND (l.expires_at IS NULL OR l.expires_at > $1)
@@ -456,7 +464,7 @@ RETURNING l.id, l.resource_id, l.name, l.sealed_key
 
 func (d *Store) recordRefusalTx(ctx context.Context, tx pgx.Tx, hash string, meta RequestMeta, now time.Time, result *ConsumeResult) error {
 	var linkID, resourceID, name, ownerID, resourceName, resourceFile string
-	var expires, revoked pgtype.Timestamptz
+	var expires, revoked, resourceExpires pgtype.Timestamptz
 	var maxUses, usedCount int
 	var takenDown, suspended bool
 	// The resource comes along so the refusal is recorded against an owner and
@@ -466,13 +474,13 @@ func (d *Store) recordRefusalTx(ctx context.Context, tx pgx.Tx, hash string, met
 	// token is the honest answer.
 	err := tx.QueryRow(ctx, `
 SELECT l.id, l.resource_id, l.name, l.expires_at, l.revoked_at, l.max_uses, l.used_count,
-       r.owner_id, r.name, r.filename, r.taken_down_at IS NOT NULL, u.suspended_at IS NOT NULL
+       r.owner_id, r.name, r.filename, r.expires_at, r.taken_down_at IS NOT NULL, u.suspended_at IS NOT NULL
 FROM links l
 JOIN resources r ON r.id = l.resource_id
 JOIN users u ON u.id = r.owner_id
 WHERE l.token_hash = $1 AND r.deleted_at IS NULL
 `, hash).Scan(&linkID, &resourceID, &name, &expires, &revoked, &maxUses, &usedCount,
-		&ownerID, &resourceName, &resourceFile, &takenDown, &suspended)
+		&ownerID, &resourceName, &resourceFile, &resourceExpires, &takenDown, &suspended)
 	if errors.Is(err, pgx.ErrNoRows) {
 		result.Reason = ReasonInvalid
 		return nil
@@ -490,7 +498,7 @@ WHERE l.token_hash = $1 AND r.deleted_at IS NULL
 		reason, detail = OutcomeSuspended, "owner is suspended"
 	case revoked.Valid:
 		reason, detail = OutcomeRevoked, "link was revoked"
-	case expires.Valid && !now.Before(expires.Time):
+	case (expires.Valid && !now.Before(expires.Time)) || (resourceExpires.Valid && !now.Before(resourceExpires.Time)):
 		reason, detail = OutcomeExpired, "link expired"
 	}
 	result.Reason = reason
@@ -524,7 +532,7 @@ SELECT CASE
   WHEN r.content_type LIKE 'audio/%' OR r.content_type LIKE 'video/%' THEN 'media'
   ELSE '' END
 FROM links l JOIN resources r ON r.id = l.resource_id JOIN users u ON u.id = r.owner_id
-WHERE l.token_hash = $1 AND r.deleted_at IS NULL AND r.taken_down_at IS NULL AND u.suspended_at IS NULL`, hashToken(token), EncryptedContentType).Scan(&shell)
+WHERE l.token_hash = $1 AND r.deleted_at IS NULL AND r.taken_down_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > now()) AND u.suspended_at IS NULL`, hashToken(token), EncryptedContentType).Scan(&shell)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ShellNone, nil
 	}

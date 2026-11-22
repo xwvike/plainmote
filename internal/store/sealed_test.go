@@ -21,6 +21,10 @@ func sealedPart(mark byte) SealedPart {
 
 func wrappedKey(mark byte) []byte { return bytes.Repeat([]byte{mark}, 60) }
 
+func fakeBlob(magic string, n int) []byte {
+	return append([]byte(magic), bytes.Repeat([]byte{1}, n)...)
+}
+
 func TestSealedResourceLifecycle(t *testing.T) {
 	db, user, _ := testDatabase(t)
 	ctx := context.Background()
@@ -281,6 +285,24 @@ func TestSealedQuickShare(t *testing.T) {
 	if err != nil || !codeLink.CodeLink() {
 		t.Fatalf("a code link: %+v %v", codeLink, err)
 	}
+	// A sealed quick share is read-only until kept: creating a second share
+	// link that could outlive the quick share must be refused.
+	if _, err := db.CreateSealedShare(ctx, user.ID, coded.ID, uuid.NewString(), "", 24*time.Hour, 0, codeKey, ownerCode); !errors.Is(err, errQuickShareReadOnly) {
+		t.Fatalf("second sealed share on quick share: %v", err)
+	}
+	// Even if a link's own expires_at were later than the resource's expires_at,
+	// delivery must refuse once the resource itself has expired.
+	if _, err := db.db.Exec(ctx, `UPDATE links SET expires_at = $2 WHERE id = $1`, codeLink.ID, now.Add(24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if expiredRes, err := db.ConsumeToken(ctx, codeLink.Token, RequestMeta{Method: "GET"}, now.Add(2*time.Hour)); err != nil || expiredRes.Allowed || expiredRes.Reason != OutcomeExpired {
+		t.Fatalf("expired quick share link must not deliver: %+v %v", expiredRes, err)
+	}
+	// Once kept as an ordinary encrypted resource, additional sealed links and
+	// rekeying are allowed.
+	if err := db.KeepQuickShare(ctx, user.ID, coded.ID, now); err != nil {
+		t.Fatal(err)
+	}
 	// And a link opened by a code on an encrypted resource, beside one with
 	// its key in the address.
 	if l, err := db.CreateSealedShare(ctx, user.ID, coded.ID, uuid.NewString(), "", time.Hour, 0, codeKey, ownerCode); err != nil || !l.CodeLink() {
@@ -305,20 +327,116 @@ func TestSealedQuickShare(t *testing.T) {
 	if err := db.RekeySealedShare(ctx, user.ID, id, keyed.ID, codeKey, ownerCode); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a link under another resource: %v", err)
 	}
+	oldToken := keyed.Token
 	if err := db.RekeySealedShare(ctx, user.ID, coded.ID, keyed.ID, codeKey, ownerCode); err != nil {
 		t.Fatal(err)
 	}
 	links, _ := db.ListShares(ctx, user.ID, coded.ID, now)
+	var rotatedToken string
 	for _, l := range links {
-		if l.ID == keyed.ID && (!l.CodeLink() || !bytes.Equal(l.OwnerKey, ownerCode)) {
-			t.Fatalf("rekeyed: %+v", l)
+		if l.ID == keyed.ID {
+			if !l.CodeLink() || !bytes.Equal(l.OwnerKey, ownerCode) {
+				t.Fatalf("rekeyed: %+v", l)
+			}
+			rotatedToken = l.Token
 		}
+	}
+	if rotatedToken == "" || rotatedToken == oldToken {
+		t.Fatalf("rekey must rotate delivery token: old=%q new=%q", oldToken, rotatedToken)
+	}
+	if oldRes, err := db.ConsumeToken(ctx, oldToken, RequestMeta{}, now); err != nil || oldRes.Allowed || oldRes.Reason != ReasonInvalid {
+		t.Fatalf("old token survived rekey: %+v %v", oldRes, err)
+	}
+	if newRes, err := db.ConsumeToken(ctx, rotatedToken, RequestMeta{}, now); err != nil || !newRes.Allowed {
+		t.Fatalf("rotated token failed: %+v %v", newRes, err)
 	}
 	if err := db.RevokeLink(ctx, user.ID, coded.ID, keyed.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.RekeySealedShare(ctx, user.ID, coded.ID, keyed.ID, wrappedKey(2), wrappedKey(3)); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a revoked link: %v", err)
+	}
+}
+
+func TestSealAndUnsealEnforceStorageQuota(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	ctx := context.Background()
+
+	// Create a version so history exists alongside current content.
+	if _, err := db.SaveResource(ctx, user.ID, resource.ID, ResourceEdit{
+		Name: "Example", Filename: "example.conf", Content: bytes.Repeat([]byte("a"), 120),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Restrict default plan to 250 bytes so oversized Seal/Unseal fails and
+	// history exceeding room is trimmed.
+	if _, err := db.db.Exec(ctx, `UPDATE plans SET max_storage = 250 WHERE is_default`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Oversized current content on SealResource must be refused.
+	if _, err := db.SealResource(ctx, user.ID, resource.ID, 2,
+		SealedPart{Content: fakeBlob("PMr1", 300), Meta: fakeBlob("PMm1", 40)},
+		map[int]SealedPart{1: {Content: fakeBlob("PMr1", 60), Meta: fakeBlob("PMm1", 40)}},
+		wrappedKey(1)); err == nil || !IsRefusal(err) {
+		t.Fatalf("seal over storage quota: %v", err)
+	}
+	// Current fits (160B <= 250B), history pushes total over 250B (160+120=280B)
+	// so trimHistoryTx must drop the history version.
+	if _, err := db.SealResource(ctx, user.ID, resource.ID, 2,
+		SealedPart{Content: fakeBlob("PMr1", 156), Meta: fakeBlob("PMm1", 40)},
+		map[int]SealedPart{1: {Content: fakeBlob("PMr1", 116), Meta: fakeBlob("PMm1", 40)}},
+		wrappedKey(1)); err != nil {
+		t.Fatalf("seal within current quota: %v", err)
+	}
+	if versions, err := db.ListVersions(ctx, user.ID, resource.ID); err != nil || len(versions) != 0 {
+		t.Fatalf("expected history trimmed during seal, got %d (%v)", len(versions), err)
+	}
+	// Oversized current content on UnsealResource must also be refused.
+	if err := db.UnsealResource(ctx, user.ID, resource.ID, 2,
+		PlainPart{Content: bytes.Repeat([]byte("z"), 300), Name: "Big", Filename: "big.txt"},
+		map[int]PlainPart{}); err == nil || !IsRefusal(err) {
+		t.Fatalf("unseal over storage quota: %v", err)
+	}
+}
+
+func TestSealedQuickShareReadOnlyAndPruneCleansHistory(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	id := uuid.NewString()
+	qs, _, err := db.CreateSealedQuickShare(ctx, user.ID, id, uuid.NewString(),
+		SealedPart{Content: fakeBlob("PMr1", 64), Meta: fakeBlob("PMm1", 40)},
+		wrappedKey(1), wrappedKey(2), wrappedKey(3), time.Hour, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sealed quick shares must be read-only until kept.
+	if _, err := db.SaveSealedResource(ctx, user.ID, qs.ID, 1,
+		SealedPart{Content: fakeBlob("PMr1", 72), Meta: fakeBlob("PMm1", 40)}); !errors.Is(err, errQuickShareReadOnly) {
+		t.Fatalf("saving sealed quick share: %v", err)
+	}
+	// Even if historical versions exist (e.g. from before this guard),
+	// expiring the quick share must delete both current and history blobs.
+	histKey := contentKey(qs.ID)
+	if err := db.blobs.Put(ctx, histKey, bytes.NewReader([]byte("old-hist")), 8); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.db.Exec(ctx, `
+INSERT INTO resource_versions(resource_id, version, content_key, content_size, content_type, content_encoding, content_sha256, saved_at, replaced_at)
+VALUES($1, 0, $2, 8, 'application/octet-stream', '', '', $3, $3)
+`, qs.ID, histKey, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.PruneQuickShares(ctx, now.Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{qs.ContentKey, histKey} {
+		if rc, _, err := db.blobs.Open(ctx, key); err == nil {
+			_ = rc.Close()
+			t.Fatalf("blob %q still exists after PruneQuickShares", key)
+		}
 	}
 }
 

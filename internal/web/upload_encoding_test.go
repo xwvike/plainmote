@@ -12,6 +12,15 @@ import (
 	"plainmote/internal/store"
 )
 
+func readPreparedResourceForm(w http.ResponseWriter, r *http.Request, maxBytes int64) (resourceForm, error) {
+	cleanup, err := prepareResourcePost(w, r, maxBytes)
+	defer cleanup()
+	if err != nil {
+		return resourceForm{}, err
+	}
+	return readResourceForm(r, maxBytes)
+}
+
 func TestEditorContentUsesSelectedEncoding(t *testing.T) {
 	values := url.Values{
 		"content":          {"name: café\n"},
@@ -20,7 +29,7 @@ func TestEditorContentUsesSelectedEncoding(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/resources/new", bytes.NewBufferString(values.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	form, err := readResourceForm(httptest.NewRecorder(), request, 1<<20)
+	form, err := readPreparedResourceForm(httptest.NewRecorder(), request, 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +46,7 @@ func TestEditorRejectsCharactersTheSelectedEncodingCannotRepresent(t *testing.T)
 	}
 	request := httptest.NewRequest(http.MethodPost, "/resources/new", bytes.NewBufferString(values.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if _, err := readResourceForm(httptest.NewRecorder(), request, 1<<20); err == nil {
+	if _, err := readPreparedResourceForm(httptest.NewRecorder(), request, 1<<20); err == nil {
 		t.Fatal("GBK save must reject a character it cannot represent")
 	}
 }
@@ -64,7 +73,7 @@ func TestUploadedBytesAreNotReencoded(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodPost, "/resources/new", &body)
 	request.Header.Set("Content-Type", writer.FormDataContentType())
-	form, err := readResourceForm(httptest.NewRecorder(), request, 1<<20)
+	form, err := readPreparedResourceForm(httptest.NewRecorder(), request, 1<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,12 +104,47 @@ func TestChunkedUploadIsBoundedToo(t *testing.T) {
 	request.ContentLength = -1 // what a chunked request looks like to the handler
 	request.TransferEncoding = []string{"chunked"}
 
-	_, err = readResourceForm(httptest.NewRecorder(), request, limit)
+	_, err = readPreparedResourceForm(httptest.NewRecorder(), request, limit)
 	// Refusing it is not the point - the old code refused it too, after the
 	// multipart parser had already written all of it to disk. The point is
 	// that reading stopped at the limit, which is what MaxBytesError reports.
 	var tooLarge *http.MaxBytesError
 	if !errors.As(err, &tooLarge) {
 		t.Fatalf("reading must stop at the limit, got %v", err)
+	}
+}
+
+// TestResourcePostEnforcesLimitBeforeCSRF verifies both create and edit reject
+// an oversized multipart upload before CSRF parsing can buffer it unboundedly.
+func TestResourcePostEnforcesLimitBeforeCSRF(t *testing.T) {
+	db, user, resource := testDatabase(t)
+	client := signedIn(t, db, user)
+	client.app.cfg.MaxContent = 4096
+
+	for _, target := range []string{"/resources/new", "/resources/" + resource.ID} {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		_ = writer.WriteField("csrf", "invalid-token")
+		part, err := writer.CreateFormFile("upload", "big.bin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(bytes.Repeat([]byte("x"), 128*1024)); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "https://cfg.test"+target, &body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req.ContentLength = -1
+		req.TransferEncoding = []string{"chunked"}
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: client.session})
+		req.AddCookie(&http.Cookie{Name: csrfCookie, Value: client.csrf})
+		rec := httptest.NewRecorder()
+		client.app.handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("%s oversize with bad csrf: got %d, want 413", target, rec.Code)
+		}
 	}
 }

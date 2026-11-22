@@ -67,22 +67,38 @@ func (a *App) readSealedForm(w http.ResponseWriter, r *http.Request, sessionID s
 	return true
 }
 
-// part is a file field of the form, or nil when there is none.
-func (a *App) part(r *http.Request, name string) []byte {
+var errPartTooLarge = errors.New("part too large")
+
+// part reads a file field of the form. A missing field returns nil, nil;
+// an unreadable or oversized field returns an error so callers never confuse
+// a failed upload with an omitted part.
+func (a *App) part(r *http.Request, name string) ([]byte, error) {
 	files := r.MultipartForm.File[name]
 	if len(files) == 0 {
-		return nil
+		return nil, nil
 	}
 	file, err := files[0].Open()
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("open part %s: %w", name, err)
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, a.cfg.MaxContent+64<<10+1))
-	if err != nil || int64(len(data)) > a.cfg.MaxContent+64<<10 {
-		return nil
+	limit := a.cfg.MaxContent + 64<<10
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read part %s: %w", name, err)
 	}
-	return data
+	if int64(len(data)) > limit {
+		return nil, errPartTooLarge
+	}
+	return data, nil
+}
+
+func (a *App) failSealedPart(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, errPartTooLarge) {
+		a.keyringFail(w, http.StatusRequestEntityTooLarge, "too_large", "")
+		return
+	}
+	a.sealedFail(w, r, http.StatusBadRequest, "bad_request", err)
 }
 
 func base64Field(r *http.Request, name string) []byte {
@@ -162,6 +178,11 @@ func (a *App) handleSealedCreate(w http.ResponseWriter, r *http.Request, user Us
 	if !a.readSealedForm(w, r, sessionID) {
 		return
 	}
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
 	var (
 		resource Resource
 		err      error
@@ -170,12 +191,24 @@ func (a *App) handleSealedCreate(w http.ResponseWriter, r *http.Request, user Us
 		var ticket store.UploadTicket
 		ticket, err = a.verifyUploadToken(uploadToken, uploadPurposeSealedCreate, user.ID, r.FormValue("id"))
 		if err == nil {
-			resource, err = a.db.CreateSealedResourceFromKey(r.Context(), user.ID, ticket.ResourceID, ticket.Key,
-				base64Field(r, "meta"), base64Field(r, "sealed_key"), ticket.Size, r.FormValue("upload_sha256"))
+			resource, err = a.db.CreateSealedResourceFromUpload(r.Context(), user.ID, ticket,
+				base64Field(r, "meta"), base64Field(r, "sealed_key"))
 		}
 	} else {
-		resource, err = a.db.CreateSealedResource(r.Context(), user.ID, r.FormValue("id"),
-			store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")}, base64Field(r, "sealed_key"))
+		var content []byte
+		content, err = a.part(r, "content")
+		if err != nil {
+			a.failSealedPart(w, r, err)
+			return
+		}
+		fallbackUploadID := ""
+		if fallbackToken := strings.TrimSpace(r.FormValue("fallback_upload_token")); fallbackToken != "" {
+			if ticket, verifyErr := a.verifyUploadToken(fallbackToken, uploadPurposeSealedCreate, user.ID, r.FormValue("id")); verifyErr == nil {
+				fallbackUploadID = ticket.UploadID
+			}
+		}
+		resource, err = a.db.CreateSealedResourceWithFallbackUpload(r.Context(), user.ID, r.FormValue("id"), fallbackUploadID,
+			store.SealedPart{Content: content, Meta: base64Field(r, "meta")}, base64Field(r, "sealed_key"))
 	}
 	if err != nil {
 		a.sealedFail(w, r, http.StatusBadRequest, "refused", err)
@@ -188,6 +221,11 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 	if !a.readSealedForm(w, r, sessionID) {
 		return
 	}
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
 	base := versionNumber(r.FormValue("base_version"))
 	var err error
 	answer := map[string]any{}
@@ -198,12 +236,24 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 			var ticket store.UploadTicket
 			ticket, err = a.verifyUploadToken(uploadToken, uploadPurposeSealedSave, user.ID, resourceID)
 			if err == nil {
-				result, err = a.db.SaveSealedResourceFromKey(r.Context(), user.ID, resourceID, base, ticket.Key,
-					base64Field(r, "meta"), ticket.Size, r.FormValue("upload_sha256"))
+				result, err = a.db.SaveSealedResourceFromUpload(r.Context(), user.ID, resourceID, base, ticket,
+					base64Field(r, "meta"))
 			}
 		} else {
-			result, err = a.db.SaveSealedResource(r.Context(), user.ID, resourceID, base,
-				store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")})
+			var content []byte
+			content, err = a.part(r, "content")
+			if err != nil {
+				a.failSealedPart(w, r, err)
+				return
+			}
+			fallbackUploadID := ""
+			if fallbackToken := strings.TrimSpace(r.FormValue("fallback_upload_token")); fallbackToken != "" {
+				if ticket, verifyErr := a.verifyUploadToken(fallbackToken, uploadPurposeSealedSave, user.ID, resourceID); verifyErr == nil {
+					fallbackUploadID = ticket.UploadID
+				}
+			}
+			result, err = a.db.SaveSealedResourceWithFallbackUpload(r.Context(), user.ID, resourceID, fallbackUploadID, base,
+				store.SealedPart{Content: content, Meta: base64Field(r, "meta")})
 		}
 		if err == nil {
 			saved := "0"
@@ -220,11 +270,21 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 		versions := map[int]store.SealedPart{}
 		for _, number := range versionNumbers(r) {
 			prefix := fmt.Sprintf("version_%d_", number)
-			versions[number] = store.SealedPart{Content: a.part(r, prefix+"content"), Meta: base64Field(r, prefix+"meta")}
+			versionContent, partErr := a.part(r, prefix+"content")
+			if partErr != nil {
+				a.failSealedPart(w, r, partErr)
+				return
+			}
+			versions[number] = store.SealedPart{Content: versionContent, Meta: base64Field(r, prefix+"meta")}
+		}
+		content, partErr := a.part(r, "content")
+		if partErr != nil {
+			a.failSealedPart(w, r, partErr)
+			return
 		}
 		var revoked int
 		revoked, err = a.db.SealResource(r.Context(), user.ID, resourceID, base,
-			store.SealedPart{Content: a.part(r, "content"), Meta: base64Field(r, "meta")}, versions, base64Field(r, "sealed_key"))
+			store.SealedPart{Content: content, Meta: base64Field(r, "meta")}, versions, base64Field(r, "sealed_key"))
 		if err == nil {
 			answer["location"] = "/resources/" + resourceID + "?sealed=1"
 			answer["revoked"] = revoked
@@ -233,10 +293,20 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 		versions := map[int]store.PlainPart{}
 		for _, number := range versionNumbers(r) {
 			prefix := fmt.Sprintf("version_%d_", number)
-			versions[number] = store.PlainPart{Content: a.part(r, prefix+"content"), Filename: strings.TrimSpace(r.FormValue(prefix + "filename"))}
+			versionContent, partErr := a.part(r, prefix+"content")
+			if partErr != nil {
+				a.failSealedPart(w, r, partErr)
+				return
+			}
+			versions[number] = store.PlainPart{Content: versionContent, Filename: strings.TrimSpace(r.FormValue(prefix + "filename"))}
+		}
+		content, partErr := a.part(r, "content")
+		if partErr != nil {
+			a.failSealedPart(w, r, partErr)
+			return
 		}
 		err = a.db.UnsealResource(r.Context(), user.ID, resourceID, base, store.PlainPart{
-			Content: a.part(r, "content"), Name: strings.TrimSpace(r.FormValue("name")), Filename: strings.TrimSpace(r.FormValue("filename")),
+			Content: content, Name: strings.TrimSpace(r.FormValue("name")), Filename: strings.TrimSpace(r.FormValue("filename")),
 		}, versions)
 		if err == nil {
 			answer["location"] = "/resources/" + resourceID + "?unsealed=1"

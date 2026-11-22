@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -81,32 +82,48 @@ func NewS3(cfg S3Config) (*S3, error) {
 }
 
 // PresignPut issues a short-lived presigned PUT URL that binds the exact object
-// key and Content-Length so browsers can upload directly to object storage.
-func (s *S3) PresignPut(ctx context.Context, key string, size int64, ttl time.Duration) (string, error) {
+// key, Content-Length, and optional SHA-256 checksum so browsers can upload
+// directly to object storage while R2/S3 enforces integrity.
+func (s *S3) PresignPut(ctx context.Context, key string, size int64, sha256B64 string, ttl time.Duration) (PresignedPut, error) {
 	if strings.TrimSpace(key) == "" {
-		return "", errors.New("blob key must not be empty")
+		return PresignedPut{}, errors.New("blob key must not be empty")
 	}
 	if size <= 0 {
-		return "", errors.New("blob size must be positive")
+		return PresignedPut{}, errors.New("blob size must be positive")
 	}
 	if ttl <= 0 {
 		ttl = 10 * time.Minute
 	}
-	req, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{
+	input := &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucket),
 		Key:           aws.String(key),
 		ContentLength: aws.Int64(size),
-	}, s3.WithPresignExpires(ttl))
-	if err != nil {
-		return "", fmt.Errorf("presign put: %w", err)
 	}
-	return req.URL, nil
+	if sha256B64 != "" {
+		input.ChecksumSHA256 = aws.String(sha256B64)
+	}
+	req, err := s.presign.PresignPutObject(ctx, input, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return PresignedPut{}, fmt.Errorf("presign put: %w", err)
+	}
+	headers := make(map[string]string)
+	for k, vals := range req.SignedHeader {
+		if len(vals) == 0 {
+			continue
+		}
+		// Browsers forbid setting Host and Content-Length manually on XHR/fetch.
+		if strings.EqualFold(k, "Host") || strings.EqualFold(k, "Content-Length") {
+			continue
+		}
+		headers[k] = vals[0]
+	}
+	return PresignedPut{URL: req.URL, Headers: headers}, nil
 }
 
-// Head checks that key exists and returns its stored byte length.
-func (s *S3) Head(ctx context.Context, key string) (int64, error) {
+// Head checks that key exists and returns its stored byte length and ETag.
+func (s *S3) Head(ctx context.Context, key string) (ObjectInfo, error) {
 	if strings.TrimSpace(key) == "" {
-		return 0, errors.New("blob key must not be empty")
+		return ObjectInfo{}, errors.New("blob key must not be empty")
 	}
 	out, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -114,14 +131,38 @@ func (s *S3) Head(ctx context.Context, key string) (int64, error) {
 	})
 	if err != nil {
 		if isNotFound(err) {
-			return 0, ErrNotFound
+			return ObjectInfo{}, ErrNotFound
 		}
-		return 0, fmt.Errorf("head blob: %w", err)
+		return ObjectInfo{}, fmt.Errorf("head blob: %w", err)
 	}
-	if out.ContentLength == nil {
-		return 0, nil
+	return ObjectInfo{
+		Size: aws.ToInt64(out.ContentLength),
+		ETag: aws.ToString(out.ETag),
+	}, nil
+}
+
+// Copy server-side copies srcKey to dstKey inside the same bucket, optionally
+// conditioning on expectedETag so a concurrent overwrite of a staging key
+// between verification and publish cannot slip through.
+func (s *S3) Copy(ctx context.Context, srcKey, dstKey, expectedETag string) error {
+	if strings.TrimSpace(srcKey) == "" || strings.TrimSpace(dstKey) == "" {
+		return errors.New("blob key must not be empty")
 	}
-	return *out.ContentLength, nil
+	input := &s3.CopyObjectInput{
+		Bucket:     aws.String(s.bucket),
+		Key:        aws.String(dstKey),
+		CopySource: aws.String(url.PathEscape(s.bucket + "/" + srcKey)),
+	}
+	if expectedETag != "" {
+		input.CopySourceIfMatch = aws.String(expectedETag)
+	}
+	if _, err := s.client.CopyObject(ctx, input); err != nil {
+		if isNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("copy blob: %w", err)
+	}
+	return nil
 }
 
 func (s *S3) Put(ctx context.Context, key string, r io.Reader, size int64) error {

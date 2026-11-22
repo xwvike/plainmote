@@ -184,18 +184,19 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 		boxContent = ""
 	}
 
+	// The box's text is never stored in the clear because the script that was
+	// to encrypt it did not run, even if the session expired before submit.
+	if form.encrypt {
+		a.refusePasteWith(w, r, boxContent, filename, ttlValue, translate(requestLanguage(r).Locale, "e2ee_plaintext_refused"), http.StatusBadRequest)
+		return
+	}
+
 	// Signed in, the quick share is the account's own: listed with its
 	// resources and its visits in its access history. A terminal carries no
 	// session, so what it sends here is anonymous.
 	var resource Resource
 	var link Link
 	if user, _, ok := a.currentUser(r); ok {
-		// The box's text is never stored in the clear because the script
-		// that was to encrypt it did not run.
-		if form.encrypt {
-			a.refusePasteWith(w, r, boxContent, filename, ttlValue, translate(requestLanguage(r).Locale, "e2ee_plaintext_refused"), http.StatusBadRequest)
-			return
-		}
 		// Sent from the box with its switch off: the box starts that way
 		// next time.
 		if wantsHTML(r) {
@@ -205,35 +206,34 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 			var ticket store.UploadTicket
 			ticket, err = a.verifyUploadToken(form.uploadToken, uploadPurposePaste, user.ID, "")
 			if err == nil {
-				resource, link, err = a.db.CreateQuickShareFromKey(r.Context(), user.ID, ticket.ResourceID, ticket.Key, filename, ticket.Size, form.uploadSHA256, ttl, time.Now().UTC())
+				resource, link, err = a.db.CreateQuickShareFromUpload(r.Context(), user.ID, ticket, filename, ttl, time.Now().UTC())
 			}
 		} else {
-			resource, link, err = a.db.CreateQuickShare(r.Context(), user.ID, filename, []byte(content), ttl, time.Now().UTC())
+			fallbackUploadID := ""
+			if form.fallbackUploadToken != "" {
+				if ticket, verifyErr := a.verifyUploadToken(form.fallbackUploadToken, uploadPurposePaste, user.ID, ""); verifyErr == nil {
+					fallbackUploadID = ticket.UploadID
+				}
+			}
+			resource, link, err = a.db.CreateQuickShareWithFallbackUpload(r.Context(), user.ID, fallbackUploadID, filename, []byte(content), ttl, time.Now().UTC())
 		}
 	} else {
 		now, key := time.Now().UTC(), addressKey(a.clientIP(r))
 		if form.uploadToken != "" {
+			// Anonymous rate limits were already spent atomically when the
+			// presigned URL was issued, so retries do not double-charge.
 			var ticket store.UploadTicket
 			ticket, err = a.verifyUploadToken(form.uploadToken, uploadPurposePaste, store.AnonymousUserID, "")
 			if err == nil {
-				limited := a.limits.pastes
-				if limited.allow(key, now) {
-					if limited = a.limits.pasteBytes; limited.spend(key, int(ticket.Size), now) {
-						limited = nil
-					}
-				}
-				if limited != nil {
-					a.db.DropBlob(r.Context(), ticket.Key)
-					wait := limited.retryIn(key, now)
-					w.Header().Set("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
-					locale := requestLanguage(r).Locale
-					a.refusePasteWith(w, r, boxContent, filename, ttlValue,
-						fmt.Sprintf(translate(locale, "paste_rate_limited"), waitText(locale, wait)), http.StatusTooManyRequests)
-					return
-				}
-				resource, link, err = a.db.CreateAnonymousPasteFromKey(r.Context(), ticket.ResourceID, ticket.Key, filename, ticket.Size, form.uploadSHA256, ttl, now)
+				resource, link, err = a.db.CreateAnonymousPasteFromUpload(r.Context(), ticket, filename, ttl, now)
 			}
 		} else {
+			fallbackUploadID := ""
+			if form.fallbackUploadToken != "" {
+				if ticket, verifyErr := a.verifyUploadToken(form.fallbackUploadToken, uploadPurposePaste, store.AnonymousUserID, ""); verifyErr == nil {
+					fallbackUploadID = ticket.UploadID
+				}
+			}
 			limited := a.limits.pastes
 			if limited.allow(key, now) {
 				if limited = a.limits.pasteBytes; limited.spend(key, len(content), now) {
@@ -248,7 +248,7 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 					fmt.Sprintf(translate(locale, "paste_rate_limited"), waitText(locale, wait)), http.StatusTooManyRequests)
 				return
 			}
-			resource, link, err = a.db.CreateAnonymousPaste(r.Context(), filename, []byte(content), ttl, now)
+			resource, link, err = a.db.CreateAnonymousPasteWithFallbackUpload(r.Context(), fallbackUploadID, filename, []byte(content), ttl, now)
 		}
 	}
 	if err != nil {
@@ -291,9 +291,10 @@ type pasteForm struct {
 	uploaded bool
 	// encrypt is the box's encryption switch, on: the page's script was to
 	// encrypt this and send it elsewhere, and did not.
-	encrypt      bool
-	uploadToken  string
-	uploadSHA256 string
+	encrypt             bool
+	uploadToken         string
+	fallbackUploadToken string
+	uploadSHA256        string
 }
 
 // readPasteForm reads the box's own form and what curl sends:
@@ -316,12 +317,13 @@ func readPasteForm(r *http.Request) (pasteForm, error) {
 		}
 		defer r.MultipartForm.RemoveAll()
 		form := pasteForm{
-			content:      []byte(r.FormValue("content")),
-			filename:     strings.TrimSpace(r.FormValue("filename")),
-			ttl:          r.FormValue("ttl"),
-			encrypt:      r.FormValue("encrypt") != "",
-			uploadToken:  strings.TrimSpace(r.FormValue("upload_token")),
-			uploadSHA256: strings.TrimSpace(r.FormValue("upload_sha256")),
+			content:             []byte(r.FormValue("content")),
+			filename:            strings.TrimSpace(r.FormValue("filename")),
+			ttl:                 r.FormValue("ttl"),
+			encrypt:             r.FormValue("encrypt") != "",
+			uploadToken:         strings.TrimSpace(r.FormValue("upload_token")),
+			fallbackUploadToken: strings.TrimSpace(r.FormValue("fallback_upload_token")),
+			uploadSHA256:        strings.TrimSpace(r.FormValue("upload_sha256")),
 		}
 		if form.uploadToken != "" {
 			form.uploaded = true
@@ -360,12 +362,13 @@ func readPasteForm(r *http.Request) (pasteForm, error) {
 	if mediaType == "application/x-www-form-urlencoded" {
 		if form, err := url.ParseQuery(string(body)); err == nil && (form.Has("content") || form.Has("upload_token")) {
 			pf := pasteForm{
-				content:      []byte(form.Get("content")),
-				filename:     strings.TrimSpace(form.Get("filename")),
-				ttl:          form.Get("ttl"),
-				encrypt:      form.Get("encrypt") != "",
-				uploadToken:  strings.TrimSpace(form.Get("upload_token")),
-				uploadSHA256: strings.TrimSpace(form.Get("upload_sha256")),
+				content:             []byte(form.Get("content")),
+				filename:            strings.TrimSpace(form.Get("filename")),
+				ttl:                 form.Get("ttl"),
+				encrypt:             form.Get("encrypt") != "",
+				uploadToken:         strings.TrimSpace(form.Get("upload_token")),
+				fallbackUploadToken: strings.TrimSpace(form.Get("fallback_upload_token")),
+				uploadSHA256:        strings.TrimSpace(form.Get("upload_sha256")),
 			}
 			if pf.uploadToken != "" {
 				pf.uploaded = true

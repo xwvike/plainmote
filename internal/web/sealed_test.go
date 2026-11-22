@@ -340,3 +340,31 @@ func TestSealedResourcesThroughTheAPI(t *testing.T) {
 		t.Fatalf("stored: v%d %q", stored.Version, got)
 	}
 }
+
+func TestSealedSaveRejectsOversizePartInsteadOfIgnoring(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	client := newVersionClient(t, db, user)
+	client.app.cfg.MaxContent = 1024
+	id := uuid.NewString()
+	initial := fakeSealed("PMr1", 1, 64)
+	meta := fakeSealed("PMm1", 1, 40)
+	created := client.sealedPost("/resources/sealed", map[string]string{
+		"id": id, "meta": b64(meta), "sealed_key": b64(bytes.Repeat([]byte{2}, 60)),
+	}, map[string][]byte{"content": initial})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", created.Code, created.Body.String())
+	}
+	// Exceeds per-part limit (MaxContent + 64 KiB) while staying inside
+	// sealedRequestLimit, so part() must return errPartTooLarge instead of nil.
+	oversize := fakeSealed("PMr1", 9, int(client.app.cfg.MaxContent)+(64<<10)+16)
+	res := client.sealedPost("/resources/"+id+"/sealed", map[string]string{
+		"action": "save", "base_version": "1", "meta": b64(fakeSealed("PMm1", 9, 40)),
+	}, map[string][]byte{"content": oversize})
+	if res.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversize sealed save: got %d (%s), want 413", res.Code, res.Body.String())
+	}
+	stored, err := db.ResourceForOwner(context.Background(), user.ID, id)
+	if err != nil || stored.Version != 1 || !bytes.Equal(stored.SealedMeta, meta) {
+		t.Fatalf("resource modified despite oversize part: v%d err=%v", stored.Version, err)
+	}
+}

@@ -449,17 +449,17 @@ function enhanceUpload(input) {
         });
 
         let result;
-        if (direct) {
+        if (direct?.uploaded) {
           ui.setSaving();
           if (input.name) formData.delete(input.name);
           formData.set("upload_token", direct.token);
           formData.set("upload_filename", chosen.name);
-          if (direct.sha256) formData.set("upload_sha256", direct.sha256);
           result = await xhrSend("POST", actionAttr, formData, {
             withCredentials: true,
             headers: { Accept: "application/json", [UPLOAD_JSON_HEADER]: "1" },
           });
         } else {
+          if (direct?.token) formData.set("fallback_upload_token", direct.token);
           result = await xhrSend("POST", actionAttr, formData, {
             withCredentials: true,
             headers: { Accept: "application/json", [UPLOAD_JSON_HEADER]: "1" },

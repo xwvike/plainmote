@@ -68,6 +68,8 @@ type currentContent struct {
 	RestoredFrom int
 	Filename     string
 	SealedMeta   []byte
+	Sealed       bool
+	QuickShare   bool
 }
 
 // lockContentTx locks the resource row and reads its content. Everything that
@@ -77,11 +79,13 @@ func lockContentTx(ctx context.Context, tx pgx.Tx, ownerID, id string) (currentC
 	var current currentContent
 	err := tx.QueryRow(ctx, `
 SELECT content_key, content_size, content_type, content_encoding, content_sha256,
-       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), filename, sealed_meta
+       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), filename, sealed_meta,
+       sealed_key IS NOT NULL, expires_at IS NOT NULL
 FROM resources WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
 FOR UPDATE
 `, id, ownerID).Scan(&current.Key, &current.Size, &current.Type, &current.Encoding, &current.SHA256,
-		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Filename, &current.SealedMeta)
+		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Filename, &current.SealedMeta,
+		&current.Sealed, &current.QuickShare)
 	if err != nil {
 		return currentContent{}, translateNotFound(err)
 	}
@@ -191,9 +195,41 @@ ON CONFLICT (key) DO NOTHING
 	}
 }
 
+// dropPublishedOnError cleans up a newly written final object after withTxStatus
+// fails. When rolledBack is true, COMMIT was never sent so deleting immediately
+// is safe. When rolledBack is false (commit outcome unknown), an independent
+// connection checks whether the object is already referenced; if not, the key is
+// queued in blob_garbage so retryGarbage re-verifies references before deleting,
+// avoiding deleting a live object whose COMMIT succeeded or is still finishing.
+func (d *Store) dropPublishedOnError(ctx context.Context, key string, rolledBack bool) {
+	if key == "" {
+		return
+	}
+	if rolledBack {
+		d.dropObjects(ctx, []string{key})
+		return
+	}
+	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	var referenced bool
+	err := d.db.QueryRow(checkCtx, `
+SELECT EXISTS (SELECT 1 FROM resources WHERE content_key = $1)
+    OR EXISTS (SELECT 1 FROM resource_versions WHERE content_key = $1)
+`, key).Scan(&referenced)
+	if err == nil && referenced {
+		return
+	}
+	if _, err := d.db.Exec(checkCtx, `
+INSERT INTO blob_garbage(key, since) VALUES ($1, now())
+ON CONFLICT (key) DO NOTHING
+`, key); err != nil {
+		fmt.Fprintf(os.Stderr, "queue uncertain object %s for prune: %v\n", key, err)
+	}
+}
+
 // retryGarbage deletes again, a batch at a time, the objects whose delete
 // failed. A key a row still names was never garbage, and is only forgotten.
-func (d *Store) retryGarbage(ctx context.Context, conn *pgxpool.Conn) (int64, error) {
+func (d *Store) retryGarbage(ctx context.Context, conn *pgxpool.Conn, now time.Time) (int64, error) {
 	if _, err := conn.Exec(ctx, `
 DELETE FROM blob_garbage g
 WHERE EXISTS (SELECT 1 FROM resources r WHERE r.content_key = g.key)
@@ -201,7 +237,12 @@ WHERE EXISTS (SELECT 1 FROM resources r WHERE r.content_key = g.key)
 `); err != nil {
 		return 0, err
 	}
-	rows, err := conn.Query(ctx, `SELECT key FROM blob_garbage ORDER BY since LIMIT $1`, pruneBatch)
+	rows, err := conn.Query(ctx, `
+SELECT key FROM blob_garbage
+WHERE not_before IS NULL OR not_before <= $1
+ORDER BY since
+LIMIT $2
+`, now, pruneBatch)
 	if err != nil {
 		return 0, err
 	}

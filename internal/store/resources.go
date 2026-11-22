@@ -97,6 +97,10 @@ func resourceName(name, filename string) string {
 }
 
 func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename string, content []byte, contentEncoding string) (Resource, error) {
+	return d.CreateResourceWithFallbackUpload(ctx, ownerID, "", name, filename, content, contentEncoding)
+}
+
+func (d *Store) CreateResourceWithFallbackUpload(ctx context.Context, ownerID, fallbackUploadID, name, filename string, content []byte, contentEncoding string) (Resource, error) {
 	input, err := normalizeResourceInput(name, filename, content, contentEncoding)
 	if err != nil {
 		return Resource{}, err
@@ -123,8 +127,9 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 	}
 
 	var dropped []string
-	err = d.withTx(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGate(ctx, tx, ownerID, "", now)
+	var fallbackStagingKey string
+	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
+		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, "", fallbackUploadID, now)
 		if err != nil {
 			return err
 		}
@@ -145,12 +150,17 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
 		}
 		// New content takes its room from the history, if the history was in it.
 		dropped, err = trimHistoryTx(ctx, tx, ownerID, "", limit.StorageBytes)
+		if err != nil {
+			return err
+		}
+		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, ownerID, "resource_create", resource.ID, 1, true, len(dropped), now)
 		return err
 	})
 	if err != nil {
-		d.dropObjects(ctx, []string{resource.ContentKey})
+		d.dropPublishedOnError(ctx, resource.ContentKey, rolledBack)
 		return Resource{}, err
 	}
+	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return resource, nil
 }
@@ -290,11 +300,12 @@ func escapeLikePattern(value string) string {
 // that would replace newer content than that is refused with a
 // VersionConflict. Zero skips the check.
 type ResourceEdit struct {
-	Name            string
-	Filename        string
-	Content         []byte
-	ContentEncoding string
-	BaseVersion     int
+	Name             string
+	Filename         string
+	Content          []byte
+	ContentEncoding  string
+	BaseVersion      int
+	FallbackUploadID string
 }
 
 // UpdateResource saves without a base version: whatever is current is replaced.
@@ -376,16 +387,23 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 	now := time.Now().UTC()
 	var result SaveResult
 	var dropped []string
-	err = d.withTx(ctx, func(tx pgx.Tx) error {
+	var fallbackStagingKey string
+	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
 		// The resource is left out of the usage total, so the replacement is
 		// measured in place of what it replaces rather than on top of it.
-		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
+		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, id, edit.FallbackUploadID, now)
 		if err != nil {
 			return err
 		}
 		locked, err := lockContentTx(ctx, tx, ownerID, id)
 		if err != nil {
 			return err
+		}
+		if locked.QuickShare {
+			return errQuickShareReadOnly
+		}
+		if locked.Sealed {
+			return errSealedInBrowser
 		}
 		// Checked against the content, not just the number: posting back
 		// exactly what is current loses nobody's work, however stale the page.
@@ -425,16 +443,21 @@ WHERE id = $12 AND owner_id = $13
 		}
 		result.Version = next.Version
 		trimmed, err := trimHistoryTx(ctx, tx, ownerID, id, limit.StorageBytes)
+		if err != nil {
+			return err
+		}
 		result.Trimmed = len(trimmed)
 		dropped = append(dropped, trimmed...)
+		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, edit.FallbackUploadID, ownerID, "resource_save", id, result.Version, result.NewVersion, result.Trimmed, now)
 		return err
 	})
 	if err != nil {
 		if replaceContent {
-			d.dropObjects(ctx, []string{nextKey})
+			d.dropPublishedOnError(ctx, nextKey, rolledBack)
 		}
 		return SaveResult{}, err
 	}
+	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return result, nil
 }

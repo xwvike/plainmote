@@ -135,6 +135,7 @@ func (d *Store) DeleteAccount(ctx context.Context, userID string) error {
 		return ErrNotFound
 	}
 	var keys []string
+	now := time.Now().UTC()
 	err := d.withTx(ctx, func(tx pgx.Tx) error {
 		var locked string
 		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&locked); err != nil {
@@ -158,6 +159,31 @@ RETURNING content_key`, userID)
 			return fmt.Errorf("delete account resources: %w: %w", ErrInternal, err)
 		}
 		keys = append(keys, current...)
+		// Collect staged upload keys before deleting the user, and keep a
+		// deferred cleanup entry in blob_garbage covering any still-valid
+		// presigned URL lifetime so late or in-flight PUTs are swept too.
+		rows, err = tx.Query(ctx, `
+WITH removed AS (
+  DELETE FROM staged_uploads WHERE owner_id = $1
+  RETURNING staging_key, expires_at
+), queued AS (
+  INSERT INTO blob_garbage(key, since, not_before)
+  SELECT staging_key, $2, expires_at
+  FROM removed
+  WHERE expires_at > $2
+  ON CONFLICT (key) DO UPDATE
+    SET not_before = GREATEST(COALESCE(blob_garbage.not_before, EXCLUDED.not_before), EXCLUDED.not_before)
+)
+SELECT staging_key FROM removed
+`, userID, now)
+		if err != nil {
+			return fmt.Errorf("delete account staged uploads: %w: %w", ErrInternal, err)
+		}
+		stagedKeys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return fmt.Errorf("delete account staged uploads: %w: %w", ErrInternal, err)
+		}
+		keys = append(keys, stagedKeys...)
 		if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
 			return fmt.Errorf("delete account: %w: %w", ErrInternal, err)
 		}

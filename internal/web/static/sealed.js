@@ -21,10 +21,52 @@ function say(element, text) {
   if (element) element.textContent = text || "";
 }
 
+function decodeUTF32(bytes, bigEndian) {
+  if (bytes.length % 4 !== 0) throw new TypeError("invalid UTF-32 byte length");
+  const codePoints = [];
+  for (let index = 0; index < bytes.length; index += 4) {
+    const value = bigEndian
+      ? ((bytes[index] * 0x1000000) + (bytes[index + 1] << 16) + (bytes[index + 2] << 8) + bytes[index + 3])
+      : (bytes[index] + (bytes[index + 1] << 8) + (bytes[index + 2] << 16) + (bytes[index + 3] * 0x1000000));
+    if (value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) throw new TypeError("invalid UTF-32 code point");
+    codePoints.push(value);
+  }
+  let decoded = "";
+  for (let index = 0; index < codePoints.length; index += 4096) {
+    decoded += String.fromCodePoint(...codePoints.slice(index, index + 4096));
+  }
+  return decoded;
+}
+
 // Plaintext in another encoding is carried across as UTF-8.
 function utf8Bytes(bytes, type, encoding) {
-  if (!textLike(type) || !encoding || /^utf-?8$/i.test(encoding)) return { bytes, type };
-  const text = new TextDecoder(encoding).decode(bytes);
+  if (!textLike(type) || !encoding) return { bytes, type };
+  const canonical = String(encoding).trim().toLowerCase().replaceAll("_", "-");
+  if (canonical === "utf-8" || canonical === "utf8") return { bytes, type };
+  const boms = {
+    "utf-8bom": [0xef, 0xbb, 0xbf],
+    "utf-16le-bom": [0xff, 0xfe],
+    "utf-16be-bom": [0xfe, 0xff],
+    "utf-32le-bom": [0xff, 0xfe, 0x00, 0x00],
+    "utf-32be-bom": [0x00, 0x00, 0xfe, 0xff],
+  };
+  const bom = boms[canonical] || [];
+  const content = bom.length > 0 && bom.every((value, index) => bytes[index] === value)
+    ? bytes.subarray(bom.length)
+    : bytes;
+  let text;
+  if (canonical.startsWith("utf-32")) {
+    text = decodeUTF32(content, canonical.includes("be"));
+  } else {
+    const decoderName = {
+      "utf-8bom": "utf-8",
+      "utf-16le-bom": "utf-16le",
+      "utf-16be-bom": "utf-16be",
+      "mac-cyrillic": "x-mac-cyrillic",
+      "shift-jis": "shift_jis",
+    }[canonical] || canonical;
+    text = new TextDecoder(decoderName, { ignoreBOM: true }).decode(content);
+  }
   return { bytes: encoder.encode(text), type: type.replace(/;\s*charset=[^;]+/i, "") + "; charset=utf-8" };
 }
 
@@ -89,7 +131,7 @@ function showOpened(meta, content) {
   const textarea = form.querySelector("[data-sealed-text]");
   const media = form.querySelector("[data-sealed-media]");
   if (textLike(meta.type)) {
-    opened.text = new TextDecoder().decode(content);
+    opened.text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(content);
     textarea.value = opened.text;
     textarea.dataset.filename = meta.filename;
     textarea.dataset.contentType = meta.type;
@@ -190,11 +232,11 @@ async function saveSealed(event) {
         csrf,
         onProgress: (p) => ui.setProgress(p),
       });
-      if (direct) {
+      if (direct?.uploaded) {
         ui.setSaving();
         fields.upload_token = direct.token;
-        if (direct.sha256) fields.upload_sha256 = direct.sha256;
       } else {
+        if (direct?.token) fields.fallback_upload_token = direct.token;
         files = { content: sealedBytes };
       }
     }
@@ -288,7 +330,7 @@ async function newSealedShare(button) {
 }
 
 // A link opened by a code, or by its key again, or with a new code: new
-// keys, the same address.
+// keys and a new address.
 async function rekey(linkID, withCode, control) {
   control.disabled = true;
   try {
@@ -329,6 +371,8 @@ async function startSealed() {
   // Unlocked from the top bar while this waited for it.
   document.addEventListener("plainmote:unlocked", (event) => {
     if (opened.key) return;
+    unlockForm.reset();
+    if (unlockForm.elements.password) unlockForm.elements.password.value = "";
     unlockForm.hidden = true;
     tryOpen(event.detail.key);
   });
@@ -353,6 +397,8 @@ async function startSealed() {
     try {
       // What opens it is the listener above, as from the top bar.
       await unlock(unlockForm.elements.password.value);
+      unlockForm.reset();
+      if (unlockForm.elements.password) unlockForm.elements.password.value = "";
     } catch (error) {
       say(problem, error instanceof WrongPassword ? sealedRoot.dataset.msgWrong
         : error instanceof NoStorage ? sealedRoot.dataset.msgNoStorage : sealedRoot.dataset.msgFailed);
@@ -366,14 +412,17 @@ async function keyFor(dialog) {
   const key = await accountKey();
   if (key) return key;
   const field = dialog.querySelector("[data-seal-password]");
-  const password = field.querySelector("input").value;
+  const passwordInput = field.querySelector("input");
+  const password = passwordInput.value;
   if (field.hidden || !password) {
     field.hidden = false;
-    field.querySelector("input").required = true;
+    passwordInput.required = true;
     throw new Error(toggle.dataset.msgUnlock);
   }
   try {
-    return await unlock(password);
+    const unlocked = await unlock(password);
+    passwordInput.value = "";
+    return unlocked;
   } catch (error) {
     throw new Error(error instanceof WrongPassword ? toggle.dataset.msgWrong : toggle.dataset.msgFailed);
   }
@@ -464,14 +513,26 @@ function startNew(input) {
   const unlockForm = document.querySelector("[data-new-unlock]");
   if (!form) return;
   let key = null;
+  const resetUnlockForm = () => {
+    if (!unlockForm) return;
+    unlockForm.reset();
+    if (unlockForm.elements.password) unlockForm.elements.password.value = "";
+    say(unlockForm.querySelector("[data-new-unlock-error]"), "");
+  };
   const needKey = async () => {
-    key = key || (await accountKey());
+    key = await accountKey();
     if (unlockForm) unlockForm.hidden = Boolean(key) || !input.checked;
   };
   input.addEventListener("change", needKey);
   document.addEventListener("plainmote:unlocked", (event) => {
     key = event.detail.key;
+    resetUnlockForm();
     if (unlockForm) unlockForm.hidden = true;
+  });
+  document.addEventListener("plainmote:locked", () => {
+    key = null;
+    resetUnlockForm();
+    if (unlockForm && input.checked) unlockForm.hidden = false;
   });
   unlockForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -479,6 +540,7 @@ function startNew(input) {
     say(problem, "");
     try {
       key = await unlock(unlockForm.elements.password.value);
+      resetUnlockForm();
       unlockForm.hidden = true;
     } catch (error) {
       say(problem, error instanceof WrongPassword ? toggle.dataset.msgWrong : toggle.dataset.msgFailed);
@@ -517,11 +579,11 @@ function startNew(input) {
         onProgress: (p) => ui.setProgress(p),
       });
       let files = {};
-      if (direct) {
+      if (direct?.uploaded) {
         ui.setSaving();
         fields.upload_token = direct.token;
-        if (direct.sha256) fields.upload_sha256 = direct.sha256;
       } else {
+        if (direct?.token) fields.fallback_upload_token = direct.token;
         files = { content: sealedBytes };
       }
       const result = await post("/resources/sealed", fields, files, {

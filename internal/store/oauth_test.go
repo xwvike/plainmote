@@ -158,7 +158,25 @@ func TestOAuthCodeExchange(t *testing.T) {
 		t.Fatalf("access token reads as %+v %+v %v", user, access, err)
 	}
 
-	// The same code again: the grant and its tokens are ended.
+	// An expired, mismatched, or unverified replay of a spent code must NOT
+	// revoke the legitimate active grant.
+	for name, bad := range map[string]struct {
+		ex OAuthExchange
+		at time.Time
+	}{
+		"wrong verifier": {OAuthExchange{Code: code, ClientID: client.ID, RedirectURI: good.RedirectURI, Verifier: strings.Repeat("z", 50), Resource: testResource}, now},
+		"other client":   {OAuthExchange{Code: code, ClientID: other.ID, RedirectURI: good.RedirectURI, Verifier: verifier, Resource: testResource}, now},
+		"expired code":   {good, now.Add(OAuthCodeLifetime + time.Second)},
+	} {
+		if _, err := db.ExchangeOAuthCode(ctx, bad.ex, bad.at); !errors.Is(err, ErrOAuthGrant) {
+			t.Fatalf("spent code %s: %v", name, err)
+		}
+		if _, _, err := db.OAuthAccessUser(ctx, tokens.AccessToken, "", now); err != nil {
+			t.Fatalf("active grant revoked by spent code (%s): %v", name, err)
+		}
+	}
+
+	// The same valid, unexpired code again: the grant and its tokens are ended.
 	if _, err := db.ExchangeOAuthCode(ctx, good, now); !errors.Is(err, ErrOAuthGrant) {
 		t.Fatalf("a code was exchanged twice: %v", err)
 	}

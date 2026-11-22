@@ -570,6 +570,10 @@ type apiLink struct {
 	ID         string     `json:"id"`
 	Name       string     `json:"name"`
 	URL        string     `json:"url,omitempty"`
+	BaseURL    string     `json:"base_url,omitempty"`
+	Sealed     bool       `json:"sealed,omitempty"`
+	CodeLink   bool       `json:"code_link,omitempty"`
+	OwnerKey   string     `json:"owner_key,omitempty"`
 	MaxUses    int        `json:"max_uses"`
 	UsedCount  int        `json:"used_count"`
 	CreatedAt  time.Time  `json:"created_at"`
@@ -582,8 +586,23 @@ func (a *App) apiLinkView(r *http.Request, resource Resource, link Link) apiLink
 		ID: link.ID, Name: link.Name, MaxUses: link.MaxUses, UsedCount: link.UsedCount,
 		CreatedAt: link.CreatedAt, ExpiresAt: link.ExpiresAt, LastUsedAt: link.LastUsedAt,
 	}
+	if resource.Sealed() {
+		view.Sealed = true
+		view.CodeLink = link.CodeLink()
+		if len(link.OwnerKey) > 0 {
+			view.OwnerKey = base64.RawURLEncoding.EncodeToString(link.OwnerKey)
+		}
+	}
 	if !link.Unreadable && link.Token != "" {
-		view.URL = a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))
+		address := a.baseURL(r) + shareAddress(link.Token, deliveryFilename(resource, resource.ContentType))
+		if resource.Sealed() && !link.CodeLink() {
+			// Key-in-fragment links cannot decrypt without appending #k=<key>
+			// unwrapped from owner_key on the client; expose base_url instead of
+			// an incomplete url that would fail if shared verbatim.
+			view.BaseURL = address
+		} else {
+			view.URL = address
+		}
 	}
 	return view
 }

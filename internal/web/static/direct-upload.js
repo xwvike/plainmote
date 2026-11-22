@@ -69,21 +69,27 @@ export function xhrSend(method, url, body, { headers = {}, withCredentials = fal
   });
 }
 
-// Attempts a direct presigned PUT upload. Returns { token, resourceID, sha256 }
-// on success, returns null when the caller should fall back to uploading through
-// the web server, or throws an Error for user-facing refusals (quota, rate limit,
-// file too large, expired session).
+// Attempts a direct presigned PUT upload. Computes SHA-256 first so the
+// presigned URL binds ChecksumSHA256 in R2/S3 (server never trusts a client
+// digest without object storage enforcing it). Returns:
+//   - { uploaded: true, token, resourceID } when direct PUT succeeded;
+//   - { uploaded: false, token, resourceID } when presign reserved quota but
+//     direct PUT failed so the fallback POST can reuse the same reservation;
+//   - null when presign was skipped or did not reserve quota;
+//   - throws an Error for user-facing refusals.
 export async function presignAndUpload({ purpose, blob, resourceID = "", csrf = "", onProgress = null }) {
   if (!canDirectUpload() || !blob || blob.size < DIRECT_THRESHOLD) return null;
 
-  const shaPromise = sha256Hex(blob);
+  const sha256 = await sha256Hex(blob);
+  if (!sha256) return null;
+
   let presign;
   try {
     const response = await fetch("/uploads/presign", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ purpose, size: blob.size, resource_id: resourceID, csrf }),
+      body: JSON.stringify({ purpose, size: blob.size, sha256, resource_id: resourceID, csrf }),
     });
     if (response.status === 501) {
       directDisabled = true;
@@ -92,7 +98,6 @@ export async function presignAndUpload({ purpose, blob, resourceID = "", csrf = 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (data && data.message) throw new Error(data.message);
-      if (response.status >= 400 && response.status < 500) return null;
       return null;
     }
     presign = data;
@@ -102,22 +107,24 @@ export async function presignAndUpload({ purpose, blob, resourceID = "", csrf = 
   }
 
   if (!presign || !presign.url || !presign.token) return null;
+  const resolvedResourceID = presign.resource_id || resourceID;
 
   try {
-    const put = await xhrSend("PUT", presign.url, blob, { withCredentials: false, onProgress });
+    const put = await xhrSend("PUT", presign.url, blob, {
+      headers: presign.headers || {},
+      withCredentials: false,
+      onProgress,
+    });
     if (!put.ok) {
-      // Most commonly R2 bucket CORS is not configured yet or an edge firewall
-      // blocks direct storage access; remember and fall back seamlessly.
       if (put.status === 0 || put.status === 403) directDisabled = true;
-      return null;
+      return { uploaded: false, token: presign.token, resourceID: resolvedResourceID };
     }
   } catch {
     directDisabled = true;
-    return null;
+    return { uploaded: false, token: presign.token, resourceID: resolvedResourceID };
   }
 
-  const sha256 = await shaPromise;
-  return { token: presign.token, resourceID: presign.resource_id || resourceID, sha256 };
+  return { uploaded: true, token: presign.token, resourceID: resolvedResourceID };
 }
 
 // Manages button text and a quiet hairline <progress> bar inside a form's

@@ -34,6 +34,10 @@ func refuseQuickShare(resource Resource) error {
 // what their bytes prove, anything else a download - and it counts toward the
 // account's storage like any resource.
 func (d *Store) CreateQuickShare(ctx context.Context, ownerID, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	return d.CreateQuickShareWithFallbackUpload(ctx, ownerID, "", filename, content, ttl, now)
+}
+
+func (d *Store) CreateQuickShareWithFallbackUpload(ctx context.Context, ownerID, fallbackUploadID, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
 	if !validUUIDs(ownerID) || ownerID == AnonymousUserID {
 		return Resource{}, Link{}, ErrNotFound
 	}
@@ -55,7 +59,7 @@ func (d *Store) CreateQuickShare(ctx context.Context, ownerID, filename string, 
 		ID: uuid.NewString(), Name: filename, Filename: filename, ContentType: contentType, ContentEncoding: encoding,
 		ContentSHA256: contentSHA256(content),
 	}
-	return d.insertQuickShare(ctx, ownerID, resource, Link{}, content, ttl, now)
+	return d.insertQuickShare(ctx, ownerID, fallbackUploadID, "paste", resource, Link{}, content, ttl, now)
 }
 
 // CreateSealedQuickShare stores a quick share encrypted in the browser - or
@@ -64,6 +68,10 @@ func (d *Store) CreateQuickShare(ctx context.Context, ownerID, filename string, 
 // link's keys are bound to. Its owner can open it, show its link again and
 // keep it, as with any encrypted resource; the service reads none of it.
 func (d *Store) CreateSealedQuickShare(ctx context.Context, ownerID, id, linkID string, part SealedPart, sealedKey, linkKey, ownerKey []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	return d.CreateSealedQuickShareWithFallbackUpload(ctx, ownerID, id, linkID, "", part, sealedKey, linkKey, ownerKey, ttl, now)
+}
+
+func (d *Store) CreateSealedQuickShareWithFallbackUpload(ctx context.Context, ownerID, id, linkID, fallbackUploadID string, part SealedPart, sealedKey, linkKey, ownerKey []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
 	if !validUUIDs(ownerID, id) || ownerID == AnonymousUserID {
 		return Resource{}, Link{}, ErrNotFound
 	}
@@ -80,7 +88,7 @@ func (d *Store) CreateSealedQuickShare(ctx context.Context, ownerID, id, linkID 
 	resource := Resource{
 		ID: id, ContentType: SealedContentType, ContentSHA256: contentSHA256(part.Content), SealedKey: sealedKey, SealedMeta: part.Meta,
 	}
-	return d.insertQuickShare(ctx, ownerID, resource, Link{ID: linkID, SealedKey: linkKey, OwnerKey: ownerKey}, part.Content, ttl, now)
+	return d.insertQuickShare(ctx, ownerID, fallbackUploadID, "sealed_paste", resource, Link{ID: linkID, SealedKey: linkKey, OwnerKey: ownerKey}, part.Content, ttl, now)
 }
 
 func quickShareTTL(ttl time.Duration) (time.Duration, error) {
@@ -96,7 +104,7 @@ func quickShareTTL(ttl time.Duration) (time.Duration, error) {
 // insertQuickShare stores what the two kinds of quick share have in common:
 // the resource, given its id, names, type and digest, and its link, given
 // its keys if it has any.
-func (d *Store) insertQuickShare(ctx context.Context, ownerID string, resource Resource, link Link, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+func (d *Store) insertQuickShare(ctx context.Context, ownerID, fallbackUploadID, fallbackPurpose string, resource Resource, link Link, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
 	link.ExpiresAt = shareExpiry(now, ttl)
 	resource.OwnerID, resource.ContentSize, resource.ExpiresAt = ownerID, int64(len(content)), link.ExpiresAt
 	resource.CreatedAt, resource.UpdatedAt, resource.Version, resource.VersionAt = now, now, 1, now
@@ -107,8 +115,9 @@ func (d *Store) insertQuickShare(ctx context.Context, ownerID string, resource R
 		return Resource{}, Link{}, fmt.Errorf("store quick share body: %w: %w", ErrInternal, err)
 	}
 	var dropped []string
-	err := d.withTx(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGate(ctx, tx, ownerID, "", now)
+	var fallbackStagingKey string
+	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
+		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, "", fallbackUploadID, now)
 		if err != nil {
 			return err
 		}
@@ -141,12 +150,17 @@ ON CONFLICT (id) DO NOTHING
 			return err
 		}
 		dropped, err = trimHistoryTx(ctx, tx, ownerID, "", limit.StorageBytes)
+		if err != nil {
+			return err
+		}
+		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, ownerID, fallbackPurpose, resource.ID, 1, true, len(dropped), now)
 		return err
 	})
 	if err != nil {
-		d.dropObjects(ctx, []string{resource.ContentKey})
+		d.dropPublishedOnError(ctx, resource.ContentKey, rolledBack)
 		return Resource{}, Link{}, err
 	}
+	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return resource, link, nil
 }
@@ -244,19 +258,36 @@ LIMIT $2
 }
 
 // deleteEndedQuickShare is DeleteResource for a quick share still ended
-// when the row is locked.
+// when the row is locked, including any historical version objects.
 func (d *Store) deleteEndedQuickShare(ctx context.Context, ownerID, id string, now time.Time) error {
-	var contentKey string
+	var keys []string
 	err := d.withTx(ctx, func(tx pgx.Tx) error {
+		var contentKey string
 		err := tx.QueryRow(ctx, `
-DELETE FROM resources WHERE id = $1 AND owner_id = $2 AND expires_at IS NOT NULL AND expires_at <= $3
-RETURNING content_key
+SELECT content_key FROM resources
+WHERE id = $1 AND owner_id = $2 AND expires_at IS NOT NULL AND expires_at <= $3
+FOR UPDATE
 `, id, ownerID, now).Scan(&contentKey)
-		return translateNotFound(err)
+		if err != nil {
+			return translateNotFound(err)
+		}
+		rows, err := tx.Query(ctx, `SELECT content_key FROM resource_versions WHERE resource_id = $1`, id)
+		if err != nil {
+			return fmt.Errorf("read quick share history: %w: %w", ErrInternal, err)
+		}
+		historyKeys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return fmt.Errorf("read quick share history: %w: %w", ErrInternal, err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM resources WHERE id = $1 AND owner_id = $2`, id, ownerID); err != nil {
+			return fmt.Errorf("delete ended quick share: %w: %w", ErrInternal, err)
+		}
+		keys = append(historyKeys, contentKey)
+		return nil
 	})
 	if err != nil {
 		return err
 	}
-	d.dropObjects(ctx, []string{contentKey})
+	d.dropObjects(ctx, keys)
 	return nil
 }

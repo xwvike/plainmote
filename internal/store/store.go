@@ -65,6 +65,34 @@ func (d *Store) withTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return pgx.BeginFunc(ctx, d.db, fn)
 }
 
+// withTxStatus runs fn inside a transaction and distinguishes a definite
+// rollback (Begin or fn returned an error, so COMMIT was never sent) from an
+// uncertain commit failure (fn returned nil and tx.Commit failed, where
+// PostgreSQL may still have committed the transaction before the connection
+// broke).
+func (d *Store) withTxStatus(ctx context.Context, fn func(pgx.Tx) error) (rolledBack bool, err error) {
+	tx, err := d.db.Begin(ctx)
+	if err != nil {
+		return true, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_ = tx.Rollback(rollbackCtx)
+		}
+	}()
+	if err := fn(tx); err != nil {
+		return true, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	committed = true
+	return false, nil
+}
+
 func translateNotFound(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound

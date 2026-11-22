@@ -397,7 +397,10 @@ WHERE id IN (SELECT id FROM sessions WHERE expires_at < $1 ORDER BY expires_at L
 	if err != nil {
 		return result, fmt.Errorf("prune trash: %w", err)
 	}
-	if _, err = d.retryGarbage(ctx, conn); err != nil {
+	if _, err = d.pruneStagedUploads(ctx, conn, now); err != nil {
+		return result, fmt.Errorf("prune staged uploads: %w", err)
+	}
+	if _, err = d.retryGarbage(ctx, conn, now); err != nil {
 		return result, fmt.Errorf("retry undeleted objects: %w", err)
 	}
 

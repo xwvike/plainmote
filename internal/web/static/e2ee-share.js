@@ -62,7 +62,17 @@ function setupForm(form) {
     error.hidden = true;
   });
   document.addEventListener("plainmote:unlocked", () => {
-    if (unlockRow) unlockRow.hidden = true;
+    if (unlockRow) {
+      const password = unlockRow.querySelector("input");
+      if (password) password.value = "";
+      unlockRow.hidden = true;
+    }
+  });
+  document.addEventListener("plainmote:locked", () => {
+    if (unlockRow) {
+      const password = unlockRow.querySelector("input");
+      if (password) password.value = "";
+    }
   });
   const maxBytes = Number(form.dataset.maxBytes);
 
@@ -147,15 +157,15 @@ function setupForm(form) {
       });
 
       let response;
-      if (direct) {
+      if (direct?.uploaded) {
         ui.setSaving();
         body.set("upload_token", direct.token);
-        if (direct.sha256) body.set("upload_sha256", direct.sha256);
         response = await xhrSend("POST", form.dataset.endpoint, body, {
           withCredentials: true,
           headers: { Accept: "application/json" },
         });
       } else {
+        if (direct?.token) body.set("fallback_upload_token", direct.token);
         body.set("content", sealedBlob, "blob");
         response = await xhrSend("POST", form.dataset.endpoint, body, {
           withCredentials: true,
@@ -176,6 +186,9 @@ function setupForm(form) {
       button.textContent = label;
     }
   });
+  // Enable encryption controls only after the submit interceptor is attached.
+  toggle.disabled = false;
+  button.disabled = false;
 }
 
 function setupResult(result) {

@@ -137,11 +137,14 @@ ALTER TABLE resources ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS resources_deleted_idx ON resources(owner_id, deleted_at DESC) WHERE deleted_at IS NOT NULL;
 -- Objects whose delete failed once no row pointed at them any more. The
 -- prune deletes them again. Keys are made new for every write, so none of
--- these can come back into use.
+-- these can come back into use. not_before defers deletion until a presigned
+-- URL for the key can no longer overwrite it.
 CREATE TABLE IF NOT EXISTS blob_garbage (
   key TEXT PRIMARY KEY,
-  since TIMESTAMPTZ NOT NULL
+  since TIMESTAMPTZ NOT NULL,
+  not_before TIMESTAMPTZ
 );
+ALTER TABLE blob_garbage ADD COLUMN IF NOT EXISTS not_before TIMESTAMPTZ;
 -- Remote resources - an address fetched again on every access, with no
 -- content of their own - are no longer kept. Those left are removed with
 -- their links; their access log stays, as it does for any deleted resource.
@@ -473,3 +476,31 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
 );
 CREATE INDEX IF NOT EXISTS oauth_tokens_grant_idx ON oauth_tokens(grant_id);
 CREATE INDEX IF NOT EXISTS oauth_tokens_expiry_idx ON oauth_tokens(expires_at);
+
+-- Pending and recently committed direct-to-object-storage uploads. Each row
+-- reserves the account's quota under a staging/<id> key until committed or
+-- pruned, and records the commit result so network retries are idempotent and
+-- never delete a published object. owner_id is not cascading so deleting an
+-- account never drops tracking of staging objects before cleanup finishes.
+CREATE TABLE IF NOT EXISTS staged_uploads (
+  id UUID PRIMARY KEY,
+  owner_id UUID,
+  purpose TEXT NOT NULL,
+  resource_id UUID NOT NULL,
+  staging_key TEXT NOT NULL UNIQUE,
+  size BIGINT NOT NULL CHECK (size > 0),
+  sha256 TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  committed_at TIMESTAMPTZ,
+  committed_resource_id UUID,
+  committed_version INTEGER NOT NULL DEFAULT 0,
+  committed_new_version BOOLEAN NOT NULL DEFAULT FALSE,
+  committed_trimmed INTEGER NOT NULL DEFAULT 0,
+  staging_cleaned_at TIMESTAMPTZ
+);
+ALTER TABLE staged_uploads DROP CONSTRAINT IF EXISTS staged_uploads_owner_id_fkey;
+ALTER TABLE staged_uploads ALTER COLUMN owner_id DROP NOT NULL;
+ALTER TABLE staged_uploads ADD COLUMN IF NOT EXISTS staging_cleaned_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS staged_uploads_owner_idx ON staged_uploads(owner_id) WHERE committed_at IS NULL;
+CREATE INDEX IF NOT EXISTS staged_uploads_expiry_idx ON staged_uploads(expires_at);

@@ -191,11 +191,27 @@ func (d *Store) EmptyTrash(ctx context.Context, ownerID string) (int64, error) {
 		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&locked); err != nil {
 			return translateNotFound(err)
 		}
+		// Lock the exact trashed resource rows first and delete both history
+		// and current rows by that same locked ID set so a concurrent restore
+		// cannot lose its version history between two separate WHERE scans.
 		rows, err := tx.Query(ctx, `
-DELETE FROM resource_versions
-WHERE resource_id IN (SELECT id FROM resources WHERE owner_id = $1 AND deleted_at IS NOT NULL)
-RETURNING content_key
+SELECT id FROM resources WHERE owner_id = $1 AND deleted_at IS NOT NULL FOR UPDATE
 `, ownerID)
+		if err != nil {
+			return fmt.Errorf("lock trash: %w: %w", ErrInternal, err)
+		}
+		ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return fmt.Errorf("lock trash: %w: %w", ErrInternal, err)
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		rows, err = tx.Query(ctx, `
+DELETE FROM resource_versions
+WHERE resource_id = ANY($1::uuid[])
+RETURNING content_key
+`, ids)
 		if err != nil {
 			return fmt.Errorf("empty trash history: %w: %w", ErrInternal, err)
 		}
@@ -203,8 +219,8 @@ RETURNING content_key
 			return fmt.Errorf("empty trash history: %w: %w", ErrInternal, err)
 		}
 		rows, err = tx.Query(ctx, `
-DELETE FROM resources WHERE owner_id = $1 AND deleted_at IS NOT NULL RETURNING content_key
-`, ownerID)
+DELETE FROM resources WHERE id = ANY($1::uuid[]) RETURNING content_key
+`, ids)
 		if err != nil {
 			return fmt.Errorf("empty trash: %w: %w", ErrInternal, err)
 		}
