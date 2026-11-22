@@ -27,3 +27,6 @@
 .paste-pick { height: auto; padding: 0; border: 0; background: none; box-shadow: none; }
 .paste-pick > span { display: none; }
 .paste-pick > input.sr { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip-path: none; white-space: normal; font: 500 12px/1.5 var(--sans); color: var(--ink2); }
+
+/* Mobile navigation drawer requires JS; keep inline topbar & side nav visible without it. */
+.menu-btn, .drawer, .drawer-scrim { display: none !important; }

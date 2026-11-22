@@ -14,6 +14,7 @@ var messageTable = map[string][6]string{
 	"cancel":                    {"Cancel", "取消", "取消", "キャンセル", "Annuler", "Abbrechen"},
 	"clear":                     {"Clear", "清除", "清除", "クリア", "Effacer", "Leeren"},
 	"close":                     {"Close", "关闭", "關閉", "閉じる", "Fermer", "Schließen"},
+	"menu":                      {"Menu", "菜单", "選單", "メニュー", "Menu", "Menü"},
 	"confirm_delete":            {"Move to trash", "移至回收站", "移至資源回收筒", "ゴミ箱に移動", "Mettre à la corbeille", "In den Papierkorb"},
 	"content":                   {"Content", "内容", "內容", "内容", "Contenu", "Inhalt"},
 	"copy":                      {"Copy", "复制", "複製", "コピー", "Copier", "Kopieren"},

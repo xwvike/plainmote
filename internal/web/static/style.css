@@ -178,6 +178,7 @@ a:hover { color: var(--accent-d); text-decoration: underline; text-underline-off
   border-bottom: 1px solid var(--line);
 }
 .topin { display: flex; align-items: center; gap: 22px; min-width: 0; height: 49px; width: var(--col); margin: 0 auto; }
+.menu-btn, .drawer, .drawer-scrim { display: none; }
 .brand { display: flex; align-items: center; gap: 8px; color: var(--ink); }
 .brand b { font-size: 14px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
 .brand a { display: flex; align-items: center; gap: 8px; color: inherit; }
@@ -1125,11 +1126,111 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 }
 
 @media (max-width: 760px) {
-  .top { height: auto; }
-  .topin { height: auto; min-height: 48px; flex-wrap: wrap; gap: 6px 10px; padding: 8px 0; }
+  .top { height: auto; padding-top: env(safe-area-inset-top); }
+  .topin { height: auto; min-height: 49px; flex-wrap: wrap; gap: 6px 10px; padding: 8px 0; }
   .topin .nav { order: 3; flex-basis: 100%; max-width: 100%; overflow-x: auto; padding-bottom: 2px; }
   .who { padding: 0 3px; }
   .who-n { display: none; }
+
+  /* App-style single-row mobile topbar + slide-out sidebar drawer (JS enhanced). */
+  html.js-ready .topin { height: 49px; flex-wrap: nowrap; gap: 10px; padding: 0; }
+  html.js-ready .topin .nav,
+  html.js-ready .top .rt .theme-switch,
+  html.js-ready .top .rt .lang-switch { display: none; }
+  html.js-ready .menu-btn {
+    display: grid; flex: none; place-items: center;
+    width: 34px; height: 34px; margin-left: -6px; padding: 0;
+    border: 0; border-radius: var(--r); background: none; box-shadow: none;
+    color: var(--ink2); cursor: pointer;
+    transition: background .14s, color .14s;
+  }
+  html.js-ready .menu-btn:hover { background: var(--zebra); color: var(--ink); }
+  html.js-ready .menu-btn svg { width: 18px; height: 18px; }
+  html.js-ready .keylock-pop {
+    position: fixed; left: 12px; right: 12px;
+    top: calc(56px + env(safe-area-inset-top));
+    width: auto; max-width: 360px; margin: 0 auto;
+  }
+
+  html.drawer-open, html.drawer-open body { overflow: hidden; }
+  html.js-ready .drawer-scrim {
+    display: block; position: fixed; inset: 0; z-index: 40;
+    background: var(--scrim); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none; transition: opacity .22s ease;
+  }
+  html.drawer-open .drawer-scrim { opacity: 1; pointer-events: auto; }
+
+  html.js-ready .drawer {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 50;
+    display: flex; flex-direction: column;
+    width: min(292px, 84vw);
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    background: var(--panel); border-right: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    transform: translateX(-100%); visibility: hidden;
+    transition: transform .24s cubic-bezier(.22, 1, .36, 1), visibility 0s linear .24s;
+  }
+  html.drawer-open .drawer {
+    transform: translateX(0); visibility: visible;
+    transition: transform .24s cubic-bezier(.22, 1, .36, 1), visibility 0s;
+  }
+  html.js-ready .drawer.dragging { transition: none; }
+
+  .drawer-head {
+    display: flex; flex: none; align-items: center; justify-content: space-between; gap: 10px;
+    height: 50px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--line);
+  }
+  .drawer-close {
+    display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+    border: 0; border-radius: var(--r); background: none; box-shadow: none;
+    color: var(--ink3); font: 400 20px/1 var(--sans);
+  }
+  .drawer-close:hover { background: var(--zebra); color: var(--ink); }
+
+  .drawer-body {
+    flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
+    display: grid; align-content: start; gap: 2px;
+    padding: 12px 10px 18px;
+  }
+  .drawer-body .side-h {
+    padding: 16px 10px 6px;
+    font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--ink3);
+  }
+  .drawer-body a {
+    display: flex; align-items: center; gap: 10px;
+    height: 38px; padding: 0 10px; border-radius: var(--r);
+    font-size: 14px; font-weight: 500; color: var(--ink2);
+    transition: background .12s, color .12s;
+  }
+  .drawer-body a svg { width: 15px; height: 15px; flex: none; opacity: .62; }
+  .drawer-body a:hover { background: var(--zebra); color: var(--ink); text-decoration: none; }
+  .drawer-body a:hover svg { opacity: .92; }
+  .drawer-body a.on { background: var(--sunk); color: var(--ink); font-weight: 600; }
+  .drawer-body a.on svg { opacity: 1; color: var(--accent); }
+
+  .drawer-foot {
+    flex: none; display: grid; gap: 10px;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line); background: var(--head);
+  }
+  .drawer-user {
+    display: flex; align-items: center; gap: 10px; min-width: 0;
+    padding: 6px 8px; margin: -4px -6px; border-radius: var(--r);
+    color: var(--ink); transition: background .12s;
+  }
+  .drawer-user:hover { background: var(--zebra); text-decoration: none; }
+  .drawer-user .who-av { width: 28px; height: 28px; font-size: 12px; }
+  .drawer-user-id { display: grid; gap: 1px; min-width: 0; }
+  .drawer-user-id b { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drawer-user-id span { font: 400 11px var(--mono); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drawer-signin { width: 100%; }
+  .drawer-prefs { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .drawer-prefs .theme-switch a { width: 32px; height: 32px; }
+  .drawer-prefs .lang-switch { height: 28px; }
+  .drawer-prefs .lang-cell { height: 24px; padding: 0 8px; }
+
   .ph { flex-wrap: wrap; }
   .ph h1 { flex: 1 1 180px; font-size: 20px; }
   .lede h1 { font-size: 23px; }
@@ -1218,7 +1319,8 @@ a.who:hover, a.who[aria-current] { border-color: var(--line2); color: var(--ink)
 @media (max-width: 760px) {
   .page.settings { grid-template-columns: minmax(0, 1fr); }
   .side { position: static; display: flex; gap: 4px; overflow-x: auto; padding: 6px; white-space: nowrap; }
-  .side-h { display: none; }
+  .side .side-h { display: none; }
+  html.js-ready .page.settings > .side { display: none; }
 }
 
 /* Settings cards. */
