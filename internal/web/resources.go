@@ -126,13 +126,11 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 				resource, err = a.db.CreateResourceFromUpload(r.Context(), user.ID, ticket, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding)
 			}
 		} else {
-			fallbackUploadID := ""
-			if form.FallbackUploadToken != "" {
-				if ticket, verifyErr := a.verifyUploadToken(form.FallbackUploadToken, uploadPurposeResourceCreate, user.ID, ""); verifyErr == nil {
-					fallbackUploadID = ticket.UploadID
-				}
+			var fallbackUploadID string
+			fallbackUploadID, err = a.fallbackUploadID(form.FallbackUploadToken, uploadPurposeResourceCreate, user.ID, "")
+			if err == nil {
+				resource, err = a.db.CreateResourceWithFallbackUpload(r.Context(), user.ID, fallbackUploadID, form.Name, form.Filename, form.Content, form.ContentEncoding)
 			}
-			resource, err = a.db.CreateResourceWithFallbackUpload(r.Context(), user.ID, fallbackUploadID, form.Name, form.Filename, form.Content, form.ContentEncoding)
 		}
 		if err == nil {
 			location := "/resources/" + resource.ID + "?created=1"
@@ -251,11 +249,11 @@ func readResourceForm(r *http.Request, maxBytes int64) (resourceForm, error) {
 	var form resourceForm
 	multipartForm := strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data")
 	form = resourceForm{
-		Name:            r.FormValue("name"),
-		Filename:        strings.TrimSpace(r.FormValue("filename")),
-		Content:         []byte(r.FormValue("content")),
-		ContentEncoding: strings.TrimSpace(r.FormValue("content_encoding")),
-		ContentEOL:      store.NormalizeEOLName(r.FormValue("content_eol")),
+		Name:                r.FormValue("name"),
+		Filename:            strings.TrimSpace(r.FormValue("filename")),
+		Content:             []byte(r.FormValue("content")),
+		ContentEncoding:     strings.TrimSpace(r.FormValue("content_encoding")),
+		ContentEOL:          store.NormalizeEOLName(r.FormValue("content_eol")),
 		ContentGiven:        r.Form["content"] != nil,
 		UploadToken:         strings.TrimSpace(r.FormValue("upload_token")),
 		FallbackUploadToken: strings.TrimSpace(r.FormValue("fallback_upload_token")),
@@ -402,17 +400,15 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 				result, err = a.db.SaveResourceFromUpload(r.Context(), user.ID, resourceID, ticket, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding, base)
 			}
 		} else {
-			fallbackUploadID := ""
-			if form.FallbackUploadToken != "" {
-				if ticket, verifyErr := a.verifyUploadToken(form.FallbackUploadToken, uploadPurposeResourceSave, user.ID, resourceID); verifyErr == nil {
-					fallbackUploadID = ticket.UploadID
-				}
+			var fallbackUploadID string
+			fallbackUploadID, err = a.fallbackUploadID(form.FallbackUploadToken, uploadPurposeResourceSave, user.ID, resourceID)
+			if err == nil {
+				result, err = a.db.SaveResource(r.Context(), user.ID, resourceID, store.ResourceEdit{
+					Name: form.Name, Filename: form.Filename, Content: content,
+					ContentEncoding: form.ContentEncoding, BaseVersion: base,
+					FallbackUploadID: fallbackUploadID,
+				})
 			}
-			result, err = a.db.SaveResource(r.Context(), user.ID, resourceID, store.ResourceEdit{
-				Name: form.Name, Filename: form.Filename, Content: content,
-				ContentEncoding: form.ContentEncoding, BaseVersion: base,
-				FallbackUploadID: fallbackUploadID,
-			})
 		}
 		if conflict := (*store.VersionConflict)(nil); errors.As(err, &conflict) {
 			if wantsUploadJSON(r) {

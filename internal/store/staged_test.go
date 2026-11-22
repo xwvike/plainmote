@@ -27,19 +27,12 @@ func TestDropPublishedOnErrorDistinguishesRollbackFromUncertainCommit(t *testing
 
 	// 1. Uncertain commit (!rolledBack) when the published object IS referenced
 	// in resources (e.g., PostgreSQL committed before the connection dropped):
-	// the live blob must remain intact and must not be queued as garbage.
-	db.dropPublishedOnError(ctx, resource.ContentKey, false)
+	// the live blob must survive reconciliation.
+	db.dropPublishedOnError(ctx, resource.OwnerID, false, resource.ContentKey)
 	if rc, _, err := blobs.Open(ctx, resource.ContentKey); err != nil {
 		t.Fatalf("live object referenced by resources was deleted on uncertain commit: %v", err)
 	} else {
 		_ = rc.Close()
-	}
-	var queued int
-	if err := db.db.QueryRow(ctx, `SELECT COUNT(*) FROM blob_garbage WHERE key = $1`, resource.ContentKey).Scan(&queued); err != nil {
-		t.Fatal(err)
-	}
-	if queued != 0 {
-		t.Fatalf("live referenced key should not be queued in blob_garbage, got %d", queued)
 	}
 
 	// 2. Uncertain commit (!rolledBack) when the object is NOT referenced:
@@ -49,7 +42,7 @@ func TestDropPublishedOnErrorDistinguishesRollbackFromUncertainCommit(t *testing
 	if err := blobs.Put(ctx, orphanKey, bytes.NewReader([]byte("orphan")), 6); err != nil {
 		t.Fatal(err)
 	}
-	db.dropPublishedOnError(ctx, orphanKey, false)
+	db.dropPublishedOnError(ctx, resource.OwnerID, false, orphanKey)
 	if rc, _, err := blobs.Open(ctx, orphanKey); err != nil {
 		t.Fatalf("uncertain unreferenced object should be deferred to blob_garbage, not deleted immediately: %v", err)
 	} else {
@@ -57,6 +50,9 @@ func TestDropPublishedOnErrorDistinguishesRollbackFromUncertainCommit(t *testing
 	}
 	if _, err := db.Prune(ctx, 0, time.Now().UTC()); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := blobs.Head(ctx, resource.ContentKey); err != nil {
+		t.Fatalf("collector deleted live key: %v", err)
 	}
 	if rc, _, err := blobs.Open(ctx, orphanKey); err == nil {
 		_ = rc.Close()
@@ -68,7 +64,7 @@ func TestDropPublishedOnErrorDistinguishesRollbackFromUncertainCommit(t *testing
 	if err := blobs.Put(ctx, rolledKey, bytes.NewReader([]byte("rolled")), 6); err != nil {
 		t.Fatal(err)
 	}
-	db.dropPublishedOnError(ctx, rolledKey, true)
+	db.dropPublishedOnError(ctx, resource.OwnerID, true, rolledKey)
 	if rc, _, err := blobs.Open(ctx, rolledKey); err == nil {
 		_ = rc.Close()
 		t.Fatalf("explicitly rolled-back object %q should be deleted immediately", rolledKey)
@@ -126,5 +122,162 @@ func TestDeleteAccountCleansStagedUploadsThroughPresignExpiry(t *testing.T) {
 	}
 	if remaining != 0 {
 		t.Fatalf("expected blob_garbage entry cleared after sweep, got %d", remaining)
+	}
+}
+
+func TestCollectorWaitsForPublication(t *testing.T) {
+	db, owner, res := testDatabase(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	collector, err := db.db.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer collector.Release()
+	writer, err := db.db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Rollback(context.Background())
+
+	key := contentKey(res.ID)
+	payload := []byte("new version")
+	if err := db.blobs.Put(ctx, key, bytes.NewReader(payload), int64(len(payload))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Exec(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Exec(ctx, `UPDATE resources SET content_key=$1 WHERE id=$2`, key, res.ID); err != nil {
+		t.Fatal(err)
+	}
+	db.dropPublishedOnError(ctx, owner.ID, false, key)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := db.retryGarbage(ctx, collector, time.Now().UTC())
+		done <- err
+	}()
+	// Observe the actual lock wait rather than assuming the goroutine has run.
+	// Always unblock and join it before releasing its pooled connection.
+	joined := false
+	defer func() {
+		_ = writer.Rollback(context.Background())
+		if !joined {
+			<-done
+		}
+	}()
+	for {
+		var waiting bool
+		if err := db.db.QueryRow(ctx, `SELECT $1::integer = ANY(pg_blocking_pids($2))`,
+			writer.Conn().PgConn().PID(), collector.Conn().PgConn().PID()).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case err := <-done:
+			joined = true
+			t.Fatalf("collector finished before the writer: %v", err)
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	if err := writer.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	err = <-done
+	joined = true
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.blobs.(*memoryBlobs).Head(ctx, key); err != nil {
+		t.Fatalf("published object missing: %v", err)
+	}
+}
+
+func TestPrunedUploadSurvivesCollectorRestart(t *testing.T) {
+	db, owner, _ := testDatabase(t)
+	ctx := context.Background()
+	blobs := &presignTestBlobs{db.blobs.(*memoryBlobs)}
+	db.blobs = blobs
+	now := time.Now().UTC()
+	payload := []byte("sample")
+	_, _, ticket, err := db.BeginStagedUpload(ctx, owner.ID, "resource_create", uuid.NewString(), "",
+		int64(len(payload)), 1, contentSHA256(payload), time.Minute, 2*time.Minute, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := blobs.Put(ctx, ticket.StagingKey, bytes.NewReader(payload), ticket.Size); err != nil {
+		t.Fatal(err)
+	}
+	later := now.Add(3 * time.Minute)
+	conn, err := db.db.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.pruneStagedUploads(ctx, conn, later)
+	conn.Release()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var queued bool
+	if err := db.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM blob_garbage WHERE key=$1)`, ticket.StagingKey).Scan(&queued); err != nil || !queued {
+		t.Fatalf("retired reservation has no durable cleanup job: %v", err)
+	}
+	next, err := db.db.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer next.Release()
+	if _, err := db.retryGarbage(ctx, next, later); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := blobs.Head(ctx, ticket.StagingKey); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("staging object after restart: %v", err)
+	}
+}
+
+func TestSealedSaveFallbackAndDirectRetryShareVersion(t *testing.T) {
+	db, owner, _ := testDatabase(t)
+	ctx := context.Background()
+	db.blobs = &presignTestBlobs{db.blobs.(*memoryBlobs)}
+	id := uuid.NewString()
+	resource, err := db.CreateSealedResource(ctx, owner.ID, id, sealedPart(1), wrappedKey(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit := sealedPart(2)
+	_, _, ticket, err := db.BeginStagedUpload(ctx, owner.ID, "sealed_save", id, id,
+		int64(len(edit.Content)), 0, contentSHA256(edit.Content), time.Minute, 2*time.Minute, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type outcome struct {
+		result SaveResult
+		err    error
+	}
+	out := make(chan outcome, 2)
+	start := make(chan struct{})
+	for range 2 {
+		go func() {
+			<-start
+			result, err := db.SaveSealedResourceWithFallbackUpload(ctx, owner.ID, id, ticket.UploadID, resource.Version, edit)
+			out <- outcome{result, err}
+		}()
+	}
+	close(start)
+	first, second := <-out, <-out
+	if first.err != nil || second.err != nil || first.result != second.result || first.result.Version != resource.Version+1 {
+		t.Fatalf("concurrent fallback results: %+v, %+v", first, second)
+	}
+	replayed, err := db.SaveSealedResourceFromUpload(ctx, owner.ID, id, resource.Version, ticket, edit.Meta)
+	if err != nil || replayed != first.result {
+		t.Fatalf("direct retry: %+v, %v", replayed, err)
+	}
+	count, err := db.HistoryCount(ctx, owner.ID, id)
+	if err != nil || count != 1 {
+		t.Fatalf("history count after retries: %d, %v", count, err)
 	}
 }

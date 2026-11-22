@@ -599,9 +599,54 @@ func TestDirectUploadFallbackReusesQuotaReservation(t *testing.T) {
 		t.Fatalf("fallback upload with ticket failed: %d %s", withToken.Code, withToken.Body.String())
 	}
 
-	// Step 4: Replaying the same fallback token must not bypass the 1-resource limit.
+	// Give the replay enough quota to create another resource if it ignores
+	// the committed ticket. It must return the very same location instead.
+	if _, err := conn.Exec(ctx, `UPDATE plans SET max_resources = 3, max_storage = $1 WHERE is_default`, int64(3*len(payload))); err != nil {
+		t.Fatal(err)
+	}
 	replay := postFallback(presigned.Token)
-	if replay.Code == http.StatusCreated {
-		t.Fatalf("replayed fallback_upload_token must not bypass resource quota")
+	if replay.Code != http.StatusCreated || replay.Body.String() != withToken.Body.String() {
+		t.Fatalf("replay returned %d %s, original %s", replay.Code, replay.Body.String(), withToken.Body.String())
+	}
+	usage, err := db.UsageForUser(ctx, user.ID)
+	if err != nil || usage.Resources != 1 {
+		t.Fatalf("usage after replay = %+v, %v", usage, err)
+	}
+}
+
+func TestAnonymousFallbackUsesPresignRateChargeOnce(t *testing.T) {
+	app, db, _ := openDirectTestApp(t)
+	payload := "contents"
+	app.limits.pastes = newWindowLimiter(1, time.Hour)
+	app.limits.pasteBytes = newWindowLimiter(len(payload), time.Hour)
+	h := app.Handler()
+	rec, ticket := doPresign(t, h, map[string]any{"purpose": "paste", "size": len(payload), "sha256": sha256Of([]byte(payload))})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("presign: %d %s", rec.Code, rec.Body.String())
+	}
+	post := func(body, token string) *httptest.ResponseRecorder {
+		form := url.Values{"content": {body}, "fallback_upload_token": {token}}
+		req := httptest.NewRequest(http.MethodPost, "/paste", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set(uploadJSONHeader, "1")
+		out := httptest.NewRecorder()
+		h.ServeHTTP(out, req)
+		return out
+	}
+	if got := post("mismatch", ticket.Token); got.Code == http.StatusCreated {
+		t.Fatal("unreserved bytes accepted")
+	}
+	first := post(payload, ticket.Token)
+	second := post(payload, ticket.Token)
+	if first.Code != http.StatusCreated || second.Code != first.Code || second.Body.String() != first.Body.String() {
+		t.Fatalf("fallback and retry: %d %s, %d %s", first.Code, first.Body.String(), second.Code, second.Body.String())
+	}
+	usage, err := db.UsageForUser(context.Background(), store.AnonymousUserID)
+	if err != nil || usage.Resources != 1 {
+		t.Fatalf("anonymous usage: %+v %v", usage, err)
+	}
+	if got := post(payload, ""); got.Code != http.StatusTooManyRequests {
+		t.Fatalf("unticketed request: %d", got.Code)
 	}
 }

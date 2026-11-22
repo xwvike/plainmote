@@ -65,7 +65,14 @@ func (d *Store) CreateAnonymousPaste(ctx context.Context, filename string, conte
 }
 
 func (d *Store) CreateAnonymousPasteWithFallbackUpload(ctx context.Context, fallbackUploadID, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
-	return d.createAnonymousPasteFor(ctx, "", fallbackUploadID, filename, content, ttl, now)
+	if fallbackUploadID != "" {
+		ticket, err := d.fallbackTicket(ctx, fallbackUploadID, AnonymousUserID, "paste", "", content)
+		if err != nil {
+			return Resource{}, Link{}, err
+		}
+		return d.CreateAnonymousPasteFromUpload(ctx, ticket, filename, ttl, now)
+	}
+	return d.CreateAnonymousPaste(ctx, filename, content, ttl, now)
 }
 
 // CreateAnonymousPasteFor keeps the paste anonymous while remembering who may
@@ -73,10 +80,6 @@ func (d *Store) CreateAnonymousPasteWithFallbackUpload(ctx context.Context, fall
 // anonymous sentinel means possession of the separate result address is the
 // claim until the visitor signs in.
 func (d *Store) CreateAnonymousPasteFor(ctx context.Context, creatorID, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
-	return d.createAnonymousPasteFor(ctx, creatorID, "", filename, content, ttl, now)
-}
-
-func (d *Store) createAnonymousPasteFor(ctx context.Context, creatorID, fallbackUploadID, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
 	if creatorID != "" && (!validUUIDs(creatorID) || creatorID == AnonymousUserID) {
 		return Resource{}, Link{}, ErrNotFound
 	}
@@ -100,7 +103,7 @@ func (d *Store) createAnonymousPasteFor(ctx context.Context, creatorID, fallback
 	// the web layer's to undo; a paste piped in from a terminal is exactly
 	// what was sent, CRLF included.
 	contentType, encoding := anonymousType(content)
-	return d.insertPaste(ctx, creatorID, fallbackUploadID, filename, content, contentType, encoding, now, ttl)
+	return d.insertPaste(ctx, creatorID, filename, content, contentType, encoding, now, ttl)
 }
 
 // anonymousType is what an anonymous paste is served as, decided by its bytes
@@ -152,11 +155,11 @@ func (d *Store) CreateEncryptedPaste(ctx context.Context, creatorID string, enve
 	// Only a signed-in account encrypts, so this is always its own quick
 	// share, listed with its resources like any other.
 	resource := Resource{ID: uuid.NewString(), ContentType: EncryptedContentType, ContentSHA256: contentSHA256(envelope)}
-	return d.insertQuickShare(ctx, creatorID, "", "", resource, Link{}, envelope, ttl, now)
+	return d.insertQuickShare(ctx, creatorID, resource, Link{}, envelope, ttl, now)
 }
 
 // insertPaste writes a checked paste body and its one link.
-func (d *Store) insertPaste(ctx context.Context, creatorID, fallbackUploadID, filename string, content []byte, contentType, encoding string, now time.Time, ttl time.Duration) (Resource, Link, error) {
+func (d *Store) insertPaste(ctx context.Context, creatorID, filename string, content []byte, contentType, encoding string, now time.Time, ttl time.Duration) (Resource, Link, error) {
 	resource := Resource{
 		ID: uuid.NewString(), OwnerID: AnonymousUserID, Name: filename, Filename: filename,
 		ContentType: contentType, ContentEncoding: encoding,
@@ -171,9 +174,8 @@ func (d *Store) insertPaste(ctx context.Context, creatorID, fallbackUploadID, fi
 		return Resource{}, Link{}, fmt.Errorf("store paste body: %w: %w", ErrInternal, err)
 	}
 
-	var fallbackStagingKey string
 	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGateForUpload(ctx, tx, AnonymousUserID, "", fallbackUploadID, now)
+		limit, usage, err := quotaGate(ctx, tx, AnonymousUserID, "", now)
 		if err != nil {
 			return err
 		}
@@ -204,14 +206,12 @@ VALUES($1, $2, $3)
 `, resource.ID, claimOwner, now); err != nil {
 			return fmt.Errorf("create paste claim: %w: %w", ErrInternal, err)
 		}
-		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, AnonymousUserID, "paste", resource.ID, 1, true, 0, now)
-		return err
+		return nil
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, resource.ContentKey, rolledBack)
+		d.dropPublishedOnError(ctx, AnonymousUserID, rolledBack, resource.ContentKey)
 		return Resource{}, Link{}, err
 	}
-	d.DropBlob(ctx, fallbackStagingKey)
 	return resource, link, nil
 }
 

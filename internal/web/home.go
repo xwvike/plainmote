@@ -209,13 +209,11 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 				resource, link, err = a.db.CreateQuickShareFromUpload(r.Context(), user.ID, ticket, filename, ttl, time.Now().UTC())
 			}
 		} else {
-			fallbackUploadID := ""
-			if form.fallbackUploadToken != "" {
-				if ticket, verifyErr := a.verifyUploadToken(form.fallbackUploadToken, uploadPurposePaste, user.ID, ""); verifyErr == nil {
-					fallbackUploadID = ticket.UploadID
-				}
+			var fallbackUploadID string
+			fallbackUploadID, err = a.fallbackUploadID(form.fallbackUploadToken, uploadPurposePaste, user.ID, "")
+			if err == nil {
+				resource, link, err = a.db.CreateQuickShareWithFallbackUpload(r.Context(), user.ID, fallbackUploadID, filename, []byte(content), ttl, time.Now().UTC())
 			}
-			resource, link, err = a.db.CreateQuickShareWithFallbackUpload(r.Context(), user.ID, fallbackUploadID, filename, []byte(content), ttl, time.Now().UTC())
 		}
 	} else {
 		now, key := time.Now().UTC(), addressKey(a.clientIP(r))
@@ -227,13 +225,15 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				resource, link, err = a.db.CreateAnonymousPasteFromUpload(r.Context(), ticket, filename, ttl, now)
 			}
-		} else {
-			fallbackUploadID := ""
-			if form.fallbackUploadToken != "" {
-				if ticket, verifyErr := a.verifyUploadToken(form.fallbackUploadToken, uploadPurposePaste, store.AnonymousUserID, ""); verifyErr == nil {
-					fallbackUploadID = ticket.UploadID
-				}
+		} else if form.fallbackUploadToken != "" {
+			var ticket store.UploadTicket
+			ticket, err = a.verifyUploadToken(form.fallbackUploadToken, uploadPurposePaste, store.AnonymousUserID, "")
+			if err == nil {
+				// Presign paid the rate limit. The store binds these bytes to
+				// the reservation and replays its original result on retry.
+				resource, link, err = a.db.CreateAnonymousPasteWithFallbackUpload(r.Context(), ticket.UploadID, filename, []byte(content), ttl, now)
 			}
+		} else {
 			limited := a.limits.pastes
 			if limited.allow(key, now) {
 				if limited = a.limits.pasteBytes; limited.spend(key, len(content), now) {
@@ -248,7 +248,7 @@ func (a *App) handlePaste(w http.ResponseWriter, r *http.Request) {
 					fmt.Sprintf(translate(locale, "paste_rate_limited"), waitText(locale, wait)), http.StatusTooManyRequests)
 				return
 			}
-			resource, link, err = a.db.CreateAnonymousPasteWithFallbackUpload(r.Context(), fallbackUploadID, filename, []byte(content), ttl, now)
+			resource, link, err = a.db.CreateAnonymousPaste(r.Context(), filename, []byte(content), ttl, now)
 		}
 	}
 	if err != nil {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"plainmote/internal/store"
@@ -123,15 +122,13 @@ func (a *App) handleSealedPaste(w http.ResponseWriter, r *http.Request) {
 			writePlainError(w, http.StatusBadRequest, translate(locale, "e2ee_failed"))
 			return
 		}
-		fallbackUploadID := ""
-		if fallbackToken := strings.TrimSpace(r.FormValue("fallback_upload_token")); fallbackToken != "" {
-			if ticket, verifyErr := a.verifyUploadToken(fallbackToken, uploadPurposeSealedPaste, user.ID, r.FormValue("id")); verifyErr == nil {
-				fallbackUploadID = ticket.UploadID
-			}
+		var fallbackUploadID string
+		fallbackUploadID, err = a.fallbackUploadID(r.FormValue("fallback_upload_token"), uploadPurposeSealedPaste, user.ID, r.FormValue("id"))
+		if err == nil {
+			resource, _, err = a.db.CreateSealedQuickShareWithFallbackUpload(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"), fallbackUploadID,
+				store.SealedPart{Content: content, Meta: base64Field(r, "meta")},
+				base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"), ttl, time.Now().UTC())
 		}
-		resource, _, err = a.db.CreateSealedQuickShareWithFallbackUpload(r.Context(), user.ID, r.FormValue("id"), r.FormValue("link_id"), fallbackUploadID,
-			store.SealedPart{Content: content, Meta: base64Field(r, "meta")},
-			base64Field(r, "sealed_key"), base64Field(r, "link_key"), base64Field(r, "owner_key"), ttl, time.Now().UTC())
 	}
 	if err != nil {
 		if !store.IsRefusal(err) && !errors.Is(err, store.ErrNotFound) {

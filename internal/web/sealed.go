@@ -201,14 +201,12 @@ func (a *App) handleSealedCreate(w http.ResponseWriter, r *http.Request, user Us
 			a.failSealedPart(w, r, err)
 			return
 		}
-		fallbackUploadID := ""
-		if fallbackToken := strings.TrimSpace(r.FormValue("fallback_upload_token")); fallbackToken != "" {
-			if ticket, verifyErr := a.verifyUploadToken(fallbackToken, uploadPurposeSealedCreate, user.ID, r.FormValue("id")); verifyErr == nil {
-				fallbackUploadID = ticket.UploadID
-			}
+		var fallbackUploadID string
+		fallbackUploadID, err = a.fallbackUploadID(r.FormValue("fallback_upload_token"), uploadPurposeSealedCreate, user.ID, r.FormValue("id"))
+		if err == nil {
+			resource, err = a.db.CreateSealedResourceWithFallbackUpload(r.Context(), user.ID, r.FormValue("id"), fallbackUploadID,
+				store.SealedPart{Content: content, Meta: base64Field(r, "meta")}, base64Field(r, "sealed_key"))
 		}
-		resource, err = a.db.CreateSealedResourceWithFallbackUpload(r.Context(), user.ID, r.FormValue("id"), fallbackUploadID,
-			store.SealedPart{Content: content, Meta: base64Field(r, "meta")}, base64Field(r, "sealed_key"))
 	}
 	if err != nil {
 		a.sealedFail(w, r, http.StatusBadRequest, "refused", err)
@@ -246,14 +244,12 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 				a.failSealedPart(w, r, err)
 				return
 			}
-			fallbackUploadID := ""
-			if fallbackToken := strings.TrimSpace(r.FormValue("fallback_upload_token")); fallbackToken != "" {
-				if ticket, verifyErr := a.verifyUploadToken(fallbackToken, uploadPurposeSealedSave, user.ID, resourceID); verifyErr == nil {
-					fallbackUploadID = ticket.UploadID
-				}
+			var fallbackUploadID string
+			fallbackUploadID, err = a.fallbackUploadID(r.FormValue("fallback_upload_token"), uploadPurposeSealedSave, user.ID, resourceID)
+			if err == nil {
+				result, err = a.db.SaveSealedResourceWithFallbackUpload(r.Context(), user.ID, resourceID, fallbackUploadID, base,
+					store.SealedPart{Content: content, Meta: base64Field(r, "meta")})
 			}
-			result, err = a.db.SaveSealedResourceWithFallbackUpload(r.Context(), user.ID, resourceID, fallbackUploadID, base,
-				store.SealedPart{Content: content, Meta: base64Field(r, "meta")})
 		}
 		if err == nil {
 			saved := "0"

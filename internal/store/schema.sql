@@ -145,6 +145,9 @@ CREATE TABLE IF NOT EXISTS blob_garbage (
   not_before TIMESTAMPTZ
 );
 ALTER TABLE blob_garbage ADD COLUMN IF NOT EXISTS not_before TIMESTAMPTZ;
+-- An uncertain publication holds this account's row lock until its outcome
+-- is visible. The UUID survives deletion of the account.
+ALTER TABLE blob_garbage ADD COLUMN IF NOT EXISTS wait_owner UUID;
 -- Remote resources - an address fetched again on every access, with no
 -- content of their own - are no longer kept. Those left are removed with
 -- their links; their access log stays, as it does for any deleted resource.

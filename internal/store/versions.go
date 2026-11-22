@@ -195,72 +195,89 @@ ON CONFLICT (key) DO NOTHING
 	}
 }
 
-// dropPublishedOnError cleans up a newly written final object after withTxStatus
-// fails. When rolledBack is true, COMMIT was never sent so deleting immediately
-// is safe. When rolledBack is false (commit outcome unknown), an independent
-// connection checks whether the object is already referenced; if not, the key is
-// queued in blob_garbage so retryGarbage re-verifies references before deleting,
-// avoiding deleting a live object whose COMMIT succeeded or is still finishing.
-func (d *Store) dropPublishedOnError(ctx context.Context, key string, rolledBack bool) {
-	if key == "" {
-		return
-	}
+// A failed COMMIT may still be running on PostgreSQL. Record its account
+// with the candidate keys so the collector can wait for the writer's lock.
+func (d *Store) dropPublishedOnError(ctx context.Context, ownerID string, rolledBack bool, keys ...string) {
 	if rolledBack {
-		d.dropObjects(ctx, []string{key})
+		d.dropObjects(ctx, keys)
 		return
 	}
-	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	var referenced bool
-	err := d.db.QueryRow(checkCtx, `
-SELECT EXISTS (SELECT 1 FROM resources WHERE content_key = $1)
-    OR EXISTS (SELECT 1 FROM resource_versions WHERE content_key = $1)
-`, key).Scan(&referenced)
-	if err == nil && referenced {
-		return
-	}
-	if _, err := d.db.Exec(checkCtx, `
-INSERT INTO blob_garbage(key, since) VALUES ($1, now())
-ON CONFLICT (key) DO NOTHING
-`, key); err != nil {
-		fmt.Fprintf(os.Stderr, "queue uncertain object %s for prune: %v\n", key, err)
+	_, err := d.db.Exec(recordCtx, `
+INSERT INTO blob_garbage(key, since, wait_owner)
+SELECT DISTINCT k, now(), $2::uuid FROM unnest($1::text[]) AS k WHERE k <> ''
+ON CONFLICT (key) DO UPDATE SET wait_owner = EXCLUDED.wait_owner
+`, keys, ownerID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "queue uncertain publication: %v\n", err)
 	}
 }
 
-// retryGarbage deletes again, a batch at a time, the objects whose delete
-// failed. A key a row still names was never garbage, and is only forgotten.
+// retryGarbage only processes the keys it inspected. Every published key is
+// unique. After its originating writer finishes, an unreferenced key cannot
+// be published again. Object storage I/O can then run outside the SQL locks.
 func (d *Store) retryGarbage(ctx context.Context, conn *pgxpool.Conn, now time.Time) (int64, error) {
-	if _, err := conn.Exec(ctx, `
-DELETE FROM blob_garbage g
-WHERE EXISTS (SELECT 1 FROM resources r WHERE r.content_key = g.key)
-   OR EXISTS (SELECT 1 FROM resource_versions v WHERE v.content_key = g.key)
-`); err != nil {
-		return 0, err
-	}
-	rows, err := conn.Query(ctx, `
-SELECT key FROM blob_garbage
-WHERE not_before IS NULL OR not_before <= $1
-ORDER BY since
-LIMIT $2
-`, now, pruneBatch)
-	if err != nil {
-		return 0, err
-	}
-	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return 0, err
-	}
-	var deleted []string
-	for _, key := range keys {
-		if err := d.blobs.Delete(ctx, key); err == nil {
-			deleted = append(deleted, key)
+	var total int64
+	after := ""
+	for {
+		rows, err := conn.Query(ctx, `
+SELECT key FROM blob_garbage WHERE key > $1 AND (not_before IS NULL OR not_before <= $2)
+ORDER BY key LIMIT $3`, after, now, pruneBatch)
+		if err != nil {
+			return total, err
+		}
+		batch, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil || len(batch) == 0 {
+			return total, err
+		}
+		after = batch[len(batch)-1]
+		var garbage []string
+		err = pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+			// This statement may block. Read references in the NEXT statement
+			// so READ COMMITTED obtains a snapshot after all writers finish.
+			if _, err := tx.Exec(ctx, `
+SELECT id FROM users WHERE id IN (SELECT wait_owner FROM blob_garbage WHERE key = ANY($1))
+ORDER BY id FOR UPDATE`, batch); err != nil {
+				return err
+			}
+			rows, err := tx.Query(ctx, `
+WITH live AS (
+  DELETE FROM blob_garbage g WHERE g.key = ANY($1)
+    AND (EXISTS (SELECT 1 FROM resources r WHERE r.content_key = g.key)
+      OR EXISTS (SELECT 1 FROM resource_versions v WHERE v.content_key = g.key))
+  RETURNING g.key
+)
+SELECT g.key FROM blob_garbage g WHERE g.key = ANY($1)
+  AND (g.not_before IS NULL OR g.not_before <= $2)
+  AND NOT EXISTS (SELECT 1 FROM live WHERE live.key = g.key)`, batch, now)
+			if err != nil {
+				return err
+			}
+			garbage, err = pgx.CollectRows(rows, pgx.RowTo[string])
+			return err
+		})
+		if err != nil {
+			return total, err
+		}
+		var deleted []string
+		for _, key := range garbage {
+			if err := d.blobs.Delete(ctx, key); err == nil {
+				deleted = append(deleted, key)
+			}
+		}
+		if len(deleted) > 0 {
+			tag, err := conn.Exec(ctx, `DELETE FROM blob_garbage WHERE key = ANY($1)
+AND (not_before IS NULL OR not_before <= $2)`, deleted, now)
+			if err != nil {
+				return total, err
+			}
+			total += tag.RowsAffected()
+		}
+		if len(batch) < pruneBatch {
+			return total, nil
 		}
 	}
-	if len(deleted) == 0 {
-		return 0, nil
-	}
-	tag, err := conn.Exec(ctx, `DELETE FROM blob_garbage WHERE key = ANY($1)`, deleted)
-	return tag.RowsAffected(), err
 }
 
 const versionColumns = `v.resource_id, v.version, v.content_key, v.content_size, v.content_type, v.content_encoding,

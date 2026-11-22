@@ -261,3 +261,13 @@ func (a *App) verifyUploadToken(token, purpose, ownerID, resourceID string) (sto
 	}
 	return ticket, nil
 }
+
+// An explicitly supplied fallback ticket must authenticate. Treating a bad
+// ticket as an ordinary upload would create a second resource on retry.
+func (a *App) fallbackUploadID(token, purpose, ownerID, resourceID string) (string, error) {
+	if token == "" {
+		return "", nil
+	}
+	ticket, err := a.verifyUploadToken(token, purpose, ownerID, resourceID)
+	return ticket.UploadID, err
+}

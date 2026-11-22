@@ -89,6 +89,13 @@ func (d *Store) CreateSealedResource(ctx context.Context, ownerID, id string, pa
 }
 
 func (d *Store) CreateSealedResourceWithFallbackUpload(ctx context.Context, ownerID, id, fallbackUploadID string, part SealedPart, sealedKey []byte) (Resource, error) {
+	if fallbackUploadID != "" {
+		ticket, err := d.fallbackTicket(ctx, fallbackUploadID, ownerID, "sealed_create", id, part.Content)
+		if err != nil {
+			return Resource{}, err
+		}
+		return d.CreateSealedResourceFromUpload(ctx, ownerID, ticket, part.Meta, sealedKey)
+	}
 	if !validUUIDs(ownerID, id) || ownerID == AnonymousUserID {
 		return Resource{}, ErrNotFound
 	}
@@ -105,9 +112,8 @@ func (d *Store) CreateSealedResourceWithFallbackUpload(ctx context.Context, owne
 		return Resource{}, fmt.Errorf("store sealed body: %w: %w", ErrInternal, err)
 	}
 	var dropped []string
-	var fallbackStagingKey string
 	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, "", fallbackUploadID, now)
+		limit, usage, err := quotaGate(ctx, tx, ownerID, "", now)
 		if err != nil {
 			return err
 		}
@@ -130,17 +136,12 @@ ON CONFLICT (id) DO NOTHING
 			return errSealedShape
 		}
 		dropped, err = trimHistoryTx(ctx, tx, ownerID, "", limit.StorageBytes)
-		if err != nil {
-			return err
-		}
-		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, ownerID, "sealed_create", resource.ID, 1, true, len(dropped), now)
 		return err
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, resource.ContentKey, rolledBack)
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, resource.ContentKey)
 		return Resource{}, err
 	}
-	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return resource, nil
 }
@@ -153,6 +154,13 @@ func (d *Store) SaveSealedResource(ctx context.Context, ownerID, id string, base
 }
 
 func (d *Store) SaveSealedResourceWithFallbackUpload(ctx context.Context, ownerID, id, fallbackUploadID string, baseVersion int, part SealedPart) (SaveResult, error) {
+	if fallbackUploadID != "" {
+		ticket, err := d.fallbackTicket(ctx, fallbackUploadID, ownerID, "sealed_save", id, part.Content)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		return d.SaveSealedResourceFromUpload(ctx, ownerID, id, baseVersion, ticket, part.Meta)
+	}
 	current, err := d.ResourceForOwner(ctx, ownerID, id)
 	if err != nil {
 		return SaveResult{}, err
@@ -177,9 +185,8 @@ func (d *Store) SaveSealedResourceWithFallbackUpload(ctx context.Context, ownerI
 	now := time.Now().UTC()
 	var result SaveResult
 	var dropped []string
-	var fallbackStagingKey string
 	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, id, fallbackUploadID, now)
+		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
 		if err != nil {
 			return err
 		}
@@ -226,16 +233,14 @@ WHERE id = $9 AND owner_id = $10
 		}
 		result.Trimmed = len(trimmed)
 		dropped = trimmed
-		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, ownerID, "sealed_save", id, result.Version, result.NewVersion, result.Trimmed, now)
-		return err
+		return nil
 	})
 	if err != nil {
 		if replace {
-			d.dropPublishedOnError(ctx, nextKey, rolledBack)
+			d.dropPublishedOnError(ctx, ownerID, rolledBack, nextKey)
 		}
 		return SaveResult{}, err
 	}
-	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return result, nil
 }
@@ -329,7 +334,7 @@ func (d *Store) SealResource(ctx context.Context, ownerID, id string, baseVersio
 	}
 	now := time.Now().UTC()
 	var dropped []string
-	err = d.withTx(ctx, func(tx pgx.Tx) error {
+	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
 		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
 		if err != nil {
 			return err
@@ -388,7 +393,12 @@ WHERE id = $1 AND owner_id = $2
 		return nil
 	})
 	if err != nil {
-		d.dropObjects(ctx, slices.Collect(maps.Values(keys)))
+		candidates := slices.Collect(maps.Values(keys))
+		if !rolledBack {
+			// Either set can be obsolete if the acknowledgement was lost.
+			candidates = append(candidates, dropped...)
+		}
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, candidates...)
 		return 0, err
 	}
 	d.dropObjects(ctx, dropped)
@@ -436,7 +446,7 @@ func (d *Store) UnsealResource(ctx context.Context, ownerID, id string, baseVers
 	}
 	now := time.Now().UTC()
 	var dropped []string
-	err = d.withTx(ctx, func(tx pgx.Tx) error {
+	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
 		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
 		if err != nil {
 			return err
@@ -493,7 +503,12 @@ WHERE id = $1 AND owner_id = $2
 		return nil
 	})
 	if err != nil {
-		d.dropObjects(ctx, slices.Collect(maps.Values(keys)))
+		candidates := slices.Collect(maps.Values(keys))
+		if !rolledBack {
+			// Either set can be obsolete if the acknowledgement was lost.
+			candidates = append(candidates, dropped...)
+		}
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, candidates...)
 		return err
 	}
 	d.dropObjects(ctx, dropped)

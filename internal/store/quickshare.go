@@ -38,6 +38,13 @@ func (d *Store) CreateQuickShare(ctx context.Context, ownerID, filename string, 
 }
 
 func (d *Store) CreateQuickShareWithFallbackUpload(ctx context.Context, ownerID, fallbackUploadID, filename string, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	if fallbackUploadID != "" {
+		ticket, err := d.fallbackTicket(ctx, fallbackUploadID, ownerID, "paste", "", content)
+		if err != nil {
+			return Resource{}, Link{}, err
+		}
+		return d.CreateQuickShareFromUpload(ctx, ownerID, ticket, filename, ttl, now)
+	}
 	if !validUUIDs(ownerID) || ownerID == AnonymousUserID {
 		return Resource{}, Link{}, ErrNotFound
 	}
@@ -59,7 +66,7 @@ func (d *Store) CreateQuickShareWithFallbackUpload(ctx context.Context, ownerID,
 		ID: uuid.NewString(), Name: filename, Filename: filename, ContentType: contentType, ContentEncoding: encoding,
 		ContentSHA256: contentSHA256(content),
 	}
-	return d.insertQuickShare(ctx, ownerID, fallbackUploadID, "paste", resource, Link{}, content, ttl, now)
+	return d.insertQuickShare(ctx, ownerID, resource, Link{}, content, ttl, now)
 }
 
 // CreateSealedQuickShare stores a quick share encrypted in the browser - or
@@ -72,6 +79,13 @@ func (d *Store) CreateSealedQuickShare(ctx context.Context, ownerID, id, linkID 
 }
 
 func (d *Store) CreateSealedQuickShareWithFallbackUpload(ctx context.Context, ownerID, id, linkID, fallbackUploadID string, part SealedPart, sealedKey, linkKey, ownerKey []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+	if fallbackUploadID != "" {
+		ticket, err := d.fallbackTicket(ctx, fallbackUploadID, ownerID, "sealed_paste", id, part.Content)
+		if err != nil {
+			return Resource{}, Link{}, err
+		}
+		return d.CreateSealedQuickShareFromUpload(ctx, ownerID, ticket, linkID, part.Meta, sealedKey, linkKey, ownerKey, ttl, now)
+	}
 	if !validUUIDs(ownerID, id) || ownerID == AnonymousUserID {
 		return Resource{}, Link{}, ErrNotFound
 	}
@@ -88,7 +102,7 @@ func (d *Store) CreateSealedQuickShareWithFallbackUpload(ctx context.Context, ow
 	resource := Resource{
 		ID: id, ContentType: SealedContentType, ContentSHA256: contentSHA256(part.Content), SealedKey: sealedKey, SealedMeta: part.Meta,
 	}
-	return d.insertQuickShare(ctx, ownerID, fallbackUploadID, "sealed_paste", resource, Link{ID: linkID, SealedKey: linkKey, OwnerKey: ownerKey}, part.Content, ttl, now)
+	return d.insertQuickShare(ctx, ownerID, resource, Link{ID: linkID, SealedKey: linkKey, OwnerKey: ownerKey}, part.Content, ttl, now)
 }
 
 func quickShareTTL(ttl time.Duration) (time.Duration, error) {
@@ -104,7 +118,7 @@ func quickShareTTL(ttl time.Duration) (time.Duration, error) {
 // insertQuickShare stores what the two kinds of quick share have in common:
 // the resource, given its id, names, type and digest, and its link, given
 // its keys if it has any.
-func (d *Store) insertQuickShare(ctx context.Context, ownerID, fallbackUploadID, fallbackPurpose string, resource Resource, link Link, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
+func (d *Store) insertQuickShare(ctx context.Context, ownerID string, resource Resource, link Link, content []byte, ttl time.Duration, now time.Time) (Resource, Link, error) {
 	link.ExpiresAt = shareExpiry(now, ttl)
 	resource.OwnerID, resource.ContentSize, resource.ExpiresAt = ownerID, int64(len(content)), link.ExpiresAt
 	resource.CreatedAt, resource.UpdatedAt, resource.Version, resource.VersionAt = now, now, 1, now
@@ -115,9 +129,8 @@ func (d *Store) insertQuickShare(ctx context.Context, ownerID, fallbackUploadID,
 		return Resource{}, Link{}, fmt.Errorf("store quick share body: %w: %w", ErrInternal, err)
 	}
 	var dropped []string
-	var fallbackStagingKey string
 	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, "", fallbackUploadID, now)
+		limit, usage, err := quotaGate(ctx, tx, ownerID, "", now)
 		if err != nil {
 			return err
 		}
@@ -150,17 +163,12 @@ ON CONFLICT (id) DO NOTHING
 			return err
 		}
 		dropped, err = trimHistoryTx(ctx, tx, ownerID, "", limit.StorageBytes)
-		if err != nil {
-			return err
-		}
-		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, ownerID, fallbackPurpose, resource.ID, 1, true, len(dropped), now)
 		return err
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, resource.ContentKey, rolledBack)
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, resource.ContentKey)
 		return Resource{}, Link{}, err
 	}
-	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return resource, link, nil
 }

@@ -101,6 +101,13 @@ func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename stri
 }
 
 func (d *Store) CreateResourceWithFallbackUpload(ctx context.Context, ownerID, fallbackUploadID, name, filename string, content []byte, contentEncoding string) (Resource, error) {
+	if fallbackUploadID != "" {
+		ticket, err := d.fallbackTicket(ctx, fallbackUploadID, ownerID, "resource_create", "", content)
+		if err != nil {
+			return Resource{}, err
+		}
+		return d.CreateResourceFromUpload(ctx, ownerID, ticket, name, filename, "", contentEncoding)
+	}
 	input, err := normalizeResourceInput(name, filename, content, contentEncoding)
 	if err != nil {
 		return Resource{}, err
@@ -127,9 +134,8 @@ func (d *Store) CreateResourceWithFallbackUpload(ctx context.Context, ownerID, f
 	}
 
 	var dropped []string
-	var fallbackStagingKey string
 	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
-		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, "", fallbackUploadID, now)
+		limit, usage, err := quotaGate(ctx, tx, ownerID, "", now)
 		if err != nil {
 			return err
 		}
@@ -150,17 +156,12 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
 		}
 		// New content takes its room from the history, if the history was in it.
 		dropped, err = trimHistoryTx(ctx, tx, ownerID, "", limit.StorageBytes)
-		if err != nil {
-			return err
-		}
-		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, fallbackUploadID, ownerID, "resource_create", resource.ID, 1, true, len(dropped), now)
 		return err
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, resource.ContentKey, rolledBack)
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, resource.ContentKey)
 		return Resource{}, err
 	}
-	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return resource, nil
 }
@@ -320,6 +321,13 @@ func (d *Store) UpdateResource(ctx context.Context, ownerID, id, name, filename 
 // becomes a new version and the old content joins the history; the same bytes
 // again, or a change of name alone, keep the version as it is.
 func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit ResourceEdit) (SaveResult, error) {
+	if edit.FallbackUploadID != "" {
+		ticket, err := d.fallbackTicket(ctx, edit.FallbackUploadID, ownerID, "resource_save", id, edit.Content)
+		if err != nil {
+			return SaveResult{}, err
+		}
+		return d.SaveResourceFromUpload(ctx, ownerID, id, ticket, edit.Name, edit.Filename, "", edit.ContentEncoding, edit.BaseVersion)
+	}
 	current, err := d.ResourceForOwner(ctx, ownerID, id)
 	if err != nil {
 		return SaveResult{}, err
@@ -387,11 +395,10 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 	now := time.Now().UTC()
 	var result SaveResult
 	var dropped []string
-	var fallbackStagingKey string
 	rolledBack, err := d.withTxStatus(ctx, func(tx pgx.Tx) error {
 		// The resource is left out of the usage total, so the replacement is
 		// measured in place of what it replaces rather than on top of it.
-		limit, usage, err := quotaGateForUpload(ctx, tx, ownerID, id, edit.FallbackUploadID, now)
+		limit, usage, err := quotaGate(ctx, tx, ownerID, id, now)
 		if err != nil {
 			return err
 		}
@@ -448,16 +455,14 @@ WHERE id = $12 AND owner_id = $13
 		}
 		result.Trimmed = len(trimmed)
 		dropped = append(dropped, trimmed...)
-		fallbackStagingKey, err = consumeFallbackStagedTx(ctx, tx, edit.FallbackUploadID, ownerID, "resource_save", id, result.Version, result.NewVersion, result.Trimmed, now)
-		return err
+		return nil
 	})
 	if err != nil {
 		if replaceContent {
-			d.dropPublishedOnError(ctx, nextKey, rolledBack)
+			d.dropPublishedOnError(ctx, ownerID, rolledBack, nextKey)
 		}
 		return SaveResult{}, err
 	}
-	d.DropBlob(ctx, fallbackStagingKey)
 	d.dropObjects(ctx, dropped)
 	return result, nil
 }

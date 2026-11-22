@@ -25,22 +25,23 @@ const (
 	// (4-byte magic + 12-byte IV + 16-byte GCM tag).
 	SealedHeaderBytes = sealedHeaderBytes
 
-	sniffPrefixMaxBytes       = 64 << 10
-	committedStagedRetention  = time.Hour
+	sniffPrefixMaxBytes      = 64 << 10
+	committedStagedRetention = time.Hour
 )
 
 // UploadTicket binds a browser-uploaded staging object to the exact account,
 // resource, purpose, size, R2-enforced SHA-256 and expiry authorised when the
 // presigned URL was issued. It is encrypted and authenticated with tokenCipher.
 type UploadTicket struct {
-	UploadID   string `json:"u"`
-	Purpose    string `json:"p"`
-	OwnerID    string `json:"o"`
-	ResourceID string `json:"r"`
-	StagingKey string `json:"k"`
-	Size       int64  `json:"s"`
-	SHA256     string `json:"h"`
-	ExpiresAt  int64  `json:"e"`
+	fallbackContent []byte // validated server-uploaded bytes, never serialized
+	UploadID        string `json:"u"`
+	Purpose         string `json:"p"`
+	OwnerID         string `json:"o"`
+	ResourceID      string `json:"r"`
+	StagingKey      string `json:"k"`
+	Size            int64  `json:"s"`
+	SHA256          string `json:"h"`
+	ExpiresAt       int64  `json:"e"`
 }
 
 func (d *Store) directStore() (blob.DirectStore, bool) {
@@ -168,105 +169,53 @@ func (d *Store) VerifyUploadTicket(token string, now time.Time) (UploadTicket, e
 	return ticket, nil
 }
 
-// pruneStagedUploads deletes expired staging objects from object storage (for
-// both uncommitted uploads and committed uploads whose presigned PUT URL has
-// now expired, catching any post-commit re-PUT) and cleans up expired or old
-// committed rows from staged_uploads.
+// pruneStagedUploads transfers expired keys to the durable deletion queue in
+// the same statement that retires their reservation. Recently committed rows
+// remain available for retry after their staging key has been queued.
 func (d *Store) pruneStagedUploads(ctx context.Context, conn *pgxpool.Conn, now time.Time) (int64, error) {
-	// Pass 1: once a committed upload's presigned PUT window has expired, sweep
-	// its staging key even while the row stays for idempotent retries.
-	for {
-		if err := ctx.Err(); err != nil {
-			return 0, nil
-		}
-		rows, err := conn.Query(ctx, `
-UPDATE staged_uploads
-SET staging_cleaned_at = $1
-WHERE id IN (
-  SELECT id FROM staged_uploads
-  WHERE committed_at IS NOT NULL
-    AND staging_cleaned_at IS NULL
-    AND expires_at < $1
-  ORDER BY expires_at
-  LIMIT $2
-)
-RETURNING staging_key
-`, now, pruneBatch)
-		if err != nil {
-			return 0, err
-		}
-		keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
-		if err != nil {
-			return 0, err
-		}
-		if len(keys) > 0 {
-			d.dropObjects(ctx, keys)
-		}
-		if len(keys) < pruneBatch {
-			break
-		}
-	}
-
-	// Pass 2: remove expired uncommitted rows and old committed rows (only once
-	// their presigned URL window has also expired), deleting any staging keys
-	// not yet swept in Pass 1.
 	var total int64
 	for {
-		if err := ctx.Err(); err != nil {
-			return total, nil
-		}
-		rows, err := conn.Query(ctx, `
-DELETE FROM staged_uploads
-WHERE id IN (
-  SELECT id FROM staged_uploads
-  WHERE (committed_at IS NULL AND expires_at < $1)
-     OR (committed_at IS NOT NULL AND committed_at < $2 AND expires_at < $1)
-  ORDER BY expires_at
-  LIMIT $3
+		var n int64
+		err := conn.QueryRow(ctx, `
+WITH due AS MATERIALIZED (
+  SELECT id, committed_at IS NULL OR committed_at < $2 AS retire
+  FROM staged_uploads
+  WHERE expires_at <= $1
+    AND (staging_cleaned_at IS NULL OR committed_at IS NULL OR committed_at < $2)
+  ORDER BY expires_at, id LIMIT $3 FOR UPDATE
+), retired AS (
+  DELETE FROM staged_uploads s USING due
+  WHERE s.id = due.id AND due.retire RETURNING s.staging_key
+), swept AS (
+  UPDATE staged_uploads s SET staging_cleaned_at = $1 FROM due
+  WHERE s.id = due.id AND NOT due.retire RETURNING s.staging_key
+), queued AS (
+  INSERT INTO blob_garbage(key, since)
+  SELECT staging_key, $1 FROM retired UNION ALL SELECT staging_key, $1 FROM swept
+  ON CONFLICT (key) DO NOTHING
 )
-RETURNING staging_key, staging_cleaned_at IS NULL
-`, now, now.Add(-committedStagedRetention), pruneBatch)
+SELECT count(*) FROM due
+`, now, now.Add(-committedStagedRetention), pruneBatch).Scan(&n)
 		if err != nil {
 			return total, err
 		}
-		var keys []string
-		var count int64
-		for rows.Next() {
-			var key string
-			var uncleaned bool
-			if err := rows.Scan(&key, &uncleaned); err != nil {
-				rows.Close()
-				return total, err
-			}
-			count++
-			if uncleaned {
-				keys = append(keys, key)
-			}
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return total, err
-		}
-		if len(keys) > 0 {
-			d.dropObjects(ctx, keys)
-		}
-		total += count
-		if count < pruneBatch {
+		total += n
+		if n < pruneBatch {
 			return total, nil
 		}
 	}
 }
 
 type stagedState struct {
-	Committed     bool
-	ResourceID    string
-	Version       int
-	NewVersion    bool
-	Trimmed       int
-	StagingKey    string
-	Size          int64
-	SHA256        string
-	ExpiresAt     time.Time
+	Committed  bool
+	ResourceID string
+	Version    int
+	NewVersion bool
+	Trimmed    int
+	StagingKey string
+	Size       int64
+	SHA256     string
+	ExpiresAt  time.Time
 }
 
 func readStagedTx(ctx context.Context, q storeQuerier, ticket UploadTicket, lock bool) (stagedState, error) {
@@ -313,28 +262,32 @@ WHERE id = $1
 	return nil
 }
 
-// consumeFallbackStagedTx consumes an uncommitted staged upload reservation in
-// the same transaction as a server-side fallback upload so quota is not
-// double-counted, while keeping the row until its presigned PUT expires.
-func consumeFallbackStagedTx(ctx context.Context, tx pgx.Tx, uploadID, ownerID, purpose, resourceID string, version int, newVersion bool, trimmed int, now time.Time) (string, error) {
-	if uploadID == "" || !validUUIDs(uploadID) {
-		return "", nil
+// fallbackTicket resolves the original reservation for a server-side retry. The
+// body must be exactly the bytes authorized for the direct PUT, including on
+// replay; both transports then share one publication transaction and result.
+func (d *Store) fallbackTicket(ctx context.Context, id, ownerID, purpose, target string, content []byte) (UploadTicket, error) {
+	ticket := UploadTicket{UploadID: id, OwnerID: ownerID, Purpose: purpose}
+	if !validUUIDs(id, ownerID) {
+		return ticket, refusal("上传凭证无效")
 	}
-	var stagingKey string
-	err := tx.QueryRow(ctx, `
-UPDATE staged_uploads
-SET committed_at = $2, committed_resource_id = $3, committed_version = $4,
-    committed_new_version = $5, committed_trimmed = $6
-WHERE id = $1 AND owner_id = $7 AND purpose = $8 AND committed_at IS NULL
-RETURNING staging_key
-`, uploadID, now, resourceID, version, newVersion, trimmed, ownerID, purpose).Scan(&stagingKey)
+	err := d.db.QueryRow(ctx, `
+SELECT resource_id, size, sha256 FROM staged_uploads
+WHERE id = $1 AND owner_id = $2 AND purpose = $3
+`, id, ownerID, purpose).Scan(&ticket.ResourceID, &ticket.Size, &ticket.SHA256)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
+		return ticket, refusal("上传凭证无效或已过期，请重试")
 	}
 	if err != nil {
-		return "", fmt.Errorf("consume fallback staged upload: %w: %w", ErrInternal, err)
+		return ticket, err
 	}
-	return stagingKey, nil
+	if target != "" && target != ticket.ResourceID {
+		return ticket, refusal("上传凭证无效")
+	}
+	if int64(len(content)) != ticket.Size || contentSHA256(content) != ticket.SHA256 {
+		return ticket, refusal("上传内容与凭证不匹配")
+	}
+	ticket.fallbackContent = content
+	return ticket, nil
 }
 
 // trimUTF8Tail removes an incomplete UTF-8 rune split at the end of a prefix
@@ -360,7 +313,13 @@ func trimUTF8Tail(sample []byte, totalSize int64) []byte {
 // immutable server-owned finalKey conditioned on the verified ETag. Because
 // browsers only ever receive presigned URLs for staging/* keys, they can never
 // overwrite the published finalKey after commit.
-func (d *Store) publishStagedObject(ctx context.Context, stagingKey, finalKey string, expectedSize, prefixMax int64) ([]byte, error) {
+func (d *Store) publishStagedObject(ctx context.Context, fallback []byte, stagingKey, finalKey string, expectedSize, prefixMax int64) ([]byte, error) {
+	if fallback != nil {
+		if err := d.blobs.Put(ctx, finalKey, bytes.NewReader(fallback), expectedSize); err != nil {
+			return nil, fmt.Errorf("store fallback upload: %w: %w", ErrInternal, err)
+		}
+		return fallback[:min(len(fallback), int(prefixMax))], nil
+	}
 	ds, ok := d.directStore()
 	if !ok {
 		return nil, fmt.Errorf("direct upload unsupported: %w", ErrInternal)
@@ -428,7 +387,7 @@ func (d *Store) CreateAnonymousPasteFromUpload(ctx context.Context, ticket Uploa
 		return Resource{}, Link{}, refusal("上传凭证已过期，请重试")
 	}
 	finalKey := contentKey(ticket.ResourceID)
-	prefix, err := d.publishStagedObject(ctx, st.StagingKey, finalKey, st.Size, sniffPrefixMaxBytes)
+	prefix, err := d.publishStagedObject(ctx, ticket.fallbackContent, st.StagingKey, finalKey, st.Size, sniffPrefixMaxBytes)
 	if err != nil {
 		return Resource{}, Link{}, err
 	}
@@ -489,7 +448,7 @@ VALUES($1, $2, $3)
 		return markStagedCommittedTx(ctx, tx, ticket.UploadID, resource.ID, 1, true, 0, now)
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, finalKey, rolledBack)
+		d.dropPublishedOnError(ctx, AnonymousUserID, rolledBack, finalKey)
 		return Resource{}, Link{}, err
 	}
 	if alreadyCommitted {
@@ -531,7 +490,7 @@ func (d *Store) CreateQuickShareFromUpload(ctx context.Context, ownerID string, 
 		return Resource{}, Link{}, refusal("上传凭证已过期，请重试")
 	}
 	finalKey := contentKey(ticket.ResourceID)
-	prefix, err := d.publishStagedObject(ctx, st.StagingKey, finalKey, st.Size, sniffPrefixMaxBytes)
+	prefix, err := d.publishStagedObject(ctx, ticket.fallbackContent, st.StagingKey, finalKey, st.Size, sniffPrefixMaxBytes)
 	if err != nil {
 		return Resource{}, Link{}, err
 	}
@@ -570,7 +529,7 @@ func (d *Store) CreateSealedQuickShareFromUpload(ctx context.Context, ownerID st
 		return Resource{}, Link{}, refusal("上传凭证已过期，请重试")
 	}
 	finalKey := contentKey(ticket.ResourceID)
-	prefix, err := d.publishStagedObject(ctx, st.StagingKey, finalKey, st.Size, int64(len(sealedContentMagic)))
+	prefix, err := d.publishStagedObject(ctx, ticket.fallbackContent, st.StagingKey, finalKey, st.Size, int64(len(sealedContentMagic)))
 	if err != nil {
 		return Resource{}, Link{}, err
 	}
@@ -644,7 +603,7 @@ ON CONFLICT (id) DO NOTHING
 		return err
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, resource.ContentKey, rolledBack)
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, resource.ContentKey)
 		return Resource{}, Link{}, err
 	}
 	if alreadyCommitted {
@@ -674,7 +633,7 @@ func (d *Store) CreateResourceFromUpload(ctx context.Context, ownerID string, ti
 		return Resource{}, refusal("上传凭证已过期，请重试")
 	}
 	finalKey := contentKey(ticket.ResourceID)
-	prefix, err := d.publishStagedObject(ctx, st.StagingKey, finalKey, st.Size, sniffPrefixMaxBytes)
+	prefix, err := d.publishStagedObject(ctx, ticket.fallbackContent, st.StagingKey, finalKey, st.Size, sniffPrefixMaxBytes)
 	if err != nil {
 		return Resource{}, err
 	}
@@ -736,7 +695,7 @@ ON CONFLICT (id) DO NOTHING
 		return err
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, finalKey, rolledBack)
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, finalKey)
 		return Resource{}, err
 	}
 	if alreadyCommitted {
@@ -773,7 +732,7 @@ func (d *Store) SaveResourceFromUpload(ctx context.Context, ownerID, resourceID 
 		return SaveResult{}, errSealedInBrowser
 	}
 	finalKey := contentKey(resourceID)
-	prefix, err := d.publishStagedObject(ctx, st.StagingKey, finalKey, st.Size, sniffPrefixMaxBytes)
+	prefix, err := d.publishStagedObject(ctx, ticket.fallbackContent, st.StagingKey, finalKey, st.Size, sniffPrefixMaxBytes)
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -861,7 +820,7 @@ WHERE id = $12 AND owner_id = $13
 		return markStagedCommittedTx(ctx, tx, ticket.UploadID, resourceID, result.Version, result.NewVersion, result.Trimmed, now)
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, finalKey, rolledBack)
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, finalKey)
 		return SaveResult{}, err
 	}
 	if alreadyCommitted {
@@ -897,7 +856,7 @@ func (d *Store) CreateSealedResourceFromUpload(ctx context.Context, ownerID stri
 		return Resource{}, refusal("上传凭证已过期，请重试")
 	}
 	finalKey := contentKey(ticket.ResourceID)
-	prefix, err := d.publishStagedObject(ctx, st.StagingKey, finalKey, st.Size, int64(len(sealedContentMagic)))
+	prefix, err := d.publishStagedObject(ctx, ticket.fallbackContent, st.StagingKey, finalKey, st.Size, int64(len(sealedContentMagic)))
 	if err != nil {
 		return Resource{}, err
 	}
@@ -955,7 +914,7 @@ ON CONFLICT (id) DO NOTHING
 		return err
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, finalKey, rolledBack)
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, finalKey)
 		return Resource{}, err
 	}
 	if alreadyCommitted {
@@ -995,7 +954,7 @@ func (d *Store) SaveSealedResourceFromUpload(ctx context.Context, ownerID, resou
 		return SaveResult{}, err
 	}
 	finalKey := contentKey(resourceID)
-	prefix, err := d.publishStagedObject(ctx, st.StagingKey, finalKey, st.Size, int64(len(sealedContentMagic)))
+	prefix, err := d.publishStagedObject(ctx, ticket.fallbackContent, st.StagingKey, finalKey, st.Size, int64(len(sealedContentMagic)))
 	if err != nil {
 		return SaveResult{}, err
 	}
@@ -1064,7 +1023,7 @@ WHERE id = $9 AND owner_id = $10
 		return markStagedCommittedTx(ctx, tx, ticket.UploadID, resourceID, result.Version, result.NewVersion, result.Trimmed, now)
 	})
 	if err != nil {
-		d.dropPublishedOnError(ctx, finalKey, rolledBack)
+		d.dropPublishedOnError(ctx, ownerID, rolledBack, finalKey)
 		return SaveResult{}, err
 	}
 	if alreadyCommitted {
