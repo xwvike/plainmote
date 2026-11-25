@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"slices"
@@ -18,6 +19,9 @@ const dashboardPath = "/resources/"
 
 const (
 	defaultPageSize = 10
+	// Finder browser loads a generous directory batch instead of forcing
+	// traditional 10-item pages; overflow batches load seamlessly on scroll.
+	finderBatchSize = 100
 	// Keep search URLs and LIKE patterns bounded without cutting a UTF-8 rune.
 	maxQueryLength = 256
 	pageWindow     = 7
@@ -36,14 +40,52 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	query := r.URL.Query()
 	search := strings.TrimSpace(query.Get("q"))
 	search = truncateBytes(search, maxQueryLength)
-	size := normalizePageSize(query.Get("size"))
+	size := finderBatchSize
+	if rawSize := strings.TrimSpace(query.Get("size")); rawSize != "" {
+		size = normalizePageSize(rawSize)
+	}
 	page, err := strconv.Atoi(strings.TrimSpace(query.Get("page")))
 	if err != nil || page < 1 {
 		page = 1
 	}
+	folderID := strings.TrimSpace(query.Get("folder"))
+	viewMode := a.resolveViewMode(w, r)
+
 	filter := store.ResourceFilter{Query: search, Kind: query.Get("kind"), Tags: resourceTags(query["tag"])}
 	if filter.Kind != store.KindResource && filter.Kind != store.KindQuickShare {
 		filter.Kind = ""
+	}
+
+	browsingFolder := search == "" && len(filter.Tags) == 0 && filter.Kind != store.KindQuickShare
+	var crumbs []store.Folder
+	var childFolders []store.Folder
+	if browsingFolder {
+		if folderID != "" {
+			crumbs, err = a.db.FolderBreadcrumbs(r.Context(), user.ID, folderID)
+			if errors.Is(err, store.ErrNotFound) {
+				http.Redirect(w, r, dashboardPath, http.StatusSeeOther)
+				return
+			}
+			if err != nil {
+				a.renderError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
+		filter.UseFolder = true
+		filter.FolderID = folderID
+		childFolders, err = a.db.ListChildFolders(r.Context(), user.ID, folderID)
+		if err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+	} else {
+		folderID = ""
+	}
+
+	allFolders, err := a.db.ListAllFolders(r.Context(), user.ID)
+	if err != nil {
+		a.renderError(w, http.StatusInternalServerError, err)
+		return
 	}
 
 	resources, total, err := a.db.ListResourcesBy(r.Context(), user.ID, filter, size, (page-1)*size)
@@ -85,23 +127,49 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	})
 	pager.Query = search
 	pager.Kind = filter.Kind
+	pager.FolderID = folderID
 	pager.Tags = filter.Tags
 	clear := filter
 	clear.Tags = nil
 	pager.ClearTagsURL = dashboardURL(clear, size, 1)
 	pager.SealedIndexURL = "/resources/sealed?" + url.Values{"kind": {filter.Kind}, "tag": filter.Tags}.Encode()
+
+	viewURL := func(mode string) string {
+		u := dashboardURL(filter, size, page)
+		if strings.Contains(u, "?") {
+			return u + "&view=" + mode
+		}
+		return u + "?view=" + mode
+	}
+	newResourceURL := "/resources/new"
+	if folderID != "" {
+		newResourceURL += "?folder=" + url.QueryEscape(folderID)
+	}
+	folderTrashed, _ := strconv.Atoi(query.Get("folder_trashed"))
 	a.renderTemplate(w, r, http.StatusOK, "dashboard.html", pageData{
-		User:      user,
-		CSRF:      csrfValue(r),
-		Active:    "resources",
-		BaseURL:   a.baseURL(r),
-		SignedIn:  true,
-		Resources: resources,
-		Tags:      chips,
-		Quota:     quota,
-		Pager:     pager,
-		TrashDays: int(store.TrashRetention / (24 * time.Hour)),
-		Trashed:   query.Get("trashed") == "1",
+		User:            user,
+		CSRF:            csrfValue(r),
+		Active:          "resources",
+		BaseURL:         a.baseURL(r),
+		SignedIn:        true,
+		Error:           strings.TrimSpace(query.Get("error")),
+		Resources:       resources,
+		Folders:         childFolders,
+		FolderCrumbs:    crumbs,
+		FolderOptions:   buildFolderOptions(allFolders),
+		CurrentFolderID: folderID,
+		BrowsingFolder:  browsingFolder,
+		ViewMode:        viewMode,
+		IconViewURL:     viewURL(viewIcon),
+		ListViewURL:     viewURL(viewList),
+		NewResourceURL:  newResourceURL,
+		Tags:            chips,
+		Quota:           quota,
+		Pager:           pager,
+		TrashDays:       int(store.TrashRetention / (24 * time.Hour)),
+		Trashed:         query.Get("trashed") == "1",
+		FolderDeleted:   query.Get("folder_deleted") == "1",
+		FolderTrashed:   folderTrashed,
 	})
 }
 
@@ -151,6 +219,9 @@ func lastPage(total, size int) int {
 
 func dashboardURL(filter store.ResourceFilter, size, page int) string {
 	values := url.Values{}
+	if filter.UseFolder && filter.FolderID != "" {
+		values.Set("folder", filter.FolderID)
+	}
 	if filter.Query != "" {
 		values.Set("q", filter.Query)
 	}
@@ -160,7 +231,7 @@ func dashboardURL(filter store.ResourceFilter, size, page int) string {
 	for _, tag := range filter.Tags {
 		values.Add("tag", tag)
 	}
-	if size != defaultPageSize {
+	if size != defaultPageSize && size != finderBatchSize {
 		values.Set("size", strconv.Itoa(size))
 	}
 	if page > 1 {

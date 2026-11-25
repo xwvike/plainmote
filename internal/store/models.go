@@ -57,6 +57,21 @@ type Resource struct {
 	Tags []string
 	// DeletedAt is set when the resource has been moved to the trash.
 	DeletedAt *time.Time
+	// FolderID is the folder holding this resource, or empty for the root directory.
+	FolderID string
+}
+
+// Folder is a directory in an account's resource browser. Folders may nest up
+// to FolderMaxDepth levels deep.
+type Folder struct {
+	ID        string
+	OwnerID   string
+	ParentID  string
+	Name      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	// ItemCount is the number of direct child folders plus active direct resources.
+	ItemCount int
 }
 
 // Trashed reports whether the resource is in the trash.

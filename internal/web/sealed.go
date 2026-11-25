@@ -212,6 +212,9 @@ func (a *App) handleSealedCreate(w http.ResponseWriter, r *http.Request, user Us
 		a.sealedFail(w, r, http.StatusBadRequest, "refused", err)
 		return
 	}
+	if folderID := strings.TrimSpace(r.FormValue("folder_id")); folderID != "" {
+		_ = a.db.MoveResource(r.Context(), user.ID, resource.ID, folderID)
+	}
 	a.writeAPI(w, http.StatusCreated, map[string]string{"location": "/resources/" + resource.ID + "?created=1"})
 }
 

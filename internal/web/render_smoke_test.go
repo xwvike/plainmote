@@ -89,7 +89,7 @@ func TestAllPagesRender(t *testing.T) {
 	for _, tc := range []struct{ name, path, want string }{
 		{"home", "/", "Create share link"},
 		{"dashboard", "/resources/", "New resource"},
-		{"dashboard page 2", "/resources/?size=10&page=2", `class="pgn on">2<`},
+		{"dashboard batch 2", "/resources/?size=10&page=2", `data-fb-stat`},
 		{"dashboard search", "/resources/?q=" + resource.Name, resource.Filename},
 		{"dashboard no match", "/resources/?q=%25_nothing", "No resources match"},
 		{"logs", "/logs", "Successful"},

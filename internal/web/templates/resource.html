@@ -59,6 +59,7 @@
          different shape. */}}
     <form class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}"{{if not .IsNew}} data-parts{{end}}>
       <input type="hidden" name="csrf" value="{{.CSRF}}">
+      {{if and .IsNew .CurrentFolderID}}<input type="hidden" name="folder_id" value="{{.CurrentFolderID}}">{{end}}
       {{if not .IsNew}}{{template "resource-base" .}}{{end}}
 
       <div class="editor-shell">
@@ -181,7 +182,7 @@
 
 {{define "resource-doc-title"}}<title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{resourceLabel .Locale .Resource}}{{end}} · PlainMote</title>{{end}}
 
-{{define "resource-crumb"}}<div class="crumb" data-part="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><span>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{resourceLabel .Locale .Resource}}{{end}}</span></div>{{end}}
+{{define "resource-crumb"}}<div class="crumb" data-part="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a>{{range .FolderCrumbs}}<span>/</span><a href="{{folderURL .ID}}">{{.Name}}</a>{{end}}<span>/</span><span>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{resourceLabel .Locale .Resource}}{{end}}</span></div>{{end}}
 
 {{/* Each tag takes itself off with its own form; Enter in the box adds one.
      parts.js swaps only this row, so an edit in progress stays. */}}
@@ -216,8 +217,8 @@
     {{if .Created}}
     <div class="notice notice-row" role="status">
       <span>{{printf (tr .Locale "notice_created") (or .Resource.Name (tr .Locale "untitled_resource"))}}</span>
-      <a class="txt" href="/resources/new">{{tr .Locale "create_another"}}</a>
-      <a class="txt" href="/resources/">{{tr .Locale "back_to_resources"}}</a>
+      <a class="txt" href="/resources/new{{if .CurrentFolderID}}?folder={{.CurrentFolderID}}{{end}}">{{tr .Locale "create_another"}}</a>
+      <a class="txt" href="{{if .CurrentFolderID}}{{folderURL .CurrentFolderID}}{{else}}/resources/{{end}}">{{tr .Locale "back_to_resources"}}</a>
     </div>
     {{else if .Sealed}}
     <p class="notice" role="status">{{tr .Locale "seal_done"}}</p>

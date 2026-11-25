@@ -508,7 +508,7 @@ func TestQuickSharesInTheResourceList(t *testing.T) {
 		return w.Body.String()
 	}
 	all := page("/resources/")
-	if strings.Count(all, `<span class="tag qs">Quick share</span>`) != 2 || !strings.Contains(all, "Encrypted content") || !strings.Contains(all, `<span class="st qs-left">`) {
+	if strings.Count(all, `class="fb-qs-left"`) != 2 || !strings.Contains(all, "Encrypted content") || strings.Count(all, `class="fb-dot qs"`) != 2 {
 		t.Fatal("the list does not mark its quick shares")
 	}
 	quick := page("/resources/?kind=quick")

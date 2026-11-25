@@ -135,6 +135,25 @@ ALTER TABLE resources ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}'
 -- toward the account's quota until it is permanently deleted or ages out.
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS resources_deleted_idx ON resources(owner_id, deleted_at DESC) WHERE deleted_at IS NOT NULL;
+
+-- Nested folders for organizing an account's resources. Folder names are kept
+-- in plain text (like tags) so hierarchy, breadcrumbs, and moves work server-side.
+-- Deleting a folder cascades to descendant folders; resources inside are moved
+-- to trash with folder_id cleared before deletion.
+CREATE TABLE IF NOT EXISTS folders (
+  id UUID PRIMARY KEY,
+  owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_id UUID REFERENCES folders(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS folders_owner_parent_idx ON folders(owner_id, parent_id);
+CREATE UNIQUE INDEX IF NOT EXISTS folders_root_name_idx ON folders(owner_id, lower(name)) WHERE parent_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS folders_child_name_idx ON folders(owner_id, parent_id, lower(name)) WHERE parent_id IS NOT NULL;
+
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS folder_id UUID REFERENCES folders(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS resources_owner_folder_idx ON resources(owner_id, folder_id) WHERE deleted_at IS NULL;
 -- Objects whose delete failed once no row pointed at them any more. The
 -- prune deletes them again. Keys are made new for every write, so none of
 -- these can come back into use. not_before defers deletion until a presigned

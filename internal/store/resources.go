@@ -174,7 +174,8 @@ VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
 const resourceColumns = `r.id, r.owner_id, r.name, r.filename, r.content_key, r.content_size, r.content_type,
        r.content_encoding, r.created_at, r.updated_at,
        r.version, COALESCE(r.version_at, r.updated_at), COALESCE(r.restored_from, 0), r.content_sha256,
-       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key, r.sealed_meta, r.tags, r.deleted_at`
+       r.taken_down_at IS NOT NULL, r.takedown_reason, r.expires_at, r.sealed_key, r.sealed_meta, r.tags, r.deleted_at,
+       COALESCE(r.folder_id::text, '')`
 
 // unexpiredResource leaves out a quick share whose time is up but which the
 // sweep has not reached yet. Quota counts live and trashed resources alike.
@@ -195,7 +196,7 @@ func scanResource(row rowScanner, extra ...any) (Resource, error) {
 		&r.ID, &r.OwnerID, &r.Name, &r.Filename, &r.ContentKey, &r.ContentSize, &r.ContentType,
 		&r.ContentEncoding, &r.CreatedAt, &r.UpdatedAt,
 		&r.Version, &r.VersionAt, &r.RestoredFrom, &r.ContentSHA256,
-		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt, &r.SealedKey, &r.SealedMeta, &r.Tags, &r.DeletedAt,
+		&r.TakenDown, &r.TakedownReason, &r.ExpiresAt, &r.SealedKey, &r.SealedMeta, &r.Tags, &r.DeletedAt, &r.FolderID,
 	}, extra...)...)
 	return r, err
 }
@@ -231,11 +232,14 @@ func (d *Store) ListResources(ctx context.Context, ownerID, query string, limit,
 }
 
 // ResourceFilter narrows the resource list: Query by name or filename, Kind
-// to resources or quick shares, Tags to those carrying every selected tag.
+// to resources or quick shares, Tags to those carrying every selected tag,
+// and when UseFolder is true, FolderID restricts to one folder (empty = root).
 type ResourceFilter struct {
-	Query string
-	Kind  string
-	Tags  []string
+	Query     string
+	Kind      string
+	Tags      []string
+	FolderID  string
+	UseFolder bool
 }
 
 const resourceFilterSQL = `r.owner_id = $1 AND ($2 = '' OR r.name ILIKE $3 ESCAPE '\' OR r.filename ILIKE $3 ESCAPE '\')
@@ -254,9 +258,26 @@ func (d *Store) ListResourcesBy(ctx context.Context, ownerID string, filter Reso
 	default:
 		kind = ""
 	}
+	folderClause := ""
+	folderID := ""
+	if filter.UseFolder {
+		if filter.FolderID == "" {
+			folderClause = ` AND r.folder_id IS NULL`
+		} else {
+			if !validUUIDs(filter.FolderID) {
+				return nil, 0, nil
+			}
+			folderID = filter.FolderID
+			folderClause = ` AND r.folder_id = $6::uuid`
+		}
+	}
+	countArgs := []any{ownerID, query, pattern, kind, filter.Tags}
+	if folderID != "" {
+		countArgs = append(countArgs, folderID)
+	}
 	var total int
-	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM resources r WHERE `+resourceFilterSQL,
-		ownerID, query, pattern, kind, filter.Tags).Scan(&total); err != nil {
+	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM resources r WHERE `+resourceFilterSQL+folderClause,
+		countArgs...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count resources: %w: %w", ErrInternal, err)
 	}
 	if limit <= 0 {
@@ -265,16 +286,23 @@ func (d *Store) ListResourcesBy(ctx context.Context, ownerID string, filter Reso
 	if offset < 0 {
 		offset = 0
 	}
-	rows, err := d.db.Query(ctx, `
+	nowIdx, limitIdx, offsetIdx := 6, 7, 8
+	listArgs := []any{ownerID, query, pattern, kind, filter.Tags}
+	if folderID != "" {
+		listArgs = append(listArgs, folderID)
+		nowIdx, limitIdx, offsetIdx = 7, 8, 9
+	}
+	listArgs = append(listArgs, time.Now().UTC(), limit, offset)
+	rows, err := d.db.Query(ctx, fmt.Sprintf(`
 SELECT `+resourceColumns+`,
        (SELECT COUNT(*) FROM links l WHERE l.resource_id = r.id AND l.revoked_at IS NULL
-          AND (l.expires_at IS NULL OR l.expires_at > $6)
+          AND (l.expires_at IS NULL OR l.expires_at > $%d)
           AND (l.max_uses = 0 OR l.used_count < l.max_uses))
 FROM resources r
-WHERE `+resourceFilterSQL+`
+WHERE `+resourceFilterSQL+folderClause+`
 ORDER BY r.updated_at DESC, r.id
-LIMIT $7 OFFSET $8
-`, ownerID, query, pattern, kind, filter.Tags, time.Now().UTC(), limit, offset)
+LIMIT $%d OFFSET $%d
+`, nowIdx, limitIdx, offsetIdx), listArgs...)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -138,6 +138,10 @@ func (a *App) templateSet() *template.Template {
 		"add":                func(a, b int) int { return a + b },
 		"grantSource":        grantSource,
 		"trashPurgeAt":       trashPurgeAt,
+		"fileKind":           fileKindForResource,
+		"folderURL": func(id string) string {
+			return folderDashboardURL(id, nil)
+		},
 	}).ParseFS(webAssets, "templates/*.html"))
 }
 

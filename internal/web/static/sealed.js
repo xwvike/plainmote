@@ -571,6 +571,7 @@ function startNew(input) {
         sealed_key: toBase64URL(await wrapContentKey(contentKey, key, id)),
         meta: toBase64URL(await encryptMeta(contentKey, id, { name: (form.elements.name?.value || "").trim(), filename, type })),
       };
+      if (form.elements.folder_id?.value) fields.folder_id = form.elements.folder_id.value;
       const direct = await presignAndUpload({
         purpose: "sealed_create",
         blob: sealedBlob,

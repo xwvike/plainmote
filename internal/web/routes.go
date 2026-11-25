@@ -146,6 +146,18 @@ type pageData struct {
 	SealedQuickShares int
 	RegistrationMode  auth.RegistrationMode
 	Resources         []Resource
+	// Finder-style folder browser state on the dashboard & resource pages.
+	Folders         []store.Folder
+	FolderCrumbs    []store.Folder
+	FolderOptions   []folderOption
+	CurrentFolderID string
+	BrowsingFolder  bool
+	ViewMode        string
+	IconViewURL     string
+	ListViewURL     string
+	NewResourceURL  string
+	FolderDeleted   bool
+	FolderTrashed   int
 	// Tags are the account's tags: filters on the resource list, and on a
 	// resource the ones it could still be given.
 	Tags     []tagChip
@@ -287,6 +299,7 @@ type pageData struct {
 type pager struct {
 	Query          string
 	Kind           string
+	FolderID       string
 	Tags           []string
 	ClearTagsURL   string
 	SealedIndexURL string

@@ -41,6 +41,14 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 		a.handleSealedIndex(w, r, user, sessionID)
 		return
 	}
+	if path == foldersPath || path == foldersPath+"/" {
+		a.handleFolders(w, r, user, sessionID)
+		return
+	}
+	if path == movePath || path == movePath+"/" {
+		a.handleMoveResource(w, r, user, sessionID)
+		return
+	}
 	if path == trashPath || path == trashPath+"/" {
 		http.Redirect(w, r, accountTrashPath, http.StatusFound)
 		return
@@ -83,6 +91,12 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	if r.Method == http.MethodGet {
 		data := a.basePage(r, user)
 		data.IsNew = true
+		if folderID := strings.TrimSpace(r.URL.Query().Get("folder")); folderID != "" {
+			if crumbs, err := a.db.FolderBreadcrumbs(r.Context(), user.ID, folderID); err == nil {
+				data.CurrentFolderID = folderID
+				data.FolderCrumbs = crumbs
+			}
+		}
 		var err error
 		if data.HasKeyring, err = a.hasKeyring(r, user.ID); err != nil {
 			a.renderError(w, http.StatusInternalServerError, err)
@@ -133,6 +147,9 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 			}
 		}
 		if err == nil {
+			if folderID := strings.TrimSpace(r.FormValue("folder_id")); folderID != "" {
+				_ = a.db.MoveResource(r.Context(), user.ID, resource.ID, folderID)
+			}
 			location := "/resources/" + resource.ID + "?created=1"
 			if wantsUploadJSON(r) {
 				a.writeAPI(w, http.StatusCreated, map[string]string{"location": location})
@@ -507,6 +524,12 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 	data := a.basePage(r, user)
 	data.Error = pageError
+	if resource.FolderID != "" {
+		if crumbs, crumbErr := a.db.FolderBreadcrumbs(r.Context(), user.ID, resource.FolderID); crumbErr == nil {
+			data.CurrentFolderID = resource.FolderID
+			data.FolderCrumbs = crumbs
+		}
+	}
 	// A request from parts.js renders everything but the editor, so it does
 	// not read the body - except for a resource with no filename, whose body
 	// is what names it in the addresses of its links.

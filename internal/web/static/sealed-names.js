@@ -34,12 +34,31 @@ function showSealedNames(signal) {
     return names;
   }
 
+  function extBadge(filename, type) {
+    const clean = String(filename || "").trim();
+    const dot = clean.lastIndexOf(".");
+    if (dot > 0 && dot < clean.length - 1) {
+      const ext = clean.slice(dot + 1).toLowerCase();
+      if (/^[a-z0-9]{1,4}$/.test(ext)) return ext.toUpperCase();
+    }
+    const mime = String(type || "").toLowerCase().split(";")[0].trim();
+    if (mime.startsWith("image/")) return "IMG";
+    if (mime.startsWith("video/")) return "VID";
+    if (mime.startsWith("audio/")) return "AUD";
+    if (mime === "application/pdf") return "PDF";
+    if (mime.startsWith("text/")) return "TXT";
+    return "";
+  }
+
   function fill(names) {
     for (const element of document.querySelectorAll("[data-sealed-name]")) {
       const meta = names.get(element.dataset.sealedName);
       if (meta && (meta.name || meta.filename)) {
         element.textContent = meta.name || meta.filename;
+        element.title = element.textContent;
         element.closest("[title]")?.setAttribute("title", element.textContent);
+        const item = element.closest("[data-fb-item]");
+        if (item && meta.filename) item.dataset.infoFilename = meta.filename;
       }
     }
     for (const element of document.querySelectorAll("[data-sealed-file]")) {
@@ -47,6 +66,24 @@ function showSealedNames(signal) {
       if (meta?.filename) {
         element.textContent = meta.filename;
         element.title = meta.filename;
+      }
+    }
+    for (const element of document.querySelectorAll("[data-sealed-badge]")) {
+      const meta = names.get(element.dataset.sealedBadge);
+      if (!meta) continue;
+      const badge = extBadge(meta.filename, meta.type);
+      if (badge) {
+        element.textContent = badge;
+        element.hidden = false;
+      }
+    }
+    for (const element of document.querySelectorAll("[data-sealed-kind]")) {
+      const meta = names.get(element.dataset.sealedKind);
+      if (!meta) continue;
+      const badge = extBadge(meta.filename, meta.type);
+      if (badge && !element.dataset.kindFilled) {
+        element.textContent = `${element.textContent} · ${badge}`;
+        element.dataset.kindFilled = "1";
       }
     }
   }
