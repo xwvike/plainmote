@@ -389,3 +389,56 @@ func TestSiblingFilenameUniqueness(t *testing.T) {
 		t.Fatalf("expected restored duplicate to become 'notes (3).md', got %q", restored.Filename)
 	}
 }
+
+func TestMarkdownPreviewSupport(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	client := signedIn(t, db, user)
+
+	// 1. Static markdown.js asset is embedded and served with JS content-type.
+	assetRec := httptest.NewRecorder()
+	client.app.handler.ServeHTTP(assetRec, httptest.NewRequest(http.MethodGet, assetPath("markdown.js"), nil))
+	if assetRec.Code != http.StatusOK {
+		t.Fatalf("GET markdown.js: got %d", assetRec.Code)
+	}
+	if ct := assetRec.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Fatalf("unexpected markdown.js content-type: %q", ct)
+	}
+
+	// 2. Create a .md resource and verify both modal and standalone pages carry the preview switcher.
+	res, err := db.CreateResource(ctx, user.ID, "guide.md", "guide.md", []byte("# Hello\n\n- [x] ready\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		"/resources/" + res.ID + "?modal=edit",
+		"/resources/" + res.ID,
+		"/resources/new?modal=edit",
+	} {
+		rec := client.do(http.MethodGet, path, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s: got %d", path, rec.Code)
+		}
+		body := rec.Body.String()
+		for _, want := range []string{`data-md-mode`, `data-md-view="preview"`, `data-md-view="edit"`, `data-msg-md-empty`} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("GET %s missing %q", path, want)
+			}
+		}
+	}
+
+	// 3. Save a second version and verify version preview carries the read-only switcher.
+	if err := db.UpdateResource(ctx, user.ID, res.ID, "guide.md", "guide.md", []byte("# Hello v2\n"), "utf-8"); err != nil {
+		t.Fatal(err)
+	}
+	verRec := client.do(http.MethodGet, "/resources/"+res.ID+"/versions/1?modal=history", nil)
+	if verRec.Code != http.StatusOK {
+		t.Fatalf("GET version 1: got %d", verRec.Code)
+	}
+	verBody := verRec.Body.String()
+	for _, want := range []string{`data-md-mode`, `data-md-view="preview"`, `data-md-view="edit"`, `data-msg-md-empty`} {
+		if !strings.Contains(verBody, want) {
+			t.Fatalf("GET version 1 missing %q", want)
+		}
+	}
+}

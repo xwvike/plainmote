@@ -15,6 +15,7 @@ import {
   standardSQL, StreamLanguage, syntaxHighlighting, tags, toml, xml, yaml,
 } from "./vendor/codemirror.js";
 import { uploadController } from "./upload.js";
+import { isMarkdownFile, renderMarkdown } from "./markdown.js";
 
 function message(name, values = {}) {
   let text = document.body.dataset[name] || "";
@@ -434,6 +435,104 @@ const tabKeymap = [{
   shift: indentLess,
 }];
 
+function setupMarkdownPreview({ textarea, host, view, filenameInput, defaultMode }) {
+  const panel = textarea.closest(".panel-ed");
+  const modeBar = (panel && panel.querySelector("[data-md-mode]")) || document.querySelector("[data-md-mode]");
+  if (!modeBar) {
+    return {
+      isPreview: () => false,
+      refresh: () => {},
+      setSuppressed: () => {},
+    };
+  }
+  const previewBtn = modeBar.querySelector('[data-md-view="preview"]');
+  const editBtn = modeBar.querySelector('[data-md-view="edit"]');
+  const previewEl = document.createElement("div");
+  previewEl.className = "md-preview";
+  previewEl.dataset.mdPreview = "";
+  previewEl.hidden = true;
+  host.parentNode.insertBefore(previewEl, host.nextSibling);
+
+  let mode = defaultMode === "preview" ? "preview" : "edit";
+  let suppressed = false;
+
+  const isMD = () => isMarkdownFile(
+    filenameInput ? filenameInput.value : textarea.dataset.filename,
+    textarea.dataset.contentType,
+  );
+
+  const render = () => {
+    renderMarkdown(view.state.sliceDoc(), previewEl, {
+      emptyText: message("msgMdEmpty"),
+      copyLabel: message("msgCopy"),
+      copiedLabel: message("msgCopied"),
+    });
+  };
+
+  const apply = ({ focusEditor = false } = {}) => {
+    const active = !suppressed && isMD();
+    modeBar.hidden = !active;
+    if (!active) {
+      previewEl.hidden = true;
+      if (!suppressed) host.hidden = false;
+      if (previewBtn) {
+        previewBtn.classList.remove("on");
+        previewBtn.setAttribute("aria-pressed", "false");
+      }
+      if (editBtn) {
+        editBtn.classList.remove("on");
+        editBtn.setAttribute("aria-pressed", "false");
+      }
+      return;
+    }
+
+    const showPreview = mode === "preview";
+    if (previewBtn) {
+      previewBtn.classList.toggle("on", showPreview);
+      previewBtn.setAttribute("aria-pressed", showPreview ? "true" : "false");
+    }
+    if (editBtn) {
+      editBtn.classList.toggle("on", !showPreview);
+      editBtn.setAttribute("aria-pressed", !showPreview ? "true" : "false");
+    }
+    if (showPreview) {
+      render();
+      host.hidden = true;
+      previewEl.hidden = false;
+    } else {
+      previewEl.hidden = true;
+      host.hidden = false;
+      view.requestMeasure();
+      if (focusEditor) view.focus();
+    }
+  };
+
+  if (previewBtn) {
+    previewBtn.addEventListener("click", () => {
+      if (mode === "preview") return;
+      mode = "preview";
+      apply();
+    });
+  }
+  if (editBtn) {
+    editBtn.addEventListener("click", () => {
+      if (mode === "edit") return;
+      mode = "edit";
+      apply({ focusEditor: true });
+    });
+  }
+
+  apply();
+  return {
+    isPreview: () => !suppressed && isMD() && mode === "preview",
+    refresh: () => apply(),
+    setSuppressed: (flag) => {
+      suppressed = Boolean(flag);
+      apply();
+    },
+  };
+}
+
 function enhance(textarea) {
   const form = textarea.form;
   const language = new Compartment();
@@ -529,6 +628,7 @@ function enhance(textarea) {
   // not from a decoding of it.
   let uploadedSource = null;
   let reopen = null;
+  let refreshMarkdown = null;
   const offerEncodings = (open) => {
     if (!encodingSelect) return;
     encodingSelect.hidden = !open;
@@ -544,6 +644,7 @@ function enhance(textarea) {
         uploads.showText(chosen.file, message("msgEncodingGuess", {
           encoding: encodingSelect.options[encodingSelect.selectedIndex].textContent,
         }));
+        if (refreshMarkdown) refreshMarkdown();
       } catch (error) {
         encodingSelect.dataset.valid = "false";
         uploads.setStatus(message("msgEditorFileReopenFailed", { name: chosen.file.name, encoding: encodingSelect.value }));
@@ -620,7 +721,16 @@ function enhance(textarea) {
   // the stylesheet means a thrown constructor leaves a working textarea behind.
   textarea.classList.add("cm-source");
   configureLanguage();
-  if (textarea.autofocus) view.focus();
+  const isExisting = Boolean(textarea.dataset.rawUrl) || Boolean(form && form.hasAttribute("data-sealed-form"));
+  const md = setupMarkdownPreview({
+    textarea,
+    host,
+    view,
+    filenameInput,
+    defaultMode: isExisting ? "preview" : "edit",
+  });
+  refreshMarkdown = md.refresh;
+  if (textarea.autofocus && !md.isPreview()) view.focus();
 
   if (form) {
     // The editor reports its own edits through markContentForSave; this covers
@@ -682,7 +792,10 @@ function enhance(textarea) {
     // The filename decides the type, and on a new resource it is typed after
     // the content just as often as before it.
     if (filenameInput) {
-      filenameInput.addEventListener("input", configureLanguage);
+      filenameInput.addEventListener("input", () => {
+        configureLanguage();
+        md.refresh();
+      });
       if (!form.contains(filenameInput)) filenameInput.addEventListener("input", markDirty);
     }
 
@@ -722,6 +835,7 @@ function enhance(textarea) {
           uploadedSource = null;
           offerEncodings(false);
           setUploadStatus("");
+          md.setSuppressed(false);
           return;
         }
 
@@ -738,12 +852,14 @@ function enhance(textarea) {
         if (oversize) {
           editorDirty = false;
           documentEdited = false;
+          md.setSuppressed(kind !== "text" && kind !== "unknown");
           return;
         }
 
         if (kind !== "text" && kind !== "unknown") {
           editorDirty = false;
           documentEdited = false;
+          md.setSuppressed(true);
           return;
         }
 
@@ -755,6 +871,7 @@ function enhance(textarea) {
           editorDirty = false;
           documentEdited = false;
           uploads.showFile(file, message("msgEditorFileFailed", { name: file.name }));
+          md.setSuppressed(true);
           console.error("editor: cannot read uploaded file", error);
           return;
         }
@@ -773,8 +890,10 @@ function enhance(textarea) {
             // person's, from the same list a guess would come from.
             offerEncodings(true);
             uploads.showText(file, message("msgEncodingChoose", { name: file.name }));
+            md.setSuppressed(false);
           } else {
             uploads.showFile(file);
+            md.setSuppressed(true);
           }
           return;
         }
@@ -786,6 +905,7 @@ function enhance(textarea) {
           if (guessedEncoding(encoding)) {
             offerEncodings(true);
             uploads.showText(file, message("msgEncodingGuess", { encoding: encodingLabel ? encodingLabel.textContent : encoding }));
+            md.setSuppressed(false);
             return;
           }
           offerEncodings(false);
@@ -796,13 +916,16 @@ function enhance(textarea) {
           if (encodingSelect) encodingSelect.dataset.valid = "false";
           if (kind === "text") {
             uploads.showText(file, message("msgEditorFileReopenFailed", { name: file.name, encoding }));
+            md.setSuppressed(false);
           } else {
             uploads.showFile(file);
+            md.setSuppressed(true);
           }
           return;
         }
 
         uploads.showText(file);
+        md.setSuppressed(false);
       });
     }
   }
@@ -818,7 +941,7 @@ function preview(textarea) {
   host.className = "cm-host";
   textarea.parentNode.insertBefore(host, textarea.nextSibling);
 
-  new EditorView({
+  const view = new EditorView({
     parent: host,
     state: EditorState.create({
       doc: textarea.value,
@@ -849,6 +972,13 @@ function preview(textarea) {
   });
 
   textarea.classList.add("cm-source");
+  setupMarkdownPreview({
+    textarea,
+    host,
+    view,
+    filenameInput: null,
+    defaultMode: "preview",
+  });
 }
 
 for (const textarea of document.querySelectorAll("textarea[data-editor]")) {

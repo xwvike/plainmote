@@ -4,7 +4,10 @@
   {{template "htmlhead" .}}
   <title>v{{.Viewed.Number}} · {{template "resource-title-text" .}} · PlainMote</title>
 </head>
-<body{{if .ModalMode}} class="is-modal modal-{{.ModalMode}}" data-modal-mode="{{.ModalMode}}"{{end}}>
+<body{{if .ModalMode}} class="is-modal modal-{{.ModalMode}}" data-modal-mode="{{.ModalMode}}"{{end}}
+      data-msg-md-empty="{{tr .Locale "md_empty"}}"
+      data-msg-copy="{{tr .Locale "copy"}}"
+      data-msg-copied="{{tr .Locale "copied"}}">
   {{if not .ModalMode}}{{template "topbar" .}}{{end}}
   {{template "sealed-page" .}}
   {{$base := printf "/resources/%s/versions" .Resource.ID}}
@@ -59,6 +62,10 @@
         <span class="sec">v{{.Viewed.Number}} · {{formatMinute .Viewed.SavedAt}}</span>
         <span class="tag">{{tr .Locale "read_only"}}</span>
         <span class="sp">
+          <div class="mbar-tabs md-switch" data-md-mode role="group" aria-label="{{tr .Locale "md_preview"}}" hidden>
+            <button type="button" data-md-view="preview" aria-pressed="false">{{tr .Locale "md_preview"}}</button>
+            <button type="button" data-md-view="edit" aria-pressed="false">{{tr .Locale "md_source"}}</button>
+          </div>
           {{if .ViewedText}}<span class="tags">{{range .TextEncodings}}{{if eq .Value $.ContentEncoding}}<span class="tag">{{.Label}}</span>{{end}}{{end}}<span class="tag">{{if eq .ContentEOL "crlf"}}CRLF{{else}}LF{{end}}</span></span>{{end}}
           <em class="content-meta">{{bytesText .Viewed.ContentSize}}</em>
           <span class="vnav">

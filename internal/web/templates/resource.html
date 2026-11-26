@@ -14,7 +14,10 @@
       data-msg-remove-file="{{tr .Locale "remove_file"}}"
       data-msg-request-failed="{{tr .Locale "request_unconfirmed"}}"
       data-msg-uploading="{{tr .Locale "uploading"}}"
-      data-msg-saving="{{tr .Locale "saving"}}">
+      data-msg-saving="{{tr .Locale "saving"}}"
+      data-msg-md-empty="{{tr .Locale "md_empty"}}"
+      data-msg-copy="{{tr .Locale "copy"}}"
+      data-msg-copied="{{tr .Locale "copied"}}">
   {{if eq .ModalMode "share"}}
   {{/* Dedicated Share & Activity Modal: switch seamlessly between Share Links and Access Logs. */}}
   <header class="mbar">
@@ -66,6 +69,10 @@
       {{if .Resource.Sealed}}<span class="tag enc">{{tr .Locale "encrypted"}}</span>{{end}}
     </div>
     <div class="mbar-right">
+      <div class="mbar-tabs md-switch" data-md-mode role="group" aria-label="{{tr .Locale "md_preview"}}" hidden>
+        <button type="button" data-md-view="preview" aria-pressed="false">{{tr .Locale "md_preview"}}</button>
+        <button type="button" data-md-view="edit" aria-pressed="false">{{if and (not .IsNew) .Resource.QuickShare}}{{tr .Locale "md_source"}}{{else}}{{tr .Locale "md_edit"}}{{end}}</button>
+      </div>
       {{if and .HasKeyring (not (or .Resource.QuickShare .Resource.TakenDown))}}{{template "seal-switch" .}}{{end}}
       <button type="button" class="mbar-close" data-modal-close aria-label="{{tr .Locale "close"}}">&times;</button>
     </div>
@@ -171,6 +178,10 @@
             </div>
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             <span class="sp">
+              <div class="mbar-tabs md-switch" data-md-mode role="group" aria-label="{{tr .Locale "md_preview"}}" hidden>
+                <button type="button" data-md-view="preview" aria-pressed="false">{{tr .Locale "md_preview"}}</button>
+                <button type="button" data-md-view="edit" aria-pressed="false">{{tr .Locale "md_edit"}}</button>
+              </div>
               <span class="tags" data-text-controls{{if not (or .Resource.Editable .IsNew)}} hidden{{end}}>
                 <span class="tag" data-encoding-label>{{range .TextEncodings}}{{if eq .Value $.ContentEncoding}}{{.Label}}{{end}}{{end}}</span>
                 <span class="tag" data-eol-label>{{if eq .ContentEOL "crlf"}}CRLF{{else}}LF{{end}}</span>
@@ -501,7 +512,15 @@
       <div class="pt">
         <span class="sec">{{tr .Locale "content"}}</span>
         <span class="tag">{{tr .Locale "read_only"}}</span>
-        <span class="sp"><em class="content-meta">{{if not .Resource.Encrypted}}{{.Resource.ContentType}} · {{end}}{{bytesText .Resource.ContentSize}}</em></span>
+        <span class="sp">
+          {{if ne .ModalMode "edit"}}
+          <div class="mbar-tabs md-switch" data-md-mode role="group" aria-label="{{tr .Locale "md_preview"}}" hidden>
+            <button type="button" data-md-view="preview" aria-pressed="false">{{tr .Locale "md_preview"}}</button>
+            <button type="button" data-md-view="edit" aria-pressed="false">{{tr .Locale "md_source"}}</button>
+          </div>
+          {{end}}
+          <em class="content-meta">{{if not .Resource.Encrypted}}{{.Resource.ContentType}} · {{end}}{{bytesText .Resource.ContentSize}}</em>
+        </span>
       </div>
       <div class="pb">
         {{if .Resource.Encrypted}}
@@ -570,6 +589,12 @@
             </div>{{end}}
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             <span class="sp">
+              {{if ne .ModalMode "edit"}}
+              <div class="mbar-tabs md-switch" data-md-mode role="group" aria-label="{{tr .Locale "md_preview"}}" hidden>
+                <button type="button" data-md-view="preview" aria-pressed="false">{{tr .Locale "md_preview"}}</button>
+                <button type="button" data-md-view="edit" aria-pressed="false">{{if .Resource.QuickShare}}{{tr .Locale "md_source"}}{{else}}{{tr .Locale "md_edit"}}{{end}}</button>
+              </div>
+              {{end}}
               {{/* The editor's own controls, as on a plain resource: what a
                    chosen file was read as, and a choice of another reading.
                    Saved, it is UTF-8. */}}
