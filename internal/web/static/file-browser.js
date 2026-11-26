@@ -772,9 +772,10 @@ function observeLoadMore() {
   loadMoreObserver?.disconnect();
   const wrap = document.querySelector("[data-load-more]");
   if (!wrap || !("IntersectionObserver" in window)) return;
+  const scrollRoot = document.querySelector("[data-fb-scroll]") || null;
   loadMoreObserver = new IntersectionObserver((entries) => {
     if (entries.some((e) => e.isIntersecting)) loadNextBatch(wrap);
-  }, { rootMargin: "240px" });
+  }, { root: scrollRoot, rootMargin: "200px" });
   loadMoreObserver.observe(wrap);
 }
 
@@ -1043,7 +1044,7 @@ window.addEventListener("popstate", () => {
   }
 });
 
-window.addEventListener("scroll", closeMenu, { passive: true });
+document.addEventListener("scroll", closeMenu, { capture: true, passive: true });
 window.addEventListener("resize", closeMenu, { passive: true });
 
 document.addEventListener("plainmote:resource-results", () => {

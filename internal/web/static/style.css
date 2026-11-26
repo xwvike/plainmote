@@ -906,10 +906,20 @@ a[aria-busy="true"], form[aria-busy="true"] { cursor: progress; }
 .res-list .st { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .res-list .num { white-space: nowrap; }
 
-/* Finder-style file browser inside the resource list panel. */
-.fb-panel { overflow: visible; }
-.fb-panel > .fb-bar { border-radius: var(--r-lg) var(--r-lg) 0 0; }
-.fb-panel > .pf { border-radius: 0 0 var(--r-lg) var(--r-lg); }
+/* Finder-style file browser inside the resource list panel (fixed viewport-bounded window with internal scroll). */
+.fb-panel {
+  display: flex; flex-direction: column;
+  height: clamp(420px, calc(100dvh - 208px), 820px);
+  overflow: hidden;
+}
+.fb-panel > .fb-bar { flex: none; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.fb-panel > .pf { flex: none; border-radius: 0 0 var(--r-lg) var(--r-lg); }
+.fb-scroll {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column;
+}
+.fb-scroll > .empty { margin: auto; }
 .fb-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--head);
@@ -1055,8 +1065,9 @@ a.fb-crumb-item:hover { background: var(--zebra); color: var(--ink); text-decora
 @media (hover: none) { .fb-more { opacity: .72; } }
 
 /* Finder-style 4-column List View: Name · Size · Kind · Date added. */
-.fb-list-wrap { max-width: 100%; overflow-x: auto; user-select: none; }
+.fb-list-wrap { max-width: 100%; user-select: none; }
 table.fb-list { width: 100%; min-width: 0; border-collapse: collapse; }
+table.fb-list thead th { position: sticky; top: 0; z-index: 2; }
 table.fb-list .col-size { width: 92px; }
 table.fb-list .col-kind { width: 138px; }
 table.fb-list .col-date { width: 112px; }
@@ -1383,6 +1394,7 @@ body.fb-dragging * { cursor: grabbing !important; }
 /* Finder bottom status bar & seamless load-more trigger. */
 .fb-more-wrap { display: flex; justify-content: center; padding: 6px 16px 14px; }
 .fb-foot {
+  flex: none;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 7px 14px 7px 16px; border-top: 1px solid var(--line); background: var(--head);
   border-radius: 0 0 var(--r-lg) var(--r-lg);
@@ -1399,6 +1411,7 @@ body.fb-dragging * { cursor: grabbing !important; }
 .fb-usage .meter-bar.mini { width: 84px; height: 5px; }
 
 @media (max-width: 680px) {
+  .fb-panel { height: clamp(340px, calc(100dvh - 230px), 640px); }
   .fb-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); padding: 10px 8px 12px; gap: 4px 2px; }
   .fb-tile-link { padding: 7px 4px 6px; }
   table.fb-list .col-kind { display: none; }

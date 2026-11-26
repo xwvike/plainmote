@@ -337,6 +337,7 @@
       </div>
     </div>
 
+    <div class="fb-scroll" data-fb-scroll>
     {{if or .Folders .Resources}}
       {{if eq .ViewMode "list"}}
       {{/* Finder-style List View: Name · Size · Kind · Date Added */}}
@@ -473,6 +474,7 @@
     {{else}}
     <p class="empty">{{if .Pager.Query}}{{tr .Locale "no_matching_resources"}}<span class="mono">{{.Pager.Query}}</span>{{else if or .Pager.Tags .Pager.Kind}}{{tr .Locale "no_filtered_resources"}}{{else if .CurrentFolderID}}{{tr .Locale "folder_empty"}}{{else}}{{tr .Locale "no_resources"}}{{end}}</p>
     {{end}}
+    </div>
 
     {{/* Finder-style bottom status bar: item count + selection on left, storage meter on right. */}}
     <div class="fb-foot">
