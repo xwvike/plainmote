@@ -300,7 +300,7 @@ SELECT `+resourceColumns+`,
           AND (l.max_uses = 0 OR l.used_count < l.max_uses))
 FROM resources r
 WHERE `+resourceFilterSQL+folderClause+`
-ORDER BY r.updated_at DESC, r.id
+ORDER BY r.created_at DESC, r.id
 LIMIT $%d OFFSET $%d
 `, nowIdx, limitIdx, offsetIdx), listArgs...)
 	if err != nil {

@@ -11,7 +11,11 @@ const dlgNew = document.getElementById("dlg-folder-new");
 const dlgRename = document.getElementById("dlg-folder-rename");
 const dlgMove = document.getElementById("dlg-move");
 const dlgDelete = document.getElementById("dlg-folder-delete");
+const dlgResDelete = document.getElementById("dlg-resource-delete");
 const dlgInfo = document.getElementById("dlg-info");
+const dlgTags = document.getElementById("dlg-tags");
+const dlgSheet = document.getElementById("dlg-sheet");
+const sheetFrame = document.getElementById("fb-sheet-frame");
 const errBanner = document.getElementById("fb-error");
 
 const isCoarsePointer = () => window.matchMedia?.("(pointer: coarse)").matches;
@@ -22,6 +26,10 @@ let suppressNextClick = false;
 let dragState = null;
 let loadMoreObserver = null;
 let loadingMore = false;
+let sheetDirty = false;
+let sheetResourceId = "";
+let activeTagsItem = null;
+let tagsDirty = false;
 
 function resultsRoot() {
   return document.getElementById("resource-results");
@@ -51,6 +59,9 @@ function itemInfo(el) {
     name: sealedLabel || el.dataset.itemName || "",
     parent: el.dataset.itemParent || "",
     href: el.dataset.itemHref || el.querySelector("a")?.href || "",
+    sealed: el.dataset.itemSealed === "1",
+    quick: el.dataset.itemQuick === "1",
+    shares: Number(el.dataset.itemShares || "0"),
   };
 }
 
@@ -77,16 +88,64 @@ function syncReturnInputs() {
   }
 }
 
+function openSheet(url, variant, resourceId = "") {
+  if (!dlgSheet || !sheetFrame) {
+    location.assign(url);
+    return;
+  }
+  closeMenu();
+  sheetDirty = false;
+  sheetResourceId = resourceId || "";
+  dlgSheet.classList.remove("is-editor", "is-panel", "is-wide");
+  dlgSheet.classList.add(variant);
+  sheetFrame.src = url;
+  if (!dlgSheet.open) dlgSheet.showModal();
+}
+
+function selectById(id) {
+  if (!id) return;
+  const target = document.querySelector(`[data-fb-item][data-item-id="${CSS.escape(id)}"]`);
+  if (target) {
+    setSelected(target);
+    target.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function tryCloseSheet(force = false) {
+  if (!dlgSheet?.open) return;
+  if (!force) {
+    try {
+      const hasUnsaved = Boolean(sheetFrame?.contentDocument?.querySelector("[data-unsaved].show"));
+      if (hasUnsaved && !window.confirm(dlgSheet.dataset.msgUnsaved || "Discard unsaved changes?")) {
+        return;
+      }
+    } catch {
+      // Ignore if iframe is still navigating.
+    }
+  }
+  const shouldRefresh = sheetDirty;
+  const reselectId = sheetResourceId;
+  sheetDirty = false;
+  sheetResourceId = "";
+  dlgSheet.close();
+  sheetFrame.src = "about:blank";
+  if (shouldRefresh) {
+    navigateFolder(location.href, false, reselectId);
+  } else if (reselectId) {
+    selectById(reselectId);
+  }
+}
+
 function openItem(info) {
   if (!info?.href) return;
   if (info.kind === "folder") {
     navigateFolder(info.href);
   } else {
-    location.assign(info.href);
+    openSheet(`/resources/${encodeURIComponent(info.id)}?modal=edit`, "is-editor", info.id);
   }
 }
 
-async function navigateFolder(href, push = true) {
+async function navigateFolder(href, push = true, selectId = "") {
   const results = resultsRoot();
   if (!results) {
     location.assign(href);
@@ -142,6 +201,7 @@ async function navigateFolder(href, push = true) {
     syncReturnInputs();
     observeLoadMore();
     document.dispatchEvent(new Event("plainmote:resource-results"));
+    if (selectId) selectById(selectId);
   } catch {
     location.assign(href);
   }
@@ -157,14 +217,20 @@ function openMenuAt(info, x, y) {
   if (!menu || !info) return;
   activeMenuItem = info;
 
-  const renameBtn = menu.querySelector('[data-fb-act="rename"]');
-  const deleteBtn = menu.querySelector('[data-fb-act="delete"]');
-  if (renameBtn) renameBtn.hidden = info.kind !== "folder";
-  if (deleteBtn) deleteBtn.hidden = info.kind !== "folder";
+  const isFolder = info.kind === "folder";
+  const setHidden = (act, hide) => {
+    const btn = menu.querySelector(`[data-fb-act="${act}"]`);
+    if (btn) btn.hidden = hide;
+  };
+  setHidden("share", isFolder);
+  setHidden("tags", isFolder);
+  setHidden("versions", isFolder || info.quick);
+  setHidden("rename", !isFolder && (info.sealed || info.quick));
+  setHidden("delete", false);
 
   menu.hidden = false;
-  const mw = menu.offsetWidth || 156;
-  const mh = menu.offsetHeight || 128;
+  const mw = menu.offsetWidth || 164;
+  const mh = menu.offsetHeight || 180;
   const left = Math.max(8, Math.min(x, window.innerWidth - mw - 8));
   const top = y + mh + 8 > window.innerHeight ? Math.max(8, y - mh - 4) : Math.max(8, y);
   menu.style.left = `${left}px`;
@@ -183,12 +249,135 @@ function openNewFolder() {
 function openRename(item) {
   if (!dlgRename) return;
   syncReturnInputs();
-  dlgRename.querySelector('input[name="folder_id"]').value = item.id;
-  const input = dlgRename.querySelector('input[name="name"]');
-  if (input) input.value = item.name;
+  const form = dlgRename.querySelector("form");
+  const isFolder = item.kind === "folder";
+  form.action = isFolder ? "/resources/folders" : "/resources/rename";
+  form.querySelector('input[name="folder_id"]').value = isFolder ? item.id : "";
+  form.querySelector('input[name="resource_id"]').value = isFolder ? "" : item.id;
+  dlgRename.querySelector("[data-rename-title]").textContent = isFolder ? dlgRename.dataset.titleFolder : dlgRename.dataset.titleFile;
+  dlgRename.querySelector("[data-rename-label]").textContent = isFolder ? dlgRename.dataset.labelFolder : dlgRename.dataset.labelFile;
+  const input = form.querySelector('input[name="name"], input[name="filename"]');
+  if (input) {
+    input.name = isFolder ? "name" : "filename";
+    input.value = item.el?.dataset.infoFilename || item.name;
+  }
   dlgRename.showModal();
   input?.focus();
   input?.select();
+}
+
+function openDeleteResource(item) {
+  if (!dlgResDelete) return;
+  syncReturnInputs();
+  const form = dlgResDelete.querySelector("form");
+  form.action = `/resources/${encodeURIComponent(item.id)}`;
+  const warn = dlgResDelete.querySelector("[data-delete-file-warn]");
+  if (warn) {
+    warn.textContent = item.shares > 0 ? dlgResDelete.dataset.warnOne : dlgResDelete.dataset.warnNone;
+  }
+  dlgResDelete.showModal();
+}
+
+let activeTagsList = [];
+
+function renderTagPills(tags) {
+  activeTagsList = tags;
+  const list = dlgTags?.querySelector("[data-tags-list]");
+  const emptyEl = dlgTags?.querySelector("[data-tags-empty]");
+  if (list) {
+    list.replaceChildren();
+    for (const tag of tags) {
+      const chip = document.createElement("span");
+      chip.className = "lbl";
+      const text = document.createElement("span");
+      text.textContent = tag;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.dataset.tagRemove = tag;
+      remove.setAttribute("aria-label", tag);
+      chip.append(text, remove);
+      list.append(chip);
+    }
+  }
+  if (emptyEl) emptyEl.hidden = tags.length > 0;
+  syncTagSuggestions();
+}
+
+function syncTagSuggestions() {
+  const wrap = dlgTags?.querySelector("[data-tags-suggest]");
+  if (!wrap) return;
+  const active = new Set(activeTagsList);
+  const query = (dlgTags.querySelector('input[name="add"]')?.value || "").trim().toLowerCase();
+  // Ensure any newly created tag also appears in the quick-pick pool.
+  for (const tag of activeTagsList) {
+    if (!wrap.querySelector(`[data-tag-pick="${CSS.escape(tag)}"]`)) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "fb-tag-pick";
+      btn.dataset.tagPick = tag;
+      btn.textContent = tag;
+      wrap.append(btn);
+    }
+  }
+  let visibleCount = 0;
+  for (const btn of wrap.querySelectorAll("[data-tag-pick]")) {
+    const name = btn.dataset.tagPick || "";
+    const isOn = active.has(name);
+    btn.classList.toggle("on", isOn);
+    btn.setAttribute("aria-pressed", isOn ? "true" : "false");
+    const match = !query || name.toLowerCase().includes(query);
+    btn.hidden = !match;
+    if (match) visibleCount += 1;
+  }
+  wrap.hidden = visibleCount === 0;
+}
+
+function openTags(item) {
+  if (!dlgTags || !item) return;
+  activeTagsItem = item;
+  tagsDirty = false;
+  const el = item.el || document.querySelector(`[data-fb-item][data-item-id="${CSS.escape(item.id)}"]`);
+  const fileEl = dlgTags.querySelector("[data-tags-file]");
+  if (fileEl) fileEl.textContent = item.name ? `· ${item.name}` : "";
+  const input = dlgTags.querySelector('input[name="add"]');
+  if (input) input.value = "";
+  const tags = (el?.dataset.infoTags || "").split("\n").map((t) => t.trim()).filter(Boolean);
+  renderTagPills(tags);
+  const errEl = dlgTags.querySelector("[data-tags-error]");
+  if (errEl) { errEl.textContent = ""; errEl.hidden = true; }
+  dlgTags.showModal();
+  input?.focus();
+}
+
+async function mutateTag(params) {
+  if (!activeTagsItem || !dlgTags) return;
+  const errEl = dlgTags.querySelector("[data-tags-error]");
+  if (errEl) { errEl.textContent = ""; errEl.hidden = true; }
+  const body = new URLSearchParams(params);
+  body.set("csrf", csrfToken());
+  try {
+    const response = await fetch(`/resources/${encodeURIComponent(activeTagsItem.id)}/tags`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (errEl) { errEl.textContent = data.message || "Error"; errEl.hidden = false; }
+      return;
+    }
+    const tags = Array.isArray(data.tags) ? data.tags : [];
+    renderTagPills(tags);
+    const el = document.querySelector(`[data-fb-item][data-item-id="${CSS.escape(activeTagsItem.id)}"]`);
+    if (el) el.dataset.infoTags = tags.join("\n");
+    tagsDirty = true;
+    const input = dlgTags.querySelector('input[name="add"]');
+    if (input && params.add) { input.value = ""; input.focus(); }
+  } catch {
+    if (errEl) { errEl.textContent = "Network error"; errEl.hidden = false; }
+  }
 }
 
 function openMove(item) {
@@ -302,7 +491,7 @@ function openInfo(item) {
   };
 
   setRow("kind", kindText);
-  setRow("filename", !isFolder ? ds.infoFilename : "");
+  setRow("filename", !isFolder && ds.infoFilename && ds.infoFilename !== item.name ? ds.infoFilename : "");
   const bytesNum = Number(ds.infoBytes);
   const sizeDetail = !isFolder && ds.infoSize
     ? (Number.isFinite(bytesNum) && bytesNum >= 1024 ? `${ds.infoSize} (${bytesNum.toLocaleString()} B)` : ds.infoSize)
@@ -651,7 +840,34 @@ document.addEventListener("click", (event) => {
       closeMenu();
     } else {
       const rect = moreBtn.getBoundingClientRect();
-      openMenuAt(info, rect.right - 156, rect.bottom + 4);
+      openMenuAt(info, rect.right - 136, rect.bottom + 4);
+    }
+    return;
+  }
+
+  const newResLink = event.target.closest("#new-resource-link");
+  if (newResLink && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+    event.preventDefault();
+    const u = new URL(newResLink.href, location.href);
+    u.searchParams.set("modal", "edit");
+    openSheet(u.pathname + u.search, "is-editor");
+    return;
+  }
+
+  const tagRemoveBtn = event.target.closest("[data-tag-remove]");
+  if (tagRemoveBtn && dlgTags?.open) {
+    event.preventDefault();
+    mutateTag({ remove: tagRemoveBtn.dataset.tagRemove });
+    return;
+  }
+
+  const tagPickBtn = event.target.closest("[data-tag-pick]");
+  if (tagPickBtn && dlgTags?.open) {
+    event.preventDefault();
+    const name = tagPickBtn.dataset.tagPick;
+    if (name) {
+      if (activeTagsList.includes(name)) mutateTag({ remove: name });
+      else mutateTag({ add: name });
     }
     return;
   }
@@ -662,18 +878,33 @@ document.addEventListener("click", (event) => {
     closeMenu();
     const act = actBtn.dataset.fbAct;
     if (act === "open") openItem(item);
+    else if (act === "share") openSheet(`/resources/${encodeURIComponent(item.id)}?modal=share`, "is-panel", item.id);
+    else if (act === "tags") openTags(item);
+    else if (act === "versions") openSheet(`/resources/${encodeURIComponent(item.id)}/versions?modal=versions`, "is-wide", item.id);
     else if (act === "info") openInfo(item);
     else if (act === "rename") openRename(item);
     else if (act === "move") openMove(item);
-    else if (act === "delete") openDeleteFolder(item);
+    else if (act === "delete") {
+      if (item.kind === "folder") openDeleteFolder(item);
+      else openDeleteResource(item);
+    }
     return;
   }
 
   const infoOpen = event.target.closest("[data-info-open]");
-  if (infoOpen && infoOpen.dataset.infoKind === "folder" && event.button === 0 && !event.metaKey && !event.ctrlKey) {
+  if (infoOpen && event.button === 0 && !event.metaKey && !event.ctrlKey) {
     event.preventDefault();
+    const kind = infoOpen.dataset.infoKind;
+    const href = infoOpen.href;
     dlgInfo?.close();
-    navigateFolder(infoOpen.href, true);
+    if (kind === "folder") {
+      navigateFolder(href, true);
+    } else {
+      const u = new URL(href, location.href);
+      u.searchParams.set("modal", "edit");
+      const idMatch = /^\/resources\/([0-9a-f-]{36})$/i.exec(u.pathname);
+      openSheet(u.pathname + u.search, "is-editor", idMatch ? idMatch[1] : "");
+    }
     return;
   }
 
@@ -689,9 +920,9 @@ document.addEventListener("click", (event) => {
     }
     if (isCoarsePointer()) {
       const info = itemInfo(itemEl);
-      if (info?.kind === "folder") {
+      if (info) {
         event.preventDefault();
-        navigateFolder(info.href, true);
+        openItem(info);
       }
       return;
     }
@@ -725,11 +956,47 @@ document.addEventListener("contextmenu", (event) => {
 });
 
 // Close dialogs when clicking their backdrop.
-for (const dlg of [dlgNew, dlgRename, dlgMove, dlgDelete, dlgInfo]) {
+for (const dlg of [dlgNew, dlgRename, dlgMove, dlgDelete, dlgResDelete, dlgInfo, dlgTags]) {
   dlg?.addEventListener("click", (event) => {
     if (event.target === dlg) dlg.close();
   });
 }
+
+dlgSheet?.addEventListener("click", (event) => {
+  if (event.target === dlgSheet) tryCloseSheet(false);
+});
+dlgSheet?.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  tryCloseSheet(false);
+});
+
+dlgTags?.querySelector("[data-tags-add-form]")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = event.currentTarget.querySelector('input[name="add"]');
+  const tag = input?.value.trim();
+  if (tag) mutateTag({ add: tag });
+});
+dlgTags?.querySelector('input[name="add"]')?.addEventListener("input", syncTagSuggestions);
+dlgTags?.addEventListener("close", () => {
+  if (tagsDirty) {
+    tagsDirty = false;
+    location.reload();
+  }
+});
+
+window.addEventListener("message", (event) => {
+  if (event.origin !== location.origin || !event.data || typeof event.data !== "object") return;
+  if (event.data.type === "plainmote:modal-saved") {
+    sheetDirty = true;
+    if (event.data.resourceId) sheetResourceId = event.data.resourceId;
+    tryCloseSheet(true);
+  } else if (event.data.type === "plainmote:modal-dirty") {
+    sheetDirty = true;
+    if (event.data.resourceId) sheetResourceId = event.data.resourceId;
+  } else if (event.data.type === "plainmote:modal-close") {
+    tryCloseSheet(false);
+  }
+});
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {

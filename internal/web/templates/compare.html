@@ -4,11 +4,25 @@
   {{template "htmlhead" .}}
   <title>v{{.DiffFrom.Number}} → v{{.DiffTo.Number}} · {{template "resource-title-text" .}} · PlainMote</title>
 </head>
-<body>
-  {{template "topbar" .}}
+<body{{if .ModalMode}} class="is-modal modal-{{.ModalMode}}" data-modal-mode="{{.ModalMode}}"{{end}}>
+  {{if not .ModalMode}}{{template "topbar" .}}{{end}}
   {{template "sealed-page" .}}
   {{$base := printf "/resources/%s/versions" .Resource.ID}}
-  <main class="page">
+  {{if .ModalMode}}
+  <header class="mbar">
+    <div class="mbar-title">
+      <a class="txt" href="{{$base}}?modal={{.ModalMode}}">&lsaquo; {{tr .Locale "history"}}</a>
+      <b>{{tr .Locale "compare"}}</b>
+      <span class="mut mono">v{{.DiffFrom.Number}} → v{{.DiffTo.Number}}</span>
+    </div>
+    <div class="mbar-right">
+      {{if ne .DiffFrom.Number .Resource.Version}}<a class="btn sm" href="{{$base}}/{{.DiffFrom.Number}}?restore=1&amp;modal={{.ModalMode}}" data-dialog>{{printf (tr .Locale "restore_title") .DiffFrom.Number}}</a>{{end}}
+      <button type="button" class="mbar-close" data-modal-close aria-label="{{tr .Locale "close"}}">&times;</button>
+    </div>
+  </header>
+  {{end}}
+  <main class="page{{if .ModalMode}} modal-page{{end}}">
+    {{if not .ModalMode}}
     <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{template "resource-title" .}}</a><span>/</span><a href="{{$base}}">{{tr .Locale "history"}}</a><span>/</span><span>{{tr .Locale "compare"}}</span></div>
     <div class="ph">
       <h1>{{tr .Locale "compare"}}</h1>
@@ -17,8 +31,10 @@
         {{if ne .DiffFrom.Number .Resource.Version}}<a class="btn" href="{{$base}}/{{.DiffFrom.Number}}?restore=1" data-dialog>{{printf (tr .Locale "restore_title") .DiffFrom.Number}}</a>{{end}}
       </span>
     </div>
+    {{end}}
     {{/* A plain GET form: any two versions, with or without scripts. */}}
     <form class="filters cmpbar" method="get" action="{{$base}}/compare">
+      {{if .ModalMode}}<input type="hidden" name="modal" value="{{.ModalMode}}">{{end}}
       <label class="pick"><span>{{tr .Locale "compare_from"}}</span>
         <select name="from">{{range .DiffChoices}}<option value="{{.}}"{{if eq . $.DiffFrom.Number}} selected{{end}}>v{{.}}{{if eq . $.Resource.Version}} · {{tr $.Locale "version_current"}}{{end}}</option>{{end}}</select>
       </label>
@@ -36,7 +52,7 @@
           {{if .SealedCompare}}<span class="stat" data-sealed-stat hidden><span class="a"></span> <span class="d"></span></span>
           {{else if not .DiffNote}}<span class="stat"><span class="a">+{{.Diff.Added}}</span> <span class="d">−{{.Diff.Removed}}</span></span>{{end}}
           <em class="content-meta">{{bytesText .DiffFrom.Size}} → {{bytesText .DiffTo.Size}}</em>
-          {{if and (not .DiffNote) (not .DiffFull)}}<a class="txt"{{if .SealedCompare}} data-sealed-full hidden{{end}} href="{{$base}}/compare?from={{.DiffFrom.Number}}&amp;to={{.DiffTo.Number}}&amp;full=1">{{tr .Locale "compare_show_all"}}</a>{{end}}
+          {{if and (not .DiffNote) (not .DiffFull)}}<a class="txt"{{if .SealedCompare}} data-sealed-full hidden{{end}} href="{{$base}}/compare?from={{.DiffFrom.Number}}&amp;to={{.DiffTo.Number}}&amp;full=1{{if .ModalMode}}&amp;modal={{.ModalMode}}{{end}}">{{tr .Locale "compare_show_all"}}</a>{{end}}
         </span>
       </div>
       <div class="pb{{if not .DiffNote}} diff-sheet{{end}}">
@@ -85,8 +101,9 @@
       </div>
     </div>
   </main>
-  {{template "footer" .}}
+  {{if not .ModalMode}}{{template "footer" .}}{{end}}
   <script type="module" src="{{asset "parts.js"}}"></script>
   {{if .Resource.Sealed}}<script type="module" src="{{asset "sealed-view.js"}}"></script>{{end}}
+  {{if .ModalMode}}<script type="module" src="{{asset "modal-bridge.js"}}"></script>{{end}}
 </body>
 </html>{{end}}

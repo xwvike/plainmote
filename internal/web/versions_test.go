@@ -206,7 +206,7 @@ func TestCreateAndSaveSayWhatHappened(t *testing.T) {
 		t.Fatalf("create lands on the resource with a notice: %d %q", created.Code, location)
 	}
 	page := client.page(location)
-	for _, want := range []string{"Created “Second”.", `href="/resources/new">Create another`, `href="/resources/">Back to resources`} {
+	for _, want := range []string{"Created “second.conf”.", `href="/resources/new">Create another`, `href="/resources/">Back to resources`} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("the created notice is missing %q", want)
 		}

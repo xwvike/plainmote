@@ -104,6 +104,7 @@ func (a *App) handleVersionList(w http.ResponseWriter, r *http.Request, user Use
 	}
 	data := a.basePage(r, user)
 	data.Error = r.URL.Query().Get("error")
+	data.ModalMode = modalModeFromRequest(r)
 	data.Resource = resource
 	data.HistoryKeep = store.HistoryKeep
 	data.HistoryDays = int(store.HistoryRetention / (24 * time.Hour))
@@ -156,6 +157,7 @@ func (a *App) renderVersion(w http.ResponseWriter, r *http.Request, user User, r
 	}
 	data := a.basePage(r, user)
 	data.Error = pageError
+	data.ModalMode = modalModeFromRequest(r)
 	data.Resource = resource
 	data.Viewed = version
 	// Neighbours among what is kept: older is further down the list, newer
@@ -220,9 +222,10 @@ func (a *App) handleVersionAction(w http.ResponseWriter, r *http.Request, user U
 		writePlainError(w, http.StatusForbidden, "invalid csrf token")
 		return
 	}
+	modalMode := modalModeFromRequest(r)
 	back := func(target string, err error) {
 		text, _ := a.writeErrorText("version action", err)
-		http.Redirect(w, r, target+"?"+url.Values{"error": {text}}.Encode(), http.StatusSeeOther)
+		http.Redirect(w, r, appendModalParam(target+"?"+url.Values{"error": {text}}.Encode(), modalMode), http.StatusSeeOther)
 	}
 	switch r.FormValue("action") {
 	case actionRestore:
@@ -235,6 +238,10 @@ func (a *App) handleVersionAction(w http.ResponseWriter, r *http.Request, user U
 		if result.Trimmed > 0 {
 			values.Set("trimmed", strconv.Itoa(result.Trimmed))
 		}
+		if modalMode != "" {
+			http.Redirect(w, r, appendModalParam(versionsPath(resource.ID)+"?"+values.Encode(), modalMode), http.StatusSeeOther)
+			return
+		}
 		http.Redirect(w, r, "/resources/"+resource.ID+"?"+values.Encode(), http.StatusSeeOther)
 	case actionCopy:
 		name := fmt.Sprintf("%s (v%d)", resourceTitle(requestLanguage(r).Locale, resource), version.Number)
@@ -243,13 +250,17 @@ func (a *App) handleVersionAction(w http.ResponseWriter, r *http.Request, user U
 			back(versionPath(resource.ID, version.Number), err)
 			return
 		}
+		if modalMode != "" {
+			http.Redirect(w, r, appendModalParam("/resources/"+copied.ID+"?created=1", "edit"), http.StatusSeeOther)
+			return
+		}
 		http.Redirect(w, r, "/resources/"+copied.ID, http.StatusSeeOther)
 	case actionDelete:
 		if err := a.db.DeleteVersion(r.Context(), user.ID, resource.ID, version.Number); err != nil {
 			back(versionsPath(resource.ID), err)
 			return
 		}
-		http.Redirect(w, r, versionsPath(resource.ID), http.StatusSeeOther)
+		http.Redirect(w, r, appendModalParam(versionsPath(resource.ID), modalMode), http.StatusSeeOther)
 	default:
 		writePlainError(w, http.StatusBadRequest, "unknown version action")
 	}
@@ -403,6 +414,7 @@ func (a *App) handleCompare(w http.ResponseWriter, r *http.Request, user User, r
 		after, err = a.versionBody(r, user, resource, to)
 		if err == nil {
 			data := a.basePage(r, user)
+			data.ModalMode = modalModeFromRequest(r)
 			data.Resource = resource
 			data.DiffChoices = choices
 			data.DiffFrom, data.DiffTo = before, after

@@ -49,6 +49,10 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 		a.handleMoveResource(w, r, user, sessionID)
 		return
 	}
+	if path == renamePath || path == renamePath+"/" {
+		a.handleRenameResource(w, r, user, sessionID)
+		return
+	}
 	if path == trashPath || path == trashPath+"/" {
 		http.Redirect(w, r, accountTrashPath, http.StatusFound)
 		return
@@ -91,6 +95,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	if r.Method == http.MethodGet {
 		data := a.basePage(r, user)
 		data.IsNew = true
+		data.ModalMode = modalModeFromRequest(r)
 		if folderID := strings.TrimSpace(r.URL.Query().Get("folder")); folderID != "" {
 			if crumbs, err := a.db.FolderBreadcrumbs(r.Context(), user.ID, folderID); err == nil {
 				data.CurrentFolderID = folderID
@@ -111,6 +116,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	}
 	cleanup, parseErr := prepareResourcePost(w, r, a.cfg.MaxContent)
 	defer cleanup()
+	modalMode := modalModeFromRequest(r)
 	if parseErr != nil {
 		text, status := a.writeErrorText("create resource", parseErr)
 		if isOversizeError(parseErr) {
@@ -123,6 +129,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		}
 		data := a.basePageWithError(r, user, text)
 		data.IsNew = true
+		data.ModalMode = modalMode
 		a.renderTemplate(w, r, status, "resource.html", data)
 		return
 	}
@@ -150,7 +157,7 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 			if folderID := strings.TrimSpace(r.FormValue("folder_id")); folderID != "" {
 				_ = a.db.MoveResource(r.Context(), user.ID, resource.ID, folderID)
 			}
-			location := "/resources/" + resource.ID + "?created=1"
+			location := appendModalParam("/resources/"+resource.ID+"?created=1", modalMode)
 			if wantsUploadJSON(r) {
 				a.writeAPI(w, http.StatusCreated, map[string]string{"location": location})
 				return
@@ -172,6 +179,8 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 	}
 	data := a.basePageWithError(r, user, text)
 	data.IsNew = true
+	data.ModalMode = modalMode
+	data.CurrentFolderID = strings.TrimSpace(r.FormValue("folder_id"))
 	data.Resource = Resource{Name: form.Name, Filename: form.Filename, ContentSize: int64(len(form.Content)), ContentEncoding: form.ContentEncoding}
 	data.ContentEncoding = form.ContentEncoding
 	data.ContentEOL = form.ContentEOL
@@ -265,9 +274,15 @@ func prepareResourcePost(w http.ResponseWriter, r *http.Request, maxBytes int64)
 func readResourceForm(r *http.Request, maxBytes int64) (resourceForm, error) {
 	var form resourceForm
 	multipartForm := strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data")
+	filename := strings.TrimSpace(r.FormValue("filename"))
+	name := r.FormValue("name")
+	if r.Form["name"] == nil {
+		// Single-filename UI omits the redundant Name field; unify both.
+		name = filename
+	}
 	form = resourceForm{
-		Name:                r.FormValue("name"),
-		Filename:            strings.TrimSpace(r.FormValue("filename")),
+		Name:                name,
+		Filename:            filename,
 		Content:             []byte(r.FormValue("content")),
 		ContentEncoding:     strings.TrimSpace(r.FormValue("content_encoding")),
 		ContentEOL:          store.NormalizeEOLName(r.FormValue("content_eol")),
@@ -376,7 +391,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 				a.renderResourcePage(w, r, user, resource, text, status, nil, nil)
 				return
 			}
-			http.Redirect(w, r, dashboardPath+"?trashed=1", http.StatusSeeOther)
+			http.Redirect(w, r, folderDashboardURL(strings.TrimSpace(r.FormValue("return_folder")), url.Values{"trashed": {"1"}}), http.StatusSeeOther)
 			return
 		}
 		if r.FormValue("action") == actionKeep {
@@ -389,7 +404,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 				a.renderResourcePage(w, r, user, resource, text, status, nil, nil)
 				return
 			}
-			http.Redirect(w, r, "/resources/"+resourceID+"?kept=1", http.StatusSeeOther)
+			http.Redirect(w, r, appendModalParam("/resources/"+resourceID+"?kept=1", modalModeFromRequest(r)), http.StatusSeeOther)
 			return
 		}
 		// Deleting and keeping are all a quick share takes. The store refuses
@@ -477,7 +492,7 @@ func (a *App) handleResource(w http.ResponseWriter, r *http.Request, user User, 
 		if result.Trimmed > 0 {
 			values.Set("trimmed", strconv.Itoa(result.Trimmed))
 		}
-		location := "/resources/" + resourceID + "?" + values.Encode()
+		location := appendModalParam("/resources/"+resourceID+"?"+values.Encode(), modalModeFromRequest(r))
 		if wantsUploadJSON(r) {
 			a.writeAPI(w, http.StatusOK, map[string]string{"location": location})
 			return
@@ -524,6 +539,7 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	}
 	data := a.basePage(r, user)
 	data.Error = pageError
+	data.ModalMode = modalModeFromRequest(r)
 	if resource.FolderID != "" {
 		if crumbs, crumbErr := a.db.FolderBreadcrumbs(r.Context(), user.ID, resource.FolderID); crumbErr == nil {
 			data.CurrentFolderID = resource.FolderID
@@ -802,10 +818,18 @@ func (a *App) handleShare(w http.ResponseWriter, r *http.Request, user User, ses
 	// Every share action lands back on the resource, where the list is, and
 	// shows the list, which now holds the result - or the reason it does not.
 	// A refused change of terms is the exception: see refuseShareUpdate.
+	modalMode := modalModeFromRequest(r)
 	back := func(message string) {
 		target := "/resources/" + resourceID
+		vals := url.Values{}
+		if modalMode != "" {
+			vals.Set("modal", modalMode)
+		}
 		if message != "" {
-			target += "?" + url.Values{"error": {message}}.Encode()
+			vals.Set("error", message)
+		}
+		if len(vals) > 0 {
+			target += "?" + vals.Encode()
 		}
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	}

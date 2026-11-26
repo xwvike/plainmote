@@ -4,7 +4,7 @@
   {{template "htmlhead" .}}
   {{template "resource-doc-title" .}}
 </head>
-<body{{if .DirectUpload}} data-direct-upload="1"{{end}}
+<body{{if .ModalMode}} class="is-modal modal-{{.ModalMode}}" data-modal-mode="{{.ModalMode}}"{{end}}{{if .DirectUpload}} data-direct-upload="1"{{end}}
       data-msg-editor-file-failed="{{tr .Locale "editor_file_failed"}}"
       data-msg-encoding-guess="{{tr .Locale "encoding_guess"}}"
       data-msg-encoding-choose="{{tr .Locale "encoding_choose"}}"
@@ -15,6 +15,78 @@
       data-msg-request-failed="{{tr .Locale "request_unconfirmed"}}"
       data-msg-uploading="{{tr .Locale "uploading"}}"
       data-msg-saving="{{tr .Locale "saving"}}">
+  {{if eq .ModalMode "share"}}
+  {{/* Dedicated Share Modal: only share links / quick-share ticket + E2EE unlock. */}}
+  <header class="mbar">
+    <div class="mbar-title">
+      <b>{{tr .Locale "share_links"}}</b>
+      <span class="mut" data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>· {{fileDisplayName .Locale .Resource}}</span>
+    </div>
+    <button type="button" class="mbar-close" data-modal-close aria-label="{{tr .Locale "close"}}">&times;</button>
+  </header>
+  <main class="page modal-page">
+    {{template "resource-notices" .}}
+    {{if .Resource.QuickShare}}
+      {{template "quick-share-ticket" .}}
+    {{else}}
+      {{if .Resource.Sealed}}
+      <div data-sealed data-resource="{{.Resource.ID}}" data-version="{{.Resource.Version}}" data-sealed-key="{{b64 .Resource.SealedKey}}" data-sealed-meta="{{b64 .Resource.SealedMeta}}" data-size="{{.Resource.ContentSize}}"
+           data-msg-failed="{{tr .Locale "seal_failed"}}" data-msg-wrong="{{tr .Locale "keyring_wrong"}}" data-msg-no-storage="{{tr .Locale "keyring_no_storage"}}"
+           data-msg-decrypting="{{tr .Locale "sealed_decrypting"}}" data-msg-download="{{tr .Locale "sealed_download"}}" data-msg-locked="{{tr .Locale "keylock_locked_hint"}}">
+        <form class="unlock-bar" data-sealed-unlock hidden>
+          <span class="lock-ic" aria-hidden="true"></span>
+          <span class="msg">{{tr .Locale "sealed_locked"}}</span>
+          <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+          <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+          <a class="txt" href="/account/security" target="_top">{{tr .Locale "keyring_forgot"}}</a>
+          <span class="err" data-sealed-error role="alert"></span>
+        </form>
+      </div>
+      {{end}}
+      {{template "share-panel" .}}
+    {{end}}
+  </main>
+  {{else if eq .ModalMode "edit"}}
+  {{/* Pure full-height Create / Edit / Preview Modal: single merged titlebar + full-bleed editor + footer. */}}
+  <header class="mbar">
+    <div class="mbar-title">
+      {{if and (not .IsNew) .Resource.QuickShare}}
+        <b><span data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{fileDisplayName .Locale .Resource}}</span></b>
+        <span class="tag qs">{{tr .Locale "quick_share"}}</span>
+      {{else}}
+        <input type="text" name="filename" form="modal-rform" class="mbar-name-input"
+               {{if and (not .IsNew) .Resource.Sealed}}data-sealed-filename disabled{{end}}
+               value="{{if not (and (not .IsNew) .Resource.Sealed)}}{{or .Resource.Filename .Resource.Name}}{{end}}"
+               placeholder="{{if and (not .IsNew) .Resource.Sealed}}{{tr .Locale "encrypted"}}{{else}}{{tr .Locale "untitled_resource"}}{{end}}"
+               aria-label="{{tr .Locale "filename"}}" autocomplete="off" spellcheck="false" data-modal-filename>
+      {{end}}
+      {{if .Resource.Sealed}}<span class="tag enc">{{tr .Locale "encrypted"}}</span>{{end}}
+    </div>
+    <div class="mbar-right">
+      {{if and .HasKeyring (not (or .Resource.QuickShare .Resource.TakenDown))}}{{template "seal-switch" .}}{{end}}
+      <button type="button" class="mbar-close" data-modal-close aria-label="{{tr .Locale "close"}}">&times;</button>
+    </div>
+  </header>
+  <main class="modal-editor-main">
+    {{template "resource-notices" .}}
+    {{if and .IsNew .HasKeyring}}
+    <form class="unlock-bar" data-new-unlock hidden>
+      <span class="lock-ic" aria-hidden="true"></span>
+      <span class="msg">{{tr .Locale "seal_unlock_first"}}</span>
+      <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
+      <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
+      <span class="err" data-new-unlock-error role="alert"></span>
+    </form>
+    {{end}}
+    {{if and (not .IsNew) .Resource.QuickShare}}
+      {{template "quick-share-body" .}}
+    {{else if and (not .IsNew) .Resource.Sealed}}
+      {{template "sealed-resource" .}}
+    {{else}}
+      {{template "plain-resource-form" .}}
+    {{end}}
+  </main>
+  {{else}}
   {{template "topbar" .}}
   <main class="page{{if not .IsNew}} resource-detail{{end}}">
     {{template "resource-crumb" .}}
@@ -53,31 +125,49 @@
     {{template "sealed-resource" .}}
     {{template "share-panel" .}}
     {{else}}
+    {{template "plain-resource-form" .}}
+    {{if not .IsNew}}
+    {{template "share-panel" .}}
+    {{end}}
+    {{end}}
 
-    {{/* An edit is saved in place, the editor left as it is, unless it
-         carries a chosen file: what comes back then is a page of a
-         different shape. */}}
-    <form class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}"{{if not .IsNew}} data-parts{{end}}>
+    {{if not .IsNew}}{{template "resource-meta" .}}{{end}}
+
+  </main>
+  {{end}}
+
+  {{if or .ShareOpen .DeleteOpen}}<div class="scrim"></div>{{end}}
+  {{template "resource-dialogs" .}}
+  {{if and (not .IsNew) (ne .ModalMode "share")}}{{template "seal-dialogs" .}}{{end}}
+
+  {{if ne .ModalMode "share"}}<script type="module" src="{{asset "upload.js"}}"></script>{{end}}
+  {{if not .IsNew}}<script type="module" src="{{asset "resource.js"}}"></script>
+  <script type="module" src="{{asset "parts.js"}}"></script>{{end}}
+  {{if and (ne .ModalMode "share") (or .Resource.Editable .IsNew)}}
+  <script type="module" src="{{asset "editor.js"}}"></script>
+  {{end}}
+  {{if or .Resource.Sealed (and (ne .ModalMode "share") (not .Resource.QuickShare))}}<script type="module" src="{{asset "sealed.js"}}"></script>{{end}}
+  {{if .ModalMode}}<script type="module" src="{{asset "modal-bridge.js"}}"></script>{{end}}
+  {{template "copy-status" .}}
+</body>
+</html>{{end}}
+
+{{define "plain-resource-form"}}
+    <form{{if eq .ModalMode "edit"}} id="modal-rform"{{end}} class="rform" method="post" enctype="multipart/form-data" action="{{if .IsNew}}/resources/new{{else}}/resources/{{.Resource.ID}}{{end}}"{{if not .IsNew}} data-parts{{end}}>
       <input type="hidden" name="csrf" value="{{.CSRF}}">
+      {{if .ModalMode}}<input type="hidden" name="modal" value="{{.ModalMode}}">{{end}}
       {{if and .IsNew .CurrentFolderID}}<input type="hidden" name="folder_id" value="{{.CurrentFolderID}}">{{end}}
       {{if not .IsNew}}{{template "resource-base" .}}{{end}}
 
       <div class="editor-shell">
         <div class="panel ruled panel-ed">
+          {{if ne .ModalMode "edit"}}
           <div class="pt">
             <div class="doc-fields">
-              <label class="doc-field"><span>{{tr .Locale "name"}}</span><input type="text" name="name" class="doc-name" value="{{.Resource.Name}}" placeholder="{{if .IsNew}}{{tr .Locale "optional"}}{{else}}{{tr .Locale "name_filename_fallback"}}{{end}}"></label>
-              <span class="doc-sep" aria-hidden="true"></span>
-              <label class="doc-field"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="doc-file mpath" value="{{.Resource.Filename}}" placeholder="{{tr .Locale "optional"}}"></label>
+              <label class="doc-field"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" class="doc-file doc-file-only mpath" value="{{or .Resource.Filename .Resource.Name}}" placeholder="{{tr .Locale "filename_placeholder"}}"></label>
             </div>
-            {{/* Said out loud only when something goes wrong with a chosen file. */}}
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             <span class="sp">
-              {{/* How the text is stored, shown and kept: the encoding and line
-                   endings are detected from the bytes, and a save writes them
-                   back the same way. Not a choice - this is not an editor for
-                   converting files. The selects are hidden and only carry the
-                   detected values into the form. */}}
               <span class="tags" data-text-controls{{if not (or .Resource.Editable .IsNew)}} hidden{{end}}>
                 <span class="tag" data-encoding-label>{{range .TextEncodings}}{{if eq .Value $.ContentEncoding}}{{.Label}}{{end}}{{end}}</span>
                 <span class="tag" data-eol-label>{{if eq .ContentEOL "crlf"}}CRLF{{else}}LF{{end}}</span>
@@ -92,41 +182,31 @@
                 {{else if .IsNew}}{{tr .Locale "limit"}} {{bytesText .MaxContent}}
                 {{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}}
               </em>
-              {{/* The way content gets in ends the row. A key, not the browser's
-                   picker, so it says what it does - load into an empty
-                   resource, replace a stored one - and not which file was
-                   picked: the content below shows that. */}}
               <label class="btn sm upload-key" data-upload-key>
                 <input type="file" name="upload" class="sr" data-upload data-max-bytes="{{.MaxContent}}">
                 {{if .IsNew}}{{tr .Locale "load_from_file"}}{{else}}{{tr .Locale "replace_file"}}{{end}}
               </label>
             </span>
           </div>
+          {{end}}
           <div class="pb" data-content-body>
             <div class="media-stage upload-preview" data-upload-preview hidden></div>
             {{if .Resource.Editable}}
             <textarea name="content" rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}" data-raw-url="/resources/{{.Resource.ID}}/raw">{{.ContentText}}</textarea>
             {{else if .IsNew}}
-            {{/* Carries ContentText, because this is also the page a refused
-                 creation comes back on and the body has to survive it. Empty on
-                 a fresh screen, and with no data-raw-url either way: nothing is
-                 stored yet to re-read. */}}
             <textarea name="content" rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-current-content data-editor data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}" data-encoding="{{.ContentEncoding}}" data-eol="{{.ContentEOL}}">{{.ContentText}}</textarea>
             {{else}}
-              {{/* Waiting for a text file chosen to replace this content:
-                   upload.js makes it the editor then (see becomeText). No
-                   name until then, so it never posts empty content. */}}
               <textarea rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-lazy-editor="content" data-filename="{{.Resource.Filename}}" hidden></textarea>
               {{if hasPrefix .Resource.ContentType "image/"}}
-              <div class="media-stage" data-current-content><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{or .Resource.Name (tr .Locale "untitled_resource")}}"></div>
+              <div class="media-stage" data-current-content><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{or .Resource.Filename .Resource.Name (tr .Locale "untitled_resource")}}"></div>
               {{else if hasPrefix .Resource.ContentType "audio/"}}
-              <div class="media-stage" data-current-content><audio class="resource-media resource-audio" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{or .Resource.Name (tr .Locale "untitled_resource")}}"></audio></div>
+              <div class="media-stage" data-current-content><audio class="resource-media resource-audio" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{or .Resource.Filename .Resource.Name (tr .Locale "untitled_resource")}}"></audio></div>
               {{else if hasPrefix .Resource.ContentType "video/"}}
-              <div class="media-stage" data-current-content><video class="resource-media resource-video" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{or .Resource.Name (tr .Locale "untitled_resource")}}" data-prime-video></video></div>
+              <div class="media-stage" data-current-content><video class="resource-media resource-video" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw" aria-label="{{or .Resource.Filename .Resource.Name (tr .Locale "untitled_resource")}}" data-prime-video></video></div>
               {{else}}
               <div class="media-stage" data-current-content>
                 <div class="file-card">
-                  <strong>{{.Resource.Filename}}</strong>
+                  <strong>{{or .Resource.Filename .Resource.Name}}</strong>
                   <span>{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}</span>
                   <a class="btn sm" href="/resources/{{.Resource.ID}}/raw" target="_blank" rel="noopener">{{tr .Locale "open_file"}}</a>
                 </div>
@@ -137,47 +217,46 @@
         </div>
 
         <div class="savebar">
+          {{if eq .ModalMode "edit"}}
+          <div class="savebar-meta">
+            <span class="tags" data-text-controls{{if not (or .Resource.Editable .IsNew)}} hidden{{end}}>
+              <span class="tag" data-encoding-label>{{range .TextEncodings}}{{if eq .Value $.ContentEncoding}}{{.Label}}{{end}}{{end}}</span>
+              <span class="tag" data-eol-label>{{if eq .ContentEOL "crlf"}}CRLF{{else}}LF{{end}}</span>
+              <select name="content_encoding" class="sm" data-encoding-select aria-label="{{tr .Locale "encoding"}}" hidden>{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value $.ContentEncoding}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+              <select name="content_eol" data-eol-select hidden>
+                <option value="lf"{{if eq .ContentEOL "lf"}} selected{{end}}>LF</option>
+                <option value="crlf"{{if eq .ContentEOL "crlf"}} selected{{end}}>CRLF</option>
+              </select>
+            </span>
+            <em class="content-meta" data-content-meta>
+              {{if .Resource.Editable}}{{bytesText .Resource.ContentSize}} / {{tr .Locale "limit"}} {{bytesText .MaxContent}}
+              {{else if .IsNew}}{{tr .Locale "limit"}} {{bytesText .MaxContent}}
+              {{else}}{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}{{end}}
+            </em>
+            <label class="btn sm upload-key" data-upload-key>
+              <input type="file" name="upload" class="sr" data-upload data-max-bytes="{{.MaxContent}}">
+              {{if .IsNew}}{{tr .Locale "load_from_file"}}{{else}}{{tr .Locale "replace_file"}}{{end}}
+            </label>
+            <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
+          </div>
+          {{end}}
           {{if .IsNew}}
-          <a class="txt" href="/resources/">{{tr .Locale "cancel"}}</a>
-          <span class="savebar-actions">{{template "resource-submit" .}}</span>
-          {{else}}
-          <span class="unsaved{{if .Conflict}} show{{end}}" data-unsaved>{{tr .Locale "unsaved"}}</span>
           <span class="savebar-actions">
-            {{if .Conflict}}<a class="txt show" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_mine"}}</a>
-            {{else}}<a class="txt" href="/resources/{{.Resource.ID}}" data-revert>{{tr .Locale "discard_changes"}}</a>{{end}}
+            {{if .ModalMode}}<button type="button" class="txt" data-modal-close>{{tr .Locale "cancel"}}</button>{{else}}<a class="txt" href="/resources/">{{tr .Locale "cancel"}}</a>{{end}}
+            {{template "resource-submit" .}}
+          </span>
+          {{else}}
+          <span class="savebar-actions">
+            <span class="unsaved{{if .Conflict}} show{{end}}" data-unsaved>{{tr .Locale "unsaved"}}</span>
+            {{if .Conflict}}<a class="txt show" href="/resources/{{.Resource.ID}}{{if .ModalMode}}?modal={{.ModalMode}}{{end}}" data-revert>{{tr .Locale "discard_mine"}}</a>
+            {{else}}<a class="txt" href="/resources/{{.Resource.ID}}{{if .ModalMode}}?modal={{.ModalMode}}{{end}}" data-revert>{{tr .Locale "discard_changes"}}</a>{{end}}
             {{template "resource-submit" .}}
           </span>
           {{end}}
         </div>
       </div>
     </form>
-
-    {{if not .IsNew}}
-    {{/* Below the content, not behind a button. The addresses are what this
-         resource is for, so they are on the page whenever it is open; the
-         dialog is left for changing one's terms, which is rare. */}}
-    {{template "share-panel" .}}
-    {{end}}
-    {{end}}
-
-    {{if not .IsNew}}{{template "resource-meta" .}}{{end}}
-
-  </main>
-
-  {{if or .ShareOpen .DeleteOpen}}<div class="scrim"></div>{{end}}
-  {{template "resource-dialogs" .}}
-  {{if not .IsNew}}{{template "seal-dialogs" .}}{{end}}
-
-  <script type="module" src="{{asset "upload.js"}}"></script>
-  {{if not .IsNew}}<script type="module" src="{{asset "resource.js"}}"></script>
-  <script type="module" src="{{asset "parts.js"}}"></script>{{end}}
-  {{if or .Resource.Editable .IsNew}}
-  <script type="module" src="{{asset "editor.js"}}"></script>
-  {{end}}
-  {{if or .Resource.Sealed (not .Resource.QuickShare)}}<script type="module" src="{{asset "sealed.js"}}"></script>{{end}}
-  {{template "copy-status" .}}
-</body>
-</html>{{end}}
+{{end}}
 
 
 {{define "resource-doc-title"}}<title>{{if .IsNew}}{{tr .Locale "new_resource"}}{{else}}{{resourceLabel .Locale .Resource}}{{end}} · PlainMote</title>{{end}}
@@ -216,9 +295,11 @@
     {{if .Resource.TakenDown}}<p class="err">{{tr .Locale "takedown_notice"}}{{.Resource.TakedownReason}}</p>{{end}}
     {{if .Created}}
     <div class="notice notice-row" role="status">
-      <span>{{printf (tr .Locale "notice_created") (or .Resource.Name (tr .Locale "untitled_resource"))}}</span>
+      <span>{{printf (tr .Locale "notice_created") (fileDisplayName .Locale .Resource)}}</span>
+      {{if not .ModalMode}}
       <a class="txt" href="/resources/new{{if .CurrentFolderID}}?folder={{.CurrentFolderID}}{{end}}">{{tr .Locale "create_another"}}</a>
       <a class="txt" href="{{if .CurrentFolderID}}{{folderURL .CurrentFolderID}}{{else}}/resources/{{end}}">{{tr .Locale "back_to_resources"}}</a>
+      {{end}}
     </div>
     {{else if .Sealed}}
     <p class="notice" role="status">{{tr .Locale "seal_done"}}</p>
@@ -258,12 +339,13 @@
   <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{tr .Locale "share_settings"}}</b>
-      <a class="x" href="/resources/{{.Resource.ID}}" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="/resources/{{.Resource.ID}}{{if .ModalMode}}?modal={{.ModalMode}}{{end}}" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
       <form method="post" action="/resources/{{.Resource.ID}}/share" style="display:grid;gap:12px" data-parts>
         <input type="hidden" name="csrf" value="{{.CSRF}}">
+        {{if .ModalMode}}<input type="hidden" name="modal" value="{{.ModalMode}}">{{end}}
         <input type="hidden" name="action" value="update">
         <input type="hidden" name="share_id" value="{{.FocusShare.Link.ID}}">
         <label class="f">
@@ -311,7 +393,7 @@
         </dl>
         <div class="fl" style="justify-content:flex-end">
           <span class="hint" style="margin-right:auto">{{tr .Locale "terms_restart_now"}}</span>
-          <a class="btn" href="/resources/{{.Resource.ID}}" data-close>{{tr .Locale "cancel"}}</a>
+          <a class="btn" href="/resources/{{.Resource.ID}}{{if .ModalMode}}?modal={{.ModalMode}}{{end}}" data-close>{{tr .Locale "cancel"}}</a>
           <button type="submit" class="pri">{{tr .Locale "apply"}}</button>
         </div>
       </form>
@@ -344,7 +426,7 @@
 {{/* What parts.js asks for: the pieces of this page an action can change. */}}
 {{define "resource.html#parts"}}{{template "resource-doc-title" .}}
 {{template "resource-crumb" .}}
-<h1 data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{resourceLabel .Locale .Resource}}</h1>
+{{if eq .ModalMode "share"}}<span class="mut" data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>· {{fileDisplayName .Locale .Resource}}</span>{{else if .ModalMode}}<span data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{fileDisplayName .Locale .Resource}}</span>{{else}}<h1 data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{resourceLabel .Locale .Resource}}</h1>{{end}}
 {{template "resource-tags" .}}
 {{template "resource-hist" .}}
 {{template "resource-notices" .}}
@@ -358,11 +440,17 @@
      what it holds, read only. Keeping it as a resource is the way to
      anything more, and is offered beside the time it would otherwise end. */}}
 {{define "quick-share"}}
+    {{template "quick-share-ticket" .}}
+    {{template "quick-share-body" .}}
+{{end}}
+
+{{define "quick-share-ticket"}}
     <div class="notice notice-row">
       <span>{{tr .Locale "quick_share_notice_prefix"}}{{formatTime .Resource.ExpiresAt}}{{tr .Locale "quick_share_notice_suffix"}}{{if .Resource.Encrypted}}{{tr .Locale "quick_share_encrypted_keep"}}{{else}}{{tr .Locale "quick_share_notice_keep"}}{{end}}</span>
       {{if .Resource.Encrypted}}
       {{else}}<form method="post" action="/resources/{{.Resource.ID}}" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
+        {{if .ModalMode}}<input type="hidden" name="modal" value="{{.ModalMode}}">{{end}}
         <input type="hidden" name="action" value="keep">
         <button type="submit" class="pri sm">{{tr .Locale "quick_share_keep"}}</button>
       </form>{{end}}
@@ -370,7 +458,7 @@
     <section class="ruled paste-result" style="{{endStyle .Resource.ExpiresAt}}">
       <div class="pt">
         <span class="sec">{{tr .Locale "share_link"}}</span>
-        <span class="sp">{{with .Shares}}{{with index . 0}}<span class="counts">{{tr $.Locale "used_count"}} <b>{{.Link.UsedCount}}</b></span>{{end}}{{end}}<a class="txt" href="/logs?resource={{.Resource.ID}}">{{tr .Locale "access_logs"}}</a></span>
+        <span class="sp">{{with .Shares}}{{with index . 0}}<span class="counts">{{tr $.Locale "used_count"}} <b>{{.Link.UsedCount}}</b></span>{{end}}{{end}}<a class="txt" href="/logs?resource={{.Resource.ID}}"{{if .ModalMode}} target="_top"{{end}}>{{tr .Locale "access_logs"}}</a></span>
       </div>
       {{with .Shares}}{{with index . 0}}
       {{if $.Resource.Encrypted}}
@@ -378,8 +466,6 @@
       {{else if .Link.Unreadable}}
       <p class="hint">{{tr $.Locale "share_link_unreadable"}}</p>
       {{else if $.Resource.Sealed}}
-      {{/* Whole only with its key, or with its code beside it, which only
-           the owner's browser can unwrap. */}}
       <div class="ticket">
         {{template "sealed-addr" (sealedLink $ . "addr ends")}}
         <span class="stub until"><button type="button" class="pri sm" data-sealed-copy="{{.Link.ID}}" disabled>{{template "copy-label" $}}</button></span>
@@ -402,11 +488,12 @@
       <p class="hint">{{tr .Locale "quick_share_link_ended"}}</p>
       {{end}}
     </section>
+{{end}}
+
+{{define "quick-share-body"}}
     {{if .Resource.Sealed}}
     {{template "sealed-resource" .}}
     {{else}}
-    {{/* As tall as the editor's sheet only when there is something to show
-         in it; encrypted content is one sentence. */}}
     <div class="panel ruled{{if not .Resource.Encrypted}} panel-ed{{end}}">
       <div class="pt">
         <span class="sec">{{tr .Locale "content"}}</span>
@@ -419,7 +506,7 @@
         {{else if .ContentText}}
         <textarea rows="18" spellcheck="false" disabled aria-label="{{tr .Locale "resource_content"}}" data-preview data-filename="{{.Resource.Filename}}" data-content-type="{{.Resource.ContentType}}">{{.ContentText}}</textarea>
         {{else if hasPrefix .Resource.ContentType "image/"}}
-        <div class="media-stage"><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{resourceLabel .Locale .Resource}}"></div>
+        <div class="media-stage"><img class="resource-media resource-image" src="/resources/{{.Resource.ID}}/raw" alt="{{fileDisplayName .Locale .Resource}}"></div>
         {{else if hasPrefix .Resource.ContentType "audio/"}}
         <div class="media-stage"><audio class="resource-media resource-audio" controls preload="metadata" src="/resources/{{.Resource.ID}}/raw"></audio></div>
         {{else if hasPrefix .Resource.ContentType "video/"}}
@@ -427,7 +514,7 @@
         {{else}}
         <div class="media-stage">
           <div class="file-card">
-            <strong>{{or .Resource.Filename (resourceLabel .Locale .Resource)}}</strong>
+            <strong>{{fileDisplayName .Locale .Resource}}</strong>
             <span>{{.Resource.ContentType}} · {{bytesText .Resource.ContentSize}}</span>
             <a class="btn sm" href="/resources/{{.Resource.ID}}/raw" target="_blank" rel="noopener">{{tr .Locale "open_file"}}</a>
           </div>
@@ -462,22 +549,21 @@
         <span class="msg">{{tr .Locale "sealed_locked"}}</span>
         <input type="password" name="password" autocomplete="current-password" placeholder="{{tr .Locale "keyring_password"}}" aria-label="{{tr .Locale "keyring_password"}}" required>
         <button type="submit" class="pri sm">{{tr .Locale "keyring_unlock"}}</button>
-        <a class="txt" href="/account/security">{{tr .Locale "keyring_forgot"}}</a>
+        <a class="txt" href="/account/security"{{if .ModalMode}} target="_top"{{end}}>{{tr .Locale "keyring_forgot"}}</a>
         <span class="err" data-sealed-error role="alert"></span>
       </form>
       <div class="panel ruled" data-sealed-placeholder>
         <div class="pt"><span class="sec">{{tr .Locale "content"}}</span><span class="sp"><em class="content-meta">{{bytesText .Resource.ContentSize}}</em></span></div>
         <div class="pb"><p class="ro" data-sealed-status>{{tr .Locale "sealed_needs_js"}}</p></div>
       </div>
-      <form class="rform" data-sealed-form hidden>
+      <form{{if eq .ModalMode "edit"}} id="modal-rform"{{end}} class="rform" data-sealed-form hidden>
         <div class="editor-shell">
         <div class="panel ruled panel-ed">
+          {{if or (ne .ModalMode "edit") .Resource.QuickShare}}
           <div class="pt">
             {{if .Resource.QuickShare}}<span class="sec">{{tr .Locale "content"}}</span>
             {{else}}<div class="doc-fields">
-              <label class="doc-field"><span>{{tr .Locale "name"}}</span><input type="text" data-sealed-name class="doc-name" placeholder="{{tr .Locale "name_filename_fallback"}}"></label>
-              <span class="doc-sep" aria-hidden="true"></span>
-              <label class="doc-field"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" data-sealed-filename class="doc-file mpath" placeholder="{{tr .Locale "optional"}}"></label>
+              <label class="doc-field"><span>{{tr .Locale "filename"}}</span><input type="text" name="filename" data-sealed-filename class="doc-file doc-file-only mpath" placeholder="{{tr .Locale "filename_placeholder"}}"></label>
             </div>{{end}}
             <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
             <span class="sp">
@@ -501,6 +587,7 @@
               </label>{{end}}
             </span>
           </div>
+          {{end}}
           <div class="pb" data-content-body>
             <div class="media-stage upload-preview" data-upload-preview hidden></div>
             <textarea rows="18" spellcheck="false" aria-label="{{tr .Locale "resource_content"}}" data-sealed-text data-lazy-editor="" hidden></textarea>
@@ -509,10 +596,27 @@
         </div>
         {{if not .Resource.QuickShare}}
         <div class="savebar">
+          {{if eq .ModalMode "edit"}}
+          <div class="savebar-meta">
+            <span class="tags" data-text-controls data-sealed-text-tags hidden>
+              <span class="tag" data-encoding-label>UTF-8</span>
+              <span class="tag" data-eol-label>LF</span>
+              <select class="sm" data-encoding-select aria-label="{{tr .Locale "encoding"}}" hidden>{{range .TextEncodings}}<option value="{{.Value}}"{{if eq .Value "utf-8"}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+              <select data-eol-select hidden><option value="lf" selected>LF</option><option value="crlf">CRLF</option></select>
+            </span>
+            <em class="content-meta" data-sealed-meta-line></em>
+            <label class="btn sm upload-key" data-upload-key>
+              <input type="file" class="sr" data-upload data-sealed-file data-max-bytes="{{.MaxContent}}">
+              {{tr .Locale "replace_file"}}
+            </label>
+            <span class="hint upload-status" data-upload-status role="status" aria-live="polite"></span>
+          </div>
+          {{else}}
           <span class="hint">{{tr .Locale "sealed_saves_encrypted"}}</span>
+          {{end}}
           <span class="err" data-sealed-save-error role="alert"></span>
           <span class="savebar-actions">
-            <a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "discard_changes"}}</a>
+            <a class="txt" href="/resources/{{.Resource.ID}}{{if .ModalMode}}?modal={{.ModalMode}}{{end}}">{{tr .Locale "discard_changes"}}</a>
             <button type="submit" class="pri">{{tr .Locale "save"}}</button>
           </span>
         </div>

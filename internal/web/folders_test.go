@@ -90,9 +90,9 @@ func TestDashboardFinderViewsAndFolders(t *testing.T) {
 		t.Fatalf("move resource json: %d %s", moveResp.Code, moveResp.Body.String())
 	}
 
-	// Inside the folder, Cluster appears and breadcrumb shows Configs.
+	// Inside the folder, cluster.yaml appears and breadcrumb shows Configs.
 	inFolder := client.do(http.MethodGet, "/resources/?folder="+folderID, nil).Body.String()
-	if !strings.Contains(inFolder, "Configs") || !strings.Contains(inFolder, "Cluster") {
+	if !strings.Contains(inFolder, "Configs") || !strings.Contains(inFolder, "cluster.yaml") {
 		t.Fatalf("folder page missing breadcrumb or moved resource")
 	}
 
@@ -102,12 +102,146 @@ func TestDashboardFinderViewsAndFolders(t *testing.T) {
 		t.Fatal("resource detail breadcrumb missing parent folder link")
 	}
 
-	// Delete the folder: moves Cluster to trash and redirects with folder_trashed=1.
+	// Delete the folder: moves cluster.yaml to trash and redirects with folder_trashed=1.
 	deleted := postForm("/resources/folders", url.Values{"action": {"delete"}, "folder_id": {folderID}})
 	if deleted.Code != http.StatusSeeOther || !strings.Contains(deleted.Header().Get("Location"), "folder_trashed=1") {
 		t.Fatalf("delete folder: %d %q", deleted.Code, deleted.Header().Get("Location"))
 	}
 	if count, err := db.TrashCount(ctx, user.ID); err != nil || count != 1 {
 		t.Fatalf("trash count after folder delete: %d %v", count, err)
+	}
+}
+
+func TestModalSheetsRenameTagsAndSingleFilename(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	client := signedIn(t, db, user)
+
+	postForm := func(path string, vals url.Values, acceptJSON bool) *httptest.ResponseRecorder {
+		vals.Set("csrf", client.csrf)
+		req := httptest.NewRequest(http.MethodPost, "https://cfg.test"+path, strings.NewReader(vals.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", "https://cfg.test")
+		if acceptJSON {
+			req.Header.Set("Accept", "application/json")
+		}
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: client.session})
+		req.AddCookie(&http.Cookie{Name: csrfCookie, Value: client.csrf})
+		rec := httptest.NewRecorder()
+		client.app.handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 1. Creating a resource with only "filename" (no "name") populates both fields
+	// and preserves ?modal=edit on redirect.
+	created := postForm("/resources/new", url.Values{
+		"filename":         {"notes.md"},
+		"content":          {"# Hello\n"},
+		"content_encoding": {"utf-8"},
+		"content_eol":      {"lf"},
+		"modal":            {"edit"},
+	}, false)
+	if created.Code != http.StatusSeeOther {
+		t.Fatalf("create single-filename resource: %d %s", created.Code, created.Body.String())
+	}
+	loc := created.Header().Get("Location")
+	if !strings.Contains(loc, "created=1") || !strings.Contains(loc, "modal=edit") {
+		t.Fatalf("expected created=1&modal=edit redirect, got %q", loc)
+	}
+	resID := strings.TrimPrefix(strings.Split(loc, "?")[0], "/resources/")
+	res, err := db.ResourceForOwner(ctx, user.ID, resID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Filename != "notes.md" || res.Name != "notes.md" {
+		t.Fatalf("expected unified name/filename 'notes.md', got name=%q filename=%q", res.Name, res.Filename)
+	}
+
+	// 2. Standalone resource page stays strictly DENY / frame-ancestors 'none'.
+	standalone := client.do(http.MethodGet, "/resources/"+resID, nil)
+	if got := standalone.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Fatalf("standalone X-Frame-Options = %q, want DENY", got)
+	}
+	if csp := standalone.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Fatalf("standalone CSP missing frame-ancestors 'none': %q", csp)
+	}
+
+	// 3. ?modal=edit renders pure edit sheet (SAMEORIGIN, no share panel, no history/delete/topbar).
+	editModal := client.do(http.MethodGet, "/resources/"+resID+"?modal=edit", nil)
+	if editModal.Code != http.StatusOK {
+		t.Fatalf("edit modal: %d", editModal.Code)
+	}
+	if got := editModal.Header().Get("X-Frame-Options"); got != "SAMEORIGIN" {
+		t.Fatalf("modal X-Frame-Options = %q, want SAMEORIGIN", got)
+	}
+	if csp := editModal.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'self'") {
+		t.Fatalf("modal CSP missing frame-ancestors 'self': %q", csp)
+	}
+	editBody := editModal.Body.String()
+	for _, want := range []string{`class="is-modal modal-edit"`, `name="filename"`, `notes.md`, `modal-bridge.js`} {
+		if !strings.Contains(editBody, want) {
+			t.Errorf("edit modal missing %q", want)
+		}
+	}
+	for _, forbid := range []string{`data-part="shares"`, `data-part="hist"`, `?delete=1`, `<header class="top"`} {
+		if strings.Contains(editBody, forbid) {
+			t.Errorf("pure edit modal should not contain %q", forbid)
+		}
+	}
+
+	// 4. ?modal=share renders only share panel (no editor form).
+	shareModal := client.do(http.MethodGet, "/resources/"+resID+"?modal=share", nil)
+	shareBody := shareModal.Body.String()
+	if shareModal.Code != http.StatusOK || !strings.Contains(shareBody, `data-part="shares"`) {
+		t.Fatalf("share modal missing shares panel: %d", shareModal.Code)
+	}
+	if strings.Contains(shareBody, `class="rform"`) {
+		t.Error("share modal should not render editor form")
+	}
+
+	// 5. ?modal=versions renders compact versions modal with SAMEORIGIN and valid
+	// unescaped compare/view links, and compare?modal=versions returns HTTP 200.
+	_ = postForm("/resources/"+resID, url.Values{
+		"filename":         {"notes.md"},
+		"content":          {"# Hello v2\n"},
+		"content_encoding": {"utf-8"},
+		"content_eol":      {"lf"},
+		"base_version":     {"1"},
+		"modal":            {"edit"},
+	}, false)
+	verModal := client.do(http.MethodGet, "/resources/"+resID+"/versions?modal=versions", nil)
+	verBody := verModal.Body.String()
+	if verModal.Code != http.StatusOK || verModal.Header().Get("X-Frame-Options") != "SAMEORIGIN" || strings.Contains(verBody, `<header class="top"`) {
+		t.Fatalf("versions modal unexpected response: %d", verModal.Code)
+	}
+	if strings.Contains(verBody, "%26modal") || strings.Contains(verBody, "%3Fmodal") {
+		t.Fatalf("versions modal has URL-escaped modal query params in links")
+	}
+	if !strings.Contains(verBody, `compare?from=1&amp;to=2&amp;modal=versions`) {
+		t.Fatalf("versions modal missing clean compare link")
+	}
+	cmpModal := client.do(http.MethodGet, "/resources/"+resID+"/versions/compare?from=1&to=2&modal=versions", nil)
+	if cmpModal.Code != http.StatusOK || cmpModal.Header().Get("X-Frame-Options") != "SAMEORIGIN" {
+		t.Fatalf("compare modal failed: %d", cmpModal.Code)
+	}
+
+	// 6. POST /resources/rename updates filename & name atomically.
+	ren := postForm("/resources/rename", url.Values{"resource_id": {resID}, "filename": {"readme.md"}}, true)
+	if ren.Code != http.StatusOK || !strings.Contains(ren.Body.String(), `"location"`) {
+		t.Fatalf("rename resource: %d %s", ren.Code, ren.Body.String())
+	}
+	resAfter, err := db.ResourceForOwner(ctx, user.ID, resID)
+	if err != nil || resAfter.Filename != "readme.md" || resAfter.Name != "readme.md" {
+		t.Fatalf("after rename: %+v %v", resAfter, err)
+	}
+
+	// 7. POST /resources/{id}/tags with Accept: application/json adds and removes tags cleanly.
+	addTag := postForm("/resources/"+resID+"/tags", url.Values{"add": {"ops"}}, true)
+	if addTag.Code != http.StatusOK || !strings.Contains(addTag.Body.String(), `"ops"`) {
+		t.Fatalf("add tag json: %d %s", addTag.Code, addTag.Body.String())
+	}
+	remTag := postForm("/resources/"+resID+"/tags", url.Values{"remove": {"ops"}}, true)
+	if remTag.Code != http.StatusOK || strings.Contains(remTag.Body.String(), `"ops"`) {
+		t.Fatalf("remove tag json: %d %s", remTag.Code, remTag.Body.String())
 	}
 }

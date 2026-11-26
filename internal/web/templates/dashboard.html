@@ -55,12 +55,48 @@
   {{/* Compact context menu popover for folder & file actions. */}}
   <div class="fb-menu" id="fb-menu" role="menu" hidden>
     <button type="button" role="menuitem" data-fb-act="open">{{tr .Locale "open_item"}}</button>
+    <button type="button" role="menuitem" data-fb-act="share" hidden>{{tr .Locale "share_action"}}</button>
+    <button type="button" role="menuitem" data-fb-act="tags" hidden>{{tr .Locale "manage_tags"}}</button>
+    <button type="button" role="menuitem" data-fb-act="versions" hidden>{{tr .Locale "history_action"}}</button>
     <button type="button" role="menuitem" data-fb-act="info">{{tr .Locale "get_info"}}</button>
     <span class="fb-menu-sep" role="separator"></span>
     <button type="button" role="menuitem" data-fb-act="rename" hidden>{{tr .Locale "rename"}}</button>
     <button type="button" role="menuitem" data-fb-act="move">{{tr .Locale "move_to"}}</button>
     <button type="button" role="menuitem" class="danger" data-fb-act="delete" hidden>{{tr .Locale "confirm_delete"}}</button>
   </div>
+
+  {{/* Full-height modal sheet host for pure Create/Edit, Share, and History views. */}}
+  <dialog class="dlg fb-sheet-dlg" id="dlg-sheet" data-msg-unsaved="{{tr .Locale "unsaved_close_confirm"}}">
+    <iframe class="fb-sheet-frame" id="fb-sheet-frame" title="PlainMote"></iframe>
+  </dialog>
+
+  {{/* Dedicated right-click Tags dialog */}}
+  <dialog class="dlg fb-tags-dlg" id="dlg-tags">
+    <header>
+      <div class="fb-tags-head">
+        <b>{{tr .Locale "tags"}}</b>
+        <span class="mut" data-tags-file></span>
+      </div>
+      <button type="button" class="x" data-dlg-close aria-label="{{tr .Locale "close"}}">&times;</button>
+    </header>
+    <div class="body">
+      <div class="fb-tags-current">
+        <div class="lbls" data-tags-list></div>
+        <span class="fb-tags-empty mut" data-tags-empty hidden>{{tr .Locale "no_tags_yet"}}</span>
+      </div>
+      <form class="fb-tags-form" data-tags-add-form>
+        <input type="text" name="add" maxlength="{{tagMaxRunes}}" autocomplete="off" placeholder="{{tr .Locale "tag_add"}}" aria-label="{{tr .Locale "tag_add"}}">
+        <button type="submit" class="pri">{{tr .Locale "tag_add_btn"}}</button>
+      </form>
+      <p class="err" data-tags-error role="alert" hidden></p>
+      <div class="fb-tags-suggest" data-tags-suggest{{if not .Tags}} hidden{{end}}>
+        {{range .Tags}}<button type="button" class="fb-tag-pick" data-tag-pick="{{.Name}}">{{.Name}}</button>{{end}}
+      </div>
+    </div>
+    <footer>
+      <button type="button" data-dlg-close>{{tr .Locale "close"}}</button>
+    </footer>
+  </dialog>
 
   {{/* Finder-style Get Info inspector dialog */}}
   <dialog class="dlg fb-info-dlg" id="dlg-info">
@@ -91,8 +127,8 @@
       </dl>
     </div>
     <footer>
-      <button type="button" data-dlg-close>{{tr .Locale "close"}}</button>
-      <a class="btn pri" href="#" data-info-open>{{tr .Locale "open_item"}}</a>
+      <button type="button" class="sm" data-dlg-close>{{tr .Locale "close"}}</button>
+      <a class="btn pri sm" href="#" data-info-open>{{tr .Locale "open_item"}}</a>
     </footer>
   </dialog>
 
@@ -120,21 +156,24 @@
     </form>
   </dialog>
 
-  {{/* Rename folder dialog */}}
-  <dialog class="dlg" id="dlg-folder-rename">
+  {{/* Rename dialog (shared by folders and plaintext files) */}}
+  <dialog class="dlg" id="dlg-folder-rename"
+          data-title-folder="{{tr .Locale "rename_folder"}}" data-label-folder="{{tr .Locale "folder_name"}}"
+          data-title-file="{{tr .Locale "rename_file"}}" data-label-file="{{tr .Locale "filename"}}">
     <form method="post" action="/resources/folders">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <input type="hidden" name="action" value="rename">
       <input type="hidden" name="folder_id" value="">
+      <input type="hidden" name="resource_id" value="">
       <input type="hidden" name="return_folder" value="{{.CurrentFolderID}}" data-fb-return-input>
       <header>
-        <b>{{tr .Locale "rename_folder"}}</b>
+        <b data-rename-title>{{tr .Locale "rename_folder"}}</b>
         <button type="button" class="x" data-dlg-close aria-label="{{tr .Locale "close"}}">&times;</button>
       </header>
       <div class="body">
         <label class="field">
-          <span>{{tr .Locale "folder_name"}}</span>
-          <input type="text" name="name" maxlength="80" required autocomplete="off">
+          <span data-rename-label>{{tr .Locale "folder_name"}}</span>
+          <input type="text" name="name" maxlength="128" required autocomplete="off">
         </label>
       </div>
       <footer>
@@ -185,6 +224,27 @@
       </header>
       <div class="body">
         <p class="ro">{{printf (tr .Locale "delete_folder_confirm") .TrashDays}}</p>
+      </div>
+      <footer>
+        <button type="button" data-dlg-close>{{tr .Locale "cancel"}}</button>
+        <button type="submit" class="danger">{{tr .Locale "confirm_delete"}}</button>
+      </footer>
+    </form>
+  </dialog>
+
+  {{/* Delete file confirm dialog */}}
+  <dialog class="dlg" id="dlg-resource-delete" data-warn-none="{{deleteWarning .Locale 0}}" data-warn-one="{{deleteWarning .Locale 1}}">
+    <form method="post" action="/resources/">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="action" value="delete">
+      <input type="hidden" name="return_folder" value="{{.CurrentFolderID}}" data-fb-return-input>
+      <header>
+        <b data-delete-file-title>{{tr .Locale "delete_file"}}</b>
+        <button type="button" class="x" data-dlg-close aria-label="{{tr .Locale "close"}}">&times;</button>
+      </header>
+      <div class="body">
+        <p class="ro" data-delete-file-warn>{{deleteWarning .Locale 0}}</p>
+        <p class="hint">{{tr .Locale "logs_retained"}}</p>
       </div>
       <footer>
         <button type="button" data-dlg-close>{{tr .Locale "cancel"}}</button>
@@ -325,8 +385,9 @@
             {{end}}
             {{range .Resources}}
             {{$k := fileKind $.Locale .}}
-            <tr class="fb-row is-file" data-fb-item data-item-kind="resource" data-item-id="{{.ID}}" data-item-name="{{resourceLabel $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}"
-                data-info-kind="{{$k.Label}}" data-info-cat="{{$k.Category}}" data-info-badge="{{$k.Badge}}" data-info-filename="{{.Filename}}"
+            <tr class="fb-row is-file" data-fb-item data-item-kind="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}"
+                data-item-sealed="{{if or .Sealed .Encrypted}}1{{end}}" data-item-quick="{{if .QuickShare}}1{{end}}" data-item-shares="{{.LiveShares}}"
+                data-info-kind="{{$k.Label}}" data-info-cat="{{$k.Category}}" data-info-badge="{{$k.Badge}}" data-info-filename="{{or .Filename .Name}}"
                 data-info-size="{{bytesText .ContentSize}}" data-info-bytes="{{.ContentSize}}"
                 data-info-status="{{if .TakenDown}}{{tr $.Locale "taken_down"}}{{else if .QuickShare}}{{tr $.Locale "quick_share"}} · {{remainText $.Locale .ExpiresAt}}{{else if .LiveShares}}{{countText $.Locale .LiveShares "shares"}}{{else}}{{tr $.Locale "not_shared"}}{{end}}"
                 data-info-enc="{{if or .Sealed .Encrypted}}{{tr $.Locale "e2ee_tag"}}{{end}}"
@@ -334,11 +395,11 @@
                 data-info-tags="{{join .Tags "\n"}}"
                 data-info-created="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" data-info-updated="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">
               <td class="trunc">
-                <a class="fb-row-name" href="/resources/{{.ID}}" draggable="false" title="{{resourceLabel $.Locale .}}{{if and .Filename (ne .Filename .Name)}} · {{.Filename}}{{end}}">
+                <a class="fb-row-name" href="/resources/{{.ID}}" draggable="false" title="{{fileDisplayName $.Locale .}}">
                   <span class="fb-mini fb-mini-file cat-{{$k.Category}}" aria-hidden="true">
                     <svg viewBox="0 0 18 20" fill="none"><path class="doc-sheet" d="M3.2 1.4h7.8l4.4 4.4V17a1.6 1.6 0 0 1-1.6 1.6H3.2A1.6 1.6 0 0 1 1.6 17V3A1.6 1.6 0 0 1 3.2 1.4Z"/><path class="doc-fold" d="M11 1.4V4.6a1.2 1.2 0 0 0 1.2 1.2h3.2L11 1.4Z"/></svg>
                   </span>
-                  <span class="trunc" title="{{resourceLabel $.Locale .}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</span>
+                  <span class="trunc" title="{{fileDisplayName $.Locale .}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{fileDisplayName $.Locale .}}</span>
                   {{if or .Sealed .Encrypted}}<span class="fb-inline-lock" title="{{tr $.Locale "encrypted"}}" aria-label="{{tr $.Locale "encrypted"}}">
                     <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="5.4" width="7.6" height="5.2" rx="1.4"/><path d="M4 5.4V3.8a2 2 0 1 1 4 0v1.6"/></svg>
                   </span>{{end}}
@@ -351,7 +412,7 @@
               <td class="mut col-kind"><span{{if .Sealed}} data-sealed-kind="{{.ID}}"{{end}}>{{$k.Label}}</span></td>
               <td class="num col-date">{{formatDay .CreatedAt}}</td>
               <td class="col-act">
-                <button type="button" class="fb-row-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="resource" data-item-id="{{.ID}}" data-item-name="{{resourceLabel $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}">⋯</button>
+                <button type="button" class="fb-row-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}">⋯</button>
               </td>
             </tr>
             {{end}}
@@ -379,15 +440,16 @@
         {{end}}
         {{range .Resources}}
         {{$k := fileKind $.Locale .}}
-        <div class="fb-tile is-file" data-fb-item data-item-kind="resource" data-item-id="{{.ID}}" data-item-name="{{resourceLabel $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}"
-             data-info-kind="{{$k.Label}}" data-info-cat="{{$k.Category}}" data-info-badge="{{$k.Badge}}" data-info-filename="{{.Filename}}"
+        <div class="fb-tile is-file" data-fb-item data-item-kind="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}"
+             data-item-sealed="{{if or .Sealed .Encrypted}}1{{end}}" data-item-quick="{{if .QuickShare}}1{{end}}" data-item-shares="{{.LiveShares}}"
+             data-info-kind="{{$k.Label}}" data-info-cat="{{$k.Category}}" data-info-badge="{{$k.Badge}}" data-info-filename="{{or .Filename .Name}}"
              data-info-size="{{bytesText .ContentSize}}" data-info-bytes="{{.ContentSize}}"
              data-info-status="{{if .TakenDown}}{{tr $.Locale "taken_down"}}{{else if .QuickShare}}{{tr $.Locale "quick_share"}} · {{remainText $.Locale .ExpiresAt}}{{else if .LiveShares}}{{countText $.Locale .LiveShares "shares"}}{{else}}{{tr $.Locale "not_shared"}}{{end}}"
              data-info-enc="{{if or .Sealed .Encrypted}}{{tr $.Locale "e2ee_tag"}}{{end}}"
              data-info-version="{{if not .QuickShare}}v{{.Version}}{{end}}"
              data-info-tags="{{join .Tags "\n"}}"
              data-info-created="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" data-info-updated="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">
-          <a class="fb-tile-link" href="/resources/{{.ID}}" draggable="false" title="{{resourceLabel $.Locale .}}{{if and .Filename (ne .Filename .Name)}} · {{.Filename}}{{end}}">
+          <a class="fb-tile-link" href="/resources/{{.ID}}" draggable="false" title="{{fileDisplayName $.Locale .}}">
             <span class="fb-ico fb-ico-file cat-{{$k.Category}}" data-sealed-icon="{{.ID}}" aria-hidden="true">
               <svg viewBox="0 0 48 56" fill="none">
                 <path class="doc-sheet" d="M9 3.5h20.5L41.5 15.5V49a3.5 3.5 0 0 1-3.5 3.5H9A3.5 3.5 0 0 1 5.5 49V7A3.5 3.5 0 0 1 9 3.5Z"/>
@@ -404,10 +466,10 @@
               {{else if .QuickShare}}<span class="fb-dot qs" title="{{remainText $.Locale .ExpiresAt}}"></span>
               {{else if .LiveShares}}<span class="fb-dot on" title="{{countText $.Locale .LiveShares "shares"}}"></span>{{end}}
             </span>
-            <span class="fb-name" title="{{resourceLabel $.Locale .}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{resourceLabel $.Locale .}}</span>
+            <span class="fb-name" title="{{fileDisplayName $.Locale .}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{fileDisplayName $.Locale .}}</span>
             {{if .QuickShare}}<span class="fb-meta"><span class="fb-qs-left">{{remainText $.Locale .ExpiresAt}}</span></span>{{end}}
           </a>
-          <button type="button" class="fb-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="resource" data-item-id="{{.ID}}" data-item-name="{{resourceLabel $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}">⋯</button>
+          <button type="button" class="fb-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}">⋯</button>
         </div>
         {{end}}
       </div>

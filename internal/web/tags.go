@@ -57,13 +57,25 @@ func (a *App) handleResourceTags(w http.ResponseWriter, r *http.Request, user Us
 	if tag := strings.TrimSpace(r.FormValue("add")); tag != "" {
 		add = append(add, tag)
 	}
-	if _, err := a.retag(r.Context(), user.ID, resource, add, remove); err != nil {
+	updated, err := a.retag(r.Context(), user.ID, resource, add, remove)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writePlainError(w, http.StatusNotFound, "resource not found")
 			return
 		}
 		text, status := a.writeErrorText("tag resource", err)
+		if wantsJSON(r) {
+			a.writeAPI(w, status, map[string]string{"message": localizePageError(requestLanguage(r).Locale, text)})
+			return
+		}
 		a.renderResourcePage(w, r, user, resource, text, status, nil, nil)
+		return
+	}
+	if wantsJSON(r) {
+		if updated == nil {
+			updated = []string{}
+		}
+		a.writeAPI(w, http.StatusOK, map[string]any{"tags": updated})
 		return
 	}
 	http.Redirect(w, r, "/resources/"+resourceID, http.StatusSeeOther)

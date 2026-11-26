@@ -120,12 +120,16 @@ const readOnly = Boolean(sealedRoot?.hasAttribute("data-read-only"));
 
 function showOpened(meta, content) {
   const id = sealedRoot.dataset.resource;
-  const label = meta.name || meta.filename;
+  const label = meta.filename || meta.name;
   nameTitles(meta);
   const form = sealedRoot.querySelector("[data-sealed-form]");
-  for (const [selector, value] of [["[data-sealed-name]", meta.name], ["[data-sealed-filename]", meta.filename]]) {
-    const field = form.querySelector(selector);
-    if (field) field.value = value;
+  if (!form) return;
+  const nameField = form.querySelector("[data-sealed-name]");
+  const fileField = form.elements.namedItem("filename") || form.querySelector("[data-sealed-filename]");
+  if (nameField) nameField.value = meta.name || "";
+  if (fileField) {
+    fileField.disabled = false;
+    fileField.value = nameField ? (meta.filename || "") : (meta.filename || meta.name || "");
   }
   say(form.querySelector("[data-sealed-meta-line]"), `${meta.type.split(";")[0]} · ${content.length.toLocaleString()} B`);
   const textarea = form.querySelector("[data-sealed-text]");
@@ -190,8 +194,12 @@ async function openSealed(key) {
   opened.key = key;
   opened.contentKey = await openContentKey(fromBase64URL(sealedRoot.dataset.sealedKey), key, id);
   opened.meta = await decryptMeta(opened.contentKey, id, fromBase64URL(sealedRoot.dataset.sealedMeta));
-  const content = await decryptContent(opened.contentKey, id, await bytesOf(`/resources/${id}/raw`));
-  showOpened(opened.meta, content);
+  if (sealedRoot.querySelector("[data-sealed-form]")) {
+    const content = await decryptContent(opened.contentKey, id, await bytesOf(`/resources/${id}/raw`));
+    showOpened(opened.meta, content);
+  } else {
+    nameTitles(opened.meta);
+  }
   await fillLinks(key);
 }
 
@@ -205,8 +213,10 @@ async function saveSealed(event) {
   const ui = createUploadProgress(form, submitBtn);
   for (const button of form.querySelectorAll("button")) button.disabled = true;
   try {
-    const filename = form.querySelector("[data-sealed-filename]").value.trim();
-    const meta = { name: form.querySelector("[data-sealed-name]").value.trim(), filename, type: opened.meta.type };
+    const fileField = form.elements.namedItem("filename") || form.querySelector("[data-sealed-filename]");
+    const filename = (fileField ? fileField.value : "").trim();
+    const nameField = form.querySelector("[data-sealed-name]");
+    const meta = { name: nameField ? nameField.value.trim() : filename, filename, type: opened.meta.type };
     let content = null;
     // A chosen text file is read into the editor, which is then what is
     // saved; any other chosen file is saved as it is.
@@ -221,6 +231,7 @@ async function saveSealed(event) {
       if (filename !== opened.meta.filename || !textLike(meta.type)) meta.type = textType(filename);
     }
     const fields = { action: "save", base_version: sealedRoot.dataset.version, meta: toBase64URL(await encryptMeta(opened.contentKey, id, meta)) };
+    if (document.body.dataset.modalMode) fields.modal = document.body.dataset.modalMode;
     let files = {};
     if (content) {
       const sealedBytes = await encryptContent(opened.contentKey, id, content);
@@ -295,7 +306,7 @@ function postShare(fields) {
   form.hidden = true;
   const viaParts = Boolean(document.querySelector("[data-share-panel]"));
   if (viaParts) form.setAttribute("data-parts", "");
-  for (const [name, value] of Object.entries({ csrf, ...fields })) {
+  for (const [name, value] of Object.entries({ csrf, ...(document.body.dataset.modalMode ? { modal: document.body.dataset.modalMode } : {}), ...fields })) {
     const input = document.createElement("input");
     input.type = "hidden";
     input.name = name;
@@ -356,10 +367,11 @@ document.addEventListener("click", (event) => {
 async function startSealed() {
   const unlockForm = sealedRoot.querySelector("[data-sealed-unlock]");
   const status = sealedRoot.querySelector("[data-sealed-status]");
-  sealedRoot.querySelector("[data-sealed-form]").addEventListener("submit", saveSealed);
+  const sealedForm = sealedRoot.querySelector("[data-sealed-form]");
+  sealedForm?.addEventListener("submit", saveSealed);
   // A non-text resource given a text file: upload.js has made the editor,
   // which now holds what will be saved.
-  sealedRoot.querySelector("[data-sealed-form]").addEventListener("plainmote:text-editor", () => {
+  sealedForm?.addEventListener("plainmote:text-editor", () => {
     opened.text = "";
   });
   document.addEventListener("plainmote:parts", () => {
@@ -439,6 +451,7 @@ async function sealResource(dialog) {
   const total = history.length + 1;
   const contentKey = await newContentKey();
   const fields = { action: "seal", base_version: toggle.dataset.version, sealed_key: toBase64URL(await wrapContentKey(contentKey, key, id)) };
+  if (document.body.dataset.modalMode) fields.modal = document.body.dataset.modalMode;
   const files = {};
   progress(dialog, 1, total);
   const current = utf8Bytes(await bytesOf(`/resources/${id}/raw`), toggle.dataset.type, toggle.dataset.encoding);
@@ -461,7 +474,8 @@ async function unsealResource(dialog) {
   const contentKey = await openContentKey(fromBase64URL(sealedRoot.dataset.sealedKey), key, id);
   progress(dialog, 1, total);
   const meta = await decryptMeta(contentKey, id, fromBase64URL(sealedRoot.dataset.sealedMeta));
-  const fields = { action: "unseal", base_version: toggle.dataset.version, name: meta.name, filename: meta.filename };
+  const fields = { action: "unseal", base_version: toggle.dataset.version, name: meta.filename || meta.name, filename: meta.filename };
+  if (document.body.dataset.modalMode) fields.modal = document.body.dataset.modalMode;
   const files = { content: await decryptContent(contentKey, id, await bytesOf(`/resources/${id}/raw`)) };
   for (const [index, version] of history.entries()) {
     progress(dialog, index + 2, total);
@@ -569,9 +583,10 @@ function startNew(input) {
       const fields = {
         id,
         sealed_key: toBase64URL(await wrapContentKey(contentKey, key, id)),
-        meta: toBase64URL(await encryptMeta(contentKey, id, { name: (form.elements.name?.value || "").trim(), filename, type })),
+        meta: toBase64URL(await encryptMeta(contentKey, id, { name: (form.elements.name?.value || filename).trim(), filename, type })),
       };
       if (form.elements.folder_id?.value) fields.folder_id = form.elements.folder_id.value;
+      if (document.body.dataset.modalMode) fields.modal = document.body.dataset.modalMode;
       const direct = await presignAndUpload({
         purpose: "sealed_create",
         blob: sealedBlob,

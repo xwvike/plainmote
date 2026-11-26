@@ -139,6 +139,7 @@ func (a *App) templateSet() *template.Template {
 		"grantSource":        grantSource,
 		"trashPurgeAt":       trashPurgeAt,
 		"fileKind":           fileKindForResource,
+		"fileDisplayName":    fileDisplayName,
 		"folderURL": func(id string) string {
 			return folderDashboardURL(id, nil)
 		},
@@ -509,10 +510,19 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	//
 	// The media player arrives here with a stricter policy of its own. Keep
 	// it intact instead of replacing it with the common page policy.
-	if w.Header().Get("Content-Security-Policy") == "" {
-		w.Header().Set("Content-Security-Policy", pagePolicy)
+	if data.ModalMode != "" {
+		// Authenticated Finder modals frame only same-origin resource sheets;
+		// cross-origin framing stays completely blocked.
+		if w.Header().Get("Content-Security-Policy") == "" {
+			w.Header().Set("Content-Security-Policy", "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'")
+		}
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	} else {
+		if w.Header().Get("Content-Security-Policy") == "" {
+			w.Header().Set("Content-Security-Policy", pagePolicy)
+		}
+		w.Header().Set("X-Frame-Options", "DENY")
 	}
-	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// same-origin keeps a path such as /paste/<id> - which is what lets a
 	// quick share be saved - out of the Referer sent to the font host. A
@@ -622,6 +632,20 @@ func grantSource(locale string, grant store.OAuthGrant) string {
 // encrypted content - whose name is inside it - that it is encrypted.
 func resourceLabel(locale string, resource Resource) string {
 	switch {
+	case resource.Name != "":
+		return resource.Name
+	case resource.Encrypted() || resource.Sealed():
+		return translate(locale, "encrypted_content")
+	}
+	return translate(locale, "untitled_resource")
+}
+
+// fileDisplayName returns the primary filename-first label for Finder views,
+// falling back cleanly to legacy Name or the localized untitled/encrypted label.
+func fileDisplayName(locale string, resource Resource) string {
+	switch {
+	case resource.Filename != "":
+		return resource.Filename
 	case resource.Name != "":
 		return resource.Name
 	case resource.Encrypted() || resource.Sealed():

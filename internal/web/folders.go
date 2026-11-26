@@ -15,10 +15,34 @@ import (
 const (
 	foldersPath = "folders"
 	movePath    = "move"
+	renamePath  = "rename"
 	viewCookie  = "plainmote_view"
 	viewIcon    = "icon"
 	viewList    = "list"
 )
+
+func modalModeFromRequest(r *http.Request) string {
+	mode := strings.TrimSpace(r.URL.Query().Get("modal"))
+	if mode == "" && r.Method == http.MethodPost {
+		mode = strings.TrimSpace(r.FormValue("modal"))
+	}
+	switch mode {
+	case "edit", "share", "versions":
+		return mode
+	default:
+		return ""
+	}
+}
+
+func appendModalParam(target, mode string) string {
+	if mode == "" {
+		return target
+	}
+	if strings.Contains(target, "?") {
+		return target + "&modal=" + url.QueryEscape(mode)
+	}
+	return target + "?modal=" + url.QueryEscape(mode)
+}
 
 // folderOption represents one entry in the "Move to…" folder selector, ordered
 // depth-first so the hierarchy reads naturally inside a plain <select>.
@@ -240,6 +264,51 @@ func (a *App) handleMoveResource(w http.ResponseWriter, r *http.Request, user Us
 	returnFolder := strings.TrimSpace(r.FormValue("return_folder"))
 	if err := a.db.MoveResource(r.Context(), user.ID, resourceID, targetID); err != nil {
 		text, status := a.writeErrorText("move resource", err)
+		if errors.Is(err, store.ErrNotFound) {
+			status = http.StatusNotFound
+			text = "not found"
+		}
+		if wantsJSON(r) {
+			a.writeAPI(w, status, map[string]string{"message": localizePageError(requestLanguage(r).Locale, text)})
+			return
+		}
+		http.Redirect(w, r, folderDashboardURL(returnFolder, url.Values{"error": {text}}), http.StatusSeeOther)
+		return
+	}
+	loc := folderDashboardURL(returnFolder, nil)
+	if wantsJSON(r) {
+		a.writeAPI(w, http.StatusOK, map[string]string{"location": loc})
+		return
+	}
+	http.Redirect(w, r, loc, http.StatusSeeOther)
+}
+
+// handleRenameResource handles POST /resources/rename to rename a plaintext
+// resource's filename (and unified name) directly from the Finder browser.
+func (a *App) handleRenameResource(w http.ResponseWriter, r *http.Request, user User, sessionID string) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writePlainError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !a.sameOriginPost(r) {
+		writePlainError(w, http.StatusForbidden, "cross-site post")
+		return
+	}
+	if !a.checkCSRF(r, sessionID) {
+		writePlainError(w, http.StatusForbidden, "invalid csrf token")
+		return
+	}
+	resourceID := strings.TrimSpace(r.FormValue("resource_id"))
+	filename := strings.TrimSpace(r.FormValue("filename"))
+	returnFolder := strings.TrimSpace(r.FormValue("return_folder"))
+	_, err := a.db.SaveResource(r.Context(), user.ID, resourceID, store.ResourceEdit{
+		Name:     filename,
+		Filename: filename,
+		Content:  nil,
+	})
+	if err != nil {
+		text, status := a.writeErrorText("rename resource", err)
 		if errors.Is(err, store.ErrNotFound) {
 			status = http.StatusNotFound
 			text = "not found"

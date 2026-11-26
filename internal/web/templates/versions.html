@@ -4,16 +4,28 @@
   {{template "htmlhead" .}}
   <title>{{tr .Locale "history"}} · {{template "resource-title-text" .}} · PlainMote</title>
 </head>
-<body>
-  {{template "topbar" .}}
+<body{{if .ModalMode}} class="is-modal modal-{{.ModalMode}}" data-modal-mode="{{.ModalMode}}"{{end}}>
+  {{if not .ModalMode}}{{template "topbar" .}}{{end}}
   {{template "sealed-page" .}}
-  <main class="page">
+  {{if .ModalMode}}
+  <header class="mbar">
+    <div class="mbar-title">
+      <b>{{tr .Locale "history"}}</b>
+      <span class="mut">· {{fileDisplayName .Locale .Resource}}</span>
+      <span class="cnt">v{{.Resource.Version}} · {{countText .Locale .HistoryCount "versions"}}</span>
+    </div>
+    <button type="button" class="mbar-close" data-modal-close aria-label="{{tr .Locale "close"}}">&times;</button>
+  </header>
+  {{end}}
+  <main class="page{{if .ModalMode}} modal-page{{end}}">
+    {{if not .ModalMode}}
     <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a><span>/</span><a href="/resources/{{.Resource.ID}}">{{template "resource-title" .}}</a><span>/</span><span>{{tr .Locale "history"}}</span></div>
     <div class="ph">
       <h1>{{tr .Locale "history"}}</h1>
       <span class="cnt">v{{.Resource.Version}} · {{countText .Locale .HistoryCount "versions"}}</span>
       <span class="sp"><a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "back_to_resource"}}</a></span>
     </div>
+    {{end}}
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
     <div class="panel">
       <div class="lh"><span>{{tr .Locale "col_version"}}</span><span>{{tr .Locale "col_saved"}}</span><span class="z">{{tr .Locale "size"}}</span><span>{{tr .Locale "col_last_delivered"}}</span><span></span></div>
@@ -22,7 +34,7 @@
       <ul class="vl">
         {{range .Versions}}
         <li{{if .Current}} class="cur"{{end}}>
-          <span class="v">{{if .Current}}v{{.Number}}{{else}}<a href="/resources/{{$.Resource.ID}}/versions/{{.Number}}">v{{.Number}}</a>{{end}}</span>
+          <span class="v">{{if .Current}}v{{.Number}}{{else}}<a href="/resources/{{$.Resource.ID}}/versions/{{.Number}}{{if $.ModalMode}}?modal={{$.ModalMode}}{{end}}">v{{.Number}}</a>{{end}}</span>
           <span class="t">{{formatMinute .SavedAt}}</span>
           <span class="z">{{bytesText .Size}}</span>
           <span class="got">
@@ -32,12 +44,12 @@
             {{if and (not .Current) (not .Links) (not .RestoredFrom)}}<span class="mut">—</span>{{end}}
           </span>
           <span class="acts">
-            {{if .Current}}<a class="txt" href="/resources/{{$.Resource.ID}}">{{tr $.Locale "edit"}}</a>
+            {{if .Current}}{{if not $.ModalMode}}<a class="txt" href="/resources/{{$.Resource.ID}}">{{tr $.Locale "edit"}}</a>{{end}}
             {{else}}
-            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}">{{tr $.Locale "view"}}</a>
-            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/compare?from={{.Number}}&amp;to={{$.Resource.Version}}">{{tr $.Locale "compare_current"}}</a>
-            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}?restore=1" data-dialog>{{tr $.Locale "restore"}}</a>
-            <a class="txt danger" href="/resources/{{$.Resource.ID}}/versions?remove={{.Number}}" data-dialog>{{tr $.Locale "delete"}}</a>
+            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}{{if $.ModalMode}}?modal={{$.ModalMode}}{{end}}">{{tr $.Locale "view"}}</a>
+            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/compare?from={{.Number}}&amp;to={{$.Resource.Version}}{{if $.ModalMode}}&amp;modal={{$.ModalMode}}{{end}}">{{tr $.Locale "compare_current"}}</a>
+            <a class="txt" href="/resources/{{$.Resource.ID}}/versions/{{.Number}}?restore=1{{if $.ModalMode}}&amp;modal={{$.ModalMode}}{{end}}" data-dialog>{{tr $.Locale "restore"}}</a>
+            <a class="txt danger" href="/resources/{{$.Resource.ID}}/versions?remove={{.Number}}{{if $.ModalMode}}&amp;modal={{$.ModalMode}}{{end}}" data-dialog>{{tr $.Locale "delete"}}</a>
             {{end}}
           </span>
         </li>
@@ -52,9 +64,10 @@
 
   {{if .RemoveVersion}}<div class="scrim"></div>{{end}}
   {{template "versions-dialog" .}}
-  {{template "footer" .}}
+  {{if not .ModalMode}}{{template "footer" .}}{{end}}
   <script type="module" src="{{asset "parts.js"}}"></script>
   {{if .Resource.Sealed}}<script type="module" src="{{asset "sealed-view.js"}}"></script>{{end}}
+  {{if .ModalMode}}<script type="module" src="{{asset "modal-bridge.js"}}"></script>{{end}}
 </body>
 </html>{{end}}
 
@@ -64,16 +77,17 @@
   <dialog class="dlg" open data-part="dialog">
     <header>
       <b>{{printf (tr .Locale "remove_title") .RemoveVersion}}</b>
-      <a class="x" href="/resources/{{.Resource.ID}}/versions" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
+      <a class="x" href="/resources/{{.Resource.ID}}/versions{{if .ModalMode}}?modal={{.ModalMode}}{{end}}" data-close aria-label="{{tr .Locale "close"}}">&times;</a>
     </header>
     <div class="body">
       <p class="err">{{printf (tr .Locale "remove_warning") .RemoveVersion}}</p>
       <p class="hint">{{printf (tr .Locale "remove_hint") .RemoveVersion}}</p>
     </div>
     <footer>
-      <a class="btn" href="/resources/{{.Resource.ID}}/versions" data-close>{{tr .Locale "cancel"}}</a>
+      <a class="btn" href="/resources/{{.Resource.ID}}/versions{{if .ModalMode}}?modal={{.ModalMode}}{{end}}" data-close>{{tr .Locale "cancel"}}</a>
       <form method="post" action="/resources/{{.Resource.ID}}/versions/{{.RemoveVersion}}" class="inline">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
+        {{if .ModalMode}}<input type="hidden" name="modal" value="{{.ModalMode}}">{{end}}
         <input type="hidden" name="action" value="delete">
         <button type="submit" class="bad">{{printf (tr .Locale "remove_confirm") .RemoveVersion}}</button>
       </form>

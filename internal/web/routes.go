@@ -158,6 +158,9 @@ type pageData struct {
 	NewResourceURL  string
 	FolderDeleted   bool
 	FolderTrashed   int
+	// ModalMode is non-empty ("edit", "share", "versions") when a resource or
+	// version view is rendered inside a same-origin Finder modal sheet.
+	ModalMode string
 	// Tags are the account's tags: filters on the resource list, and on a
 	// resource the ones it could still be given.
 	Tags     []tagChip

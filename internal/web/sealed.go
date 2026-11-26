@@ -215,7 +215,7 @@ func (a *App) handleSealedCreate(w http.ResponseWriter, r *http.Request, user Us
 	if folderID := strings.TrimSpace(r.FormValue("folder_id")); folderID != "" {
 		_ = a.db.MoveResource(r.Context(), user.ID, resource.ID, folderID)
 	}
-	a.writeAPI(w, http.StatusCreated, map[string]string{"location": "/resources/" + resource.ID + "?created=1"})
+	a.writeAPI(w, http.StatusCreated, map[string]string{"location": appendModalParam("/resources/"+resource.ID+"?created=1", modalModeFromRequest(r))})
 }
 
 func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user User, sessionID, resourceID string) {
@@ -263,7 +263,7 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 			if result.Trimmed > 0 {
 				location += "&trimmed=" + strconv.Itoa(result.Trimmed)
 			}
-			answer["location"] = location
+			answer["location"] = appendModalParam(location, modalModeFromRequest(r))
 		}
 	case "seal":
 		versions := map[int]store.SealedPart{}
@@ -285,7 +285,7 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 		revoked, err = a.db.SealResource(r.Context(), user.ID, resourceID, base,
 			store.SealedPart{Content: content, Meta: base64Field(r, "meta")}, versions, base64Field(r, "sealed_key"))
 		if err == nil {
-			answer["location"] = "/resources/" + resourceID + "?sealed=1"
+			answer["location"] = appendModalParam("/resources/"+resourceID+"?sealed=1", modalModeFromRequest(r))
 			answer["revoked"] = revoked
 		}
 	case "unseal":
@@ -308,7 +308,7 @@ func (a *App) handleSealedAction(w http.ResponseWriter, r *http.Request, user Us
 			Content: content, Name: strings.TrimSpace(r.FormValue("name")), Filename: strings.TrimSpace(r.FormValue("filename")),
 		}, versions)
 		if err == nil {
-			answer["location"] = "/resources/" + resourceID + "?unsealed=1"
+			answer["location"] = appendModalParam("/resources/"+resourceID+"?unsealed=1", modalModeFromRequest(r))
 		}
 	default:
 		a.keyringFail(w, http.StatusBadRequest, "bad_request", "")

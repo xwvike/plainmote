@@ -681,7 +681,10 @@ function enhance(textarea) {
     });
     // The filename decides the type, and on a new resource it is typed after
     // the content just as often as before it.
-    if (filenameInput) filenameInput.addEventListener("input", configureLanguage);
+    if (filenameInput) {
+      filenameInput.addEventListener("input", configureLanguage);
+      if (!form.contains(filenameInput)) filenameInput.addEventListener("input", markDirty);
+    }
 
     const replaceDocument = (content, dirty = false, edited = false) => {
       applyingSource = true;
