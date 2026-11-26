@@ -283,3 +283,109 @@ func TestModalSheetsRenameTagsAndSingleFilename(t *testing.T) {
 		t.Fatalf("legacy /logs?resource redirect: %d %q", redir.Code, redir.Header().Get("Location"))
 	}
 }
+
+func TestSiblingFilenameUniqueness(t *testing.T) {
+	db, user, _ := testDatabase(t)
+	ctx := context.Background()
+	client := signedIn(t, db, user)
+
+	postForm := func(path string, vals url.Values) *httptest.ResponseRecorder {
+		vals.Set("csrf", client.csrf)
+		req := httptest.NewRequest(http.MethodPost, "https://cfg.test"+path, strings.NewReader(vals.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", "https://cfg.test")
+		req.Header.Set("Accept", "application/json")
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: client.session})
+		req.AddCookie(&http.Cookie{Name: csrfCookie, Value: client.csrf})
+		rec := httptest.NewRecorder()
+		client.app.handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 1. Create notes.md in root, then verify creating NOTES.MD auto-suffixes
+	// like Finder ("NOTES (2).MD") instead of failing.
+	r1, err := db.CreateResource(ctx, user.ID, "notes.md", "notes.md", []byte("one\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dup := postForm("/resources/new", url.Values{
+		"filename":         {"NOTES.MD"},
+		"content":          {"two\n"},
+		"content_encoding": {"utf-8"},
+		"content_eol":      {"lf"},
+	})
+	if dup.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 auto-numbered create on duplicate filename, got %d %s", dup.Code, dup.Body.String())
+	}
+	dupID := strings.TrimPrefix(strings.Split(dup.Header().Get("Location"), "?")[0], "/resources/")
+	dupRes, err := db.ResourceForOwner(ctx, user.ID, dupID)
+	if err != nil || dupRes.Filename != "NOTES (2).MD" {
+		t.Fatalf("expected auto-numbered 'NOTES (2).MD', got %+v %v", dupRes, err)
+	}
+
+	// 1b. Creating unnamed resources via web UI auto-numbers ("Untitled resource",
+	// "Untitled resource (2)").
+	u1 := postForm("/resources/new", url.Values{"content": {"first\n"}, "content_encoding": {"utf-8"}, "content_eol": {"lf"}})
+	u2 := postForm("/resources/new", url.Values{"content": {"second\n"}, "content_encoding": {"utf-8"}, "content_eol": {"lf"}})
+	if u1.Code != http.StatusSeeOther || u2.Code != http.StatusSeeOther {
+		t.Fatalf("unnamed creates failed: %d %d", u1.Code, u2.Code)
+	}
+	u2ID := strings.TrimPrefix(strings.Split(u2.Header().Get("Location"), "?")[0], "/resources/")
+	u2Res, err := db.ResourceForOwner(ctx, user.ID, u2ID)
+	if err != nil || u2Res.Filename != "Untitled resource (2)" {
+		t.Fatalf("expected second unnamed resource 'Untitled resource (2)', got %+v %v", u2Res, err)
+	}
+
+	// 2. Creating notes.md inside a subfolder stays "notes.md" (no suffix).
+	sub, err := db.CreateFolder(ctx, user.ID, "", "Sub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inSub := postForm("/resources/new", url.Values{
+		"folder_id":        {sub.ID},
+		"filename":         {"notes.md"},
+		"content":          {"sub\n"},
+		"content_encoding": {"utf-8"},
+		"content_eol":      {"lf"},
+	})
+	if inSub.Code != http.StatusSeeOther {
+		t.Fatalf("creating same filename in subfolder should succeed, got %d %s", inSub.Code, inSub.Body.String())
+	}
+	inSubID := strings.TrimPrefix(strings.Split(inSub.Header().Get("Location"), "?")[0], "/resources/")
+	inSubRes, err := db.ResourceForOwner(ctx, user.ID, inSubID)
+	if err != nil || inSubRes.Filename != "notes.md" {
+		t.Fatalf("expected subfolder copy to keep 'notes.md', got %+v %v", inSubRes, err)
+	}
+
+	// 3. Moving root notes.md into Sub (which already has notes.md) is refused.
+	mv := postForm("/resources/move", url.Values{"resource_id": {r1.ID}, "target_folder_id": {sub.ID}})
+	if mv.Code != http.StatusBadRequest {
+		t.Fatalf("moving duplicate filename into folder should fail with 400, got %d %s", mv.Code, mv.Body.String())
+	}
+
+	// 4. Renaming another root file to notes.md is refused.
+	r2, err := db.CreateResource(ctx, user.ID, "other.md", "other.md", []byte("other\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ren := postForm("/resources/rename", url.Values{"resource_id": {r2.ID}, "filename": {"Notes.md"}})
+	if ren.Code != http.StatusBadRequest {
+		t.Fatalf("renaming to existing sibling filename should fail with 400, got %d %s", ren.Code, ren.Body.String())
+	}
+
+	// 5. Trashing notes.md, creating a fresh notes.md, then restoring the trashed
+	// one auto-suffixes to "notes (3).md" (since notes.md & NOTES (2).MD exist).
+	if _, err := db.TrashResource(ctx, user.ID, r1.ID, r1.CreatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.CreateResource(ctx, user.ID, "notes.md", "notes.md", []byte("replacement\n"), ""); err != nil {
+		t.Fatalf("creating notes.md after trashing old one should succeed: %v", err)
+	}
+	restored, err := db.RestoreResource(ctx, user.ID, r1.ID, r1.CreatedAt)
+	if err != nil {
+		t.Fatalf("restore trashed notes.md: %v", err)
+	}
+	if restored.Filename != "notes (3).md" {
+		t.Fatalf("expected restored duplicate to become 'notes (3).md', got %q", restored.Filename)
+	}
+}

@@ -97,16 +97,27 @@ func resourceName(name, filename string) string {
 }
 
 func (d *Store) CreateResource(ctx context.Context, ownerID, name, filename string, content []byte, contentEncoding string) (Resource, error) {
-	return d.CreateResourceWithFallbackUpload(ctx, ownerID, "", name, filename, content, contentEncoding)
+	return d.CreateResourceWithFallbackUploadInFolder(ctx, ownerID, "", "", name, filename, content, contentEncoding)
 }
 
 func (d *Store) CreateResourceWithFallbackUpload(ctx context.Context, ownerID, fallbackUploadID, name, filename string, content []byte, contentEncoding string) (Resource, error) {
+	return d.CreateResourceWithFallbackUploadInFolder(ctx, ownerID, "", fallbackUploadID, name, filename, content, contentEncoding)
+}
+
+func (d *Store) CreateResourceWithFallbackUploadInFolder(ctx context.Context, ownerID, folderID, fallbackUploadID, name, filename string, content []byte, contentEncoding string) (Resource, error) {
+	return d.createResourceInternal(ctx, ownerID, folderID, fallbackUploadID, name, filename, content, contentEncoding, true)
+}
+
+func (d *Store) createResourceInternal(ctx context.Context, ownerID, folderID, fallbackUploadID, name, filename string, content []byte, contentEncoding string, autoDedupe bool) (Resource, error) {
+	if folderID != "" && !validUUIDs(folderID) {
+		return Resource{}, ErrNotFound
+	}
 	if fallbackUploadID != "" {
 		ticket, err := d.fallbackTicket(ctx, fallbackUploadID, ownerID, "resource_create", "", content)
 		if err != nil {
 			return Resource{}, err
 		}
-		return d.CreateResourceFromUpload(ctx, ownerID, ticket, name, filename, "", contentEncoding)
+		return d.CreateResourceFromUploadInFolder(ctx, ownerID, folderID, ticket, name, filename, "", contentEncoding)
 	}
 	input, err := normalizeResourceInput(name, filename, content, contentEncoding)
 	if err != nil {
@@ -117,7 +128,7 @@ func (d *Store) CreateResourceWithFallbackUpload(ctx context.Context, ownerID, f
 		ID: uuid.NewString(), OwnerID: ownerID, Name: input.Name, Filename: input.Filename,
 		ContentType: input.ContentType, ContentEncoding: input.Encoding,
 		CreatedAt: now, UpdatedAt: now,
-		Version: 1, VersionAt: now,
+		Version: 1, VersionAt: now, FolderID: folderID,
 	}
 
 	// The body is written before the transaction opens. Object storage has no
@@ -139,6 +150,38 @@ func (d *Store) CreateResourceWithFallbackUpload(ctx context.Context, ownerID, f
 		if err != nil {
 			return err
 		}
+		if folderID != "" {
+			var ok string
+			if err := tx.QueryRow(ctx, `SELECT id FROM folders WHERE id = $1 AND owner_id = $2`, folderID, ownerID).Scan(&ok); err != nil {
+				return translateNotFound(err)
+			}
+		}
+		if eff := effectiveResourceFilename(resource.Name, resource.Filename); eff != "" {
+			if autoDedupe {
+				next, err := uniqueSiblingFilenameTx(ctx, tx, ownerID, folderID, "", eff)
+				if err != nil {
+					return err
+				}
+				if next != eff {
+					if resource.Filename != "" {
+						if resource.Name == resource.Filename {
+							resource.Name = next
+						}
+						resource.Filename = next
+					} else {
+						resource.Name = next
+					}
+				}
+			} else {
+				exists, err := hasSiblingFilenameTx(ctx, tx, ownerID, folderID, "", eff)
+				if err != nil {
+					return err
+				}
+				if exists {
+					return refusal("当前文件夹已存在同名文件")
+				}
+			}
+		}
 		if usage.Resources+1 > limit.Resources {
 			return resourceQuotaError(limit.Resources, usage.Resources)
 		}
@@ -147,10 +190,10 @@ func (d *Store) CreateResourceWithFallbackUpload(ctx context.Context, ownerID, f
 		}
 		_, err = tx.Exec(ctx, `
 INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding,
-                      created_at, updated_at, version, version_at, content_sha256)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
+                      created_at, updated_at, version, version_at, content_sha256, folder_id)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10, NULLIF($11, '')::uuid)
 `, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
-			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, resource.ContentSHA256)
+			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, resource.ContentSHA256, folderID)
 		if err != nil {
 			return fmt.Errorf("create resource: %w: %w", ErrInternal, err)
 		}
@@ -439,6 +482,19 @@ func (d *Store) SaveResource(ctx context.Context, ownerID, id string, edit Resou
 		}
 		if locked.Sealed {
 			return errSealedInBrowser
+		}
+		// Enforce same-folder filename uniqueness when renaming (while still
+		// allowing content-only edits on any pre-existing legacy duplicates).
+		oldEff := effectiveResourceFilename(locked.Name, locked.Filename)
+		newEff := effectiveResourceFilename(input.Name, input.Filename)
+		if newEff != "" && !strings.EqualFold(newEff, oldEff) {
+			exists, err := hasSiblingFilenameTx(ctx, tx, ownerID, locked.FolderID, id, newEff)
+			if err != nil {
+				return err
+			}
+			if exists {
+				return refusal("当前文件夹已存在同名文件")
+			}
 		}
 		// Checked against the content, not just the number: posting back
 		// exactly what is current loses nobody's work, however stale the page.

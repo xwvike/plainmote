@@ -66,7 +66,9 @@ type currentContent struct {
 	Version      int
 	VersionAt    time.Time
 	RestoredFrom int
+	Name         string
 	Filename     string
+	FolderID     string
 	SealedMeta   []byte
 	Sealed       bool
 	QuickShare   bool
@@ -79,12 +81,12 @@ func lockContentTx(ctx context.Context, tx pgx.Tx, ownerID, id string) (currentC
 	var current currentContent
 	err := tx.QueryRow(ctx, `
 SELECT content_key, content_size, content_type, content_encoding, content_sha256,
-       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), filename, sealed_meta,
+       version, COALESCE(version_at, updated_at), COALESCE(restored_from, 0), name, filename, COALESCE(folder_id::text, ''), sealed_meta,
        sealed_key IS NOT NULL, expires_at IS NOT NULL
 FROM resources WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
 FOR UPDATE
 `, id, ownerID).Scan(&current.Key, &current.Size, &current.Type, &current.Encoding, &current.SHA256,
-		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Filename, &current.SealedMeta,
+		&current.Version, &current.VersionAt, &current.RestoredFrom, &current.Name, &current.Filename, &current.FolderID, &current.SealedMeta,
 		&current.Sealed, &current.QuickShare)
 	if err != nil {
 		return currentContent{}, translateNotFound(err)
@@ -476,7 +478,7 @@ func (d *Store) CopyVersion(ctx context.Context, ownerID, resourceID string, num
 	if err != nil {
 		return Resource{}, fmt.Errorf("read version %d: %w: %w", number, ErrInternal, err)
 	}
-	return d.CreateResource(ctx, ownerID, name, RefitFilename(resource.Filename, source.Filename, body), body, source.ContentEncoding)
+	return d.createResourceInternal(ctx, ownerID, resource.FolderID, "", name, RefitFilename(resource.Filename, source.Filename, body), body, source.ContentEncoding, true)
 }
 
 // DeleteVersion removes one earlier version and its object for good - for a

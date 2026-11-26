@@ -140,6 +140,22 @@ func (d *Store) insertQuickShare(ctx context.Context, ownerID string, resource R
 		if usage.StorageBytes+resource.ContentSize > limit.StorageBytes {
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
+		if eff := effectiveResourceFilename(resource.Name, resource.Filename); eff != "" {
+			next, err := uniqueSiblingFilenameTx(ctx, tx, ownerID, "", "", eff)
+			if err != nil {
+				return err
+			}
+			if next != eff {
+				if resource.Filename != "" {
+					if resource.Name == resource.Filename {
+						resource.Name = next
+					}
+					resource.Filename = next
+				} else {
+					resource.Name = next
+				}
+			}
+		}
 		// An id chosen by the browser that is already taken is refused, as
 		// creating an encrypted resource under it would be.
 		tag, err := tx.Exec(ctx, `

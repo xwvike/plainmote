@@ -593,6 +593,8 @@ var messageTable = map[string][6]string{
 	"outcome_group_failed":        {"Blocked", "未通过", "未通過", "拒否・失敗", "Refusé", "Abgelehnt"},
 	"all_links":                   {"All links", "全部链接", "所有連結", "すべてのリンク", "Tous les liens", "Alle Links"},
 	"no_file_access_logs":         {"No access activity yet.", "还没有访问记录。", "尚無存取紀錄。", "アクセス履歴はまだありません。", "Aucune activité d'accès pour le moment.", "Noch keine Zugriffe."},
+	"error_filename_duplicate":        {"A file with this name already exists in this folder.", "当前文件夹已存在同名文件。", "目前資料夾已存在同名檔案。", "このフォルダには同じ名前のファイルが既に存在します。", "Un fichier portant ce nom existe déjà dans ce dossier.", "In diesem Ordner existiert bereits eine Datei mit diesem Namen."},
+	"error_filename_duplicate_target": {"A file with this name already exists in the destination folder.", "目标文件夹已存在同名文件。", "目標資料夾已存在同名檔案。", "移動先フォルダには同じ名前のファイルが既に存在します。", "Un fichier portant ce nom existe déjà dans le dossier de destination.", "Im Zielordner existiert bereits eine Datei mit diesem Namen."},
 	"encrypted":                   {"Encrypted", "已加密", "已加密", "暗号化済み", "Chiffré", "Verschlüsselt"},
 	"encrypted_content":           {"Encrypted content", "加密内容", "加密內容", "暗号化された内容", "Contenu chiffré", "Verschlüsselter Inhalt"},
 	"quick_share_notice_prefix":   {"This is a quick share. It expires at ", "这是一条快速分享，将于 ", "這是一則快速分享，將於 ", "これはクイック共有です。", "Ceci est un partage rapide. Il expire le ", "Dies ist eine Schnellfreigabe. Sie läuft am "},

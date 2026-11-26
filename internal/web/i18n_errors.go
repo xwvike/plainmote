@@ -19,6 +19,8 @@ var localizedErrorCodes = map[string]string{
 	"文件名不能包含路径分隔符":                       "error_filename_separator",
 	"文件名不能包含控制字符":                        "error_filename_control",
 	"文件名不能包含文字方向控制符":                     "error_filename_bidi",
+	"当前文件夹已存在同名文件":                       "error_filename_duplicate",
+	"目标文件夹已存在同名文件":                       "error_filename_duplicate_target",
 	"标签不能为空":                             "error_tag_empty",
 	"标签必须是有效的 UTF-8 文本":                  "error_tag_utf8",
 	"标签不能包含控制字符":                         "error_tag_control",

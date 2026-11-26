@@ -257,7 +257,7 @@ func TestCopyVersionStartsAResource(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, body := readCurrent(t, db, user, copied.ID)
-	if body != "answer=42\n" || current.Version != 1 || current.Filename != resource.Filename || current.Name != "Example (v1)" {
+	if body != "answer=42\n" || current.Version != 1 || current.Filename != "example (2).conf" || current.Name != "Example (v1)" {
 		t.Fatalf("the copy is a new resource at v1 with the old content: %+v %q", current, body)
 	}
 }

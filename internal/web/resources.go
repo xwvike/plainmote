@@ -140,25 +140,27 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		return
 	}
 	form, err := readResourceForm(r, a.cfg.MaxContent)
+	folderID := strings.TrimSpace(r.FormValue("folder_id"))
 	if err == nil {
+		if form.Filename == "" && form.Name == "" && form.UploadFilename == "" && form.UploadToken == "" {
+			form.Filename = translate(requestLanguage(r).Locale, "untitled_resource")
+			form.Name = form.Filename
+		}
 		var resource Resource
 		if form.UploadToken != "" {
 			var ticket store.UploadTicket
 			ticket, err = a.verifyUploadToken(form.UploadToken, uploadPurposeResourceCreate, user.ID, "")
 			if err == nil {
-				resource, err = a.db.CreateResourceFromUpload(r.Context(), user.ID, ticket, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding)
+				resource, err = a.db.CreateResourceFromUploadInFolder(r.Context(), user.ID, folderID, ticket, form.Name, form.Filename, uploadName(form.UploadFilename), form.ContentEncoding)
 			}
 		} else {
 			var fallbackUploadID string
 			fallbackUploadID, err = a.fallbackUploadID(form.FallbackUploadToken, uploadPurposeResourceCreate, user.ID, "")
 			if err == nil {
-				resource, err = a.db.CreateResourceWithFallbackUpload(r.Context(), user.ID, fallbackUploadID, form.Name, form.Filename, form.Content, form.ContentEncoding)
+				resource, err = a.db.CreateResourceWithFallbackUploadInFolder(r.Context(), user.ID, folderID, fallbackUploadID, form.Name, form.Filename, form.Content, form.ContentEncoding)
 			}
 		}
 		if err == nil {
-			if folderID := strings.TrimSpace(r.FormValue("folder_id")); folderID != "" {
-				_ = a.db.MoveResource(r.Context(), user.ID, resource.ID, folderID)
-			}
 			location := appendModalParam("/resources/"+resource.ID+"?created=1", modalMode)
 			if wantsUploadJSON(r) {
 				a.writeAPI(w, http.StatusCreated, map[string]string{"location": location})

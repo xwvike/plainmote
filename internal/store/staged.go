@@ -576,6 +576,22 @@ func (d *Store) insertQuickShareFromUpload(ctx context.Context, ownerID string, 
 		if usage.StorageBytes+resource.ContentSize > limit.StorageBytes {
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
+		if eff := effectiveResourceFilename(resource.Name, resource.Filename); eff != "" {
+			next, err := uniqueSiblingFilenameTx(ctx, tx, ownerID, "", "", eff)
+			if err != nil {
+				return err
+			}
+			if next != eff {
+				if resource.Filename != "" {
+					if resource.Name == resource.Filename {
+						resource.Name = next
+					}
+					resource.Filename = next
+				} else {
+					resource.Name = next
+				}
+			}
+		}
 		tag, err := tx.Exec(ctx, `
 INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding,
                       created_at, updated_at, version, version_at, content_sha256, expires_at, sealed_key, sealed_meta)
@@ -615,10 +631,18 @@ ON CONFLICT (id) DO NOTHING
 	return resource, link, nil
 }
 
-// CreateResourceFromUpload commits a new plain resource whose body was uploaded
-// to stagingKey.
+// CreateResourceFromUpload commits a new plain resource in the root folder.
 func (d *Store) CreateResourceFromUpload(ctx context.Context, ownerID string, ticket UploadTicket, name, filename, uploadedAs, encodingHint string) (Resource, error) {
+	return d.CreateResourceFromUploadInFolder(ctx, ownerID, "", ticket, name, filename, uploadedAs, encodingHint)
+}
+
+// CreateResourceFromUploadInFolder commits a new plain resource whose body was
+// uploaded to stagingKey directly into folderID ("" = root).
+func (d *Store) CreateResourceFromUploadInFolder(ctx context.Context, ownerID, folderID string, ticket UploadTicket, name, filename, uploadedAs, encodingHint string) (Resource, error) {
 	if !validUUIDs(ownerID) || ownerID == AnonymousUserID {
+		return Resource{}, ErrNotFound
+	}
+	if folderID != "" && !validUUIDs(folderID) {
 		return Resource{}, ErrNotFound
 	}
 	now := time.Now().UTC()
@@ -675,13 +699,36 @@ func (d *Store) CreateResourceFromUpload(ctx context.Context, ownerID string, ti
 		if usage.StorageBytes+resource.ContentSize > limit.StorageBytes {
 			return storageQuotaError(limit.StorageBytes, usage.StorageBytes, resource.ContentSize)
 		}
+		if folderID != "" {
+			var ok string
+			if err := tx.QueryRow(ctx, `SELECT id FROM folders WHERE id = $1 AND owner_id = $2`, folderID, ownerID).Scan(&ok); err != nil {
+				return translateNotFound(err)
+			}
+		}
+		if eff := effectiveResourceFilename(resource.Name, resource.Filename); eff != "" {
+			next, err := uniqueSiblingFilenameTx(ctx, tx, ownerID, folderID, "", eff)
+			if err != nil {
+				return err
+			}
+			if next != eff {
+				if resource.Filename != "" {
+					if resource.Name == resource.Filename {
+						resource.Name = next
+					}
+					resource.Filename = next
+				} else {
+					resource.Name = next
+				}
+			}
+		}
+		resource.FolderID = folderID
 		tag, err := tx.Exec(ctx, `
 INSERT INTO resources(id, owner_id, name, filename, content_key, content_size, content_type, content_encoding,
-                      created_at, updated_at, version, version_at, content_sha256)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10)
+                      created_at, updated_at, version, version_at, content_sha256, folder_id)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1, $9, $10, NULLIF($11, '')::uuid)
 ON CONFLICT (id) DO NOTHING
 `, resource.ID, ownerID, resource.Name, resource.Filename, resource.ContentKey,
-			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, resource.ContentSHA256)
+			resource.ContentSize, resource.ContentType, resource.ContentEncoding, now, resource.ContentSHA256, folderID)
 		if err != nil {
 			return fmt.Errorf("create resource: %w: %w", ErrInternal, err)
 		}
@@ -778,6 +825,17 @@ func (d *Store) SaveResourceFromUpload(ctx context.Context, ownerID, resourceID 
 		}
 		if locked.Sealed {
 			return errSealedInBrowser
+		}
+		oldEff := effectiveResourceFilename(locked.Name, locked.Filename)
+		newEff := effectiveResourceFilename(nextName, filename)
+		if newEff != "" && !strings.EqualFold(newEff, oldEff) {
+			exists, err := hasSiblingFilenameTx(ctx, tx, ownerID, locked.FolderID, resourceID, newEff)
+			if err != nil {
+				return err
+			}
+			if exists {
+				return refusal("当前文件夹已存在同名文件")
+			}
 		}
 		if baseVersion > 0 && locked.Version != baseVersion && (nextSHA == "" || nextSHA != locked.SHA256) {
 			return &VersionConflict{Current: locked.Version, At: locked.VersionAt}

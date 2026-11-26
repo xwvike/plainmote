@@ -60,18 +60,56 @@ WHERE id = $2 AND owner_id = $3
 }
 
 // RestoreResource brings a trashed resource back to the active resource list.
-// Links that were revoked when it was trashed stay revoked.
+// Links that were revoked when it was trashed stay revoked. If a live file with
+// the same name already exists in the destination folder, the restored file is
+// automatically suffixed ("name (2).ext") so restore never fails unexpectedly.
 func (d *Store) RestoreResource(ctx context.Context, ownerID, id string, now time.Time) (Resource, error) {
 	if !validUUIDs(ownerID, id) {
 		return Resource{}, ErrNotFound
 	}
-	resource, err := scanResource(d.db.QueryRow(ctx, `
-UPDATE resources r SET deleted_at = NULL
+	var resource Resource
+	err := d.withTx(ctx, func(tx pgx.Tx) error {
+		var locked string
+		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&locked); err != nil {
+			return translateNotFound(err)
+		}
+		var curName, curFile, curFolder string
+		if err := tx.QueryRow(ctx, `
+SELECT r.name, r.filename, COALESCE(r.folder_id::text, '')
+FROM resources r
 WHERE r.id = $1 AND r.owner_id = $2 AND r.deleted_at IS NOT NULL
   AND (r.expires_at IS NULL OR r.expires_at > $3)
-RETURNING `+resourceColumns, id, ownerID, now))
+FOR UPDATE
+`, id, ownerID, now).Scan(&curName, &curFile, &curFolder); err != nil {
+			return translateNotFound(err)
+		}
+		nextName, nextFile := curName, curFile
+		if eff := effectiveResourceFilename(curName, curFile); eff != "" {
+			unique, err := uniqueSiblingFilenameTx(ctx, tx, ownerID, curFolder, id, eff)
+			if err != nil {
+				return err
+			}
+			if unique != eff {
+				if curFile != "" {
+					if curName == curFile {
+						nextName = unique
+					}
+					nextFile = unique
+				} else {
+					nextName = unique
+				}
+			}
+		}
+		var err error
+		resource, err = scanResource(tx.QueryRow(ctx, `
+UPDATE resources r SET deleted_at = NULL, name = $4, filename = $5
+WHERE r.id = $1 AND r.owner_id = $2 AND r.deleted_at IS NOT NULL
+  AND (r.expires_at IS NULL OR r.expires_at > $3)
+RETURNING `+resourceColumns, id, ownerID, now, nextName, nextFile))
+		return translateNotFound(err)
+	})
 	if err != nil {
-		return Resource{}, translateNotFound(err)
+		return Resource{}, err
 	}
 	return resource, nil
 }

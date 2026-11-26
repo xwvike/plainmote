@@ -354,7 +354,90 @@ WHERE id = $1 AND owner_id = $2
 	})
 }
 
-// MoveResource moves a live resource into targetFolderID (empty = root).
+// effectiveResourceFilename returns the display filename used for sibling
+// uniqueness checks. Unnamed and sealed resources (both empty) return "".
+func effectiveResourceFilename(name, filename string) string {
+	if f := strings.TrimSpace(filename); f != "" {
+		return f
+	}
+	return strings.TrimSpace(name)
+}
+
+func isUntitledBaseName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "untitled resource", "未命名资源", "未命名資源", "無題のリソース", "ressource sans titre", "unbenannte ressource":
+		return true
+	default:
+		return false
+	}
+}
+
+// hasSiblingFilenameTx reports whether ownerID already has another live
+// resource with the same case-insensitive filename in folderID ("" = root).
+func hasSiblingFilenameTx(ctx context.Context, q storeQuerier, ownerID, folderID, excludeID, displayName string) (bool, error) {
+	displayName = strings.TrimSpace(displayName)
+	if displayName == "" {
+		return false, nil
+	}
+	matchEmpty := isUntitledBaseName(displayName)
+	var exists bool
+	err := q.QueryRow(ctx, `
+SELECT EXISTS (
+  SELECT 1 FROM resources r
+  WHERE r.owner_id = $1
+    AND (r.folder_id IS NOT DISTINCT FROM NULLIF($2, '')::uuid)
+    AND ($3 = '' OR r.id <> NULLIF($3, '')::uuid)
+    AND `+liveResource+`
+    AND (
+      lower(COALESCE(NULLIF(r.filename, ''), r.name)) = lower($4)
+      OR ($5 AND r.filename = '' AND r.name = '' AND r.sealed_key IS NULL)
+    )
+)
+`, ownerID, folderID, excludeID, displayName, matchEmpty).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check sibling filename: %w: %w", ErrInternal, err)
+	}
+	return exists, nil
+}
+
+// splitFilenameExt splits a filename into stem and extension while keeping
+// dotfiles like ".env" intact without treating the leading dot as an extension.
+func splitFilenameExt(name string) (string, string) {
+	dot := strings.LastIndexByte(name, '.')
+	if dot <= 0 || dot == len(name)-1 {
+		return name, ""
+	}
+	return name[:dot], name[dot:]
+}
+
+// uniqueSiblingFilenameTx returns filename unchanged when free in folderID, or
+// appends " (2)", " (3)", ... before the extension for automatic flows (quick
+// share, trash restore, version copy) so they never fail unexpectedly.
+func uniqueSiblingFilenameTx(ctx context.Context, q storeQuerier, ownerID, folderID, excludeID, filename string) (string, error) {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return "", nil
+	}
+	exists, err := hasSiblingFilenameTx(ctx, q, ownerID, folderID, excludeID, filename)
+	if err != nil || !exists {
+		return filename, err
+	}
+	stem, ext := splitFilenameExt(filename)
+	for n := 2; n <= 1000; n++ {
+		candidate := fmt.Sprintf("%s (%d)%s", stem, n, ext)
+		taken, err := hasSiblingFilenameTx(ctx, q, ownerID, folderID, excludeID, candidate)
+		if err != nil {
+			return "", err
+		}
+		if !taken {
+			return candidate, nil
+		}
+	}
+	return filename, nil
+}
+
+// MoveResource moves a live resource into targetFolderID (empty = root),
+// refusing when the target folder already holds a live file with the same name.
 func (d *Store) MoveResource(ctx context.Context, ownerID, resourceID, targetFolderID string) error {
 	if !validUUIDs(ownerID, resourceID) {
 		return ErrNotFound
@@ -363,10 +446,35 @@ func (d *Store) MoveResource(ctx context.Context, ownerID, resourceID, targetFol
 		return ErrNotFound
 	}
 	return d.withTx(ctx, func(tx pgx.Tx) error {
+		var locked string
+		if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE`, ownerID).Scan(&locked); err != nil {
+			return translateNotFound(err)
+		}
+		var currentFolder, curName, curFile string
+		if err := tx.QueryRow(ctx, `
+SELECT COALESCE(r.folder_id::text, ''), r.name, r.filename
+FROM resources r
+WHERE r.id = $1 AND r.owner_id = $2 AND `+liveResource+`
+FOR UPDATE
+`, resourceID, ownerID).Scan(&currentFolder, &curName, &curFile); err != nil {
+			return translateNotFound(err)
+		}
+		if currentFolder == targetFolderID {
+			return nil
+		}
 		if targetFolderID != "" {
 			var ok string
 			if err := tx.QueryRow(ctx, `SELECT id FROM folders WHERE id = $1 AND owner_id = $2`, targetFolderID, ownerID).Scan(&ok); err != nil {
 				return translateNotFound(err)
+			}
+		}
+		if eff := effectiveResourceFilename(curName, curFile); eff != "" {
+			exists, err := hasSiblingFilenameTx(ctx, tx, ownerID, targetFolderID, resourceID, eff)
+			if err != nil {
+				return err
+			}
+			if exists {
+				return refusal("目标文件夹已存在同名文件")
 			}
 		}
 		tag, err := tx.Exec(ctx, `

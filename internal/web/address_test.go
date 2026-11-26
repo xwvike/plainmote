@@ -143,7 +143,7 @@ func TestUnnamedResourceStillGetsAFilename(t *testing.T) {
 		{"json 内容", `{"a":1}`, "file.json", "application/json"},
 		{"纯文本内容", "port: 7890\n", "file.txt", "text/plain; charset=utf-8"},
 	} {
-		resource, err := db.CreateResource(ctx, user.ID, "r", "", []byte(tc.body), "")
+		resource, err := db.CreateResource(ctx, user.ID, tc.label, "", []byte(tc.body), "")
 		if err != nil {
 			t.Fatal(err)
 		}
