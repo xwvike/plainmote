@@ -2,92 +2,123 @@
 <html lang="{{.Locale}}"{{if .Theme.Current}} data-theme="{{.Theme.Current}}"{{end}}>
 <head>
   {{template "htmlhead" .}}
-  <title>{{tr .Locale "access_logs"}} · PlainMote</title>
+  <title>{{tr .Locale "access_logs"}} · {{fileDisplayName .Locale .Resource}} · PlainMote</title>
 </head>
-<body>
+<body{{if .ModalMode}} class="is-modal modal-{{.ModalMode}}" data-modal-mode="{{.ModalMode}}"{{end}}>
+  {{if .ModalMode}}
+  <header class="mbar">
+    <div class="mbar-title">
+      <nav class="mbar-tabs" aria-label="{{tr .Locale "share_links"}}">
+        <a href="/resources/{{.Resource.ID}}?modal={{.ModalMode}}">{{tr .Locale "share_links"}}</a>
+        <a class="on" href="/resources/{{.Resource.ID}}/logs?modal={{.ModalMode}}" aria-current="page">{{tr .Locale "access_logs"}}{{if .AccessLogCount}} <b>{{.AccessLogCount}}</b>{{end}}</a>
+      </nav>
+      <span class="mut">· <span{{if .Resource.Sealed}} data-sealed-name="{{.Resource.ID}}"{{end}}>{{fileDisplayName .Locale .Resource}}</span></span>
+    </div>
+    <button type="button" class="mbar-close" data-modal-close aria-label="{{tr .Locale "close"}}">&times;</button>
+  </header>
+  {{else}}
   {{template "topbar" .}}
-  <main class="page">
+  {{end}}
+
+  <main class="page{{if .ModalMode}} modal-page{{end}}">
+    {{if not .ModalMode}}
+    <div class="crumb"><a href="/resources/">{{tr .Locale "resources"}}</a>{{range .FolderCrumbs}}<span>/</span><a href="{{folderURL .ID}}">{{.Name}}</a>{{end}}<span>/</span><a href="/resources/{{.Resource.ID}}">{{fileDisplayName .Locale .Resource}}</a><span>/</span><span>{{tr .Locale "access_logs"}}</span></div>
     <div class="ph">
       <h1>{{tr .Locale "access_logs"}}</h1>
       <span class="cnt">{{countText .Locale .Pager.Total "entries"}}</span>
+      <span class="sp"><a class="txt" href="/resources/{{.Resource.ID}}">{{tr .Locale "back_to_resource"}}</a></span>
     </div>
-    <form class="filters log-filter" method="get" action="/logs">
-      <label class="pick log-filter-resource"><span>{{tr .Locale "resource"}}</span>
-        <select name="resource" data-auto-submit>
-          <option value="">{{tr .Locale "all_resources"}}</option>
-          {{range .Resources}}<option value="{{.ID}}"{{if eq .ID $.LogResource}} selected{{end}}>{{or .Name (tr $.Locale "untitled_resource")}}</option>{{end}}
-        </select>
-      </label>
-      <label class="pick log-filter-outcome"><span>{{tr .Locale "result"}}</span>
-        <select name="outcome" data-auto-submit>
-          <option value="">{{tr .Locale "all_results"}}</option>
-          {{range .Outcomes}}<option value="{{.}}"{{if eq . $.LogOutcome}} selected{{end}}>{{outcomeText $.Locale .}}</option>{{end}}
-        </select>
-      </label>
-      <input type="hidden" name="size" value="{{.Pager.Size}}">
-      <button type="submit" class="nojs-btn">{{tr .Locale "filter"}}</button>
-      {{if or .LogResource .LogOutcome}}<a class="txt" href="/logs">{{tr .Locale "clear"}}</a>{{end}}
-    </form>
-    <div class="panel lg">
-      <div class="lgh"><span>{{tr .Locale "time"}}</span><span>{{tr .Locale "result"}}</span><span>{{tr .Locale "resource"}}</span><span>{{tr .Locale "share_used"}}</span><span>{{tr .Locale "col_version"}}</span><span>{{tr .Locale "source_ip"}}</span><span>{{tr .Locale "location"}}</span><span>{{tr .Locale "count"}}</span><span></span></div>
-      {{range .AccessLogs}}
-      <details>
-        <summary>
-          <span class="tm">{{formatTime .OccurredAt}}</span>
-          <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{outcomeText $.Locale .Outcome}}</span></span>
-          <span class="trunc" data-marquee title="{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}"{{if and .ResourceID (not (or .ResourceName .ResourceFile))}} data-sealed-name="{{.ResourceID}}"{{end}}>{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}{{if .QuickShare}} <span class="tag qs">{{tr $.Locale "quick_share"}}</span>{{end}}</span>
-          <span class="trunc" data-marquee title="{{or .LinkName (tr $.Locale "untitled_share")}}">{{or .LinkName (tr $.Locale "untitled_share")}}</span>
-          {{/* Sand when the content has moved on since: this caller is behind. */}}
-          <span class="vc{{if and .Version (ne .Version .CurrentVersion)}} old{{end}}">{{if .Version}}v{{.Version}}{{else}}<span class="mut">—</span>{{end}}</span>
-          <span class="mono" data-marquee>{{.RemoteIP}}</span>
-          {{if .Location.Country}}<span data-marquee title="{{locationText $.Locale .Location}}">{{locationShort $.Locale .Location}}</span>{{else}}<span class="mut">—</span>{{end}}
-          <span class="mono">{{.Hits}}</span>
-          <svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>
-        </summary>
-        <div class="exp">
-          <dl class="kv">
-            <dt>{{tr $.Locale "resource"}}</dt><dd>{{if .ResourceID}}<a href="/resources/{{.ResourceID}}">{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}</a>{{else}}{{or .ResourceName .ResourceFile (tr $.Locale "untitled_resource")}}{{end}}</dd>
-            <dt>{{tr $.Locale "filename"}}</dt><dd>{{if .ResourceFile}}{{.ResourceFile}}{{else}}<span class="mut">—</span>{{end}}</dd>
-            <dt>{{tr $.Locale "share_used"}}</dt><dd>{{or .LinkName (tr $.Locale "untitled_share")}}</dd>
-            {{if .Version}}<dt>{{tr $.Locale "col_version"}}</dt><dd>{{if and .VersionAvailable .ResourceID}}<a href="/resources/{{.ResourceID}}/versions/{{.Version}}">v{{.Version}}</a>{{else}}v{{.Version}}{{end}}{{if and .CurrentVersion (ne .Version .CurrentVersion)}} · {{printf (tr $.Locale "log_current_version") .CurrentVersion}}{{end}}</dd>{{end}}
-            <dt>{{tr $.Locale "source_ip"}}</dt><dd>{{if .RemoteIP}}{{.RemoteIP}}{{else}}<span class="mut">—</span>{{end}}{{with locationText $.Locale .Location}} <span class="mut" title="{{tr $.Locale "approx_location_hint"}}">· {{.}}</span>{{end}}</dd>
-            <dt>{{tr $.Locale "access_count"}}</dt><dd>{{.Hits}}</dd>
-          </dl>
-          <dl class="kv">
-            <dt>{{tr $.Locale "result"}}</dt><dd>{{outcomeDescription $.Locale .Outcome}}</dd>
-            {{if gt .Hits 1}}
-            <dt>{{tr $.Locale "first_access"}}</dt><dd>{{formatTime .FirstAt}}</dd>
-            <dt>{{tr $.Locale "latest_access"}}</dt><dd>{{formatTime .OccurredAt}}</dd>
-            {{else}}
-            <dt>{{tr $.Locale "access_time"}}</dt><dd>{{formatTime .OccurredAt}}</dd>
-            {{end}}
-          </dl>
-        </div>
-      </details>
-      {{else}}
-      <p class="empty">{{tr .Locale "no_access_logs"}}</p>
-      {{end}}
-      {{if .AccessLogs}}
-      <div class="pf">
-        <div class="pg">
-          <span class="hint">{{pageSummary .Locale .Pager.From .Pager.To .Pager.Total "entries"}}</span>
-          <form class="psize" method="get" action="/logs">
-            <input type="hidden" name="resource" value="{{.LogResource}}">
-            <input type="hidden" name="outcome" value="{{.LogOutcome}}">
-            <label>{{tr .Locale "per_page"}} <select name="size" data-auto-submit>{{range .Pager.Sizes}}<option value="{{.}}"{{if eq . $.Pager.Size}} selected{{end}}>{{.}}</option>{{end}}</select></label>
-            <button type="submit" class="sm nojs-btn">{{tr .Locale "apply"}}</button>
-          </form>
-          <span class="pages">
-            {{if .Pager.PrevURL}}<a class="pgn" href="{{.Pager.PrevURL}}">&lsaquo;</a>{{else}}<span class="pgn dis">&lsaquo;</span>{{end}}
-            {{range .Pager.Links}}{{if .Current}}<span class="pgn on">{{.Num}}</span>{{else}}<a class="pgn" href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
-            {{if .Pager.NextURL}}<a class="pgn" href="{{.Pager.NextURL}}">&rsaquo;</a>{{else}}<span class="pgn dis">&rsaquo;</span>{{end}}
-          </span>
-        </div>
+    {{end}}
+
+    <div class="alog-bar">
+      <div class="alog-seg" role="navigation" aria-label="{{tr .Locale "result"}}">
+        <a class="{{if eq .LogOutcome ""}}on{{end}}" href="/resources/{{.Resource.ID}}/logs?{{if .LogLink}}link={{.LogLink}}&amp;{{end}}{{if .ModalMode}}modal={{.ModalMode}}{{end}}">{{tr .Locale "all_results"}}</a>
+        <a class="{{if eq .LogOutcome "success"}}on{{end}}" href="/resources/{{.Resource.ID}}/logs?outcome=success{{if .LogLink}}&amp;link={{.LogLink}}{{end}}{{if .ModalMode}}&amp;modal={{.ModalMode}}{{end}}">{{tr .Locale "outcome_success"}}</a>
+        <a class="{{if eq .LogOutcome "failed"}}on{{end}}" href="/resources/{{.Resource.ID}}/logs?outcome=failed{{if .LogLink}}&amp;link={{.LogLink}}{{end}}{{if .ModalMode}}&amp;modal={{.ModalMode}}{{end}}">{{tr .Locale "outcome_group_failed"}}</a>
+        {{if and .LogOutcome (ne .LogOutcome "success") (ne .LogOutcome "failed")}}
+        <span class="on">{{outcomeText .Locale .LogOutcome}}</span>
+        {{end}}
       </div>
+      {{if .LogLinks}}
+      <form class="alog-link-filter" method="get" action="/resources/{{.Resource.ID}}/logs">
+        {{if .LogOutcome}}<input type="hidden" name="outcome" value="{{.LogOutcome}}">{{end}}
+        {{if .ModalMode}}<input type="hidden" name="modal" value="{{.ModalMode}}">{{end}}
+        <select name="link" class="sm" aria-label="{{tr .Locale "share_used"}}" data-auto-submit>
+          <option value="">{{tr .Locale "all_links"}}</option>
+          {{range .LogLinks}}<option value="{{.ID}}"{{if eq .ID $.LogLink}} selected{{end}}>{{.Label}}</option>{{end}}
+        </select>
+        <button type="submit" class="sm nojs-btn">{{tr .Locale "filter"}}</button>
+      </form>
       {{end}}
     </div>
+
+    {{if .AccessLogDays}}
+    <div class="alog-feed">
+      {{range .AccessLogDays}}
+      <section class="alog-day">
+        <h2 class="alog-date">{{.DateLabel}}</h2>
+        <div class="panel alog-list">
+          {{range .Items}}
+          <details class="alog-item">
+            <summary class="alog-row">
+              <span class="alog-main">
+                <span class="st {{outcomeClass .Outcome}}"><i></i><span>{{outcomeText $.Locale .Outcome}}</span></span>
+                <span class="alog-link" title="{{or .LinkName (tr $.Locale "untitled_share")}}">{{or .LinkName (tr $.Locale "untitled_share")}}</span>
+                {{if .Version}}<span class="vc{{if ne .Version .CurrentVersion}} old{{end}}">v{{.Version}}</span>{{end}}
+              </span>
+              <span class="alog-right">
+                {{if gt .Hits 1}}<span class="alog-hits">×{{.Hits}}</span>{{end}}
+                <span class="alog-time">{{formatMinute .OccurredAt}}</span>
+                <svg class="chev" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3.5 1.5 L7 5 L3.5 8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"></path></svg>
+              </span>
+              {{if or .Location.Country .RemoteIP}}
+              <span class="alog-sub">
+                {{if .Location.Country}}<span title="{{locationText $.Locale .Location}}">{{locationShort $.Locale .Location}}</span>{{end}}
+                {{if and .Location.Country .RemoteIP}}<span class="mut">·</span>{{end}}
+                {{if .RemoteIP}}<span class="mono">{{.RemoteIP}}</span>{{end}}
+              </span>
+              {{end}}
+            </summary>
+            <div class="alog-exp">
+              <dl class="kv">
+                <dt>{{tr $.Locale "result"}}</dt><dd>{{outcomeDescription $.Locale .Outcome}}</dd>
+                <dt>{{tr $.Locale "share_used"}}</dt><dd>{{or .LinkName (tr $.Locale "untitled_share")}}</dd>
+                {{if .Version}}<dt>{{tr $.Locale "col_version"}}</dt><dd>{{if and .VersionAvailable .ResourceID}}<a href="/resources/{{.ResourceID}}/versions/{{.Version}}{{if $.ModalMode}}?modal=versions{{end}}">v{{.Version}}</a>{{else}}v{{.Version}}{{end}}{{if and .CurrentVersion (ne .Version .CurrentVersion)}} · {{printf (tr $.Locale "log_current_version") .CurrentVersion}}{{end}}</dd>{{end}}
+              </dl>
+              <dl class="kv">
+                <dt>{{tr $.Locale "source_ip"}}</dt><dd>{{if .RemoteIP}}{{.RemoteIP}}{{else}}<span class="mut">—</span>{{end}}{{with locationText $.Locale .Location}} <span class="mut" title="{{tr $.Locale "approx_location_hint"}}">· {{.}}</span>{{end}}</dd>
+                <dt>{{tr $.Locale "access_count"}}</dt><dd>{{.Hits}}</dd>
+                {{if gt .Hits 1}}
+                <dt>{{tr $.Locale "first_access"}}</dt><dd>{{formatTime .FirstAt}}</dd>
+                <dt>{{tr $.Locale "latest_access"}}</dt><dd>{{formatTime .OccurredAt}}</dd>
+                {{else}}
+                <dt>{{tr $.Locale "access_time"}}</dt><dd>{{formatTime .OccurredAt}}</dd>
+                {{end}}
+              </dl>
+            </div>
+          </details>
+          {{end}}
+        </div>
+      </section>
+      {{end}}
+    </div>
+    {{if or .Pager.PrevURL .Pager.NextURL}}
+    <div class="alog-pg">
+      <span class="hint">{{pageSummary .Locale .Pager.From .Pager.To .Pager.Total "entries"}}</span>
+      <span class="pages">
+        {{if .Pager.PrevURL}}<a class="pgn" href="{{.Pager.PrevURL}}">&lsaquo;</a>{{else}}<span class="pgn dis">&lsaquo;</span>{{end}}
+        {{range .Pager.Links}}{{if .Current}}<span class="pgn on">{{.Num}}</span>{{else}}<a class="pgn" href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
+        {{if .Pager.NextURL}}<a class="pgn" href="{{.Pager.NextURL}}">&rsaquo;</a>{{else}}<span class="pgn dis">&rsaquo;</span>{{end}}
+      </span>
+    </div>
+    {{end}}
+    {{else}}
+    <div class="panel"><p class="empty">{{tr .Locale "no_file_access_logs"}}</p></div>
+    {{end}}
   </main>
-  {{template "footer" .}}
-  <script type="module" src="{{asset "sealed-names.js"}}"></script>
+
+  {{if not .ModalMode}}{{template "footer" .}}{{end}}
+  {{if .Resource.Sealed}}<script type="module" src="{{asset "sealed-names.js"}}"></script>{{end}}
+  {{if .ModalMode}}<script type="module" src="{{asset "modal-bridge.js"}}"></script>{{end}}
 </body>
 </html>{{end}}

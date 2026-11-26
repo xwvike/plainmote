@@ -288,7 +288,7 @@ func TestUntitledNamesFollowTheReadersLanguage(t *testing.T) {
 		if page := get("/resources/", tc.language); !strings.Contains(page, ">"+tc.resource+"</span>") {
 			t.Errorf("%s resource list does not say %q", tc.language, tc.resource)
 		}
-		if page := get("/logs", tc.language); !strings.Contains(page, ">"+tc.share+"</span>") {
+		if page := get("/resources/"+resource.ID+"/logs", tc.language); !strings.Contains(page, ">"+tc.share+"</span>") {
 			t.Errorf("%s access log does not say %q", tc.language, tc.share)
 		}
 	}

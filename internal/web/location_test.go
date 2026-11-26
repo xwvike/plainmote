@@ -152,27 +152,27 @@ func TestDeliveryRecordsTheVisitorLocation(t *testing.T) {
 		t.Fatalf("direct, the client's own headers were kept: %+v", located)
 	}
 
-	page := func(owner store.User) string {
+	page := func(owner store.User, wantStatus int) string {
 		session, csrf, _, err := db.CreateSession(ctx, owner.ID, time.Hour)
 		if err != nil {
 			t.Fatal(err)
 		}
-		request := httptest.NewRequest(http.MethodGet, "https://cfg.test/logs", nil)
+		request := httptest.NewRequest(http.MethodGet, "https://cfg.test/resources/"+resource.ID+"/logs", nil)
 		request.Header.Set("Accept-Language", "zh-CN")
 		request.AddCookie(&http.Cookie{Name: sessionCookie, Value: session})
 		request.AddCookie(&http.Cookie{Name: csrfCookie, Value: csrf})
 		response := httptest.NewRecorder()
 		app.handler.ServeHTTP(response, request)
-		if response.Code != http.StatusOK {
-			t.Fatalf("logs page: %d", response.Code)
+		if response.Code != wantStatus {
+			t.Fatalf("logs page: got %d, want %d", response.Code, wantStatus)
 		}
 		return response.Body.String()
 	}
-	if body := page(user); !strings.Contains(body, `title="德国 · Bavaria · München">德国 · München</span>`) ||
+	if body := page(user, http.StatusOK); !strings.Contains(body, `title="德国 · Bavaria · München">德国 · München</span>`) ||
 		!strings.Contains(body, `198.51.100.7 <span class="mut" title="根据 IP 地址估算">· 德国 · Bavaria · München</span>`) {
 		t.Fatal("the owner's history does not show the location")
 	}
-	if body := page(other); strings.Contains(body, "München") || strings.Contains(body, "198.51.100.7") {
+	if body := page(other, http.StatusNotFound); strings.Contains(body, "München") || strings.Contains(body, "198.51.100.7") {
 		t.Fatal("another account's history shows this visitor")
 	}
 }

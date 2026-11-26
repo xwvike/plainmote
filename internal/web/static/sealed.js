@@ -106,7 +106,7 @@ const opened = { key: null, contentKey: null, meta: null, text: null };
 // The name goes wherever the page shows it - again after parts.js swaps
 // the title or the crumb back in with the placeholder.
 function nameTitles(meta) {
-  const label = meta.name || meta.filename;
+  const label = meta.filename || meta.name;
   if (!label) return;
   for (const title of document.querySelectorAll("[data-sealed-title]")) title.textContent = label;
   const crumb = document.querySelector('[data-part="crumb"] > span:last-child');

@@ -72,6 +72,8 @@ func (a *App) handleResources(w http.ResponseWriter, r *http.Request) {
 		a.handleResourceTags(w, r, user, sessionID, resourceID)
 	case len(parts) == 2 && parts[1] == "share":
 		a.handleShare(w, r, user, sessionID, resourceID)
+	case len(parts) == 2 && parts[1] == "logs":
+		a.handleResourceLogs(w, r, user, resourceID)
 	case len(parts) == 2 && parts[1] == sealedPath:
 		a.handleSealedAction(w, r, user, sessionID, resourceID)
 	case len(parts) >= 2 && parts[1] == "versions":
@@ -553,6 +555,11 @@ func (a *App) renderResourcePage(w http.ResponseWriter, r *http.Request, user Us
 	if data.HistoryCount, err = a.db.HistoryCount(r.Context(), user.ID, resource.ID); err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
+	}
+	if data.ModalMode == "share" || !parts {
+		if count, countErr := a.db.CountAccessByResource(r.Context(), user.ID, resource.ID); countErr == nil {
+			data.AccessLogCount = count
+		}
 	}
 	query := r.URL.Query()
 	// The confirmations are read from the address the action redirected to,

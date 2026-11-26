@@ -16,11 +16,14 @@
       data-msg-uploading="{{tr .Locale "uploading"}}"
       data-msg-saving="{{tr .Locale "saving"}}">
   {{if eq .ModalMode "share"}}
-  {{/* Dedicated Share Modal: only share links / quick-share ticket + E2EE unlock. */}}
+  {{/* Dedicated Share & Activity Modal: switch seamlessly between Share Links and Access Logs. */}}
   <header class="mbar">
     <div class="mbar-title">
-      <b>{{tr .Locale "share_links"}}</b>
-      <span class="mut" data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>· {{fileDisplayName .Locale .Resource}}</span>
+      <nav class="mbar-tabs" aria-label="{{tr .Locale "share_links"}}">
+        <a class="on" href="/resources/{{.Resource.ID}}?modal=share" aria-current="page">{{tr .Locale "share_links"}}</a>
+        <a href="/resources/{{.Resource.ID}}/logs?modal=share">{{tr .Locale "access_logs"}}{{if .AccessLogCount}} <b>{{.AccessLogCount}}</b>{{end}}</a>
+      </nav>
+      <span class="mut">· <span data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{fileDisplayName .Locale .Resource}}</span></span>
     </div>
     <button type="button" class="mbar-close" data-modal-close aria-label="{{tr .Locale "close"}}">&times;</button>
   </header>
@@ -426,7 +429,7 @@
 {{/* What parts.js asks for: the pieces of this page an action can change. */}}
 {{define "resource.html#parts"}}{{template "resource-doc-title" .}}
 {{template "resource-crumb" .}}
-{{if eq .ModalMode "share"}}<span class="mut" data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>· {{fileDisplayName .Locale .Resource}}</span>{{else if .ModalMode}}<span data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{fileDisplayName .Locale .Resource}}</span>{{else}}<h1 data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{resourceLabel .Locale .Resource}}</h1>{{end}}
+{{if .ModalMode}}<span data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{fileDisplayName .Locale .Resource}}</span>{{else}}<h1 data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{resourceLabel .Locale .Resource}}</h1>{{end}}
 {{template "resource-tags" .}}
 {{template "resource-hist" .}}
 {{template "resource-notices" .}}
@@ -458,7 +461,7 @@
     <section class="ruled paste-result" style="{{endStyle .Resource.ExpiresAt}}">
       <div class="pt">
         <span class="sec">{{tr .Locale "share_link"}}</span>
-        <span class="sp">{{with .Shares}}{{with index . 0}}<span class="counts">{{tr $.Locale "used_count"}} <b>{{.Link.UsedCount}}</b></span>{{end}}{{end}}<a class="txt" href="/logs?resource={{.Resource.ID}}"{{if .ModalMode}} target="_top"{{end}}>{{tr .Locale "access_logs"}}</a></span>
+        <span class="sp">{{with .Shares}}{{with index . 0}}<span class="counts">{{tr $.Locale "used_count"}} <b>{{.Link.UsedCount}}</b></span>{{end}}{{end}}<a class="txt" href="/resources/{{.Resource.ID}}/logs{{if .ModalMode}}?modal={{.ModalMode}}{{end}}">{{tr .Locale "access_logs"}}</a></span>
       </div>
       {{with .Shares}}{{with index . 0}}
       {{if $.Resource.Encrypted}}

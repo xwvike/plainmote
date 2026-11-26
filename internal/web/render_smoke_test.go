@@ -92,8 +92,8 @@ func TestAllPagesRender(t *testing.T) {
 		{"dashboard batch 2", "/resources/?size=10&page=2", `data-fb-stat`},
 		{"dashboard search", "/resources/?q=" + resource.Name, resource.Filename},
 		{"dashboard no match", "/resources/?q=%25_nothing", "No resources match"},
-		{"logs", "/logs", "Successful"},
-		{"logs page 2", "/logs?size=20&page=2", `class="pgn on">2<`},
+		{"logs", "/resources/" + resource.ID + "/logs", "Successful"},
+		{"logs page 2", "/resources/" + resource.ID + "/logs?size=20&page=2", `class="pgn on">2<`},
 		{"new resource", "/resources/new", "Load from file"},
 		{"resource", "/resources/" + resource.ID, "New share"},
 		{"resource delete confirm", "/resources/" + resource.ID + "?delete=1", "Move to trash"},
@@ -102,7 +102,8 @@ func TestAllPagesRender(t *testing.T) {
 		// something changes.
 		{"resource has an unsaved marker", "/resources/" + resource.ID, `<span class="unsaved" data-unsaved>Unsaved</span>`},
 		{"unshared resource says so", "/resources/" + unshared.ID, "No active shares"},
-		{"logs filtered", "/logs?resource=" + resource.ID + "&outcome=expired", "Expired"},
+		{"logs filtered", "/resources/" + resource.ID + "/logs?outcome=expired", "Expired"},
+		{"logs blocked group", "/resources/" + resource.ID + "/logs?outcome=failed", "Blocked"},
 	} {
 		response := get(tc.path)
 		body := response.Body.String()
@@ -127,10 +128,13 @@ func TestAllPagesRender(t *testing.T) {
 	if response := get("/resources/?size=10&page=99"); response.Code != http.StatusSeeOther {
 		t.Fatalf("out-of-range page: expected redirect, got %d", response.Code)
 	}
-	if response := get("/logs?size=20&page=99"); response.Code != http.StatusSeeOther {
+	if response := get("/resources/" + resource.ID + "/logs?size=20&page=99"); response.Code != http.StatusSeeOther {
 		t.Fatalf("out-of-range log page: expected redirect, got %d", response.Code)
 	}
-	logPage := get("/logs").Body.String()
+	if response := get("/logs"); response.Code != http.StatusSeeOther || response.Header().Get("Location") != "/resources/" {
+		t.Fatalf("retired /logs should redirect to /resources/, got %d %q", response.Code, response.Header().Get("Location"))
+	}
+	logPage := get("/resources/" + resource.ID + "/logs").Body.String()
 	if !strings.Contains(logPage, `href="/resources/`+resource.ID+`"`) {
 		t.Fatal("access log did not link its live resource")
 	}

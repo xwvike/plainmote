@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"plainmote/internal/store"
 )
 
 func TestDashboardFinderViewsAndFolders(t *testing.T) {
@@ -243,5 +245,41 @@ func TestModalSheetsRenameTagsAndSingleFilename(t *testing.T) {
 	remTag := postForm("/resources/"+resID+"/tags", url.Values{"remove": {"ops"}}, true)
 	if remTag.Code != http.StatusOK || strings.Contains(remTag.Body.String(), `"ops"`) {
 		t.Fatalf("remove tag json: %d %s", remTag.Code, remTag.Body.String())
+	}
+
+	// 8. Per-file access logs modal (?modal=share) renders tabbed switcher,
+	// supports link + outcome filters, and /logs?resource=... redirects cleanly.
+	linkA, err := db.CreateShare(ctx, user.ID, resID, "alpha", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linkB, err := db.CreateShare(ctx, user.ID, resID, "beta", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.RecordAccess(ctx, store.AccessEvent{OwnerID: user.ID, ResourceID: resID, LinkID: linkA.ID, LinkName: "alpha", Outcome: store.OutcomeSuccess, Status: 200, Version: 2}, store.RequestMeta{RemoteIP: "198.51.100.1"})
+	_ = db.RecordAccess(ctx, store.AccessEvent{OwnerID: user.ID, ResourceID: resID, LinkID: linkB.ID, LinkName: "beta", Outcome: store.OutcomeRevoked, Status: 410}, store.RequestMeta{RemoteIP: "198.51.100.2"})
+
+	logsModal := client.do(http.MethodGet, "/resources/"+resID+"/logs?modal=share", nil)
+	logsBody := logsModal.Body.String()
+	if logsModal.Code != http.StatusOK || logsModal.Header().Get("X-Frame-Options") != "SAMEORIGIN" {
+		t.Fatalf("logs modal: %d %q", logsModal.Code, logsModal.Header().Get("X-Frame-Options"))
+	}
+	for _, want := range []string{`class="mbar-tabs"`, "alpha", "beta", "198.51.100.1", "198.51.100.2"} {
+		if !strings.Contains(logsBody, want) {
+			t.Errorf("logs modal missing %q", want)
+		}
+	}
+	onlyA := client.do(http.MethodGet, "/resources/"+resID+"/logs?link="+linkA.ID+"&modal=share", nil).Body.String()
+	if !strings.Contains(onlyA, "198.51.100.1") || strings.Contains(onlyA, "198.51.100.2") {
+		t.Fatal("link filter did not narrow access logs to linkA")
+	}
+	onlyFailed := client.do(http.MethodGet, "/resources/"+resID+"/logs?outcome=failed&modal=share", nil).Body.String()
+	if strings.Contains(onlyFailed, "198.51.100.1") || !strings.Contains(onlyFailed, "198.51.100.2") {
+		t.Fatal("outcome=failed filter did not narrow to blocked accesses")
+	}
+	redir := client.do(http.MethodGet, "/logs?resource="+resID, nil)
+	if redir.Code != http.StatusSeeOther || redir.Header().Get("Location") != "/resources/"+resID+"/logs" {
+		t.Fatalf("legacy /logs?resource redirect: %d %q", redir.Code, redir.Header().Get("Location"))
 	}
 }

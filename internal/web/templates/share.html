@@ -73,7 +73,7 @@
             {{if .Link.ExpiresAt}}<span class="st off after"><i></i><span>{{tr $.Locale "share_ended_expired"}} {{formatDay .Link.ExpiresAt}}</span></span>{{end}}
           </span>
         </span>
-        <span class="uses">{{tr $.Locale "used_count"}} {{.Link.UsedCount}}{{if .Link.MaxUses}} / {{.Link.MaxUses}}{{end}}</span>
+        <a class="uses uses-link" href="/resources/{{$.Resource.ID}}/logs?link={{.Link.ID}}{{if $.ModalMode}}&amp;modal={{$.ModalMode}}{{end}}" title="{{tr $.Locale "access_logs"}}">{{tr $.Locale "used_count"}} {{.Link.UsedCount}}{{if .Link.MaxUses}} / {{.Link.MaxUses}}{{end}}</a>
         <span class="swap">
         <span class="acts until">
           {{if $.Resource.Sealed}}
@@ -92,7 +92,7 @@
             <button type="submit" class="txt danger">{{tr $.Locale "revoke"}}</button>
           </form>
         </span>
-        {{if .Link.ExpiresAt}}<span class="acts after"><a class="txt" href="/logs?resource={{$.Resource.ID}}"{{if $.ModalMode}} target="_top"{{end}}>{{tr $.Locale "access_logs"}}</a></span>{{end}}
+        {{if .Link.ExpiresAt}}<span class="acts after"><a class="txt" href="/resources/{{$.Resource.ID}}/logs?link={{.Link.ID}}{{if $.ModalMode}}&amp;modal={{$.ModalMode}}{{end}}">{{tr $.Locale "access_logs"}}</a></span>{{end}}
         </span>
       </li>
       {{end}}
@@ -110,9 +110,9 @@
           <span class="gauge" aria-hidden="true"></span>
           <span class="st off"><i></i><span>{{tr $.Locale (printf "share_ended_%s" .Ended)}} {{formatDay .EndedAt}}</span></span>
         </span>
-        <span class="uses">{{tr $.Locale "used_count"}} {{.Link.UsedCount}}{{if .Link.MaxUses}} / {{.Link.MaxUses}}{{end}}</span>
+        <a class="uses uses-link" href="/resources/{{$.Resource.ID}}/logs?link={{.Link.ID}}{{if $.ModalMode}}&amp;modal={{$.ModalMode}}{{end}}" title="{{tr $.Locale "access_logs"}}">{{tr $.Locale "used_count"}} {{.Link.UsedCount}}{{if .Link.MaxUses}} / {{.Link.MaxUses}}{{end}}</a>
         <span class="acts">
-          <a class="txt" href="/logs?resource={{$.Resource.ID}}"{{if $.ModalMode}} target="_top"{{end}}>{{tr $.Locale "access_logs"}}</a>
+          <a class="txt" href="/resources/{{$.Resource.ID}}/logs?link={{.Link.ID}}{{if $.ModalMode}}&amp;modal={{$.ModalMode}}{{end}}">{{tr $.Locale "access_logs"}}</a>
           {{/* Gone for good; its access history stays. */}}
           <form method="post" action="/resources/{{$.Resource.ID}}/share" class="inline" data-parts>
             <input type="hidden" name="csrf" value="{{$.CSRF}}">

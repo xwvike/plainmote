@@ -250,13 +250,38 @@ WHERE id = $1
 	return nil
 }
 
+// AccessLogFilter narrows access log queries for a single owner. Outcome accepts
+// "", "success", "failed" (any non-success outcome), or a specific outcome name.
+type AccessLogFilter struct {
+	ResourceID string
+	LinkID     string
+	Outcome    string
+}
+
 func (d *Store) ListAccess(ctx context.Context, ownerID, resourceID, outcome string, limit int) ([]AccessLog, error) {
 	logs, _, err := d.ListAccessPage(ctx, ownerID, resourceID, outcome, limit, 0)
 	return logs, err
 }
 
 func (d *Store) ListAccessPage(ctx context.Context, ownerID, resourceID, outcome string, limit, offset int) ([]AccessLog, int, error) {
-	if !validUUIDs(ownerID) || resourceID != "" && !validUUIDs(resourceID) {
+	return d.ListAccessBy(ctx, ownerID, AccessLogFilter{ResourceID: resourceID, Outcome: outcome}, limit, offset)
+}
+
+func (d *Store) CountAccessByResource(ctx context.Context, ownerID, resourceID string) (int, error) {
+	if !validUUIDs(ownerID, resourceID) {
+		return 0, ErrNotFound
+	}
+	var total int
+	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM access_logs WHERE owner_id = $1 AND resource_id = $2::uuid`, ownerID, resourceID).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count resource access logs: %w: %w", ErrInternal, err)
+	}
+	return total, nil
+}
+
+func (d *Store) ListAccessBy(ctx context.Context, ownerID string, filter AccessLogFilter, limit, offset int) ([]AccessLog, int, error) {
+	if !validUUIDs(ownerID) ||
+		(filter.ResourceID != "" && !validUUIDs(filter.ResourceID)) ||
+		(filter.LinkID != "" && !validUUIDs(filter.LinkID)) {
 		return nil, 0, ErrNotFound
 	}
 	if limit <= 0 {
@@ -265,14 +290,14 @@ func (d *Store) ListAccessPage(ctx context.Context, ownerID, resourceID, outcome
 	if offset < 0 {
 		offset = 0
 	}
+	whereClause := `
+  a.owner_id = $1
+  AND ($2 = '' OR a.resource_id = NULLIF($2, '')::uuid)
+  AND ($3 = '' OR a.link_id = NULLIF($3, '')::uuid)
+  AND ($4 = '' OR ($4 = 'failed' AND a.outcome <> 'success') OR ($4 <> 'failed' AND a.outcome = $4))`
 	var total int
-	if err := d.db.QueryRow(ctx, `
-SELECT COUNT(*)
-FROM access_logs
-WHERE owner_id = $1
-  AND ($2 = '' OR resource_id = NULLIF($2, '')::uuid)
-  AND ($3 = '' OR outcome = $3)
-`, ownerID, resourceID, outcome).Scan(&total); err != nil {
+	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM access_logs a WHERE `+whereClause,
+		ownerID, filter.ResourceID, filter.LinkID, filter.Outcome).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count access logs: %w: %w", ErrInternal, err)
 	}
 	// The owner is on the row, so a deleted resource takes nothing with it.
@@ -294,12 +319,10 @@ SELECT
   ), FALSE)
 FROM access_logs a
 LEFT JOIN resources r ON r.id = a.resource_id AND r.deleted_at IS NULL
-WHERE a.owner_id = $1
-  AND ($2 = '' OR a.resource_id = NULLIF($2, '')::uuid)
-  AND ($3 = '' OR a.outcome = $3)
+WHERE `+whereClause+`
 ORDER BY a.occurred_at DESC, a.id DESC
-LIMIT $4 OFFSET $5
-`, ownerID, resourceID, outcome, limit, offset)
+LIMIT $5 OFFSET $6
+`, ownerID, filter.ResourceID, filter.LinkID, filter.Outcome, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}

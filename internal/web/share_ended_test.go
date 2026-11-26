@@ -36,7 +36,7 @@ func TestRevokedLinkStaysOnThePageAsEnded(t *testing.T) {
 		t.Fatalf("no ended row on the page")
 	}
 	row := page[start : start+strings.Index(page[start:], "</li>")]
-	for _, want := range []string{"old phone", "Revoked", `href="/logs?resource=` + resource.ID + `"`, `name="action" value="delete"`} {
+	for _, want := range []string{"old phone", "Revoked", `href="/resources/` + resource.ID + `/logs?link=` + share.ID + `"`, `name="action" value="delete"`} {
 		if !strings.Contains(row, want) {
 			t.Errorf("the ended row is missing %q", want)
 		}

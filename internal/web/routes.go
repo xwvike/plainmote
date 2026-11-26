@@ -217,18 +217,22 @@ type pageData struct {
 	ContentEncoding string
 	ContentEOL      string
 	TextEncodings   []encodingOption
-	LogResource     string
-	LogOutcome      string
-	Outcomes        []string
-	Resource        Resource
-	MediaSource     string
-	MediaAutoSave   bool
-	Shares          []linkView
-	EndedShares     []linkView
-	ShareOpen       bool
-	DeleteOpen      bool
-	FocusShare      linkView
-	AccessLogs      []AccessLog
+	LogResource    string
+	LogLink        string
+	LogOutcome     string
+	Outcomes       []string
+	Resource       Resource
+	MediaSource    string
+	MediaAutoSave  bool
+	Shares         []linkView
+	EndedShares    []linkView
+	ShareOpen      bool
+	DeleteOpen     bool
+	FocusShare     linkView
+	AccessLogs     []AccessLog
+	AccessLogDays  []accessLogDay
+	AccessLogCount int
+	LogLinks       []logLinkChoice
 
 	// Version history. HistoryCount is the number of earlier versions;
 	// Versions the list, current first; HistoryGone the range of numbers the

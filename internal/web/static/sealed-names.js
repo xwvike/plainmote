@@ -53,8 +53,8 @@ function showSealedNames(signal) {
   function fill(names) {
     for (const element of document.querySelectorAll("[data-sealed-name]")) {
       const meta = names.get(element.dataset.sealedName);
-      if (meta && (meta.name || meta.filename)) {
-        element.textContent = meta.name || meta.filename;
+      if (meta && (meta.filename || meta.name)) {
+        element.textContent = meta.filename || meta.name;
         element.title = element.textContent;
         element.closest("[title]")?.setAttribute("title", element.textContent);
         const item = element.closest("[data-fb-item]");

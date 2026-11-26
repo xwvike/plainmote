@@ -165,15 +165,12 @@ async function navigateFolder(href, push = true, selectId = "") {
     }
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
     const nextResults = doc.getElementById("resource-results");
-    const nextCount = doc.getElementById("resource-count");
     const nextFilters = doc.getElementById("resource-filters");
     if (!nextResults) {
       location.assign(href);
       return;
     }
     results.replaceWith(nextResults);
-    const count = document.getElementById("resource-count");
-    if (count && nextCount) count.textContent = nextCount.textContent;
     const filters = document.getElementById("resource-filters");
     if (filters && nextFilters) {
       const nextFolder = nextResults.dataset.currentFolder || "";
@@ -223,6 +220,7 @@ function openMenuAt(info, x, y) {
     if (btn) btn.hidden = hide;
   };
   setHidden("share", isFolder);
+  setHidden("logs", isFolder);
   setHidden("tags", isFolder);
   setHidden("versions", isFolder || info.quick);
   setHidden("rename", !isFolder && (info.sealed || info.quick));
@@ -879,6 +877,7 @@ document.addEventListener("click", (event) => {
     const act = actBtn.dataset.fbAct;
     if (act === "open") openItem(item);
     else if (act === "share") openSheet(`/resources/${encodeURIComponent(item.id)}?modal=share`, "is-panel", item.id);
+    else if (act === "logs") openSheet(`/resources/${encodeURIComponent(item.id)}/logs?modal=share`, "is-panel", item.id);
     else if (act === "tags") openTags(item);
     else if (act === "versions") openSheet(`/resources/${encodeURIComponent(item.id)}/versions?modal=versions`, "is-wide", item.id);
     else if (act === "info") openInfo(item);

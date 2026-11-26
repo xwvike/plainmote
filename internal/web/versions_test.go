@@ -390,7 +390,7 @@ func TestLogsAndStorageShowVersions(t *testing.T) {
 	}
 	client.save(resource, "answer=43\n", 1)
 
-	logs := client.page("/logs")
+	logs := client.page("/resources/" + resource.ID + "/logs")
 	if !strings.Contains(logs, `<span class="vc old">v1</span>`) || !strings.Contains(logs, "current v2") {
 		t.Fatal("the access history names the version delivered and marks it behind")
 	}

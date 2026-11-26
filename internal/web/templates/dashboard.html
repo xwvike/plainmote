@@ -6,18 +6,7 @@
 </head>
 <body>
   {{template "topbar" .}}
-  <main class="page">
-    <div class="ph">
-      <h1>{{tr .Locale "resources"}}</h1>
-      {{template "dashboard-count" .}}
-      <span class="sp">
-        {{with storageMeter .Quota}}<a class="usage" href="/account" title="{{printf (tr $.Locale "meter_title") (bytesText .Current) (bytesText .History) (bytesText .Free)}}">
-          <span class="meter-bar mini" style="{{.Style}}" aria-hidden="true"><span class="cur"></span><span class="his"></span></span>
-          <span class="cnt">{{bytesText .Used}}/{{bytesText .Limit}}</span>
-        </a>{{end}}
-        <a class="btn pri" id="new-resource-link" href="{{or .NewResourceURL "/resources/new"}}">{{tr .Locale "new_resource"}}</a>
-      </span>
-    </div>
+  <main class="page fb-page">
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
     {{if .Trashed}}
     <div class="notice notice-row" role="status">
@@ -56,6 +45,7 @@
   <div class="fb-menu" id="fb-menu" role="menu" hidden>
     <button type="button" role="menuitem" data-fb-act="open">{{tr .Locale "open_item"}}</button>
     <button type="button" role="menuitem" data-fb-act="share" hidden>{{tr .Locale "share_action"}}</button>
+    <button type="button" role="menuitem" data-fb-act="logs" hidden>{{tr .Locale "logs_action"}}</button>
     <button type="button" role="menuitem" data-fb-act="tags" hidden>{{tr .Locale "manage_tags"}}</button>
     <button type="button" role="menuitem" data-fb-act="versions" hidden>{{tr .Locale "history_action"}}</button>
     <button type="button" role="menuitem" data-fb-act="info">{{tr .Locale "get_info"}}</button>
@@ -244,7 +234,6 @@
       </header>
       <div class="body">
         <p class="ro" data-delete-file-warn>{{deleteWarning .Locale 0}}</p>
-        <p class="hint">{{tr .Locale "logs_retained"}}</p>
       </div>
       <footer>
         <button type="button" data-dlg-close>{{tr .Locale "cancel"}}</button>
@@ -262,14 +251,11 @@
 
 
 {{define "dashboard.html#parts"}}
-  {{template "dashboard-count" .}}
   {{template "dashboard-filters" .}}
   {{template "dashboard-tag-clear" .}}
   {{template "dashboard-results" .}}
   <template id="resource-selected-tags">{{range .Tags}}{{if .On}}<input type="checkbox" name="tag" value="{{.Name}}" checked>{{end}}{{end}}</template>
 {{end}}
-
-{{define "dashboard-count"}}<span class="cnt" id="resource-count" aria-live="polite">{{countText .Locale .Pager.Total "items"}}</span>{{end}}
 
 {{define "dashboard-filters"}}
 <form id="resource-filters" class="filters" method="get" action="/resources/">
@@ -336,6 +322,10 @@
           <span>{{tr .Locale "new_folder"}}</span>
         </button>
         {{end}}
+        <a class="btn pri sm fb-new-res" id="new-resource-link" href="{{or .NewResourceURL "/resources/new"}}">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 3.2v9.6M3.2 8h9.6"/></svg>
+          <span>{{tr .Locale "new_resource"}}</span>
+        </a>
         <div class="fb-view" role="group" aria-label="{{tr .Locale "view_icon"}}">
           <a class="fb-vbtn{{if ne .ViewMode "list"}} on{{end}}" href="{{or .IconViewURL "/resources/?view=icon"}}" title="{{tr .Locale "view_icon"}}" aria-label="{{tr .Locale "view_icon"}}" data-view-link>
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.2" y="2.2" width="4.6" height="4.6" rx="1"/><rect x="9.2" y="2.2" width="4.6" height="4.6" rx="1"/><rect x="2.2" y="9.2" width="4.6" height="4.6" rx="1"/><rect x="9.2" y="9.2" width="4.6" height="4.6" rx="1"/></svg>
@@ -484,10 +474,15 @@
     <p class="empty">{{if .Pager.Query}}{{tr .Locale "no_matching_resources"}}<span class="mono">{{.Pager.Query}}</span>{{else if or .Pager.Tags .Pager.Kind}}{{tr .Locale "no_filtered_resources"}}{{else if .CurrentFolderID}}{{tr .Locale "folder_empty"}}{{else}}{{tr .Locale "no_resources"}}{{end}}</p>
     {{end}}
 
-    {{/* Finder-style bottom status bar replacing traditional pagination. */}}
+    {{/* Finder-style bottom status bar: item count + selection on left, storage meter on right. */}}
     <div class="fb-foot">
-      <span class="fb-stat" data-fb-stat data-base-label="{{countText .Locale (add (len .Folders) .Pager.Total) "items"}}">{{countText .Locale (add (len .Folders) .Pager.Total) "items"}}</span>
-      <span class="fb-hint">{{tr .Locale "finder_hint"}}</span>
+      <span class="fb-stat" id="resource-count" data-fb-stat data-base-label="{{countText .Locale (add (len .Folders) .Pager.Total) "items"}}" aria-live="polite">{{countText .Locale (add (len .Folders) .Pager.Total) "items"}}</span>
+      {{with storageMeter .Quota}}
+      <a class="fb-usage" href="/account" title="{{printf (tr $.Locale "meter_title") (bytesText .Current) (bytesText .History) (bytesText .Free)}}">
+        <span class="meter-bar mini" style="{{.Style}}" aria-hidden="true"><span class="cur"></span><span class="his"></span></span>
+        <span>{{bytesText .Used}} / {{bytesText .Limit}}</span>
+      </a>
+      {{end}}
     </div>
   </div>
 </div>
