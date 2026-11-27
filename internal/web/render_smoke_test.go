@@ -88,8 +88,8 @@ func TestAllPagesRender(t *testing.T) {
 
 	for _, tc := range []struct{ name, path, want string }{
 		{"home", "/", "Create share link"},
-		{"dashboard", "/resources/", "New resource"},
-		{"dashboard batch 2", "/resources/?size=10&page=2", `data-fb-stat`},
+		{"dashboard", "/resources/", "Markdown document"},
+		{"dashboard list view", "/resources/?view=list", `data-fb-stat`},
 		{"dashboard search", "/resources/?q=" + resource.Name, resource.Filename},
 		{"dashboard no match", "/resources/?q=%25_nothing", "No resources match"},
 		{"logs", "/resources/" + resource.ID + "/logs", "Successful"},
@@ -120,13 +120,17 @@ func TestAllPagesRender(t *testing.T) {
 		}
 	}
 
-	// The search filter must treat LIKE wildcards as literals, and an
-	// out-of-range page must fall back to the last page instead of 404-ing.
+	// The search filter must treat LIKE wildcards as literals, and a stale
+	// past-the-end cursor must bounce back to the top instead of 404-ing.
 	if body := get("/resources/?q=" + resource.Name).Body.String(); strings.Contains(body, "/configs/fill-1") {
 		t.Fatal("search returned resources that do not match the query")
 	}
-	if response := get("/resources/?size=10&page=99"); response.Code != http.StatusSeeOther {
-		t.Fatalf("out-of-range page: expected redirect, got %d", response.Code)
+	staleCursor := encodeResourceCursor(&store.ResourceCursor{
+		CreatedAt: time.Unix(1, 0).UTC(),
+		ID:        resource.ID,
+	})
+	if response := get("/resources/?cursor=" + staleCursor); response.Code != http.StatusSeeOther {
+		t.Fatalf("past-the-end cursor: expected redirect, got %d", response.Code)
 	}
 	if response := get("/resources/" + resource.ID + "/logs?size=20&page=99"); response.Code != http.StatusSeeOther {
 		t.Fatalf("out-of-range log page: expected redirect, got %d", response.Code)

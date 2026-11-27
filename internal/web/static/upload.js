@@ -23,7 +23,7 @@ const MEDIA_TYPES = {
 };
 
 const TEXT_EXTENSIONS = new Set([
-  "txt", "text", "md", "log", "conf", "cfg", "ini", "env", "list",
+  "txt", "text", "md", "markdown", "mdx", "log", "conf", "cfg", "ini", "env", "list",
   "rules", "properties", "pem", "crt", "key", "pub", "sh", "service",
   "json", "yaml", "yml", "toml", "xml", "csv",
 ]);
@@ -82,7 +82,8 @@ export function textLike(type) {
 // look at encrypted bytes, so what it is is decided before encrypting.
 const extensionTypes = {
   json: "application/json", yaml: "text/yaml", yml: "text/yaml", toml: "application/toml", xml: "application/xml",
-  sh: "text/x-sh", sql: "text/x-sql", md: "text/markdown", csv: "text/csv", html: "text/plain", htm: "text/plain",
+  sh: "text/x-sh", sql: "text/x-sql", md: "text/markdown", markdown: "text/markdown", mdx: "text/markdown",
+  csv: "text/csv", html: "text/plain", htm: "text/plain",
 };
 export function textType(filename) {
   const extension = (filename.split(".").pop() || "").toLowerCase();

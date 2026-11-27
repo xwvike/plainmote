@@ -60,11 +60,11 @@
         <b><span data-part="title"{{if .Resource.Sealed}} data-sealed-title{{end}}>{{fileDisplayName .Locale .Resource}}</span></b>
         <span class="tag qs">{{tr .Locale "quick_share"}}</span>
       {{else}}
-        <input type="text" name="filename" form="modal-rform" class="mbar-name-input"
+        <input type="text" name="filename" form="modal-rform" class="mbar-name-input{{if .IsNew}} is-new{{end}}"
                {{if and (not .IsNew) .Resource.Sealed}}data-sealed-filename disabled{{end}}
                value="{{if not (and (not .IsNew) .Resource.Sealed)}}{{or .Resource.Filename .Resource.Name}}{{end}}"
-               placeholder="{{if and (not .IsNew) .Resource.Sealed}}{{tr .Locale "encrypted"}}{{else}}{{tr .Locale "untitled_resource"}}{{end}}"
-               aria-label="{{tr .Locale "filename"}}" autocomplete="off" spellcheck="false" data-modal-filename>
+               placeholder="{{if and (not .IsNew) .Resource.Sealed}}{{tr .Locale "encrypted"}}{{else if .IsNew}}{{tr .Locale "modal_filename_placeholder"}}{{else}}{{tr .Locale "untitled_resource"}}{{end}}"
+               aria-label="{{tr .Locale "filename"}}" autocomplete="off" spellcheck="false" data-modal-filename{{if and .IsNew .Resource.Filename}} data-select-stem="1"{{end}}>
       {{end}}
       {{if .Resource.Sealed}}<span class="tag enc">{{tr .Locale "encrypted"}}</span>{{end}}
     </div>
@@ -150,9 +150,9 @@
   {{template "resource-dialogs" .}}
   {{if and (not .IsNew) (ne .ModalMode "share")}}{{template "seal-dialogs" .}}{{end}}
 
-  {{if ne .ModalMode "share"}}<script type="module" src="{{asset "upload.js"}}"></script>{{end}}
-  {{if not .IsNew}}<script type="module" src="{{asset "resource.js"}}"></script>
-  <script type="module" src="{{asset "parts.js"}}"></script>{{end}}
+  {{if ne .ModalMode "share"}}<script type="module" src="{{asset "upload.js"}}"></script>
+  <script type="module" src="{{asset "resource.js"}}"></script>{{end}}
+  {{if not .IsNew}}<script type="module" src="{{asset "parts.js"}}"></script>{{end}}
   {{if and (ne .ModalMode "share") (or .Resource.Editable .IsNew)}}
   <script type="module" src="{{asset "editor.js"}}"></script>
   {{end}}

@@ -1,7 +1,9 @@
 package web
 
 import (
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -10,6 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+
 	"plainmote/internal/store"
 )
 
@@ -17,17 +21,62 @@ import (
 // the page anyone can open.
 const dashboardPath = "/resources/"
 
+// batchHeader marks an incremental cursor-batch fetch from file-browser.js.
+// Unlike X-PlainMote-Fragment (which replaces the whole directory view), a
+// batch request queries only the next slice of resources and returns pure item
+// markup to append into the active grid or list.
+const batchHeader = "X-PlainMote-Batch"
+
 const (
+	// Table-view pagination defaults (used by Trash and Access Logs).
 	defaultPageSize = 10
-	// Finder browser loads a generous directory batch instead of forcing
-	// traditional 10-item pages; overflow batches load seamlessly on scroll.
-	finderBatchSize = 100
+	// Finder browser streams directories in keyset-cursor batches instead of
+	// numbered OFFSET pages, preventing item skips/duplicates during mutations.
+	finderBatchSize = 60
 	// Keep search URLs and LIKE patterns bounded without cutting a UTF-8 rune.
 	maxQueryLength = 256
 	pageWindow     = 7
 )
 
+// dashboardBatchLimit defaults to finderBatchSize and may be overridden in tests.
+var dashboardBatchLimit = finderBatchSize
+
 var pageSizes = []int{10, 20, 50}
+
+func encodeResourceCursor(c *store.ResourceCursor) string {
+	if c == nil || c.CreatedAt.IsZero() || c.ID == "" {
+		return ""
+	}
+	raw := fmt.Sprintf("%d.%s", c.CreatedAt.UTC().UnixMicro(), c.ID)
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeResourceCursor(token string) *store.ResourceCursor {
+	token = strings.TrimSpace(token)
+	if token == "" || len(token) > 128 {
+		return nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return nil
+	}
+	usStr, id, ok := strings.Cut(string(raw), ".")
+	if !ok {
+		return nil
+	}
+	us, err := strconv.ParseInt(usStr, 10, 64)
+	if err != nil || us <= 0 {
+		return nil
+	}
+	parsedID, err := uuid.Parse(id)
+	if err != nil {
+		return nil
+	}
+	return &store.ResourceCursor{
+		CreatedAt: time.UnixMicro(us).UTC(),
+		ID:        parsedID.String(),
+	}
+}
 
 // handleDashboard lists the account's own resources. It sits under /resources/
 // rather than at the root, because the root is the one page in this service
@@ -40,16 +89,9 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	query := r.URL.Query()
 	search := strings.TrimSpace(query.Get("q"))
 	search = truncateBytes(search, maxQueryLength)
-	size := finderBatchSize
-	if rawSize := strings.TrimSpace(query.Get("size")); rawSize != "" {
-		size = normalizePageSize(rawSize)
-	}
-	page, err := strconv.Atoi(strings.TrimSpace(query.Get("page")))
-	if err != nil || page < 1 {
-		page = 1
-	}
 	folderID := strings.TrimSpace(query.Get("folder"))
 	viewMode := a.resolveViewMode(w, r)
+	after := decodeResourceCursor(query.Get("cursor"))
 
 	filter := store.ResourceFilter{Query: search, Kind: query.Get("kind"), Tags: resourceTags(query["tag"])}
 	if filter.Kind != store.KindResource && filter.Kind != store.KindQuickShare {
@@ -57,9 +99,45 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 	}
 
 	browsingFolder := search == "" && len(filter.Tags) == 0 && filter.Kind != store.KindQuickShare
+	if browsingFolder {
+		filter.UseFolder = true
+		filter.FolderID = folderID
+	} else {
+		folderID = ""
+	}
+
+	batchLimit := dashboardBatchLimit
+	if batchLimit <= 0 {
+		batchLimit = finderBatchSize
+	}
+
+	// Fast path for incremental cursor streaming: skip folder tree, tag sidebar,
+	// breadcrumbs, and storage quota queries completely.
+	if r.Header.Get(batchHeader) != "" {
+		batch, err := a.db.ListResourcesCursor(r.Context(), user.ID, filter, batchLimit, after)
+		if err != nil {
+			a.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		nextURL := ""
+		if batch.NextCursor != nil {
+			nextURL = dashboardURL(filter, encodeResourceCursor(batch.NextCursor))
+		}
+		a.renderTemplate(w, r, http.StatusOK, "dashboard.html#batch", pageData{
+			Resources: batch.Resources,
+			ViewMode:  viewMode,
+			Pager: pager{
+				Total:   batch.Total,
+				NextURL: nextURL,
+			},
+		})
+		return
+	}
+
 	var crumbs []store.Folder
 	var childFolders []store.Folder
 	if browsingFolder {
+		var err error
 		if folderID != "" {
 			crumbs, err = a.db.FolderBreadcrumbs(r.Context(), user.ID, folderID)
 			if errors.Is(err, store.ErrNotFound) {
@@ -71,15 +149,15 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 				return
 			}
 		}
-		filter.UseFolder = true
-		filter.FolderID = folderID
-		childFolders, err = a.db.ListChildFolders(r.Context(), user.ID, folderID)
-		if err != nil {
-			a.renderError(w, http.StatusInternalServerError, err)
-			return
+		// Only include folders on the initial view (not when a no-JS client
+		// follows a subsequent cursor link).
+		if after == nil {
+			childFolders, err = a.db.ListChildFolders(r.Context(), user.ID, folderID)
+			if err != nil {
+				a.renderError(w, http.StatusInternalServerError, err)
+				return
+			}
 		}
-	} else {
-		folderID = ""
 	}
 
 	allFolders, err := a.db.ListAllFolders(r.Context(), user.ID)
@@ -88,15 +166,18 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		return
 	}
 
-	resources, total, err := a.db.ListResourcesBy(r.Context(), user.ID, filter, size, (page-1)*size)
+	batch, err := a.db.ListResourcesCursor(r.Context(), user.ID, filter, batchLimit, after)
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if last := lastPage(total, size); page > last {
-		http.Redirect(w, r, dashboardURL(filter, size, last), http.StatusSeeOther)
+	// If a stale no-JS cursor landed past the end of a non-empty list, bounce
+	// cleanly to the top of the current directory/filter.
+	if after != nil && len(batch.Resources) == 0 && batch.Total > 0 {
+		http.Redirect(w, r, dashboardURL(filter, ""), http.StatusSeeOther)
 		return
 	}
+
 	tags, err := a.db.AccountTags(r.Context(), user.ID)
 	if err != nil {
 		a.renderError(w, http.StatusInternalServerError, err)
@@ -122,20 +203,25 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		return
 	}
 
-	pager := buildPager(page, size, total, pageSizes, func(number int) string {
-		return dashboardURL(filter, size, number)
-	})
-	pager.Query = search
-	pager.Kind = filter.Kind
-	pager.FolderID = folderID
-	pager.Tags = filter.Tags
+	nextURL := ""
+	if batch.NextCursor != nil {
+		nextURL = dashboardURL(filter, encodeResourceCursor(batch.NextCursor))
+	}
 	clear := filter
 	clear.Tags = nil
-	pager.ClearTagsURL = dashboardURL(clear, size, 1)
-	pager.SealedIndexURL = "/resources/sealed?" + url.Values{"kind": {filter.Kind}, "tag": filter.Tags}.Encode()
+	p := pager{
+		Query:          search,
+		Kind:           filter.Kind,
+		FolderID:       folderID,
+		Tags:           filter.Tags,
+		ClearTagsURL:   dashboardURL(clear, ""),
+		SealedIndexURL: "/resources/sealed?" + url.Values{"kind": {filter.Kind}, "tag": filter.Tags}.Encode(),
+		Total:          batch.Total,
+		NextURL:        nextURL,
+	}
 
 	viewURL := func(mode string) string {
-		u := dashboardURL(filter, size, page)
+		u := dashboardURL(filter, "")
 		if strings.Contains(u, "?") {
 			return u + "&view=" + mode
 		}
@@ -151,9 +237,10 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		CSRF:            csrfValue(r),
 		Active:          "resources",
 		BaseURL:         a.baseURL(r),
+		MaxContent:      a.cfg.MaxContent,
 		SignedIn:        true,
 		Error:           strings.TrimSpace(query.Get("error")),
-		Resources:       resources,
+		Resources:       batch.Resources,
 		Folders:         childFolders,
 		FolderCrumbs:    crumbs,
 		FolderOptions:   buildFolderOptions(allFolders),
@@ -165,7 +252,7 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request, user User)
 		NewResourceURL:  newResourceURL,
 		Tags:            chips,
 		Quota:           quota,
-		Pager:           pager,
+		Pager:           p,
 		TrashDays:       int(store.TrashRetention / (24 * time.Hour)),
 		Trashed:         query.Get("trashed") == "1",
 		FolderDeleted:   query.Get("folder_deleted") == "1",
@@ -217,7 +304,7 @@ func lastPage(total, size int) int {
 	return (total + size - 1) / size
 }
 
-func dashboardURL(filter store.ResourceFilter, size, page int) string {
+func dashboardURL(filter store.ResourceFilter, cursor string) string {
 	values := url.Values{}
 	if filter.UseFolder && filter.FolderID != "" {
 		values.Set("folder", filter.FolderID)
@@ -231,11 +318,8 @@ func dashboardURL(filter store.ResourceFilter, size, page int) string {
 	for _, tag := range filter.Tags {
 		values.Add("tag", tag)
 	}
-	if size != defaultPageSize && size != finderBatchSize {
-		values.Set("size", strconv.Itoa(size))
-	}
-	if page > 1 {
-		values.Set("page", strconv.Itoa(page))
+	if cursor != "" {
+		values.Set("cursor", cursor)
 	}
 	if len(values) == 0 {
 		return dashboardPath

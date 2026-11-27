@@ -154,6 +154,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS folders_child_name_idx ON folders(owner_id, pa
 
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS folder_id UUID REFERENCES folders(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS resources_owner_folder_idx ON resources(owner_id, folder_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS resources_owner_folder_created_idx ON resources(owner_id, folder_id, created_at DESC, id DESC) WHERE deleted_at IS NULL;
 -- Objects whose delete failed once no row pointed at them any more. The
 -- prune deletes them again. Keys are made new for every write, so none of
 -- these can come back into use. not_before defers deletion until a presigned

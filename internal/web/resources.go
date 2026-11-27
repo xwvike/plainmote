@@ -98,6 +98,24 @@ func (a *App) handleNewResource(w http.ResponseWriter, r *http.Request, user Use
 		data := a.basePage(r, user)
 		data.IsNew = true
 		data.ModalMode = modalModeFromRequest(r)
+		var ext string
+		switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("type"))) {
+		case "md", "markdown":
+			ext = "md"
+		case "txt", "text":
+			ext = "txt"
+		case "json":
+			ext = "json"
+		case "yaml", "yml":
+			ext = "yaml"
+		case "conf", "ini", "cfg":
+			ext = "conf"
+		case "sh", "bash":
+			ext = "sh"
+		}
+		if ext != "" {
+			data.Resource.Filename = translate(requestLanguage(r).Locale, "untitled_stem") + "." + ext
+		}
 		if folderID := strings.TrimSpace(r.URL.Query().Get("folder")); folderID != "" {
 			if crumbs, err := a.db.FolderBreadcrumbs(r.Context(), user.ID, folderID); err == nil {
 				data.CurrentFolderID = folderID

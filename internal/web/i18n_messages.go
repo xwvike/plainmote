@@ -777,6 +777,20 @@ var messageTable = map[string][6]string{
 	"md_edit":                     {"Edit", "编辑", "編輯", "編集", "Modifier", "Bearbeiten"},
 	"md_source":                   {"Source", "原文", "原文", "原文", "Source", "Quelltext"},
 	"md_empty":                    {"Nothing to preview yet.", "暂无可预览内容。", "暫無可預覽內容。", "プレビューする内容がありません。", "Rien à prévisualiser pour l’instant.", "Noch nichts für die Vorschau."},
+	"items_shown":                 {"Showing %d of %d items", "已显示 %d / %d 项", "已顯示 %d / %d 項", "%d / %d 件を表示中", "%d sur %d éléments affichés", "%d von %d Elementen angezeigt"},
+	"loading_more":                {"Loading more…", "正在加载更多…", "正在載入更多…", "さらに読み込み中…", "Chargement…", "Weitere werden geladen…"},
+	"load_more_failed":            {"Could not load more items.", "未能加载更多内容。", "無法載入更多內容。", "続きを読み込めませんでした。", "Impossible de charger plus d’éléments.", "Weitere Elemente konnten nicht geladen werden."},
+	"retry":                       {"Retry", "重试", "重試", "再試行", "Réessayer", "Erneut versuchen"},
+	"modal_filename_placeholder":  {"Filename (e.g. notes.md)", "文件名（如 notes.md）", "檔名（如 notes.md）", "ファイル名（例: notes.md）", "Nom du fichier (ex. notes.md)", "Dateiname (z. B. notes.md)"},
+	"new_action":                  {"New", "新建", "新增", "新規", "Nouveau", "Neu"},
+	"new_markdown":                {"Markdown document", "Markdown 文档", "Markdown 文件", "Markdown ドキュメント", "Document Markdown", "Markdown-Dokument"},
+	"new_text":                    {"Plain text", "纯文本", "純文字", "プレーンテキスト", "Texte brut", "Klartext"},
+	"new_json":                    {"JSON", "JSON", "JSON", "JSON", "JSON", "JSON"},
+	"new_yaml":                    {"YAML", "YAML", "YAML", "YAML", "YAML", "YAML"},
+	"new_conf":                    {"Config file", "配置文件", "設定檔", "設定ファイル", "Fichier de config", "Konfiguration"},
+	"new_sh":                      {"Shell script", "Shell 脚本", "Shell 腳本", "シェルスクリプト", "Script shell", "Shell-Skript"},
+	"upload_file_action":          {"Upload file…", "上传文件…", "上傳檔案…", "ファイルをアップロード…", "Importer un fichier…", "Datei hochladen…"},
+	"untitled_stem":               {"Untitled", "未命名", "未命名", "無題", "Sans titre", "Unbenannt"},
 }
 
 var messageCatalogs = func() map[string]map[string]string {

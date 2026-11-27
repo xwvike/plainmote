@@ -2,11 +2,13 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"plainmote/internal/store"
 )
@@ -439,6 +441,189 @@ func TestMarkdownPreviewSupport(t *testing.T) {
 	for _, want := range []string{`data-md-mode`, `data-md-view="preview"`, `data-md-view="edit"`, `data-msg-md-empty`} {
 		if !strings.Contains(verBody, want) {
 			t.Fatalf("GET version 1 missing %q", want)
+		}
+	}
+}
+
+func TestFinderKeysetCursorStreaming(t *testing.T) {
+	prevLimit := dashboardBatchLimit
+	dashboardBatchLimit = 5
+	t.Cleanup(func() { dashboardBatchLimit = prevLimit })
+
+	db, user, seed := testDatabase(t)
+	ctx := context.Background()
+	client := signedIn(t, db, user)
+
+	// testDatabase already seeds 1 resource; add 12 more so root has 13 total (5 + 5 + 3).
+	createdIDs := []string{seed.ID}
+	for i := 1; i <= 12; i++ {
+		name := fmt.Sprintf("item-%02d.txt", i)
+		res, err := db.CreateResource(ctx, user.ID, name, name, []byte(name+"\n"), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		createdIDs = append(createdIDs, res.ID)
+	}
+
+	extractAttr := func(body, prefix string) string {
+		idx := strings.Index(body, prefix)
+		if idx < 0 {
+			return ""
+		}
+		rest := body[idx+len(prefix):]
+		end := strings.IndexByte(rest, '"')
+		if end < 0 {
+			return ""
+		}
+		return strings.ReplaceAll(rest[:end], "&amp;", "&")
+	}
+	extractIDs := func(body string) []string {
+		var ids []string
+		marker := `data-item-kind="resource" data-item-id="`
+		rest := body
+		for {
+			idx := strings.Index(rest, marker)
+			if idx < 0 {
+				break
+			}
+			rest = rest[idx+len(marker):]
+			end := strings.IndexByte(rest, '"')
+			if end < 0 {
+				break
+			}
+			ids = append(ids, rest[:end])
+			rest = rest[end:]
+		}
+		return ids
+	}
+	getBatch := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "https://cfg.test"+path, nil)
+		req.Header.Set(batchHeader, "1")
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: client.session})
+		rec := httptest.NewRecorder()
+		client.app.handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 1. Initial load: 5 items, exact total 13, cursor link, and no legacy size input.
+	page1 := client.do(http.MethodGet, "/resources/", nil)
+	if page1.Code != http.StatusOK {
+		t.Fatalf("GET /resources/: %d", page1.Code)
+	}
+	b1 := page1.Body.String()
+	if strings.Contains(b1, `name="size"`) {
+		t.Fatal("dashboard-filters must not contain legacy hidden size input")
+	}
+	if !strings.Contains(b1, `data-total-count="13"`) {
+		t.Fatalf("missing exact total count 13 in initial page")
+	}
+	ids1 := extractIDs(b1)
+	if len(ids1) != 5 {
+		t.Fatalf("batch 1 len = %d, want 5", len(ids1))
+	}
+	next1 := extractAttr(b1, `data-load-more="`)
+	if next1 == "" || !strings.Contains(next1, "cursor=") {
+		t.Fatalf("batch 1 missing cursor next URL: %q", next1)
+	}
+
+	// 2. Fetch batch 2 via lightweight X-PlainMote-Batch header.
+	batch2 := getBatch(next1)
+	if batch2.Code != http.StatusOK {
+		t.Fatalf("GET batch 2: %d", batch2.Code)
+	}
+	b2 := batch2.Body.String()
+	if strings.Contains(b2, "<!doctype html>") || strings.Contains(b2, "tag-sidebar") {
+		t.Fatal("batch response must not include full page shell")
+	}
+	ids2 := extractIDs(b2)
+	if len(ids2) != 5 {
+		t.Fatalf("batch 2 len = %d, want 5", len(ids2))
+	}
+	next2 := extractAttr(b2, `data-next-url="`)
+	if next2 == "" || !strings.Contains(b2, `data-has-more="1"`) {
+		t.Fatalf("batch 2 should indicate more items: %s", b2)
+	}
+
+	// 3. Mutate mid-stream (add a brand new file at the top and trash one from batch 1):
+	// keyset cursor must still return the exact remaining 3 items with zero skips/duplicates.
+	if _, err := db.CreateResource(ctx, user.ID, "brand-new.txt", "brand-new.txt", []byte("new\n"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.TrashResource(ctx, user.ID, ids1[0], time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	batch3 := getBatch(next2)
+	if batch3.Code != http.StatusOK {
+		t.Fatalf("GET batch 3: %d", batch3.Code)
+	}
+	b3 := batch3.Body.String()
+	ids3 := extractIDs(b3)
+	if len(ids3) != 3 {
+		t.Fatalf("batch 3 len = %d, want 3", len(ids3))
+	}
+	if !strings.Contains(b3, `data-has-more="0"`) {
+		t.Fatalf("batch 3 should be final: %s", b3)
+	}
+
+	// Verify all 13 original IDs were delivered exactly once across batches 1..3.
+	seen := make(map[string]bool, 13)
+	for _, id := range append(append(ids1, ids2...), ids3...) {
+		if seen[id] {
+			t.Fatalf("duplicate resource %s across cursor batches", id)
+		}
+		seen[id] = true
+	}
+	for _, orig := range createdIDs {
+		if !seen[orig] {
+			t.Fatalf("missing resource %s across cursor batches", orig)
+		}
+	}
+
+	// 4. Filtering with kind=resource (and even stale size=100) must NOT cap at 10.
+	dashboardBatchLimit = 60
+	filtered := client.do(http.MethodGet, "/resources/?kind=resource&size=100", nil)
+	if filtered.Code != http.StatusOK {
+		t.Fatalf("GET filtered: %d", filtered.Code)
+	}
+	if got := len(extractIDs(filtered.Body.String())); got != 13 {
+		t.Fatalf("filtered count = %d, want all 13 live resources (never downgraded to 10)", got)
+	}
+
+	// 5. List view batch returns <tr class="fb-row"> inside <template data-batch-items>.
+	dashboardBatchLimit = 5
+	listBatch := getBatch(next1 + "&view=list")
+	if listBatch.Code != http.StatusOK {
+		t.Fatalf("GET list batch: %d", listBatch.Code)
+	}
+	lb := listBatch.Body.String()
+	if !strings.Contains(lb, `<template data-batch-items>`) || !strings.Contains(lb, `<tr class="fb-row is-file"`) {
+		t.Fatalf("list batch did not render table rows inside <template>: %s", lb)
+	}
+
+	// 6. Finder "+ New" menu and typed document pre-fill (?type=md/txt/json/yaml/conf/sh).
+	for _, want := range []string{`id="fb-new-menu"`, `data-fb-new="md"`, `data-fb-new="txt"`, `data-fb-new="json"`, `data-fb-new="yaml"`, `data-fb-new="conf"`, `data-fb-new="sh"`, `data-fb-new="upload"`, `data-fb-new="folder"`} {
+		if !strings.Contains(b1, want) {
+			t.Fatalf("dashboard missing %q", want)
+		}
+	}
+	for _, tc := range []struct {
+		query, wantFile string
+	}{
+		{"type=md", `value="Untitled.md"`},
+		{"type=txt", `value="Untitled.txt"`},
+		{"type=json", `value="Untitled.json"`},
+		{"type=yaml", `value="Untitled.yaml"`},
+		{"type=conf", `value="Untitled.conf"`},
+		{"type=sh", `value="Untitled.sh"`},
+	} {
+		rec := client.do(http.MethodGet, "/resources/new?modal=edit&"+tc.query, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /resources/new?modal=edit&%s: %d", tc.query, rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, tc.wantFile) || !strings.Contains(body, `data-select-stem="1"`) {
+			t.Fatalf("GET /resources/new?modal=edit&%s missing pre-fill %s or stem select", tc.query, tc.wantFile)
 		}
 	}
 }

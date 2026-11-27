@@ -74,7 +74,7 @@
   .lbl, .lbl b, .lbl-add input[type="text"],
   .lbl-add[aria-busy="true"]::after, form.lbl[aria-busy="true"] button,
   .ph .hist b, .ph .vtag, .cur-tag,
-  .fb-dot, .fb-dot-inline, .fb-badge-lock, .fb-qs-pill, .fb-drag-dest, .fb-tag-pick,
+  .fb-dot, .fb-dot-inline, .fb-badge-lock, .fb-qs-pill, .fb-drag-dest, .fb-tag-pick, .fb-spin,
   .mbar-tabs a b, .alog-hits,
   .stub::before, .stub::after, .lock-ic::before {
     corner-shape: round;
@@ -1266,6 +1266,10 @@ body.is-modal .dunes-bg { display: none; }
   transition: background .14s, border-color .14s, box-shadow .14s;
 }
 .mbar-title input.mbar-name-input::placeholder { color: var(--ink); opacity: .78; font-weight: 600; }
+.mbar-title input.mbar-name-input.is-new {
+  margin-left: 0; background: var(--field); border-color: var(--line);
+}
+.mbar-title input.mbar-name-input.is-new::placeholder { color: var(--ink3); opacity: .88; font-weight: 400; font-size: 13.5px; }
 .mbar-title input.mbar-name-input:focus::placeholder { color: var(--ink3); opacity: .72; font-weight: 400; }
 .mbar-title input.mbar-name-input:hover:not(:disabled) { background: var(--zebra); border-color: transparent; }
 .mbar-title input.mbar-name-input:focus { background: var(--field); border-color: var(--accent); box-shadow: var(--focus-ring); }
@@ -1399,11 +1403,33 @@ body.fb-dragging * { cursor: grabbing !important; }
 
 /* Finder workspace page spacing (no redundant top admin heading). */
 .page.fb-page { padding-top: 20px; gap: 16px; }
-.fb-new-res { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; font-size: 12.5px; }
+.fb-new-res { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px 0 10px; font-size: 12.5px; }
 .fb-new-res svg { width: 13px; height: 13px; flex: none; }
+.fb-new-res .fb-caret { width: 11px; height: 11px; opacity: .82; margin-left: -1px; }
+.fb-new-menu { min-width: 196px; }
+.fb-new-menu button { gap: 8px; }
+.fb-new-menu button svg { width: 14px; height: 14px; flex: none; color: var(--ink3); }
+.fb-new-menu button:hover svg { color: var(--ink); }
+.fb-new-menu button em {
+  margin-left: auto; padding: 1px 5px; border-radius: 4px;
+  background: var(--sunk); font: 500 10.5px/1.3 var(--mono); font-style: normal; color: var(--ink3);
+}
 
-/* Finder bottom status bar & seamless load-more trigger. */
-.fb-more-wrap { display: flex; justify-content: center; padding: 6px 16px 14px; }
+/* Finder bottom status bar & keyset cursor stream sentinel. */
+.fb-more-wrap {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px 16px 18px; min-height: 44px;
+}
+.fb-more-loading {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--ink3);
+}
+.fb-spin {
+  width: 14px; height: 14px; border: 1.8px solid var(--line2); border-top-color: var(--accent);
+  border-radius: 50%; animation: fb-spin .7s linear infinite;
+}
+@keyframes fb-spin { to { transform: rotate(360deg); } }
+.fb-more-err { font-size: 12.5px; color: var(--bad); }
 .fb-foot {
   flex: none;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

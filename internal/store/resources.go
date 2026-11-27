@@ -363,6 +363,120 @@ LIMIT $%d OFFSET $%d
 	return resources, total, rows.Err()
 }
 
+// ResourceCursor marks the last item of a Finder directory batch ordered by
+// (created_at DESC, id DESC) so subsequent batches stream without OFFSET drift.
+type ResourceCursor struct {
+	CreatedAt time.Time
+	ID        string
+}
+
+// ResourceBatch holds one cursor-paginated slice of resources along with the
+// exact total count for the active directory/filter.
+type ResourceBatch struct {
+	Resources  []Resource
+	Total      int
+	NextCursor *ResourceCursor
+}
+
+// ListResourcesCursor returns up to limit resources matching filter strictly
+// after the given keyset cursor (ordered by created_at DESC, id DESC), plus
+// the exact total matching count and the next cursor when more items exist.
+func (d *Store) ListResourcesCursor(ctx context.Context, ownerID string, filter ResourceFilter, limit int, after *ResourceCursor) (ResourceBatch, error) {
+	query := strings.TrimSpace(filter.Query)
+	pattern := "%" + escapeLikePattern(query) + "%"
+	kind := filter.Kind
+	switch kind {
+	case KindResource, KindQuickShare:
+	default:
+		kind = ""
+	}
+	folderClause := ""
+	folderID := ""
+	if filter.UseFolder {
+		if filter.FolderID == "" {
+			folderClause = ` AND r.folder_id IS NULL`
+		} else {
+			if !validUUIDs(filter.FolderID) {
+				return ResourceBatch{}, nil
+			}
+			folderID = filter.FolderID
+			folderClause = ` AND r.folder_id = $6::uuid`
+		}
+	}
+	countArgs := []any{ownerID, query, pattern, kind, filter.Tags}
+	if folderID != "" {
+		countArgs = append(countArgs, folderID)
+	}
+	var total int
+	if err := d.db.QueryRow(ctx, `SELECT COUNT(*) FROM resources r WHERE `+resourceFilterSQL+folderClause,
+		countArgs...).Scan(&total); err != nil {
+		return ResourceBatch{}, fmt.Errorf("count resources: %w: %w", ErrInternal, err)
+	}
+	if limit <= 0 {
+		limit = 60
+	}
+
+	listArgs := []any{ownerID, query, pattern, kind, filter.Tags}
+	nextIdx := 6
+	if folderID != "" {
+		listArgs = append(listArgs, folderID)
+		nextIdx++
+	}
+	cursorClause := ""
+	if after != nil && !after.CreatedAt.IsZero() && validUUIDs(after.ID) {
+		cursorClause = fmt.Sprintf(` AND (r.created_at, r.id) < ($%d, $%d::uuid)`, nextIdx, nextIdx+1)
+		listArgs = append(listArgs, after.CreatedAt.UTC(), after.ID)
+		nextIdx += 2
+	}
+	nowIdx := nextIdx
+	limitIdx := nextIdx + 1
+	listArgs = append(listArgs, time.Now().UTC(), limit+1)
+
+	rows, err := d.db.Query(ctx, fmt.Sprintf(`
+SELECT `+resourceColumns+`,
+       (SELECT COUNT(*) FROM links l WHERE l.resource_id = r.id AND l.revoked_at IS NULL
+          AND (l.expires_at IS NULL OR l.expires_at > $%d)
+          AND (l.max_uses = 0 OR l.used_count < l.max_uses))
+FROM resources r
+WHERE `+resourceFilterSQL+folderClause+cursorClause+`
+ORDER BY r.created_at DESC, r.id DESC
+LIMIT $%d
+`, nowIdx, limitIdx), listArgs...)
+	if err != nil {
+		return ResourceBatch{}, err
+	}
+	defer rows.Close()
+
+	resources := make([]Resource, 0, limit+1)
+	for rows.Next() {
+		var live int
+		resource, err := scanResource(rows, &live)
+		if err != nil {
+			return ResourceBatch{}, err
+		}
+		resource.LiveShares = live
+		resources = append(resources, resource)
+	}
+	if err := rows.Err(); err != nil {
+		return ResourceBatch{}, err
+	}
+
+	var nextCursor *ResourceCursor
+	if len(resources) > limit {
+		resources = resources[:limit]
+		last := resources[limit-1]
+		nextCursor = &ResourceCursor{
+			CreatedAt: last.CreatedAt.UTC(),
+			ID:        last.ID,
+		}
+	}
+	return ResourceBatch{
+		Resources:  resources,
+		Total:      total,
+		NextCursor: nextCursor,
+	}, nil
+}
+
 func escapeLikePattern(value string) string {
 	return strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(value)
 }

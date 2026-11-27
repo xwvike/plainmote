@@ -178,5 +178,6 @@ if (globalThis.crypto?.subtle) {
     showSealedNames(view.signal);
   }
   document.addEventListener("plainmote:resource-results", refresh);
+  document.addEventListener("plainmote:batch-appended", refresh);
   refresh();
 }

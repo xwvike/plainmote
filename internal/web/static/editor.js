@@ -566,7 +566,8 @@ function enhance(textarea) {
   // both, what the text plainly is - a quick share rarely has a name. Looked
   // at again once typing pauses, not on every key, and only the head of a
   // long document is read for it.
-  const filenameInput = form ? form.elements.filename : null;
+  const filenameInput = (form && (form.elements.namedItem("filename") || form.elements.filename))
+    || document.querySelector("[data-modal-filename]");
   let languageToken = null;
   let sniffTimer = 0;
   const configureLanguage = () => {
@@ -792,11 +793,17 @@ function enhance(textarea) {
     // The filename decides the type, and on a new resource it is typed after
     // the content just as often as before it.
     if (filenameInput) {
-      filenameInput.addEventListener("input", () => {
+      const onFilenameChange = () => {
         configureLanguage();
         md.refresh();
-      });
-      if (!form.contains(filenameInput)) filenameInput.addEventListener("input", markDirty);
+      };
+      filenameInput.addEventListener("input", onFilenameChange);
+      filenameInput.addEventListener("change", onFilenameChange);
+      filenameInput.addEventListener("compositionend", onFilenameChange);
+      if (!form.contains(filenameInput)) {
+        filenameInput.addEventListener("input", markDirty);
+        filenameInput.addEventListener("change", markDirty);
+      }
     }
 
     const replaceDocument = (content, dirty = false, edited = false) => {

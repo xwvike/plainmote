@@ -495,6 +495,7 @@ func (a *App) renderTemplate(w http.ResponseWriter, r *http.Request, status int,
 	w.Header().Add("Vary", "Accept-Language")
 	w.Header().Add("Vary", "Cookie")
 	w.Header().Add("Vary", partsHeader)
+	w.Header().Add("Vary", batchHeader)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	// Scripts come from this site's own files and nowhere else: no inline

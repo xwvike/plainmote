@@ -69,7 +69,9 @@ async function refreshResults(url, fromHistory = false) {
     applied = selectedTags(nextTags);
     showSelection(applied);
     if (fromHistory) {
-      for (const name of ["q", "kind", "size"]) form.elements[name].value = nextForm.elements[name].value;
+      for (const name of ["q", "kind"]) {
+        if (form.elements[name] && nextForm.elements[name]) form.elements[name].value = nextForm.elements[name].value;
+      }
       if (response.url !== location.href) history.replaceState(history.state, "", response.url);
     } else if (response.url !== location.href) {
       history.pushState(null, "", response.url);

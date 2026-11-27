@@ -1,12 +1,16 @@
 // Finder-style folder browser interactions:
 // - Single-click selects an item (with Finder highlight); double-click opens
 //   files and enters folders (touch devices keep single-tap open).
-// - Right-click anywhere on an item opens the context menu at cursor.
+// - Right-click on an item opens the item menu; right-click on empty canvas
+//   or clicking "+ New ▾" opens the Finder/Explorer creation menu.
 // - Smooth GPU-accelerated pointer-events drag-and-drop with a crisp floating
 //   drag pill, live folder/breadcrumb drop targets, and destination feedback.
-// - Seamless infinite scroll when a directory holds more than one batch.
+// - Keyset-cursor streaming when a directory holds more than one batch.
+import { presignAndUpload, xhrSend, UPLOAD_JSON_HEADER } from "./direct-upload.js";
 
 const menu = document.getElementById("fb-menu");
+const newMenu = document.getElementById("fb-new-menu");
+const directUploadInput = document.getElementById("fb-direct-upload");
 const dlgNew = document.getElementById("dlg-folder-new");
 const dlgRename = document.getElementById("dlg-folder-rename");
 const dlgMove = document.getElementById("dlg-move");
@@ -25,6 +29,7 @@ let selectedEl = null;
 let suppressNextClick = false;
 let dragState = null;
 let loadMoreObserver = null;
+let batchController = null;
 let loadingMore = false;
 let sheetDirty = false;
 let sheetResourceId = "";
@@ -65,10 +70,21 @@ function itemInfo(el) {
   };
 }
 
+function formatShown(template, shown, total) {
+  let out = String(template || "");
+  out = out.replace("%d", String(shown));
+  out = out.replace("%d", String(total));
+  return out;
+}
+
 function updateStatusBar() {
   const stat = document.querySelector("[data-fb-stat]");
   if (!stat) return;
-  const base = stat.dataset.baseLabel || "";
+  const loaded = document.querySelectorAll("[data-fb-item]").length;
+  const total = Number(stat.dataset.totalCount || "0");
+  const base = (total > 0 && loaded < total && stat.dataset.msgShown)
+    ? formatShown(stat.dataset.msgShown, loaded, total)
+    : (stat.dataset.baseLabel || "");
   const selMsg = resultsRoot()?.dataset.msgSelected || "1 selected";
   stat.textContent = selectedEl ? `${base} · ${selMsg}` : base;
 }
@@ -151,6 +167,7 @@ async function navigateFolder(href, push = true, selectId = "") {
     location.assign(href);
     return;
   }
+  cancelPendingBatch();
   closeMenu();
   setSelected(null);
   results.setAttribute("aria-busy", "true");
@@ -204,14 +221,131 @@ async function navigateFolder(href, push = true, selectId = "") {
   }
 }
 
+function closeNewMenu() {
+  if (!newMenu) return;
+  newMenu.hidden = true;
+  document.querySelector("[data-fb-new-trigger]")?.setAttribute("aria-expanded", "false");
+}
+
 function closeMenu() {
+  closeNewMenu();
   if (!menu) return;
   menu.hidden = true;
   activeMenuItem = null;
 }
 
+function openNewMenuAt(x, y, alignRight = false) {
+  if (!newMenu) return;
+  if (menu) {
+    menu.hidden = true;
+    activeMenuItem = null;
+  }
+  const canFolder = resultsRoot()?.dataset.browsingFolder !== "0";
+  const folderBtn = newMenu.querySelector('[data-fb-new="folder"]');
+  const folderSep = newMenu.querySelector("[data-fb-new-folder-sep]");
+  if (folderBtn) folderBtn.hidden = !canFolder;
+  if (folderSep) folderSep.hidden = !canFolder;
+
+  newMenu.hidden = false;
+  const mw = newMenu.offsetWidth || 200;
+  const mh = newMenu.offsetHeight || 280;
+  const rawLeft = alignRight ? x - mw : x;
+  const left = Math.max(8, Math.min(rawLeft, window.innerWidth - mw - 8));
+  const top = y + mh + 8 > window.innerHeight ? Math.max(8, y - mh - 4) : Math.max(8, y);
+  newMenu.style.left = `${left}px`;
+  newMenu.style.top = `${top}px`;
+}
+
+function openNewDoc(type) {
+  closeMenu();
+  const folder = currentFolder();
+  const params = new URLSearchParams({ modal: "edit" });
+  if (type) params.set("type", type);
+  if (folder) params.set("folder", folder);
+  openSheet(`/resources/new?${params.toString()}`, "is-editor");
+}
+
+function formatBytes(size) {
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(2)} MiB`;
+  if (size >= 1024) return `${(size / 1024).toFixed(2)} KiB`;
+  return `${size} B`;
+}
+
+async function uploadDirectFile(file) {
+  if (!file) return;
+  showError("");
+  const maxBytes = Number(directUploadInput?.dataset.maxBytes || "0");
+  if (maxBytes > 0 && file.size > maxBytes) {
+    const tpl = document.body.dataset.msgUploadOversize || "File too large ({size} / {limit}).";
+    showError(tpl.replaceAll("{size}", formatBytes(file.size)).replaceAll("{limit}", formatBytes(maxBytes)));
+    return;
+  }
+  const stat = document.querySelector("[data-fb-stat]");
+  const setProgress = (fraction) => {
+    if (!stat) return;
+    const pct = Math.min(99, Math.max(1, Math.round(fraction * 100)));
+    const tpl = document.body.dataset.msgUploading || "Uploading %d%…";
+    stat.textContent = tpl.replace("%d", String(pct));
+  };
+  const setSaving = () => {
+    if (stat) stat.textContent = document.body.dataset.msgSaving || "Saving…";
+  };
+
+  const csrf = csrfToken();
+  const folder = currentFolder();
+  const formData = new FormData();
+  formData.set("csrf", csrf);
+  formData.set("filename", file.name);
+  if (folder) formData.set("folder_id", folder);
+
+  try {
+    setProgress(0.01);
+    const direct = await presignAndUpload({
+      purpose: "resource_create",
+      blob: file,
+      resourceID: "",
+      csrf,
+      onProgress: setProgress,
+    });
+    let result;
+    if (direct?.uploaded) {
+      setSaving();
+      formData.set("upload_token", direct.token);
+      formData.set("upload_filename", file.name);
+      result = await xhrSend("POST", "/resources/new", formData, {
+        withCredentials: true,
+        headers: { Accept: "application/json", [UPLOAD_JSON_HEADER]: "1" },
+      });
+    } else {
+      if (direct?.token) formData.set("fallback_upload_token", direct.token);
+      formData.set("upload", file, file.name);
+      result = await xhrSend("POST", "/resources/new", formData, {
+        withCredentials: true,
+        headers: { Accept: "application/json", [UPLOAD_JSON_HEADER]: "1" },
+        onProgress: setProgress,
+      });
+    }
+    const data = JSON.parse(result.responseText || "{}");
+    if (!result.ok) {
+      throw new Error(data.message || document.body.dataset.msgRequestFailed || "Upload failed");
+    }
+    const match = /^\/resources\/([0-9a-f-]{36})/i.exec(data.location || "");
+    await navigateFolder(location.href, false, match ? match[1] : "");
+  } catch (err) {
+    updateStatusBar();
+    showError(err instanceof Error && err.message ? err.message : (document.body.dataset.msgRequestFailed || "Upload failed"));
+  }
+}
+
+directUploadInput?.addEventListener("change", () => {
+  const file = directUploadInput.files?.[0];
+  directUploadInput.value = "";
+  if (file) uploadDirectFile(file);
+});
+
 function openMenuAt(info, x, y) {
   if (!menu || !info) return;
+  closeNewMenu();
   activeMenuItem = info;
 
   const isFolder = info.kind === "folder";
@@ -732,39 +866,123 @@ document.addEventListener("pointercancel", (event) => {
   if (dragState && event.pointerId === dragState.pointerId) finishDrag(true);
 });
 
-// --- Seamless Infinite Scroll (no traditional numbered pagination) ----------
+// --- Keyset Cursor Streaming (lightweight batch append inside .fb-scroll) ---
+
+function cancelPendingBatch() {
+  batchController?.abort();
+  batchController = null;
+  loadingMore = false;
+}
+
+function renderBatchLoading(wrap) {
+  const indicator = document.createElement("span");
+  indicator.className = "fb-more-loading";
+  const spin = document.createElement("span");
+  spin.className = "fb-spin";
+  spin.setAttribute("aria-hidden", "true");
+  const text = document.createElement("span");
+  text.textContent = wrap.dataset.msgLoading || "Loading…";
+  indicator.append(spin, text);
+  wrap.replaceChildren(indicator);
+}
+
+function renderBatchError(wrap, nextURL) {
+  const msg = document.createElement("span");
+  msg.className = "fb-more-err";
+  msg.textContent = wrap.dataset.msgFailed || "Could not load more items.";
+  const retry = document.createElement("a");
+  retry.className = "btn sm fb-more-btn";
+  retry.href = nextURL;
+  retry.dataset.loadMoreBtn = "";
+  retry.textContent = wrap.dataset.msgRetry || "Retry";
+  wrap.replaceChildren(msg, retry);
+}
 
 async function loadNextBatch(wrap) {
-  if (loadingMore || !wrap) return;
+  if (loadingMore || !wrap || !wrap.isConnected) return;
   const nextURL = wrap.dataset.loadMore;
   if (!nextURL) return;
   loadingMore = true;
+  batchController = new AbortController();
+  const { signal } = batchController;
   wrap.setAttribute("aria-busy", "true");
+  renderBatchLoading(wrap);
   try {
     const response = await fetch(nextURL, {
-      headers: { "X-PlainMote-Fragment": "1" },
+      headers: { "X-PlainMote-Batch": "1" },
       credentials: "same-origin",
+      signal,
     });
-    if (!response.ok) return;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+    if (signal.aborted || !wrap.isConnected) return;
+
+    const meta = doc.querySelector("[data-batch-meta]");
+    const tpl = meta?.querySelector("template[data-batch-items]");
     const container = document.querySelector("[data-fb-items]");
-    const nextContainer = doc.querySelector("[data-fb-items]");
-    if (container && nextContainer) {
-      // Only append file items (folders were already rendered on batch 1).
-      for (const el of nextContainer.querySelectorAll('[data-fb-item][data-item-kind="resource"]')) {
-        container.append(el);
+    if (!meta || !tpl || !container) throw new Error("malformed batch response");
+
+    const seen = new Set(
+      [...container.querySelectorAll('[data-fb-item][data-item-kind="resource"]')]
+        .map((el) => el.dataset.itemId),
+    );
+    const fragment = document.createDocumentFragment();
+    let appended = 0;
+    for (const el of tpl.content.querySelectorAll('[data-fb-item][data-item-kind="resource"]')) {
+      const id = el.dataset.itemId;
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      fragment.append(document.importNode(el, true));
+      appended++;
+    }
+    if (appended > 0) container.append(fragment);
+
+    const stat = document.querySelector("[data-fb-stat]");
+    if (stat && meta.dataset.total !== undefined) {
+      const folders = Number(stat.dataset.folderCount || "0");
+      const serverTotal = Number(meta.dataset.total || "0");
+      if (!Number.isNaN(serverTotal)) {
+        const prevTotal = Number(stat.dataset.totalCount || "0");
+        const nextTotal = folders + serverTotal;
+        if (nextTotal !== prevTotal) {
+          stat.dataset.totalCount = String(nextTotal);
+          if (stat.dataset.baseLabel) {
+            stat.dataset.baseLabel = stat.dataset.baseLabel.replace(/\d+/, String(nextTotal));
+          }
+        }
       }
     }
-    const nextWrap = doc.querySelector("[data-load-more]");
-    if (nextWrap) {
-      wrap.replaceWith(nextWrap);
+    updateStatusBar();
+
+    const hasMore = meta.dataset.hasMore === "1" && Boolean(meta.dataset.nextUrl);
+    if (hasMore && appended > 0) {
+      wrap.dataset.loadMore = meta.dataset.nextUrl;
+      wrap.removeAttribute("aria-busy");
+      const btn = document.createElement("a");
+      btn.className = "btn sm fb-more-btn";
+      btn.href = meta.dataset.nextUrl;
+      btn.dataset.loadMoreBtn = "";
+      btn.textContent = wrap.getAttribute("data-label-more") || wrap.dataset.msgRetry || "…";
+      wrap.replaceChildren(btn);
+      observeLoadMore();
     } else {
+      loadMoreObserver?.disconnect();
       wrap.remove();
     }
-    observeLoadMore();
-    document.dispatchEvent(new Event("plainmote:resource-results"));
+    if (appended > 0) {
+      document.dispatchEvent(new Event("plainmote:batch-appended"));
+    }
+  } catch (err) {
+    if (signal.aborted || !wrap.isConnected) return;
+    loadMoreObserver?.disconnect();
+    wrap.removeAttribute("aria-busy");
+    renderBatchError(wrap, nextURL);
+    console.error("Could not load next batch", err);
   } finally {
-    loadingMore = false;
+    if (batchController?.signal === signal) {
+      batchController = null;
+      loadingMore = false;
+    }
   }
 }
 
@@ -772,10 +990,14 @@ function observeLoadMore() {
   loadMoreObserver?.disconnect();
   const wrap = document.querySelector("[data-load-more]");
   if (!wrap || !("IntersectionObserver" in window)) return;
+  const initialBtn = wrap.querySelector("[data-load-more-btn]");
+  if (initialBtn && !wrap.getAttribute("data-label-more")) {
+    wrap.setAttribute("data-label-more", initialBtn.textContent.trim());
+  }
   const scrollRoot = document.querySelector("[data-fb-scroll]") || null;
   loadMoreObserver = new IntersectionObserver((entries) => {
     if (entries.some((e) => e.isIntersecting)) loadNextBatch(wrap);
-  }, { root: scrollRoot, rootMargin: "200px" });
+  }, { root: scrollRoot, rootMargin: "320px 0px" });
   loadMoreObserver.observe(wrap);
 }
 
@@ -844,12 +1066,34 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  const newResLink = event.target.closest("#new-resource-link");
-  if (newResLink && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+  const newTrigger = event.target.closest("[data-fb-new-trigger]");
+  if (newTrigger && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
     event.preventDefault();
-    const u = new URL(newResLink.href, location.href);
-    u.searchParams.set("modal", "edit");
-    openSheet(u.pathname + u.search, "is-editor");
+    event.stopPropagation();
+    if (newMenu && !newMenu.hidden) {
+      closeNewMenu();
+    } else {
+      const rect = newTrigger.getBoundingClientRect();
+      openNewMenuAt(rect.right, rect.bottom + 6, true);
+      newTrigger.setAttribute("aria-expanded", "true");
+    }
+    return;
+  }
+
+  const newAct = event.target.closest("[data-fb-new]");
+  if (newAct) {
+    event.preventDefault();
+    event.stopPropagation();
+    const kind = newAct.dataset.fbNew;
+    if (kind === "upload") {
+      closeMenu();
+      directUploadInput?.click();
+    } else if (kind === "folder") {
+      closeMenu();
+      openNewFolder();
+    } else if (kind) {
+      openNewDoc(kind);
+    }
     return;
   }
 
@@ -908,7 +1152,7 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  if (menu && !menu.hidden && !event.target.closest("#fb-menu")) {
+  if (((menu && !menu.hidden) || (newMenu && !newMenu.hidden)) && !event.target.closest("#fb-menu, #fb-new-menu")) {
     closeMenu();
   }
 
@@ -946,13 +1190,21 @@ document.addEventListener("dblclick", (event) => {
   openItem(itemInfo(itemEl));
 });
 
-// Right-click opens Finder context menu at pointer position.
+// Right-click on an item opens item menu; right-click on empty Finder canvas
+// opens the creation menu (just like Windows Explorer / macOS Finder).
 document.addEventListener("contextmenu", (event) => {
   const itemEl = event.target.closest("[data-fb-item]");
-  if (!itemEl) return;
-  event.preventDefault();
-  setSelected(itemEl);
-  openMenuAt(itemInfo(itemEl), event.clientX, event.clientY);
+  if (itemEl) {
+    event.preventDefault();
+    setSelected(itemEl);
+    openMenuAt(itemInfo(itemEl), event.clientX, event.clientY);
+    return;
+  }
+  if (event.target.closest("[data-fb-scroll]") && !event.target.closest("a, button, input")) {
+    event.preventDefault();
+    setSelected(null);
+    openNewMenuAt(event.clientX, event.clientY, false);
+  }
 });
 
 // Close dialogs when clicking their backdrop.
@@ -1048,6 +1300,7 @@ document.addEventListener("scroll", closeMenu, { capture: true, passive: true })
 window.addEventListener("resize", closeMenu, { passive: true });
 
 document.addEventListener("plainmote:resource-results", () => {
+  cancelPendingBatch();
   closeMenu();
   setSelected(null);
   syncReturnInputs();

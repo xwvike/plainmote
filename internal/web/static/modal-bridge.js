@@ -34,10 +34,17 @@ function currentResourceID() {
   return match ? match[1] : "";
 }
 
+function hasPageError() {
+  for (const el of document.querySelectorAll('[data-part="notices"] .err, [data-part="notices"] .warnbox')) {
+    if (!el.hidden && el.textContent.trim() !== "") return true;
+  }
+  return false;
+}
+
 // Signal parent when a create, save, seal/unseal, keep, or restore just landed.
 const params = new URLSearchParams(location.search);
 const isEditModal = document.body.dataset.modalMode === "edit";
-if (isEditModal && (params.has("created") || params.has("saved")) && !document.querySelector(".err, .warnbox")) {
+if (isEditModal && (params.has("created") || params.has("saved")) && !hasPageError()) {
   notifyParent("plainmote:modal-saved", { resourceId: currentResourceID() });
 } else if (params.has("created") || params.has("saved") || params.has("sealed") ||
     params.has("unsealed") || params.has("kept") || params.has("restored")) {
@@ -63,15 +70,33 @@ document.addEventListener("plainmote:parts", (event) => {
 });
 
 // Merged modal title input: double-click selects the entire filename (including
-// extension), Enter finishes editing cleanly without accidental form submit.
+// extension); when pre-filled from "+ New" (e.g. "未命名.md"), select only the
+// stem before the extension just like Finder / Windows Explorer so typing
+// renames it immediately while preserving the suffix, and Enter jumps straight
+// into the editor body.
 const modalFilename = document.querySelector("[data-modal-filename]");
 if (modalFilename instanceof HTMLInputElement) {
+  if (modalFilename.dataset.selectStem === "1" && modalFilename.value) {
+    const dot = modalFilename.value.lastIndexOf(".");
+    const end = dot > 0 ? dot : modalFilename.value.length;
+    requestAnimationFrame(() => {
+      modalFilename.focus();
+      modalFilename.setSelectionRange(0, end);
+    });
+  }
   modalFilename.addEventListener("dblclick", () => {
     modalFilename.select();
   });
   modalFilename.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
+      if (modalFilename.dataset.selectStem === "1") {
+        const cm = document.querySelector(".cm-content");
+        if (cm instanceof HTMLElement) {
+          cm.focus();
+          return;
+        }
+      }
       modalFilename.blur();
     }
   });

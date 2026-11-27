@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"plainmote/internal/store"
@@ -38,21 +39,39 @@ func TestSearchTextIsTrimmedOnCharacterBoundaries(t *testing.T) {
 	}
 }
 
-func TestDashboardURLKeepsSelectedTags(t *testing.T) {
+func TestDashboardURLKeepsSelectedTagsAndCursor(t *testing.T) {
 	tags := resourceTags([]string{"  OPS ", "ops", "", "配置 & 日志"})
 	if want := []string{"OPS", "配置 & 日志"}; !slices.Equal(tags, want) {
 		t.Fatalf("selected tags = %q, want %q", tags, want)
 	}
+	cursor := encodeResourceCursor(&store.ResourceCursor{
+		CreatedAt: time.Date(2026, 11, 27, 12, 0, 0, 123456000, time.UTC),
+		ID:        "11111111-2222-3333-4444-555555555555",
+	})
 	address, err := url.Parse(dashboardURL(store.ResourceFilter{
 		Query: "nginx", Kind: store.KindResource, Tags: tags,
-	}, 20, 2))
+	}, cursor))
 	if err != nil {
 		t.Fatal(err)
 	}
 	query := address.Query()
 	if !slices.Equal(query["tag"], tags) || query.Get("q") != "nginx" ||
-		query.Get("kind") != store.KindResource || query.Get("size") != "20" || query.Get("page") != "2" {
-		t.Fatalf("filters and pagination did not round-trip: %v", query)
+		query.Get("kind") != store.KindResource || query.Get("cursor") != cursor {
+		t.Fatalf("filters and cursor did not round-trip: %v", query)
+	}
+	if query.Has("size") || query.Has("page") {
+		t.Fatalf("dashboardURL must not emit legacy size/page params: %v", query)
+	}
+
+	decoded := decodeResourceCursor(cursor)
+	if decoded == nil || decoded.ID != "11111111-2222-3333-4444-555555555555" ||
+		decoded.CreatedAt.UnixMicro() != time.Date(2026, 11, 27, 12, 0, 0, 123456000, time.UTC).UnixMicro() {
+		t.Fatalf("decoded cursor mismatch: %+v", decoded)
+	}
+	for _, bad := range []string{"", "not-base64!!!", "MTIzLm5vdC1hLXV1aWQ"} {
+		if got := decodeResourceCursor(bad); got != nil {
+			t.Fatalf("decodeResourceCursor(%q) = %+v, want nil", bad, got)
+		}
 	}
 }
 

@@ -93,6 +93,8 @@ var byExtension = map[string]string{
 	".txt":        typeText,
 	".text":       typeText,
 	".md":         typeText,
+	".markdown":   typeText,
+	".mdx":        typeText,
 	".log":        typeText,
 	".conf":       typeText,
 	".cfg":        typeText,
@@ -125,8 +127,11 @@ func DetectContent(publicPath string, content []byte, encodingHint string) (stri
 			if !TextLike(known) {
 				return binaryByName(known, content)
 			}
-			// A text-looking suffix cannot hide a recognised binary signature.
-			if magic := sniffMagic(content); magic != "" {
+			// A text-looking suffix cannot hide a recognised binary signature
+			// (such as a PNG/PDF renamed to .txt), while harmless inline HTML
+			// tags inside .md/.txt stay safe text because they are always served
+			// as non-executable text/plain with X-Content-Type-Options: nosniff.
+			if magic := sniffBinaryMagic(content); magic != "" {
 				return magic, ""
 			}
 			if _, encodingName, err := detectAndDecodeText(content, encodingHint); err == nil {
@@ -256,15 +261,10 @@ func ContentTypeWithEncoding(contentType, encodingName string) string {
 	return mime.FormatMediaType(base, parameters)
 }
 
-// sniffMagic asks net/http what the bytes look like, and returns "" unless the
-// answer is both confident and safe to serve.
-func sniffMagic(content []byte) string {
+// sniffBinaryMagic checks only for concrete non-text binary file signatures
+// (media, fonts, PDF, archives) without treating HTML-like text as binary.
+func sniffBinaryMagic(content []byte) string {
 	detected := http.DetectContentType(content)
-	if executableType(detected) {
-		// Something that would run in a browser: refuse to name it, and let
-		// the caller fall through to a type that cannot.
-		return typeBinary
-	}
 	base, _, _ := strings.Cut(detected, ";")
 	switch base = strings.TrimSpace(base); {
 	case strings.HasPrefix(base, "image/"),
@@ -278,6 +278,18 @@ func sniffMagic(content []byte) string {
 		return base
 	}
 	return ""
+}
+
+// sniffMagic asks net/http what the bytes look like, and returns "" unless the
+// answer is both confident and safe to serve.
+func sniffMagic(content []byte) string {
+	detected := http.DetectContentType(content)
+	if executableType(detected) {
+		// Something that would run in a browser: refuse to name it, and let
+		// the caller fall through to a type that cannot.
+		return typeBinary
+	}
+	return sniffBinaryMagic(content)
 }
 
 // sniffContentType only claims the formats it can recognise unambiguously.

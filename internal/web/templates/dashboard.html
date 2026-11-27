@@ -4,7 +4,11 @@
   {{template "htmlhead" .}}
   <title>{{tr .Locale "resources"}} · PlainMote</title>
 </head>
-<body>
+<body{{if .DirectUpload}} data-direct-upload="1"{{end}}
+      data-msg-uploading="{{tr .Locale "uploading"}}"
+      data-msg-saving="{{tr .Locale "saving"}}"
+      data-msg-upload-oversize="{{tr .Locale "upload_oversize"}}"
+      data-msg-request-failed="{{tr .Locale "request_unconfirmed"}}">
   {{template "topbar" .}}
   <main class="page fb-page">
     {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
@@ -40,6 +44,51 @@
       </div>
     </div>
   </main>
+
+  {{/* Finder-style "+ New" & blank-canvas right-click menu. */}}
+  <div class="fb-menu fb-new-menu" id="fb-new-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-fb-new="md">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 2.2h6l3 3V13a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1V3.2a1 1 0 0 1 1-1Z"/><path d="M9.5 2.2V5.2h3"/></svg>
+      <span>{{tr .Locale "new_markdown"}}</span>
+      <em>.md</em>
+    </button>
+    <button type="button" role="menuitem" data-fb-new="txt">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 2.2h6l3 3V13a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1V3.2a1 1 0 0 1 1-1Z"/><path d="M5.5 8h5M5.5 10.6h3.5"/></svg>
+      <span>{{tr .Locale "new_text"}}</span>
+      <em>.txt</em>
+    </button>
+    <button type="button" role="menuitem" data-fb-new="json">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.2c-1.1 0-1.5.6-1.5 1.5v2c0 .7-.4 1.3-1 1.3.6 0 1 .6 1 1.3v2c0 .9.4 1.5 1.5 1.5M10 3.2c1.1 0 1.5.6 1.5 1.5v2c0 .7.4 1.3 1 1.3-.6 0-1 .6-1 1.3v2c0 .9-.4 1.5-1.5 1.5"/></svg>
+      <span>{{tr .Locale "new_json"}}</span>
+      <em>.json</em>
+    </button>
+    <button type="button" role="menuitem" data-fb-new="yaml">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h4M5.5 8h7M5.5 12h5.5M3 8h.01M3 12h.01"/></svg>
+      <span>{{tr .Locale "new_yaml"}}</span>
+      <em>.yaml</em>
+    </button>
+    <button type="button" role="menuitem" data-fb-new="conf">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5h11M2.5 11h11"/><circle cx="6" cy="5" r="1.5" fill="var(--panel)"/><circle cx="10.5" cy="11" r="1.5" fill="var(--panel)"/></svg>
+      <span>{{tr .Locale "new_conf"}}</span>
+      <em>.conf</em>
+    </button>
+    <button type="button" role="menuitem" data-fb-new="sh">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.8" width="12" height="10.4" rx="1.8"/><path d="m5 6.4 2 1.8-2 1.8M8.5 10h2.5"/></svg>
+      <span>{{tr .Locale "new_sh"}}</span>
+      <em>.sh</em>
+    </button>
+    <span class="fb-menu-sep" role="separator"></span>
+    <button type="button" role="menuitem" data-fb-new="upload">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 10.8V3.2M5.2 6 8 3.2 10.8 6"/><path d="M2.5 11.2v1.3A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5v-1.3"/></svg>
+      <span>{{tr .Locale "upload_file_action"}}</span>
+    </button>
+    <span class="fb-menu-sep" role="separator" data-fb-new-folder-sep></span>
+    <button type="button" role="menuitem" data-fb-new="folder">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.3 1.5h4.7A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7Z"/><path d="M8 7v3.5M6.25 8.75h3.5"/></svg>
+      <span>{{tr .Locale "new_folder"}}</span>
+    </button>
+  </div>
+  <input type="file" id="fb-direct-upload" class="sr" data-max-bytes="{{.MaxContent}}">
 
   {{/* Compact context menu popover for folder & file actions. */}}
   <div class="fb-menu" id="fb-menu" role="menu" hidden>
@@ -269,7 +318,6 @@
     <label><input type="radio" name="kind" value="quick" data-auto-submit{{if eq .Pager.Kind "quick"}} checked{{end}}><span>{{tr .Locale "quick_share"}}</span></label>
   </div>
   {{if .Pager.FolderID}}<input type="hidden" name="folder" value="{{.Pager.FolderID}}">{{end}}
-  <input type="hidden" name="size" value="{{.Pager.Size}}">
   <button type="submit" class="nojs-btn">{{tr .Locale "search"}}</button>
   <a class="txt" id="resource-clear" href="/resources/"{{if not (or .Pager.Query .Pager.Kind .Pager.Tags)}} hidden{{end}}>{{tr .Locale "clear"}}</a>
 </form>
@@ -278,7 +326,7 @@
 {{define "dashboard-tag-clear"}}<a class="txt tag-clear" id="tag-clear" href="{{.Pager.ClearTagsURL}}"{{if not .Pager.Tags}} hidden{{end}}>{{tr .Locale "clear"}}</a>{{end}}
 
 {{define "dashboard-results"}}
-<div class="resource-results" id="resource-results" data-current-folder="{{.CurrentFolderID}}" data-csrf="{{.CSRF}}"
+<div class="resource-results" id="resource-results" data-current-folder="{{.CurrentFolderID}}" data-browsing-folder="{{if .BrowsingFolder}}1{{else}}0{{end}}" data-csrf="{{.CSRF}}"
      data-msg-selected="{{tr .Locale "selected_one"}}" data-msg-drop-into="{{tr .Locale "drop_into"}}">
   {{/* Encrypted names are not the service's to search: once unlocked,
        sealed-names.js matches them here, in a block of their own. */}}
@@ -316,15 +364,10 @@
         {{end}}
       </nav>
       <div class="fb-tools">
-        {{if .BrowsingFolder}}
-        <button type="button" class="btn sm fb-new-folder" data-folder-new-open>
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.3 1.5h4.7A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7Z"/><path d="M8 7v3.5M6.25 8.75h3.5"/></svg>
-          <span>{{tr .Locale "new_folder"}}</span>
-        </button>
-        {{end}}
-        <a class="btn pri sm fb-new-res" id="new-resource-link" href="{{or .NewResourceURL "/resources/new"}}">
+        <a class="btn pri sm fb-new-res" id="new-resource-link" href="{{or .NewResourceURL "/resources/new"}}" data-fb-new-trigger aria-haspopup="menu" aria-expanded="false">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 3.2v9.6M3.2 8h9.6"/></svg>
-          <span>{{tr .Locale "new_resource"}}</span>
+          <span>{{tr .Locale "new_action"}}</span>
+          <svg class="fb-caret" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5 6 7.5l3-3"/></svg>
         </a>
         <div class="fb-view" role="group" aria-label="{{tr .Locale "view_icon"}}">
           <a class="fb-vbtn{{if ne .ViewMode "list"}} on{{end}}" href="{{or .IconViewURL "/resources/?view=icon"}}" title="{{tr .Locale "view_icon"}}" aria-label="{{tr .Locale "view_icon"}}" data-view-link>
@@ -374,39 +417,7 @@
               </td>
             </tr>
             {{end}}
-            {{range .Resources}}
-            {{$k := fileKind $.Locale .}}
-            <tr class="fb-row is-file" data-fb-item data-item-kind="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}"
-                data-item-sealed="{{if or .Sealed .Encrypted}}1{{end}}" data-item-quick="{{if .QuickShare}}1{{end}}" data-item-shares="{{.LiveShares}}"
-                data-info-kind="{{$k.Label}}" data-info-cat="{{$k.Category}}" data-info-badge="{{$k.Badge}}" data-info-filename="{{or .Filename .Name}}"
-                data-info-size="{{bytesText .ContentSize}}" data-info-bytes="{{.ContentSize}}"
-                data-info-status="{{if .TakenDown}}{{tr $.Locale "taken_down"}}{{else if .QuickShare}}{{tr $.Locale "quick_share"}} · {{remainText $.Locale .ExpiresAt}}{{else if .LiveShares}}{{countText $.Locale .LiveShares "shares"}}{{else}}{{tr $.Locale "not_shared"}}{{end}}"
-                data-info-enc="{{if or .Sealed .Encrypted}}{{tr $.Locale "e2ee_tag"}}{{end}}"
-                data-info-version="{{if not .QuickShare}}v{{.Version}}{{end}}"
-                data-info-tags="{{join .Tags "\n"}}"
-                data-info-created="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" data-info-updated="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">
-              <td class="trunc">
-                <a class="fb-row-name" href="/resources/{{.ID}}" draggable="false" title="{{fileDisplayName $.Locale .}}">
-                  <span class="fb-mini fb-mini-file cat-{{$k.Category}}" aria-hidden="true">
-                    <svg viewBox="0 0 18 20" fill="none"><path class="doc-sheet" d="M3.2 1.4h7.8l4.4 4.4V17a1.6 1.6 0 0 1-1.6 1.6H3.2A1.6 1.6 0 0 1 1.6 17V3A1.6 1.6 0 0 1 3.2 1.4Z"/><path class="doc-fold" d="M11 1.4V4.6a1.2 1.2 0 0 0 1.2 1.2h3.2L11 1.4Z"/></svg>
-                  </span>
-                  <span class="trunc" title="{{fileDisplayName $.Locale .}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{fileDisplayName $.Locale .}}</span>
-                  {{if or .Sealed .Encrypted}}<span class="fb-inline-lock" title="{{tr $.Locale "encrypted"}}" aria-label="{{tr $.Locale "encrypted"}}">
-                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="5.4" width="7.6" height="5.2" rx="1.4"/><path d="M4 5.4V3.8a2 2 0 1 1 4 0v1.6"/></svg>
-                  </span>{{end}}
-                  {{if .TakenDown}}<span class="fb-dot-inline bad" title="{{tr $.Locale "taken_down"}}"></span>
-                  {{else if .QuickShare}}<span class="fb-qs-pill" title="{{remainText $.Locale .ExpiresAt}}">{{remainText $.Locale .ExpiresAt}}</span>
-                  {{else if .LiveShares}}<span class="fb-dot-inline on" title="{{countText $.Locale .LiveShares "shares"}}"></span>{{end}}
-                </a>
-              </td>
-              <td class="num mut col-size">{{bytesText .ContentSize}}</td>
-              <td class="mut col-kind"><span{{if .Sealed}} data-sealed-kind="{{.ID}}"{{end}}>{{$k.Label}}</span></td>
-              <td class="num col-date">{{formatDay .CreatedAt}}</td>
-              <td class="col-act">
-                <button type="button" class="fb-row-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}">⋯</button>
-              </td>
-            </tr>
-            {{end}}
+            {{template "fb-resource-rows" .}}
           </tbody>
         </table>
       </div>
@@ -429,46 +440,16 @@
           <button type="button" class="fb-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="folder" data-item-id="{{.ID}}" data-item-name="{{.Name}}" data-item-parent="{{.ParentID}}" data-item-href="{{folderURL .ID}}">⋯</button>
         </div>
         {{end}}
-        {{range .Resources}}
-        {{$k := fileKind $.Locale .}}
-        <div class="fb-tile is-file" data-fb-item data-item-kind="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}"
-             data-item-sealed="{{if or .Sealed .Encrypted}}1{{end}}" data-item-quick="{{if .QuickShare}}1{{end}}" data-item-shares="{{.LiveShares}}"
-             data-info-kind="{{$k.Label}}" data-info-cat="{{$k.Category}}" data-info-badge="{{$k.Badge}}" data-info-filename="{{or .Filename .Name}}"
-             data-info-size="{{bytesText .ContentSize}}" data-info-bytes="{{.ContentSize}}"
-             data-info-status="{{if .TakenDown}}{{tr $.Locale "taken_down"}}{{else if .QuickShare}}{{tr $.Locale "quick_share"}} · {{remainText $.Locale .ExpiresAt}}{{else if .LiveShares}}{{countText $.Locale .LiveShares "shares"}}{{else}}{{tr $.Locale "not_shared"}}{{end}}"
-             data-info-enc="{{if or .Sealed .Encrypted}}{{tr $.Locale "e2ee_tag"}}{{end}}"
-             data-info-version="{{if not .QuickShare}}v{{.Version}}{{end}}"
-             data-info-tags="{{join .Tags "\n"}}"
-             data-info-created="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" data-info-updated="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">
-          <a class="fb-tile-link" href="/resources/{{.ID}}" draggable="false" title="{{fileDisplayName $.Locale .}}">
-            <span class="fb-ico fb-ico-file cat-{{$k.Category}}" data-sealed-icon="{{.ID}}" aria-hidden="true">
-              <svg viewBox="0 0 48 56" fill="none">
-                <path class="doc-sheet" d="M9 3.5h20.5L41.5 15.5V49a3.5 3.5 0 0 1-3.5 3.5H9A3.5 3.5 0 0 1 5.5 49V7A3.5 3.5 0 0 1 9 3.5Z"/>
-                <path class="doc-fold" d="M29.5 3.5V12a3.5 3.5 0 0 0 3.5 3.5h8.5L29.5 3.5Z"/>
-                <line class="doc-line" x1="12" y1="22" x2="29" y2="22"/>
-                <line class="doc-line" x1="12" y1="27.5" x2="34" y2="27.5"/>
-                <line class="doc-line" x1="12" y1="33" x2="24" y2="33"/>
-              </svg>
-              <span class="fb-ext"{{if .Sealed}} data-sealed-badge="{{.ID}}"{{end}}{{if not $k.Badge}} hidden{{end}}>{{$k.Badge}}</span>
-              {{if or .Sealed .Encrypted}}<span class="fb-badge-lock" title="{{tr $.Locale "encrypted"}}">
-                <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="5.4" width="7.6" height="5.2" rx="1.4"/><path d="M4 5.4V3.8a2 2 0 1 1 4 0v1.6"/></svg>
-              </span>{{end}}
-              {{if .TakenDown}}<span class="fb-dot bad" title="{{tr $.Locale "taken_down"}}"></span>
-              {{else if .QuickShare}}<span class="fb-dot qs" title="{{remainText $.Locale .ExpiresAt}}"></span>
-              {{else if .LiveShares}}<span class="fb-dot on" title="{{countText $.Locale .LiveShares "shares"}}"></span>{{end}}
-            </span>
-            <span class="fb-name" title="{{fileDisplayName $.Locale .}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{fileDisplayName $.Locale .}}</span>
-            {{if .QuickShare}}<span class="fb-meta"><span class="fb-qs-left">{{remainText $.Locale .ExpiresAt}}</span></span>{{end}}
-          </a>
-          <button type="button" class="fb-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}">⋯</button>
-        </div>
-        {{end}}
+        {{template "fb-resource-tiles" .}}
       </div>
       {{end}}
 
       {{if .Pager.NextURL}}
-      <div class="fb-more-wrap" data-load-more="{{.Pager.NextURL}}">
-        <a class="btn sm" href="{{.Pager.NextURL}}" data-load-more-btn>{{tr .Locale "load_more"}}</a>
+      <div class="fb-more-wrap" data-load-more="{{.Pager.NextURL}}"
+           data-msg-loading="{{tr .Locale "loading_more"}}"
+           data-msg-failed="{{tr .Locale "load_more_failed"}}"
+           data-msg-retry="{{tr .Locale "retry"}}">
+        <a class="btn sm fb-more-btn" href="{{.Pager.NextURL}}" data-load-more-btn>{{tr .Locale "load_more"}}</a>
       </div>
       {{end}}
     {{else}}
@@ -477,8 +458,15 @@
     </div>
 
     {{/* Finder-style bottom status bar: item count + selection on left, storage meter on right. */}}
+    {{$totalItems := add (len .Folders) .Pager.Total}}
+    {{$loadedItems := add (len .Folders) (len .Resources)}}
     <div class="fb-foot">
-      <span class="fb-stat" id="resource-count" data-fb-stat data-base-label="{{countText .Locale (add (len .Folders) .Pager.Total) "items"}}" aria-live="polite">{{countText .Locale (add (len .Folders) .Pager.Total) "items"}}</span>
+      <span class="fb-stat" id="resource-count" data-fb-stat
+            data-total-count="{{$totalItems}}"
+            data-folder-count="{{len .Folders}}"
+            data-base-label="{{countText .Locale $totalItems "items"}}"
+            data-msg-shown="{{tr .Locale "items_shown"}}"
+            aria-live="polite">{{if lt $loadedItems $totalItems}}{{printf (tr .Locale "items_shown") $loadedItems $totalItems}}{{else}}{{countText .Locale $totalItems "items"}}{{end}}</span>
       {{with storageMeter .Quota}}
       <a class="fb-usage" href="/account" title="{{printf (tr $.Locale "meter_title") (bytesText .Current) (bytesText .History) (bytesText .Free)}}">
         <span class="meter-bar mini" style="{{.Style}}" aria-hidden="true"><span class="cur"></span><span class="his"></span></span>
@@ -487,5 +475,84 @@
       {{end}}
     </div>
   </div>
+</div>
+{{end}}
+
+{{define "fb-resource-rows"}}
+{{range .Resources}}
+{{$k := fileKind $.Locale .}}
+<tr class="fb-row is-file" data-fb-item data-item-kind="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}"
+    data-item-sealed="{{if or .Sealed .Encrypted}}1{{end}}" data-item-quick="{{if .QuickShare}}1{{end}}" data-item-shares="{{.LiveShares}}"
+    data-info-kind="{{$k.Label}}" data-info-cat="{{$k.Category}}" data-info-badge="{{$k.Badge}}" data-info-filename="{{or .Filename .Name}}"
+    data-info-size="{{bytesText .ContentSize}}" data-info-bytes="{{.ContentSize}}"
+    data-info-status="{{if .TakenDown}}{{tr $.Locale "taken_down"}}{{else if .QuickShare}}{{tr $.Locale "quick_share"}} · {{remainText $.Locale .ExpiresAt}}{{else if .LiveShares}}{{countText $.Locale .LiveShares "shares"}}{{else}}{{tr $.Locale "not_shared"}}{{end}}"
+    data-info-enc="{{if or .Sealed .Encrypted}}{{tr $.Locale "e2ee_tag"}}{{end}}"
+    data-info-version="{{if not .QuickShare}}v{{.Version}}{{end}}"
+    data-info-tags="{{join .Tags "\n"}}"
+    data-info-created="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" data-info-updated="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">
+  <td class="trunc">
+    <a class="fb-row-name" href="/resources/{{.ID}}" draggable="false" title="{{fileDisplayName $.Locale .}}">
+      <span class="fb-mini fb-mini-file cat-{{$k.Category}}" aria-hidden="true">
+        <svg viewBox="0 0 18 20" fill="none"><path class="doc-sheet" d="M3.2 1.4h7.8l4.4 4.4V17a1.6 1.6 0 0 1-1.6 1.6H3.2A1.6 1.6 0 0 1 1.6 17V3A1.6 1.6 0 0 1 3.2 1.4Z"/><path class="doc-fold" d="M11 1.4V4.6a1.2 1.2 0 0 0 1.2 1.2h3.2L11 1.4Z"/></svg>
+      </span>
+      <span class="trunc" title="{{fileDisplayName $.Locale .}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{fileDisplayName $.Locale .}}</span>
+      {{if or .Sealed .Encrypted}}<span class="fb-inline-lock" title="{{tr $.Locale "encrypted"}}" aria-label="{{tr $.Locale "encrypted"}}">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="5.4" width="7.6" height="5.2" rx="1.4"/><path d="M4 5.4V3.8a2 2 0 1 1 4 0v1.6"/></svg>
+      </span>{{end}}
+      {{if .TakenDown}}<span class="fb-dot-inline bad" title="{{tr $.Locale "taken_down"}}"></span>
+      {{else if .QuickShare}}<span class="fb-qs-pill" title="{{remainText $.Locale .ExpiresAt}}">{{remainText $.Locale .ExpiresAt}}</span>
+      {{else if .LiveShares}}<span class="fb-dot-inline on" title="{{countText $.Locale .LiveShares "shares"}}"></span>{{end}}
+    </a>
+  </td>
+  <td class="num mut col-size">{{bytesText .ContentSize}}</td>
+  <td class="mut col-kind"><span{{if .Sealed}} data-sealed-kind="{{.ID}}"{{end}}>{{$k.Label}}</span></td>
+  <td class="num col-date">{{formatDay .CreatedAt}}</td>
+  <td class="col-act">
+    <button type="button" class="fb-row-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}">⋯</button>
+  </td>
+</tr>
+{{end}}
+{{end}}
+
+{{define "fb-resource-tiles"}}
+{{range .Resources}}
+{{$k := fileKind $.Locale .}}
+<div class="fb-tile is-file" data-fb-item data-item-kind="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}"
+     data-item-sealed="{{if or .Sealed .Encrypted}}1{{end}}" data-item-quick="{{if .QuickShare}}1{{end}}" data-item-shares="{{.LiveShares}}"
+     data-info-kind="{{$k.Label}}" data-info-cat="{{$k.Category}}" data-info-badge="{{$k.Badge}}" data-info-filename="{{or .Filename .Name}}"
+     data-info-size="{{bytesText .ContentSize}}" data-info-bytes="{{.ContentSize}}"
+     data-info-status="{{if .TakenDown}}{{tr $.Locale "taken_down"}}{{else if .QuickShare}}{{tr $.Locale "quick_share"}} · {{remainText $.Locale .ExpiresAt}}{{else if .LiveShares}}{{countText $.Locale .LiveShares "shares"}}{{else}}{{tr $.Locale "not_shared"}}{{end}}"
+     data-info-enc="{{if or .Sealed .Encrypted}}{{tr $.Locale "e2ee_tag"}}{{end}}"
+     data-info-version="{{if not .QuickShare}}v{{.Version}}{{end}}"
+     data-info-tags="{{join .Tags "\n"}}"
+     data-info-created="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" data-info-updated="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">
+  <a class="fb-tile-link" href="/resources/{{.ID}}" draggable="false" title="{{fileDisplayName $.Locale .}}">
+    <span class="fb-ico fb-ico-file cat-{{$k.Category}}" data-sealed-icon="{{.ID}}" aria-hidden="true">
+      <svg viewBox="0 0 48 56" fill="none">
+        <path class="doc-sheet" d="M9 3.5h20.5L41.5 15.5V49a3.5 3.5 0 0 1-3.5 3.5H9A3.5 3.5 0 0 1 5.5 49V7A3.5 3.5 0 0 1 9 3.5Z"/>
+        <path class="doc-fold" d="M29.5 3.5V12a3.5 3.5 0 0 0 3.5 3.5h8.5L29.5 3.5Z"/>
+        <line class="doc-line" x1="12" y1="22" x2="29" y2="22"/>
+        <line class="doc-line" x1="12" y1="27.5" x2="34" y2="27.5"/>
+        <line class="doc-line" x1="12" y1="33" x2="24" y2="33"/>
+      </svg>
+      <span class="fb-ext"{{if .Sealed}} data-sealed-badge="{{.ID}}"{{end}}{{if not $k.Badge}} hidden{{end}}>{{$k.Badge}}</span>
+      {{if or .Sealed .Encrypted}}<span class="fb-badge-lock" title="{{tr $.Locale "encrypted"}}">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="5.4" width="7.6" height="5.2" rx="1.4"/><path d="M4 5.4V3.8a2 2 0 1 1 4 0v1.6"/></svg>
+      </span>{{end}}
+      {{if .TakenDown}}<span class="fb-dot bad" title="{{tr $.Locale "taken_down"}}"></span>
+      {{else if .QuickShare}}<span class="fb-dot qs" title="{{remainText $.Locale .ExpiresAt}}"></span>
+      {{else if .LiveShares}}<span class="fb-dot on" title="{{countText $.Locale .LiveShares "shares"}}"></span>{{end}}
+    </span>
+    <span class="fb-name" title="{{fileDisplayName $.Locale .}}"{{if .Sealed}} data-sealed-name="{{.ID}}"{{end}}>{{fileDisplayName $.Locale .}}</span>
+    {{if .QuickShare}}<span class="fb-meta"><span class="fb-qs-left">{{remainText $.Locale .ExpiresAt}}</span></span>{{end}}
+  </a>
+  <button type="button" class="fb-more" aria-label="{{tr $.Locale "folder_actions"}}" data-item-menu="resource" data-item-id="{{.ID}}" data-item-name="{{fileDisplayName $.Locale .}}" data-item-parent="{{.FolderID}}" data-item-href="/resources/{{.ID}}">⋯</button>
+</div>
+{{end}}
+{{end}}
+
+{{define "dashboard.html#batch"}}
+<div data-batch-meta data-next-url="{{.Pager.NextURL}}" data-total="{{.Pager.Total}}" data-has-more="{{if .Pager.NextURL}}1{{else}}0{{end}}">
+  <template data-batch-items>{{if eq .ViewMode "list"}}{{template "fb-resource-rows" .}}{{else}}{{template "fb-resource-tiles" .}}{{end}}</template>
 </div>
 {{end}}
